@@ -1,0 +1,24 @@
+{
+  "name": "personal-ide",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered coding assistant with GitHub Copilot models, project memory, and autonomous agent loop",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @personal-ide/server dev\" \"pnpm --filter @personal-ide/web dev\"",
+    "build": "pnpm --filter @personal-ide/shared build && pnpm --filter @personal-ide/server build && pnpm --filter @personal-ide/web build",
+    "start": "pnpm --filter @personal-ide/server start",
+    "dev:server": "pnpm --filter @personal-ide/server dev",
+    "dev:web": "pnpm --filter @personal-ide/web dev",
+    "clean": "rimraf apps/*/dist packages/*/dist",
+    "setup": "pnpm install && pnpm build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
