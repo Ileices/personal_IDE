@@ -30,6 +30,11 @@ export function createOllamaClient(baseURL: string = 'http://localhost:11434'): 
   return createProviderClient('ollama', `${baseURL}/v1`);
 }
 
+/** Create a Nano Sea client */
+export function createNanoClient(baseURL: string = 'http://localhost:5100'): OpenAI {
+  return createProviderClient('nano', `${baseURL}/v1`, 'nano-local');
+}
+
 /** Get client from DB using stored encrypted token */
 export function getClientFromDb(db: any, provider: ProviderType = 'github'): OpenAI | null {
   if (provider === 'ollama') {
@@ -37,6 +42,13 @@ export function getClientFromDb(db: any, provider: ProviderType = 'github'): Ope
       "SELECT base_url FROM provider_configs WHERE provider_id = 'ollama' AND enabled = 1"
     ).get() as any;
     return createOllamaClient(row?.base_url || 'http://localhost:11434');
+  }
+
+  if (provider === 'nano') {
+    const row = db.prepare(
+      "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
+    ).get() as any;
+    return createNanoClient(row?.base_url || 'http://localhost:5100');
   }
 
   if (provider === 'github') {
@@ -94,6 +106,10 @@ export async function fetchProviderModels(
       return await fetchOllamaModels(client);
     }
 
+    if (provider === 'nano') {
+      return await fetchNanoModels(client);
+    }
+
     // GitHub Models API does NOT have a /models listing endpoint — it returns 404.
     // Use the curated model list from shared constants instead.
     if (provider === 'github') {
@@ -146,6 +162,44 @@ export async function fetchProviderModels(
     _modelsCache[cacheKey] = { ts: now, models };
     return models;
   } catch (err) {
+    throw err;
+  }
+}
+
+/** Fetch models from Nano Sea's /v1/models endpoint */
+async function fetchNanoModels(client: OpenAI): Promise<UnifiedModel[]> {
+  const baseURL = (client as any).baseURL?.replace('/v1', '') || 'http://localhost:5100';
+
+  try {
+    const res = await fetch(`${baseURL}/v1/models`);
+    if (!res.ok) throw new Error(`Nano Sea API error: ${res.status}`);
+    const data = await res.json();
+    const models = (data.data || []).map((m: any) => {
+      return {
+        id: `nano/${m.id}`,
+        name: m.id || 'nano-sea',
+        provider: 'nano' as ProviderType,
+        providerId: m.id,
+        description: `Nano Sea — ${m.description || 'Living ecosystem of micro-neural-networks'}`,
+        maxInputTokens: m.context_window || 32_768,
+        maxOutputTokens: m.max_output_tokens || 4_096,
+        contextWindow: m.context_window || 32_768,
+        supportsStreaming: true,
+        supportsTools: false,
+        supportsJsonMode: false,
+        supportsVision: false,
+        effectiveTokenLimit: Math.floor((m.context_window || 32_768) * 0.95),
+        isFree: true,
+        meta: m,
+      };
+    });
+
+    _modelsCache['nano'] = { ts: Date.now(), models };
+    return models;
+  } catch (err: any) {
+    if (err.message?.includes('fetch') || err.code === 'ECONNREFUSED') {
+      throw new Error('Nano Sea is not running. Start it with: python NANO_train/main.py');
+    }
     throw err;
   }
 }

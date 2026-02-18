@@ -7,7 +7,7 @@ import type { ChatStreamEvent } from '@personal-ide/shared';
 
 /** Strip provider prefix from model ID (e.g. 'ollama/codellama:latest' -> 'codellama:latest') */
 function stripModelPrefix(model: string): string {
-  const knownPrefixes = ['github', 'ollama', 'groq', 'huggingface', 'cohere', 'mistral', 'gemini', 'together', 'openrouter', 'lmstudio'];
+  const knownPrefixes = ['github', 'ollama', 'groq', 'huggingface', 'cohere', 'mistral', 'gemini', 'together', 'openrouter', 'lmstudio', 'nano'];
   const slashIdx = model.indexOf('/');
   if (slashIdx > 0) {
     const prefix = model.substring(0, slashIdx).toLowerCase();

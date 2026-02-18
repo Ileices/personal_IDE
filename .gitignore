@@ -10,3 +10,6 @@ Thumbs.db
 *.log
 .vscode/
 !.vscode/settings.json
+__pycache__/
+*.pyc
+nano_data/

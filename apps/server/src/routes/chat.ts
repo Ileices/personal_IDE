@@ -30,7 +30,7 @@ export async function chatRoutes(app: FastifyInstance) {
     const slashIdx = modelStr.indexOf('/');
     if (slashIdx > 0) {
       const prefix = modelStr.substring(0, slashIdx).toLowerCase();
-      const knownProviders: ProviderType[] = ['github', 'ollama', 'groq', 'huggingface', 'cohere', 'mistral', 'gemini', 'together', 'openrouter', 'lmstudio'];
+      const knownProviders: ProviderType[] = ['github', 'ollama', 'groq', 'huggingface', 'cohere', 'mistral', 'gemini', 'together', 'openrouter', 'lmstudio', 'nano'];
       if (knownProviders.includes(prefix as ProviderType)) {
         provider = prefix as ProviderType;
       }

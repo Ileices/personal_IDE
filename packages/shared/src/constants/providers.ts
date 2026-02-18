@@ -148,6 +148,21 @@ export const PROVIDERS: ProviderConfig[] = [
     notes: 'Download LM Studio, load any GGUF model, start the server. No API key needed.',
     enabled: false,
   },
+
+  // ── Nano Sea (Local AI) ──
+  {
+    id: 'nano',
+    name: 'Nano Sea (Local AI)',
+    description: 'Sea of Nanos — a living ecosystem of ~230 micro-neural-networks that learn from your codebase. Fully local, no API key, no internet. Powered by AE/RBY/PTAIE.',
+    baseURL: 'http://localhost:5100/v1',
+    requiresApiKey: false,
+    isLocal: true,
+    isFree: true,
+    setupUrl: 'https://github.com/Ileices/personal_IDE',
+    noSignupUrl: 'https://github.com/Ileices/personal_IDE',
+    notes: 'Run "python NANO_train/main.py" to start the Sea of Nanos. No API key needed. The nanos learn from your codebase over time.',
+    enabled: false,
+  },
 ];
 
 /** Get enabled providers */

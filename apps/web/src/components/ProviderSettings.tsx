@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Settings, ExternalLink, Check, X, RefreshCw,
-  Loader2, Shield, Wifi, WifiOff, Key, Monitor
+  Loader2, Shield, Wifi, WifiOff, Key, Monitor, Zap, Globe
 } from 'lucide-react';
 import { OllamaSetup } from './OllamaSetup';
 
@@ -32,13 +32,41 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
   const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string }>>({});
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [showOllamaSetup, setShowOllamaSetup] = useState(false);
+  const [nanoStatus, setNanoStatus] = useState<{online: boolean; nanos: number; tier: string; uptime: string; meshPeers: number} | null>(null);
+  const [nanoLoading, setNanoLoading] = useState(false);
   const [githubPat, setGithubPat] = useState('');
   const [updatingGithub, setUpdatingGithub] = useState(false);
   const [githubResult, setGithubResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     fetchProviders();
+    checkNanoStatus();
   }, []);
+
+  async function checkNanoStatus() {
+    setNanoLoading(true);
+    try {
+      const [healthRes, meshRes] = await Promise.all([
+        fetch('http://localhost:5100/v1/health').then(r => r.json()).catch(() => null),
+        fetch('http://localhost:5100/v1/mesh/info').then(r => r.json()).catch(() => null),
+      ]);
+      if (healthRes?.status === 'ok') {
+        setNanoStatus({
+          online: true,
+          nanos: healthRes.nano_count || 0,
+          tier: meshRes?.tier != null ? `Tier ${meshRes.tier}` : 'Unknown',
+          uptime: healthRes.uptime_s ? `${Math.floor(healthRes.uptime_s / 60)}m` : '?',
+          meshPeers: meshRes?.peers?.length || 0,
+        });
+      } else {
+        setNanoStatus({ online: false, nanos: 0, tier: '-', uptime: '-', meshPeers: 0 });
+      }
+    } catch {
+      setNanoStatus({ online: false, nanos: 0, tier: '-', uptime: '-', meshPeers: 0 });
+    } finally {
+      setNanoLoading(false);
+    }
+  }
 
   async function fetchProviders() {
     try {
@@ -196,6 +224,52 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
                   Detect hardware, install Ollama, download the best coding model for your PC.
                 </p>
               </button>
+
+              {/* ── Nano Sea Status ── */}
+              <div className="border rounded-lg p-3 border-ide-border bg-ide-bg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="w-4 h-4 text-purple-400" />
+                  <span className="font-medium text-sm">Nano Sea</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ml-auto flex items-center gap-1 ${
+                    nanoStatus?.online ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                  }`}>
+                    {nanoStatus?.online ? <><Wifi className="w-2.5 h-2.5" /> Alive</> : <><WifiOff className="w-2.5 h-2.5" /> Offline</>}
+                  </span>
+                </div>
+                {nanoStatus?.online ? (
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div className="bg-ide-bg border border-ide-border rounded p-1.5 text-center">
+                      <div className="text-ide-accent font-bold">{nanoStatus.nanos}</div>
+                      <div className="text-ide-text-dim text-[10px]">Nanos</div>
+                    </div>
+                    <div className="bg-ide-bg border border-ide-border rounded p-1.5 text-center">
+                      <div className="text-purple-400 font-bold">{nanoStatus.tier}</div>
+                      <div className="text-ide-text-dim text-[10px]">Compute</div>
+                    </div>
+                    <div className="bg-ide-bg border border-ide-border rounded p-1.5 text-center">
+                      <div className="text-yellow-400 font-bold">{nanoStatus.uptime}</div>
+                      <div className="text-ide-text-dim text-[10px]">Uptime</div>
+                    </div>
+                    <div className="bg-ide-bg border border-ide-border rounded p-1.5 text-center">
+                      <div className="text-green-400 font-bold">{nanoStatus.meshPeers}</div>
+                      <div className="text-ide-text-dim text-[10px]">Peers</div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-ide-text-dim">
+                    Run <code className="text-purple-400">python NANO_train/main.py</code> to start the Sea of Nanos.
+                    Enable it in the provider list below, then select <code className="text-purple-400">nano/nano-sea</code> as your model.
+                  </p>
+                )}
+                <button
+                  onClick={checkNanoStatus}
+                  disabled={nanoLoading}
+                  className="mt-2 w-full text-[10px] py-1 text-ide-text-dim hover:text-ide-text border border-ide-border rounded hover:border-ide-accent/30 flex items-center justify-center gap-1"
+                >
+                  {nanoLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  Refresh Status
+                </button>
+              </div>
 
               {/* ── Other Providers ── */}
               {providers.map(p => (

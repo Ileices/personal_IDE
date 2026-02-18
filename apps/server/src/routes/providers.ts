@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { v4 as uuid } from 'uuid';
 import { PROVIDERS } from '@personal-ide/shared';
 import type { ProviderType } from '@personal-ide/shared';
-import { fetchProviderModels, getClientFromDb, createOllamaClient, createProviderClient } from '../services/llm/providers.js';
+import { fetchProviderModels, getClientFromDb, createOllamaClient, createNanoClient, createProviderClient } from '../services/llm/providers.js';
 
 export async function providersRoutes(app: FastifyInstance): Promise<void> {
   const db = (app as any).db;
@@ -125,6 +125,12 @@ export async function providersRoutes(app: FastifyInstance): Promise<void> {
           const models = await fetchProviderModels(ollamaClient, 'ollama');
           return { models };
         }
+        // Special case: Nano Sea doesn't need DB config, try directly
+        if (id === 'nano') {
+          const nanoClient = createNanoClient();
+          const models = await fetchProviderModels(nanoClient, 'nano');
+          return { models };
+        }
         return reply.status(400).send({ error: 'Provider not configured' });
       }
 
@@ -165,10 +171,19 @@ export async function providersRoutes(app: FastifyInstance): Promise<void> {
       errors.push({ provider: 'ollama', error: err.message });
     }
 
+    // Try Nano Sea (no API key needed)
+    try {
+      const nanoClient = createNanoClient();
+      const models = await fetchProviderModels(nanoClient, 'nano');
+      allModels.push(...models);
+    } catch (err: any) {
+      errors.push({ provider: 'nano', error: err.message });
+    }
+
     // Try all other enabled providers
     const enabled = db.prepare('SELECT * FROM provider_configs WHERE enabled = 1').all() as any[];
     for (const config of enabled) {
-      if (config.provider_id === 'github' || config.provider_id === 'ollama') continue;
+      if (config.provider_id === 'github' || config.provider_id === 'ollama' || config.provider_id === 'nano') continue;
       try {
         const client = getClientFromDb(db, config.provider_id as ProviderType);
         if (client) {
