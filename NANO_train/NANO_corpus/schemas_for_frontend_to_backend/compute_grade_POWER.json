@@ -1,0 +1,326 @@
+{
+    "title": "POWER EFFICIENCY & CARBON FOOTPRINT GRADING SYSTEM",
+    "components": {
+        "performance_per_watt": {
+            "weight": 0.5,
+            "max_points": 50,
+            "tiers": [
+                {
+                    "tier_name": "Ultra-Efficient",
+                    "points_range": [45, 50],
+                    "gflops_per_watt_ranges": [
+                        { "range": ">10", "points": [48, 50], "examples": ["H100", "B200", "modern AI accelerators"] },
+                        { "range": "8-10", "points": [46, 47], "examples": ["A100", "high-end efficient GPUs"] },
+                        { "range": "6-8", "points": [45, 46], "examples": ["RTX 40/50 series efficient models"] }
+                    ]
+                },
+                {
+                    "tier_name": "Highly Efficient",
+                    "points_range": [38, 44],
+                    "gflops_per_watt_ranges": [
+                        { "range": "4-6", "points": [42, 44], "examples": ["Mid-range RTX 40/50", "recent server CPUs"] },
+                        { "range": "3-4", "points": [40, 41], "examples": ["High-end gaming GPUs", "efficient Xeons"] },
+                        { "range": "2-3", "points": [38, 39], "examples": ["Mainstream desktop", "older server gear"] }
+                    ]
+                },
+                {
+                    "tier_name": "Moderately Efficient",
+                    "points_range": [30, 37],
+                    "gflops_per_watt_ranges": [
+                        { "range": "1.5-2", "points": [35, 37], "examples": ["Older high-end GPUs", "workstation gear"] },
+                        { "range": "1-1.5", "points": [32, 34], "examples": ["Previous gen mainstream"] },
+                        { "range": "0.8-1", "points": [30, 31], "examples": ["Legacy server equipment"] }
+                    ]
+                },
+                {
+                    "tier_name": "Low Efficiency",
+                    "points_range": [20, 29],
+                    "gflops_per_watt_ranges": [
+                        { "range": "0.5-0.8", "points": [25, 29], "examples": ["5+ year old hardware"] },
+                        { "range": "0.3-0.5", "points": [22, 24], "examples": ["Very old servers/desktops"] },
+                        { "range": "0.2-0.3", "points": [20, 21], "examples": ["Ancient hardware"] }
+                    ]
+                },
+                {
+                    "tier_name": "Inefficient",
+                    "points_range": [10, 19],
+                    "gflops_per_watt_ranges": [
+                        { "range": "0.1-0.2", "points": [15, 19], "examples": ["Obsolete equipment"] },
+                        { "range": "<0.1", "points": [10, 14], "examples": ["Wasteful/collector hardware"] }
+                    ]
+                }
+            ],
+            "idle_power_bonus": [
+                { "idle_watt_range": "<50", "bonus_points": 5 },
+                { "idle_watt_range": "50-100", "bonus_points": 3 },
+                { "idle_watt_range": "100-150", "bonus_points": 1 },
+                { "idle_watt_range": ">300", "bonus_points": -5 }
+            ]
+        },
+        "energy_source_and_carbon_impact": {
+            "weight": 0.3,
+            "max_points": 30,
+            "tiers": [
+                {
+                    "tier_name": "Carbon Negative",
+                    "points_range": [27, 30],
+                    "examples": [
+                        { "description": "100% renewable + carbon capture", "points": 30 },
+                        { "description": "Majority renewable + offsets", "points": 28 },
+                        { "description": "Green energy + grid support", "points": 27 }
+                    ]
+                },
+                {
+                    "tier_name": "100% Renewable",
+                    "points_range": [23, 26],
+                    "examples": [
+                        { "description": "Solar/Wind/Hydro 100%", "points": 25 },
+                        { "description": "Geothermal/Tidal 100%", "points": 24 },
+                        { "description": "Biomass/Renewable 100%", "points": 23 }
+                    ]
+                },
+                {
+                    "tier_name": "High Renewable Mix",
+                    "points_range": [19, 22],
+                    "examples": [
+                        { "description": "80-99% renewable", "points": 21 },
+                        { "description": "60-79% renewable", "points": 20 },
+                        { "description": "40-59% renewable", "points": 19 }
+                    ]
+                },
+                {
+                    "tier_name": "Moderate Renewable",
+                    "points_range": [15, 18],
+                    "examples": [
+                        { "description": "25-39% renewable", "points": 17 },
+                        { "description": "15-24% renewable", "points": 16 },
+                        { "description": "Grid average mix", "points": 15 }
+                    ]
+                },
+                {
+                    "tier_name": "Fossil Fuel Heavy",
+                    "points_range": [10, 14],
+                    "examples": [
+                        { "description": "Coal/oil dominant", "points": 12 },
+                        { "description": "Diesel generators", "points": 10 }
+                    ]
+                }
+            ],
+            "carbon_verification_bonuses": [
+                { "condition": "Third-party verified green energy", "bonus_points": 4 },
+                { "condition": "Real-time carbon tracking", "bonus_points": 3 },
+                { "condition": "Time-shifting to green hours", "bonus_points": 3 },
+                { "condition": "Local renewable generation", "bonus_points": 2 }
+            ]
+        },
+        "cooling_efficiency": {
+            "weight": 0.2,
+            "max_points": 20,
+            "tiers": [
+                {
+                    "tier_name": "Ultra-Efficient Cooling",
+                    "points_range": [18, 20],
+                    "options": [
+                        { "description": "Passive cooling only", "points": 20 },
+                        { "description": "Liquid immersion cooling", "points": 19 },
+                        { "description": "Direct-to-chip liquid", "points": 18 },
+                        { "description": "Geothermal cooling", "points": 20 }
+                    ]
+                },
+                {
+                    "tier_name": "Highly Efficient",
+                    "points_range": [15, 17],
+                    "options": [
+                        { "description": "Efficient liquid cooling", "points": 17 },
+                        { "description": "Advanced air cooling", "points": 16 },
+                        { "description": "Heat reuse systems", "points": 17 },
+                        { "description": "Evaporative cooling", "points": 15 }
+                    ]
+                },
+                {
+                    "tier_name": "Standard Efficient",
+                    "points_range": [12, 14],
+                    "options": [
+                        { "description": "Quality air cooling", "points": 14 },
+                        { "description": "Standard liquid cooling", "points": 13 },
+                        { "description": "Good airflow design", "points": 12 }
+                    ]
+                },
+                {
+                    "tier_name": "Basic Cooling",
+                    "points_range": [9, 11],
+                    "options": [
+                        { "description": "Stock air cooling", "points": 11 },
+                        { "description": "Adequate ventilation", "points": 10 },
+                        { "description": "Minimal cooling", "points": 9 }
+                    ]
+                },
+                {
+                    "tier_name": "Inefficient Cooling",
+                    "points_range": [5, 8],
+                    "options": [
+                        { "description": "Poor airflow", "points": 7 },
+                        { "description": "Insufficient cooling", "points": 6 },
+                        { "description": "Wasteful AC reliance", "points": 5 }
+                    ]
+                }
+            ],
+            "cooling_efficiency_bonuses": [
+                { "condition": "Heat reuse for other purposes", "bonus_points": 4 },
+                { "condition": "Ambient/outside air cooling", "bonus_points": 3 },
+                { "condition": "Seasonal adaptive cooling", "bonus_points": 2 },
+                { "condition": "PUE <1.1", "bonus_points": 5 },
+                { "condition": "PUE 1.1-1.3", "bonus_points": 3 },
+                { "condition": "PUE 1.3-1.5", "bonus_points": 1 }
+            ]
+        }
+    },
+    "multipliers": {
+        "efficiency_multipliers": [
+            { "tier": "Tier 1 Efficiency (45+ points)", "points_threshold": 45, "multiplier": 1.3 },
+            { "tier": "Tier 2 Efficiency (38-44 points)", "min_points": 38, "max_points": 44, "multiplier": 1.2 },
+            { "tier": "Tier 3 Efficiency (30-37 points)", "min_points": 30, "max_points": 37, "multiplier": 1.1 },
+            { "tier": "Tier 4 Efficiency (20-29 points)", "min_points": 20, "max_points": 29, "multiplier": 1.0 },
+            { "tier": "Tier 5 Efficiency (10-19 points)", "min_points": 10, "max_points": 19, "multiplier": 0.8 },
+            { "tier": "Wasteful (<10 points)", "points_threshold": 10, "multiplier": 0.6 }
+        ],
+        "carbon_impact_multipliers": [
+            { "tier": "Carbon Negative", "multiplier": 1.4 },
+            { "tier": "100% Renewable", "multiplier": 1.3 },
+            { "tier": "High Renewable Mix", "multiplier": 1.2 },
+            { "tier": "Moderate Renewable", "multiplier": 1.1 },
+            { "tier": "Grid Average", "multiplier": 1.0 },
+            { "tier": "Fossil Heavy", "multiplier": 0.8 }
+        ]
+    },
+    "geographic_and_time_based_bonuses": {
+        "geographic_efficiency": [
+            { "condition": "Cool climate natural cooling", "bonus_points": 3 },
+            { "condition": "Access to hydroelectric power", "bonus_points": 4 },
+            { "condition": "High renewable energy region", "bonus_points": 3 }
+        ],
+        "time_based_optimization": [
+            { "condition": "Dynamic power scaling", "bonus_points": 3 },
+            { "condition": "Workload shifting to green hours", "bonus_points": 4 },
+            { "condition": "Seasonal operation optimization", "bonus_points": 2 }
+        ]
+    },
+    "penalties": {
+        "energy_waste_penalties": [
+            { "condition": "No power management", "penalty_points": -6 },
+            { "condition": "Constant max power draw", "penalty_points": -8 },
+            { "condition": "Inefficient voltage regulation", "penalty_points": -4 },
+            { "condition": "Old inefficient PSU (>5 years)", "penalty_points": -3 }
+        ],
+        "cooling_penalties": [
+            { "condition": "AC-dependent in cool climate", "penalty_points": -5 },
+            { "condition": "Single cooling point of failure", "penalty_points": -3 },
+            { "condition": "Wasteful water consumption", "penalty_points": -4 }
+        ]
+    },
+    "formulas": {
+        "base_efficiency_score": {
+            "description": "Weighted sum of component points",
+            "formula": "Base = (Performance_per_Watt * 0.5) + (Energy_Source * 0.3) + (Cooling_Efficiency * 0.2)"
+        },
+        "final_efficiency_multiplier": {
+            "description": "Apply efficiency and carbon multipliers and add percentage of total bonuses",
+            "formula": "FinalMultiplier = (Efficiency_Multiplier * Carbon_Multiplier) + (Total_Bonuses / 100)"
+        },
+        "overall_system_value_with_efficiency": {
+            "description": "Multiply hardware score by final efficiency multiplier",
+            "formula": "OverallValue = Hardware_Score * FinalMultiplier"
+        },
+        "note": "Penalties are applied as negative percentage adjustments (e.g., -6/100 = -0.06) when modifying the FinalMultiplier"
+    },
+    "examples": [
+        {
+            "name": "Modern AI Server with Solar",
+            "inputs": {
+                "performance_per_watt_gflops": 9,
+                "performance_points": 47,
+                "energy_source_points": 25,
+                "cooling_points": 19,
+                "bonuses_points_total": 6,
+                "efficiency_multiplier_tier": 1.2,
+                "carbon_multiplier_tier": 1.3
+            },
+            "calculations": {
+                "base_score": 36.3,
+                "final_multiplier_calculation": "(1.2 * 1.3) + (6/100)",
+                "final_multiplier_value": 1.62
+            }
+        },
+        {
+            "name": "Gaming PC on Grid Power",
+            "inputs": {
+                "performance_per_watt_gflops": 3.5,
+                "performance_points": 40,
+                "energy_source_points": 16,
+                "cooling_points": 14,
+                "penalties_points_total": -6,
+                "efficiency_multiplier_tier": 1.2,
+                "carbon_multiplier_tier": 1.0
+            },
+            "calculations": {
+                "base_score": 27.6,
+                "final_multiplier_calculation": "(1.2 * 1.0) + (-6/100)",
+                "final_multiplier_value": 1.14
+            }
+        },
+        {
+            "name": "Old Server Farm on Coal Power",
+            "inputs": {
+                "performance_per_watt_gflops": 0.6,
+                "performance_points": 27,
+                "energy_source_points": 13,
+                "cooling_points": 6,
+                "penalties_points_total": -8,
+                "efficiency_multiplier_tier": 1.0,
+                "carbon_multiplier_tier": 0.8
+            },
+            "calculations": {
+                "base_score": 18.9,
+                "final_multiplier_calculation": "(1.0 * 0.8) + (-8/100)",
+                "final_multiplier_value": 0.72
+            }
+        },
+        {
+            "name": "Edge Device with Passive Cooling",
+            "inputs": {
+                "performance_per_watt_gflops": 15,
+                "performance_points": 49,
+                "energy_source_points": 21,
+                "cooling_points": 20,
+                "bonuses_points_total": 5,
+                "efficiency_multiplier_tier": 1.3,
+                "carbon_multiplier_tier": 1.2
+            },
+            "calculations": {
+                "base_score": 34.8,
+                "final_multiplier_calculation": "(1.3 * 1.2) + (5/100)",
+                "final_multiplier_value": 1.61
+            }
+        }
+    ],
+    "efficiency_tier_classification": [
+        { "label": "Elite Green", "multiplier_range": [1.5, null], "description": "Premium compensation for sustainability" },
+        { "label": "Highly Efficient", "multiplier_range": [1.3, 1.49], "description": "Strong environmental contribution" },
+        { "label": "Efficient", "multiplier_range": [1.1, 1.29], "description": "Better than average efficiency" },
+        { "label": "Standard", "multiplier_range": [0.9, 1.09], "description": "Typical efficiency, no penalty" },
+        { "label": "Inefficient", "multiplier_range": [0.7, 0.89], "description": "Reduced compensation for waste" },
+        { "label": "Wasteful", "multiplier_range": [0.5, 0.69], "description": "Heavy penalties for poor efficiency" },
+        { "label": "Environmental Cost", "multiplier_range": [null, 0.49], "description": "May be excluded from network" }
+    ],
+    "notes": {
+        "scoring_scale": {
+            "component_totals": {
+                "performance_max": 50,
+                "energy_source_max": 30,
+                "cooling_max": 20
+            },
+            "total_max_points": 100
+        },
+        "application": "System designed to reward energy-efficient, low-carbon computing and penalize wasteful operations. Implementers should convert human-readable ranges to deterministic lookups or interpolation for machine scoring."
+    }
+}

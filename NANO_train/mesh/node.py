@@ -96,16 +96,18 @@ class MeshNode:
 
     def _create_new_identity(self) -> NodeInfo:
         """Generate new Ed25519 identity."""
-        from core.crypto import CryptoEngine
-        crypto = CryptoEngine()
-        identity = crypto.generate_identity()
+        from core.crypto import NodeIdentity
+        identity = NodeIdentity.generate()
 
         info = NodeInfo(
             node_id=identity.node_id,
             hostname=platform.node(),
-            public_key_hex=identity.public_key.hex(),
+            public_key_hex=identity.public_signing_bytes().hex(),
             os_name=f"{platform.system()} {platform.release()}",
         )
+        # Save the private key for later use
+        key_file = self.data_dir / "node_key.bin"
+        identity.save(str(key_file))
         self._detect_hardware(info)
         logger.info(f"Created new node identity: {info.node_id[:16]}... grade={info.compute_grade:.1f}")
         return info
@@ -246,7 +248,11 @@ class MeshNode:
 
     def go_offline(self) -> None:
         self._online = False
-        logger.info(f"Node {self.node_id[:12]}... is OFFLINE")
+        try:
+            node_id = self._info.node_id[:12] if self._info else 'unknown'
+        except Exception:
+            node_id = 'unknown'
+        logger.info(f"Node {node_id}... is OFFLINE")
 
     @property
     def is_online(self) -> bool:

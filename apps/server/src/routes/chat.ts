@@ -3,6 +3,7 @@
 // ============================================
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ChatRequest, ProviderType } from '@personal-ide/shared';
+import { getModel } from '@personal-ide/shared';
 import { getClientFromDb as getGitHubClient } from '../services/llm/client.js';
 import { getClientFromDb as getProviderClient } from '../services/llm/providers.js';
 import { streamChatResponse } from '../services/llm/streaming.js';
@@ -109,9 +110,10 @@ export async function chatRoutes(app: FastifyInstance) {
 
     // Stream the response
     rateLimiter.recordStart(body.model);
+    const modelDef = getModel(body.model);
 
     await streamChatResponse(client, body.model, messages, reply, {
-      maxTokens: 4096,
+      maxTokens: modelDef?.maxOutputTokens || 4096,
       temperature: body.mode === 'agent' ? 0.3 : 0.7,
       onDone: (fullContent, usage) => {
         rateLimiter.recordEnd(body.model);

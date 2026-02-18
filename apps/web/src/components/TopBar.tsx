@@ -8,9 +8,10 @@ import { useProjectStore } from '../stores/projectStore';
 import { MODELS } from '@personal-ide/shared';
 import {
   LogOut, User, ChevronDown, MessageSquare, Pencil, ListChecks, Bot,
-  Zap, Gauge, Settings
+  Zap, Gauge, Settings, Waves
 } from 'lucide-react';
 import { ProviderSettings } from './ProviderSettings';
+import { NanoSeaControls } from './NanoSeaControls';
 
 const API_BASE = 'http://localhost:3001';
 
@@ -37,6 +38,7 @@ export function TopBar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showProviderSettings, setShowProviderSettings] = useState(false);
+  const [showNanoSea, setShowNanoSea] = useState(false);
   const [dynamicModels, setDynamicModels] = useState<DynamicModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [providerErrors, setProviderErrors] = useState<{ provider: string; error: string }[]>([]);
@@ -205,6 +207,19 @@ export function TopBar() {
           </>
         )}
       </div>
+
+      {/* Nano Sea Controls */}
+      <button
+        onClick={() => setShowNanoSea(true)}
+        className="p-1.5 hover:bg-ide-bg rounded text-ide-text-dim hover:text-cyan-400 transition-colors"
+        title="Nano Sea Controls"
+      >
+        <Waves className="w-4 h-4" />
+      </button>
+
+      {showNanoSea && (
+        <NanoSeaControls onClose={() => setShowNanoSea(false)} />
+      )}
 
       {/* Provider Settings */}
       <button

@@ -1,0 +1,1149 @@
+{
+    "title": "RESPECT & TRUST SCORING SYSTEM",
+    "components": [
+        {
+            "name": "Task Performance History",
+            "weight_percent": 40
+        },
+        {
+            "name": "Resource Stability & Commitment",
+            "weight_percent": 30
+        },
+        {
+            "name": "Respect & Conduct",
+            "weight_percent": 20
+        },
+        {
+            "name": "Community Standing",
+            "weight_percent": 10
+        }
+    ],
+    "infraction_severity_system": {
+        "categories": [
+            {
+                "id": 1,
+                "name": "Minor Disrespect",
+                "point_reduction_percent_range": [10, 30],
+                "examples": [
+                    "Task failures without notification",
+                    "Resource over-reporting (<10%)",
+                    "Minor system gaming",
+                    "Poor communication"
+                ],
+                "penalties_by_offense": [
+                    {
+                        "offense_number": 1,
+                        "point_gain_reduction_percent": 30,
+                        "duration_days": 30
+                    },
+                    {
+                        "offense_number": 2,
+                        "point_gain_reduction_percent": 50,
+                        "duration_days": 60
+                    },
+                    {
+                        "offense_number": 3,
+                        "point_gain_reduction_percent": 80,
+                        "duration_days": 90,
+                        "applies_to": "third_and_subsequent"
+                    }
+                ],
+                "demotion_levels": 1
+            },
+            {
+                "id": 2,
+                "name": "Moderate Disrespect",
+                "point_reduction_percent_range": [50, 70],
+                "examples": [
+                    "Intentional task sabotage",
+                    "Resource misrepresentation (10-25%)",
+                    "System exploitation attempts",
+                    "Harassment of other users"
+                ],
+                "penalties_by_offense": [
+                    {
+                        "offense_number": 1,
+                        "point_gain_reduction_percent": 70,
+                        "duration_days": 90
+                    },
+                    {
+                        "offense_number": 2,
+                        "point_gain_reduction_percent": 90,
+                        "duration_days": 180
+                    },
+                    {
+                        "offense_number": 3,
+                        "point_gain_reduction_percent": 95,
+                        "duration_days": 365,
+                        "applies_to": "third_and_subsequent"
+                    }
+                ],
+                "demotion_levels": 2
+            },
+            {
+                "id": 3,
+                "name": "Major Disrespect",
+                "point_reduction_percent_range": [80, 95],
+                "examples": [
+                    "Malicious code execution",
+                    "Significant resource fraud (>25%)",
+                    "Network attacks or scanning",
+                    "Data theft attempts"
+                ],
+                "penalties_by_offense": [
+                    {
+                        "offense_number": 1,
+                        "point_gain_reduction_percent": 95,
+                        "duration_days": 180
+                    },
+                    {
+                        "offense_number": 2,
+                        "point_gain_reduction_percent": 98,
+                        "duration_days": 365
+                    },
+                    {
+                        "offense_number": 3,
+                        "point_gain_reduction_percent": 100,
+                        "duration": "permanent",
+                        "applies_to": "third_and_subsequent"
+                    }
+                ],
+                "demotion_levels": 3,
+                "reset_progress": true
+            },
+            {
+                "id": 4,
+                "name": "Critical Disrespect",
+                "point_reduction_percent_range": [100, 100],
+                "examples": [
+                    "Systemic sabotage",
+                    "Financial fraud",
+                    "Legal violations",
+                    "Threats to network integrity"
+                ],
+                "penalties_by_offense": [
+                    {
+                        "offense_number": 1,
+                        "point_gain_reduction_percent": 100,
+                        "duration_days": 365,
+                        "ban": true
+                    },
+                    {
+                        "offense_number": 2,
+                        "offense_condition": "any_repeat",
+                        "action": "permanent_network_exclusion"
+                    }
+                ],
+                "demotion_to_level": 0,
+                "ban": true
+            }
+        ]
+    },
+    "point_gain_mechanics": {
+        "base_point_gain_rates": {
+            "perfect_behavior_multiplier": 1.0,
+            "minor_issues_multiplier": 0.9,
+            "standard_new_user_multiplier": 0.8,
+            "recovery_status_multiplier": 0.5
+        },
+        "respect_level_multipliers": {
+            "10": 1.5,
+            "9": 1.4,
+            "8": 1.3,
+            "7": 1.2,
+            "6": 1.1,
+            "5": 1.0,
+            "4": 0.9,
+            "3": 0.7,
+            "2": 0.5,
+            "1": 0.3,
+            "0": 0.1
+        }
+    },
+    "task_performance_history": {
+        "max_points": 40,
+        "tiers": [
+            {
+                "name": "Elite Performer",
+                "range_points": [36, 40],
+                "criteria": [
+                    {
+                        "condition": "99.9%+ success rate",
+                        "bonus_points_per_1000_tasks": 0.5
+                    },
+                    {
+                        "condition": "99.5%+ complex tasks",
+                        "bonus_points_per_1000_tasks": 0.4
+                    },
+                    {
+                        "condition": "99%+ high volume",
+                        "bonus_points_per_1000_tasks": 0.3
+                    }
+                ]
+            },
+            {
+                "name": "Reliable Performer",
+                "range_points": [31, 35],
+                "criteria": [
+                    {
+                        "condition": "97-99% success",
+                        "bonus_points_per_1000_tasks": 0.2
+                    },
+                    {
+                        "condition": "95-97% consistent",
+                        "bonus_points_per_1000_tasks": 0.15
+                    },
+                    {
+                        "condition": "92-95% dependable",
+                        "bonus_points_per_1000_tasks": 0.1
+                    }
+                ]
+            },
+            {
+                "name": "Average Performer",
+                "range_points": [25, 30],
+                "criteria": [
+                    {
+                        "condition": "85-90% success",
+                        "bonus_points_per_1000_tasks": 0.05
+                    },
+                    {
+                        "condition": "80-85% moderate",
+                        "bonus_points_per_1000_tasks": 0.03
+                    },
+                    {
+                        "condition": "below 80%",
+                        "bonus_points_per_1000_tasks": 0.0
+                    }
+                ]
+            }
+        ],
+        "performance_decay": {
+            "each_task_failure_points": -0.1,
+            "consecutive_failure_additional_per_failure": -0.5,
+            "critical_task_failure_points": -5.0
+        }
+    },
+    "resource_stability_and_commitment": {
+        "max_points": 30,
+        "gain_mechanics": [
+            {
+                "duration_days": 30,
+                "points": 1
+            },
+            {
+                "duration_days": 90,
+                "points": 3,
+                "additional": true
+            },
+            {
+                "duration_days": 180,
+                "points": 6,
+                "additional": true
+            },
+            {
+                "duration_days": 365,
+                "points": 12,
+                "additional": true
+            }
+        ],
+        "withdrawal_penalties": [
+            {
+                "condition": "less_than_24_hour_notice",
+                "points": -10
+            },
+            {
+                "condition": "1_to_7_day_notice",
+                "points": -5
+            },
+            {
+                "condition": "during_critical_tasks",
+                "points": -20
+            },
+            {
+                "condition": "mass_withdrawal_more_than_50_percent_resources",
+                "points": -30
+            }
+        ],
+        "churn_multipliers": [
+            {
+                "churn_percent": 0,
+                "multiplier": 1.5
+            },
+            {
+                "churn_percent_less_than": 5,
+                "multiplier": 1.2
+            },
+            {
+                "churn_percent_less_than": 10,
+                "multiplier": 1.0
+            },
+            {
+                "churn_percent_less_than": 25,
+                "multiplier": 0.5
+            },
+            {
+                "churn_percent_greater_than": 25,
+                "multiplier": 0.1
+            }
+        ]
+    },
+    "respect_and_conduct": {
+        "max_points": 20,
+        "incremental_gains": [
+            {
+                "duration_days": 30,
+                "points": 0.5
+            },
+            {
+                "duration_days": 90,
+                "points": 1.5,
+                "additional": true
+            },
+            {
+                "duration_days": 180,
+                "points": 3.0,
+                "additional": true
+            },
+            {
+                "duration_days": 365,
+                "points": 6.0,
+                "additional": true
+            }
+        ],
+        "conduct_bonuses": [
+            {
+                "action": "system_vulnerability_report",
+                "points": 5
+            },
+            {
+                "action": "major_bug_fix",
+                "points": 3
+            },
+            {
+                "action": "helping_new_users",
+                "points_per_count": 1,
+                "count_unit": 10
+            },
+            {
+                "action": "community_moderation",
+                "points_per_month": 2
+            }
+        ],
+        "respect_violations": [
+            {
+                "level": "minor",
+                "points": -5,
+                "point_gain_reduction_percent": 30
+            },
+            {
+                "level": "moderate",
+                "points": -15,
+                "point_gain_reduction_percent": 70
+            },
+            {
+                "level": "major",
+                "points": -30,
+                "point_gain_reduction_percent": 95
+            },
+            {
+                "level": "critical",
+                "points": -50,
+                "point_gain_reduction_percent": 100,
+                "ban": true
+            }
+        ]
+    },
+    "community_standing": {
+        "max_points": 10,
+        "slow_growth": [
+            {
+                "condition": "100_helpful_votes",
+                "points": 1
+            },
+            {
+                "condition": "500_positive_interactions",
+                "points": 2
+            },
+            {
+                "condition": "1000_community_contributions",
+                "points": 3
+            },
+            {
+                "condition": "mentor_status",
+                "points": 5
+            }
+        ],
+        "penalties": [
+            {
+                "condition": "negative_votes",
+                "points_per_10_votes": -2
+            },
+            {
+                "condition": "community_reports",
+                "points_per_valid_report": -5
+            },
+            {
+                "condition": "toxic_behavior",
+                "points": -10,
+                "additional": "apply_conduct_penalty"
+            }
+        ]
+    },
+    "respect_level_promotion_requirements": {
+        "levels": [
+            {
+                "from": 0,
+                "to": 1,
+                "requirements": {
+                    "clean_days": 30,
+                    "successful_tasks": 100
+                }
+            },
+            {
+                "from": 1,
+                "to": 2,
+                "requirements": {
+                    "clean_days": 60,
+                    "successful_tasks": 500
+                }
+            },
+            {
+                "from": 2,
+                "to": 3,
+                "requirements": {
+                    "clean_days": 90,
+                    "successful_tasks": 1000
+                }
+            },
+            {
+                "from": 3,
+                "to": 4,
+                "requirements": {
+                    "clean_days": 180,
+                    "successful_tasks": 2500
+                }
+            },
+            {
+                "from": 4,
+                "to": 5,
+                "requirements": {
+                    "clean_days": 365,
+                    "successful_tasks": 5000
+                }
+            },
+            {
+                "from": 5,
+                "to": 6,
+                "requirements": {
+                    "clean_days": 540,
+                    "successful_tasks": 10000,
+                    "extra": "community_approval_required"
+                }
+            },
+            {
+                "from": 6,
+                "to": 7,
+                "requirements": {
+                    "clean_days": 720,
+                    "successful_tasks": 25000,
+                    "extra": "peer_endorsements_required"
+                }
+            },
+            {
+                "from": 7,
+                "to": 8,
+                "requirements": {
+                    "clean_days": 900,
+                    "successful_tasks": 50000,
+                    "extra": "system_contribution_required"
+                }
+            },
+            {
+                "from": 8,
+                "to": 9,
+                "requirements": {
+                    "clean_days": 1080,
+                    "successful_tasks": 100000,
+                    "extra": "leadership_role_required"
+                }
+            },
+            {
+                "from": 9,
+                "to": 10,
+                "requirements": {
+                    "clean_days": 1460,
+                    "successful_tasks": 250000,
+                    "extra": "exceptional_service_required"
+                }
+            }
+        ]
+    },
+    "demotion_mechanics": {
+        "automatic_demotions": [
+            {
+                "infraction_category": 1,
+                "demote_levels": 1
+            },
+            {
+                "infraction_category": 2,
+                "demote_levels": 2
+            },
+            {
+                "infraction_category": 3,
+                "demote_levels": 3,
+                "reset_progress": true
+            },
+            {
+                "infraction_category": 4,
+                "action": "immediate_level_0_and_ban"
+            }
+        ],
+        "progress_reset": {
+            "major_violations_reset_level_progress_to_minimum_requirements": true,
+            "cannot_promote_faster_than_original_timeline_after_reset": true,
+            "previous_violations_remain_on_permanent_record": true
+        }
+    },
+    "recovery_mechanics": {
+        "respect_debt_system": {
+            "description": "Each violation creates respect debt",
+            "requirements": [
+                "must_maintain_clean_period_twice_violation_duration",
+                "debt_must_be_cleared_before_normal_progression"
+            ],
+            "escalation": "additional_violations_increase_debt_exponentially"
+        },
+        "accelerated_recovery_limited": [
+            {
+                "action": "exceptional_contributions",
+                "debt_reduction_percent": 10
+            },
+            {
+                "action": "system_improvements",
+                "debt_reduction_percent": 15
+            },
+            {
+                "action": "community_service",
+                "debt_reduction_percent_per_month": 5
+            }
+        ],
+        "accelerated_recovery_max_reduction_percent": 50
+    },
+    "integrated_respect_score_formula": {
+        "base_respect_score_formula": "(Task_Performance * 0.4) + (Resource_Stability * 0.3) + (Respect_Conduct * 0.2) + (Community_Standing * 0.1)",
+        "respect_multiplier_formula": "Respect_Level_Multiplier * (1 - Active_Penalty_Reduction)",
+        "effective_point_gain_formula": "Base_Points * Respect_Multiplier",
+        "overall_system_value_formula": "(Hardware + Services) * Respect_Multiplier"
+    },
+    "example_scenarios": [
+        {
+            "name": "New User Progression",
+            "steps": [
+                {
+                    "start_level": 2,
+                    "multiplier": 0.7
+                },
+                {
+                    "after_30_days_clean": 3,
+                    "multiplier": 0.9
+                },
+                {
+                    "after_90_days_clean": 4,
+                    "multiplier": 1.0
+                },
+                {
+                    "after_180_days_and_2500_tasks": 5,
+                    "multiplier": 1.1
+                }
+            ]
+        },
+        {
+            "name": "Violation Impact",
+            "scenario": {
+                "start_level": 6,
+                "start_multiplier": 1.3,
+                "infraction_category": 2,
+                "demoted_to_level": 4,
+                "demoted_multiplier": 1.0,
+                "point_reduction_percent": 70,
+                "penalty_duration_days": 90,
+                "effective_gain_during_penalty_multiplier": 0.3,
+                "recovery_time_days_to_return_to_6": 180
+            }
+        },
+        {
+            "name": "Elite User Mistake",
+            "scenario": {
+                "start_level": 9,
+                "start_multiplier": 1.4,
+                "infraction_category": 1,
+                "demoted_to_level": 8,
+                "demoted_multiplier": 1.3,
+                "point_reduction_percent": 30,
+                "penalty_duration_days": 30,
+                "progression_reset_years": 2,
+                "permanent_record": true
+            }
+        },
+        {
+            "name": "Career Criminal",
+            "scenario": {
+                "multiple_category_3_violations": true,
+                "permanent_point_reduction_percent": 95,
+                "max_level_possible": 2,
+                "monitoring": "heavy"
+            }
+        }
+    ],
+    "respect_tier_consequences": {
+        "8-10": {
+            "description": "Priority access, maximum rewards, system influence"
+        },
+        "5-7": {
+            "description": "Premium tasks, good compensation, trusted status"
+        },
+        "3-4": {
+            "description": "Standard access, average compensation"
+        },
+        "1-2": {
+            "description": "Restricted tasks, reduced pay, heavy monitoring"
+        },
+        "0": {
+            "description": "Administrative review for every task, minimal rewards"
+        }
+    },
+    "props_system": {
+        "props_mechanics": {
+            "daily_prop_limit_per_user": 3,
+            "weekly_prop_limit_per_user": 15,
+            "monthly_prop_limit_per_user": 45,
+            "cooldown_between_props_seconds": 7200,
+            "unique_recipient_limit_days": 7,
+            "value_tiers": {
+                "standard": 1,
+                "quality": 2,
+                "elite": 3,
+                "verified_helpful": 5
+            },
+            "prop_weighting_by_respect_level": [
+                {
+                    "levels": "0-2",
+                    "weight": 0.1
+                },
+                {
+                    "levels": "3-4",
+                    "weight": 0.3
+                },
+                {
+                    "levels": "5-6",
+                    "weight": 0.7
+                },
+                {
+                    "levels": "7-8",
+                    "weight": 1.5
+                },
+                {
+                    "levels": "9-10",
+                    "weight": 2.0
+                }
+            ]
+        },
+        "props_to_respect_conversion": {
+            "receiving_props": [
+                {
+                    "range": "1-10",
+                    "effect": "no_direct_respect_gain"
+                },
+                {
+                    "range": "11-50",
+                    "respect_points": 0.001
+                },
+                {
+                    "range": "51-100",
+                    "respect_points": 0.005
+                },
+                {
+                    "range": "101-250",
+                    "respect_points": 0.01
+                },
+                {
+                    "range": "251-500",
+                    "respect_points": 0.02
+                },
+                {
+                    "range": "501-1000",
+                    "respect_points": 0.05
+                },
+                {
+                    "range": "1001-2500",
+                    "respect_points": 0.1
+                },
+                {
+                    "range": "2501-5000",
+                    "respect_points": 0.2
+                },
+                {
+                    "range": "5001-10000",
+                    "respect_points": 0.5
+                },
+                {
+                    "range": "10000+",
+                    "respect_points": 1.0
+                }
+            ],
+            "giving_props": {
+                "any_prop_given": 0.00000001,
+                "daily_giving_cap": 0.00000003,
+                "monthly_giving_cap": 0.00000045,
+                "giving_to_new_users_bonus": 0.00000002
+            }
+        },
+        "anti_gaming_protections": {
+            "patterns_and_penalties": [
+                {
+                    "pattern": "reciprocal_prop_rings",
+                    "penalty_points": -10,
+                    "prop_ban_days": 90
+                },
+                {
+                    "pattern": "bot_like_behavior",
+                    "penalty_points": -25,
+                    "action": "permanent_prop_privileges_revoked"
+                },
+                {
+                    "pattern": "prop_farming",
+                    "penalty_points": -15,
+                    "prop_cooldown_days": 180
+                },
+                {
+                    "pattern": "mass_prop_spam",
+                    "penalty_points": -5,
+                    "prop_limit_days": 30
+                }
+            ],
+            "velocity_monitoring": [
+                {
+                    "condition": "more_than_10_props_received_in_1_hour",
+                    "action": "flag_for_review"
+                },
+                {
+                    "condition": "more_than_50_props_received_in_24_hours",
+                    "action": "automatic_audit"
+                },
+                {
+                    "condition": "more_than_90_percent_props_from_same_respect_tier",
+                    "action": "suspicious_pattern_flag"
+                }
+            ],
+            "quality_controls": {
+                "low_value_props_from_same_ip_or_group_weight": 0.1,
+                "high_quality_props_diverse_sources_weight": 2.0,
+                "verified_helpful_props_weight": 5.0
+            }
+        },
+        "content_based_props": {
+            "post_quality_tiers": {
+                "basic_helpful_post": {
+                    "typical_props_range": [1, 5]
+                },
+                "quality_tutorial": {
+                    "typical_props_range": [10, 25]
+                },
+                "exceptional_contribution": {
+                    "typical_props_range": [50, 100]
+                },
+                "system_defining_work": {
+                    "typical_props_range": [100, 500]
+                }
+            },
+            "content_type_multipliers": {
+                "bug_fix_solution": 1.5,
+                "tutorial_guide": 2.0,
+                "tool_utility_release": 3.0,
+                "system_improvement": 5.0,
+                "security_vulnerability": 10.0
+            },
+            "verification_requirements": {
+                "long_posts_words_threshold": 1000,
+                "long_posts_action": "auto_verify_for_quality",
+                "code_contributions_action": "github_or_live_demo_verification",
+                "system_improvements_action": "peer_review_required",
+                "security_issues_action": "admin_verification_only"
+            }
+        },
+        "community_moderation_integration": {
+            "prop_challenge_system": {
+                "trigger": "5_or_more_users_flag_prop_as_undeserved",
+                "action": "trigger_review",
+                "community_vote": "majority_decides",
+                "false_prop_giver_penalty_points": -2,
+                "prop_fraud_conspiracy_penalty_points": -25
+            },
+            "moderator_oversight": {
+                "level_8_plus_can_flag": true,
+                "level_9_plus_can_initiate_audits": true,
+                "admins_can_remove_fraudulent_props": true,
+                "automated_detection_real_time": true
+            },
+            "appeal_process": {
+                "challenged_props_review_period_hours": 48,
+                "community_jury": {
+                    "size": 5,
+                    "min_level": 5
+                },
+                "admin_override_for_complex_cases": true,
+                "false_challenge_penalty_points": -1
+            }
+        },
+        "props_distribution_curve": {
+            "distribution_percentiles": {
+                "top_1_percent_receive_percent_of_props": 15,
+                "top_5_percent_receive_percent_of_props": 35,
+                "top_10_percent_receive_percent_of_props": 50,
+                "bottom_50_percent_receive_percent_of_props": 10
+            },
+            "healthy_community_metrics": {
+                "prop_diversity_target_percent_from_top_1_percent": 30,
+                "new_user_inclusion_min_percent_in_props_to_under_30_days": 15,
+                "content_quality_min_percent_of_props_on_verified_helpful_content": 60,
+                "gaming_detection_percent_removed_target": 2
+            }
+        },
+        "props_to_respect_integration": {
+            "maximum_props_contribution_to_respect": {
+                "absolute_cap_points": 1.0,
+                "annual_cap_points": 0.25,
+                "monthly_cap_points": 0.05
+            },
+            "respect_level_requirements_with_props": [
+                {
+                    "level": 5,
+                    "non_prop_respect_required": 0.5
+                },
+                {
+                    "level": 7,
+                    "non_prop_respect_required": 2.0
+                },
+                {
+                    "level": 9,
+                    "non_prop_respect_required": 5.0
+                },
+                {
+                    "level": 10,
+                    "non_prop_respect_required": 8.0
+                }
+            ],
+            "props_as_tiebreaker": {
+                "equal_respect_scores": "user_with_more_props_ranks_higher",
+                "promotion_decisions": "props_secondary_factor",
+                "task_allocation": "high_prop_users_preferred_in_close_calls"
+            }
+        },
+        "props_examples": [
+            {
+                "organic_quality_contributor": {
+                    "props_received": 85,
+                    "source_diversity_levels": "3-9",
+                    "quality_multiplier": 2.0,
+                    "total_prop_value_weighted": 170,
+                    "respect_gain": 0.01
+                }
+            },
+            {
+                "prop_ring_attempt": {
+                    "participants": 5,
+                    "props_exchanged_total": 200,
+                    "system_action": "void_all_props",
+                    "penalty_each_points": -10,
+                    "prop_ban_days": 90
+                }
+            },
+            {
+                "elite_user_recognition": {
+                    "user_level": 9,
+                    "props_received": 300,
+                    "security_multiplier": 10,
+                    "admin_verification_multiplier": 5,
+                    "total_weighted_props": 1500,
+                    "respect_gain": 0.2
+                }
+            },
+            {
+                "new_user_helping": {
+                    "user_level": 2,
+                    "helped_count": 10,
+                    "props_received": 15,
+                    "low_weight": 0.3,
+                    "total_weighted_props": 4.5,
+                    "respect_gain": 0.0001
+                }
+            }
+        ],
+        "props_economy_balance": {
+            "prevention_of_inflation": {
+                "diminishing_returns_each_additional_prop_worth_percent_decrease": 10,
+                "source_diversity_bonus": "props_from_new_sources_worth_more",
+                "time_decay_days_threshold": 365,
+                "time_decay_value_loss_percent_after_threshold": 50,
+                "respect_cap_protection": "props_cannot_bypass_core_requirements"
+            },
+            "community_health_metrics_targets": {
+                "prop_authenticity_target_percent": 95,
+                "user_participation_min_percent_giving_props_monthly": 40,
+                "content_quality_percent_on_verified_content_target": 70,
+                "gaming_detection_max_percent_removed": 1
+            }
+        }
+    },
+    "nods_system_and_external_influence_mitigation": {
+        "nods_mechanics": {
+            "distinction": "nods_affect_feed_algorithms_props_affect_respect",
+            "nod_value_per_nod_respect_points": 0.000000001,
+            "daily_nod_limit_per_user": 50,
+            "nod_cooldown_seconds": 30,
+            "maximum_nod_respect_gain_per_month": 0.001,
+            "lifetime_nod_cap_points": 0.01,
+            "nod_weight_all": 0.01
+        },
+        "external_influence_detection": {
+            "velocity_monitoring": [
+                {
+                    "condition": "more_than_1000_nods_in_24_hours",
+                    "action": "automatic_mitigation_trigger"
+                },
+                {
+                    "condition": "more_than_5000_nods_in_7_days",
+                    "action": "severe_mitigation_90_percent_reduction"
+                },
+                {
+                    "condition": "more_than_80_percent_nods_from_new_accounts",
+                    "action": "external_influence_flag"
+                },
+                {
+                    "condition": "geographic_clustering",
+                    "action": "trigger_review"
+                }
+            ],
+            "influence_mitigation_multipliers": {
+                "normal_growth": 1.0,
+                "moderate_suspicion": 0.3,
+                "high_suspicion": 0.1,
+                "confirmed_external_influence": 0.01
+            },
+            "mitigation_duration_days_by_offense": [
+                {
+                    "offense_number": 1,
+                    "days": 30
+                },
+                {
+                    "offense_number": 2,
+                    "days": 90
+                },
+                {
+                    "offense_number": 3,
+                    "days": 365
+                }
+            ],
+            "pattern_abuse_action": "permanent_capped_growth"
+        },
+        "infrastructure_donation_system": {
+            "hardware_donation_tiers": [
+                {
+                    "tier": 1,
+                    "value_threshold_usd": 10000,
+                    "respect_points": 3.0,
+                    "mitigation_reduction": "significant"
+                },
+                {
+                    "tier": 2,
+                    "value_range_usd": [5000, 9999],
+                    "respect_points": 1.5,
+                    "mitigation_reduction": "moderate"
+                },
+                {
+                    "tier": 3,
+                    "value_range_usd": [1000, 4999],
+                    "respect_points": 0.5,
+                    "mitigation_reduction": "small"
+                },
+                {
+                    "tier": 4,
+                    "value_range_usd": [100, 999],
+                    "respect_points": 0.1,
+                    "mitigation_reduction": "minimal"
+                }
+            ],
+            "monetary_donation_tiers": [
+                {
+                    "tier": "A",
+                    "value_threshold_usd": 100000,
+                    "respect_points": 5.0,
+                    "mitigation_reduction_percent": 80
+                },
+                {
+                    "tier": "B",
+                    "value_range_usd": [50000, 99999],
+                    "respect_points": 2.5,
+                    "mitigation_reduction_percent": 60
+                },
+                {
+                    "tier": "C",
+                    "value_range_usd": [10000, 49999],
+                    "respect_points": 1.0,
+                    "mitigation_reduction_percent": 40
+                },
+                {
+                    "tier": "D",
+                    "value_range_usd": [1000, 9999],
+                    "respect_points": 0.2,
+                    "mitigation_reduction_percent": 20
+                }
+            ],
+            "donation_verification_requirements": {
+                "hardware": "must_be_verified_operational_in_network_for_30_days",
+                "money": "must_be_used_for_infrastructure_within_90_days",
+                "both": "public_transparency_reports_required",
+                "fraud_penalty_points": -10,
+                "fraud_action": "permanent_donation_ban"
+            },
+            "mitigation_reduction_mechanics": [
+                {
+                    "action": "tier_1_hardware",
+                    "reduces_current_mitigation_by_percent": 50
+                },
+                {
+                    "action": "tier_2_hardware",
+                    "reduces_current_mitigation_by_percent": 30
+                },
+                {
+                    "action": "tier_A_money",
+                    "reduces_current_mitigation_by_percent": 80
+                },
+                {
+                    "action": "tier_B_money",
+                    "reduces_current_mitigation_by_percent": 60
+                }
+            ],
+            "donation_example": {
+                "scenario": "famous_person_receives_10000_nods_in_24_hours",
+                "initial_mitigation_percent": 90,
+                "donates_usd": 50000,
+                "donation_tier": "B",
+                "mitigation_reduction_percent": 60,
+                "new_mitigation_percent": 30,
+                "effective_gain_multiplier": 0.7
+            }
+        },
+        "organic_growth_incentives": {
+            "diverse_nod_sources_bonus_per_100_unique_users": 0.0001,
+            "content_based_nods_per_quality_post": 0.0005,
+            "long_term_engagement_per_365_days_active": 0.001,
+            "community_contribution_per_verified_system_improvement": 0.002,
+            "anti_viral_protection": {
+                "viral_content_nod_value_reduction_percent": 50,
+                "external_sharing_link_reduction_percent": 70,
+                "influencer_callouts_reduction_percent_for_30_days": 90,
+                "paid_promotion_reduction_percent": 99,
+                "paid_promotion_action": "investigation"
+            }
+        },
+        "transparency_and_verification": {
+            "public_influence_dashboard_fields": [
+                "nod_sources_geographic_distribution",
+                "average_account_age_of_nodders",
+                "growth_velocity_charts",
+                "mitigation_status_current_multiplier"
+            ],
+            "community_oversight": {
+                "level_8_plus_can_view_detailed_influence_analytics": true,
+                "community_votes_can_approve_or_deny_mitigation_appeals": true,
+                "audit_committee": "random_7_users_review_high_profile_cases",
+                "public_reports_frequency": "quarterly"
+            }
+        },
+        "respect_cap_system": {
+            "total_social_respect_cap_points": 2.0,
+            "annual_social_growth_cap_points": 0.5,
+            "core_requirement_percent_task_respect": 80,
+            "respect_source_requirements_by_level": [
+                {
+                    "level": 6,
+                    "max_social_respect_points": 1.0,
+                    "required_task_respect_points": 2.0
+                },
+                {
+                    "level": 8,
+                    "max_social_respect_points": 1.5,
+                    "required_task_respect_points": 4.0
+                },
+                {
+                    "level": 10,
+                    "max_social_respect_points": 2.0,
+                    "required_task_respect_points": 8.0
+                }
+            ],
+            "examples": [
+                {
+                    "organic_community_leader": {
+                        "years_active": 2,
+                        "props_received": 500,
+                        "nods_received": 10000,
+                        "social_respect_points": 0.5,
+                        "task_respect_points": 8.5,
+                        "status": "healthy_no_mitigation"
+                    }
+                },
+                {
+                    "famous_influencer": {
+                        "followers_brought": 50000,
+                        "nods_in_first_week": 100000,
+                        "automatic_mitigation_percent": 99,
+                        "donates_usd": 100000,
+                        "donation_tier": "A",
+                        "mitigation_reduction_percent": 80,
+                        "final_mitigation_percent": 19,
+                        "must_earn_task_respect_before_level_10": 8.0
+                    }
+                },
+                {
+                    "corporate_sponsor": {
+                        "donated_usd": 1000000,
+                        "donation_respect_points": 5.0,
+                        "still_requires_task_respect_for_level_10": 8.0,
+                        "social_growth_cap_points": 2.0
+                    }
+                },
+                {
+                    "prop_ring_attempt": {
+                        "description": "group_tries_to_game_with_reciprocal_props",
+                        "action": "velocity_detection_triggers_90_percent_mitigation",
+                        "pattern_recognized": true,
+                        "participants_consequence": "permanent_social_caps"
+                    }
+                }
+            ]
+        }
+    },
+    "enforcement_and_appeals": {
+        "automated_enforcement": {
+            "real_time_monitoring": true,
+            "automatic_mitigation_applied": true,
+            "appeal_process_hours_for_false_positives": 48,
+            "false_appeal_penalty_points": -0.5
+        },
+        "community_justice": {
+            "jury_system": {
+                "size": 11,
+                "min_level": 5,
+                "required_super_majority_to_overturn": 8
+            },
+            "transparent_rulings": true,
+            "precedent_setting_guidance_for_future_cases": true
+        }
+    },
+    "notes": {
+        "design_intent": "Make respect valuable and hard to earn; violations have severe long-lasting consequences to protect network integrity.",
+        "json_export_timestamp": null
+    }
+}

@@ -1,0 +1,434 @@
+{
+    "title": "Storage Tiering & Availability Grading System",
+    "component_weights": {
+        "performance": 0.30,
+        "capacity_scalability": 0.25,
+        "availability_uptime": 0.20,
+        "data_accessibility": 0.15,
+        "network_bandwidth": 0.10
+    },
+    "performance_tiers": [
+        {
+            "tier": 1,
+            "name": "Ultra-High Performance",
+            "score_range": { "min": 27, "max": 30 },
+            "items": [
+                { "name": "NVMe Gen5 RAID 0/10", "min_points": 29, "max_points": 30 },
+                { "name": "Enterprise All-Flash Arrays", "min_points": 28, "max_points": 29 },
+                { "name": "NVMe Gen4 RAID", "min_points": 27, "max_points": 28 },
+                { "name": "Optane Persistent Memory", "points": 30, "note": "specialized" }
+            ]
+        },
+        {
+            "tier": 2,
+            "name": "High Performance",
+            "score_range": { "min": 23, "max": 26 },
+            "items": [
+                { "name": "Single NVMe Gen5", "min_points": 25, "max_points": 26 },
+                { "name": "NVMe Gen3 RAID", "min_points": 24, "max_points": 25 },
+                { "name": "Enterprise SAS SSDs", "min_points": 23, "max_points": 24 },
+                { "name": "U.2 NVMe Enterprise", "min_points": 24, "max_points": 26 }
+            ]
+        },
+        {
+            "tier": 3,
+            "name": "Good Performance",
+            "score_range": { "min": 18, "max": 22 },
+            "items": [
+                { "name": "Single NVMe Gen4", "min_points": 21, "max_points": 22 },
+                { "name": "SATA SSD RAID", "min_points": 20, "max_points": 21 },
+                { "name": "Single NVMe Gen3", "min_points": 19, "max_points": 20 },
+                { "name": "High-end SATA SSD", "min_points": 18, "max_points": 19 }
+            ]
+        },
+        {
+            "tier": 4,
+            "name": "Moderate Performance",
+            "score_range": { "min": 13, "max": 17 },
+            "items": [
+                { "name": "Single SATA SSD", "min_points": 16, "max_points": 17 },
+                { "name": "HDD RAID 10", "min_points": 15, "max_points": 16 },
+                { "name": "Hybrid SSHD", "min_points": 14, "max_points": 15 },
+                { "name": "Enterprise HDD RAID", "min_points": 13, "max_points": 14 }
+            ]
+        },
+        {
+            "tier": 5,
+            "name": "Basic Performance",
+            "score_range": { "min": 8, "max": 12 },
+            "items": [
+                { "name": "Single 7200RPM HDD", "min_points": 11, "max_points": 12 },
+                { "name": "5400RPM HDD RAID", "min_points": 10, "max_points": 11 },
+                { "name": "Single 5400RPM HDD", "min_points": 9, "max_points": 10 },
+                { "name": "External USB HDD", "min_points": 8, "max_points": 9 }
+            ]
+        },
+        {
+            "tier": 6,
+            "name": "Limited Performance",
+            "score_range": { "min": 3, "max": 7 },
+            "items": [
+                { "name": "Older HDD (<2015)", "min_points": 6, "max_points": 7 },
+                { "name": "Network-attached slow storage", "min_points": 5, "max_points": 6 },
+                { "name": "Optical media/tape", "min_points": 3, "max_points": 4 }
+            ]
+        }
+    ],
+    "capacity_scalability": {
+        "max_points": 25,
+        "tiers": [
+            {
+                "tier": 1,
+                "name": "Massive Scale",
+                "score_range": { "min": 23, "max": 25 },
+                "items": [
+                    { "name": "100TB+ available", "points": 25 },
+                    { "name": "50-100TB available", "points": 24 },
+                    { "name": "25-50TB available", "points": 23 }
+                ]
+            },
+            {
+                "tier": 2,
+                "name": "Large Scale",
+                "score_range": { "min": 19, "max": 22 },
+                "items": [
+                    { "name": "10-25TB available", "min_points": 21, "max_points": 22 },
+                    { "name": "5-10TB available", "points": 20 },
+                    { "name": "2-5TB available", "points": 19 }
+                ]
+            },
+            {
+                "tier": 3,
+                "name": "Medium Scale",
+                "score_range": { "min": 15, "max": 18 },
+                "items": [
+                    { "name": "1-2TB available", "min_points": 17, "max_points": 18 },
+                    { "name": "500GB-1TB available", "points": 16 },
+                    { "name": "250-500GB available", "points": 15 }
+                ]
+            },
+            {
+                "tier": 4,
+                "name": "Small Scale",
+                "score_range": { "min": 11, "max": 14 },
+                "items": [
+                    { "name": "100-250GB available", "min_points": 13, "max_points": 14 },
+                    { "name": "50-100GB available", "points": 12 },
+                    { "name": "<50GB available", "points": 11 }
+                ]
+            }
+        ],
+        "scalability_bonuses": [
+            { "name": "Expandable capacity", "points": 3 },
+            { "name": "Hot-swappable", "points": 2 },
+            { "name": "Modular design", "points": 2 }
+        ]
+    },
+    "availability_uptime": {
+        "max_points": 20,
+        "tiers": [
+            {
+                "tier": 1,
+                "name": "Maximum Availability",
+                "score_range": { "min": 18, "max": 20 },
+                "items": [
+                    { "name": "99.99%+ uptime (enterprise)", "points": 20 },
+                    { "name": "99.9%+ uptime (business)", "points": 19 },
+                    { "name": "99.5%+ uptime", "points": 18 }
+                ]
+            },
+            {
+                "tier": 2,
+                "name": "High Availability",
+                "score_range": { "min": 15, "max": 17 },
+                "items": [
+                    { "name": "99%+ uptime", "points": 17 },
+                    { "name": "98%+ uptime", "points": 16 },
+                    { "name": "97%+ uptime", "points": 15 }
+                ]
+            },
+            {
+                "tier": 3,
+                "name": "Good Availability",
+                "score_range": { "min": 12, "max": 14 },
+                "items": [
+                    { "name": "95%+ uptime", "points": 14 },
+                    { "name": "92%+ uptime", "points": 13 },
+                    { "name": "90%+ uptime", "points": 12 }
+                ]
+            },
+            {
+                "tier": 4,
+                "name": "Moderate Availability",
+                "score_range": { "min": 9, "max": 11 },
+                "items": [
+                    { "name": "85%+ uptime", "points": 11 },
+                    { "name": "80%+ uptime", "points": 10 },
+                    { "name": "75%+ uptime", "points": 9 }
+                ]
+            },
+            {
+                "tier": 5,
+                "name": "Limited Availability",
+                "score_range": { "min": 5, "max": 8 },
+                "items": [
+                    { "name": "50-75% uptime", "min_points": 7, "max_points": 8 },
+                    { "name": "25-50% uptime", "points": 6 },
+                    { "name": "<25% uptime", "points": 5 }
+                ]
+            }
+        ],
+        "redundancy_bonuses": [
+            { "name": "RAID 10/60", "points": 4 },
+            { "name": "RAID 5/6", "points": 3 },
+            { "name": "RAID 1", "points": 2 },
+            { "name": "Backup power", "points": 2 }
+        ]
+    },
+    "data_accessibility": {
+        "max_points": 15,
+        "tiers": [
+            {
+                "tier": 1,
+                "name": "Instant Access",
+                "score_range": { "min": 13, "max": 15 },
+                "items": [
+                    { "name": "Direct block-level access", "points": 15 },
+                    { "name": "High-speed network share", "points": 14 },
+                    { "name": "Local filesystem", "points": 13 }
+                ]
+            },
+            {
+                "tier": 2,
+                "name": "Fast Access",
+                "score_range": { "min": 10, "max": 12 },
+                "items": [
+                    { "name": "Standard network share", "points": 12 },
+                    { "name": "Cloud sync with local cache", "points": 11 },
+                    { "name": "Mounted remote storage", "points": 10 }
+                ]
+            },
+            {
+                "tier": 3,
+                "name": "Delayed Access",
+                "score_range": { "min": 7, "max": 9 },
+                "items": [
+                    { "name": "Manual mount required", "points": 9 },
+                    { "name": "Scheduled availability", "points": 8 },
+                    { "name": "Limited access hours", "points": 7 }
+                ]
+            },
+            {
+                "tier": 4,
+                "name": "Restricted Access",
+                "score_range": { "min": 4, "max": 6 },
+                "items": [
+                    { "name": "Request-based access", "points": 6 },
+                    { "name": "Archive retrieval needed", "points": 5 },
+                    { "name": "Offline with notice", "points": 4 }
+                ]
+            },
+            {
+                "tier": 5,
+                "name": "Minimal Access",
+                "score_range": { "min": 1, "max": 3 },
+                "items": [
+                    { "name": "Emergency only", "points": 3 },
+                    { "name": "Read-only", "points": 2 },
+                    { "name": "Backup/tape access", "points": 1 }
+                ]
+            }
+        ]
+    },
+    "network_bandwidth": {
+        "max_points": 10,
+        "tiers": [
+            {
+                "tier": 1,
+                "name": "Maximum Bandwidth",
+                "score_range": { "min": 9, "max": 10 },
+                "items": [
+                    { "name": "10Gbps+ to network", "points": 10 },
+                    { "name": "5-10Gbps to network", "points": 9 }
+                ]
+            },
+            {
+                "tier": 2,
+                "name": "High Bandwidth",
+                "score_range": { "min": 7, "max": 8 },
+                "items": [
+                    { "name": "2.5Gbps to network", "points": 8 },
+                    { "name": "1Gbps dedicated", "points": 7 }
+                ]
+            },
+            {
+                "tier": 3,
+                "name": "Medium Bandwidth",
+                "score_range": { "min": 5, "max": 6 },
+                "items": [
+                    { "name": "1Gbps shared", "points": 6 },
+                    { "name": "500Mbps+", "points": 5 }
+                ]
+            },
+            {
+                "tier": 4,
+                "name": "Limited Bandwidth",
+                "score_range": { "min": 3, "max": 4 },
+                "items": [
+                    { "name": "100-500Mbps", "points": 4 },
+                    { "name": "<100Mbps", "points": 3 }
+                ]
+            },
+            {
+                "tier": 5,
+                "name": "Constrained Bandwidth",
+                "score_range": { "min": 1, "max": 2 },
+                "items": [
+                    { "name": "WiFi/USB limited", "points": 2 },
+                    { "name": "Heavily shared", "points": 1 }
+                ]
+            }
+        ]
+    },
+    "multipliers": {
+        "usage_pattern": [
+            { "name": "Persistent Hot Storage", "multiplier": 1.3 },
+            { "name": "Ephemeral Fast Storage", "multiplier": 1.1 },
+            { "name": "Warm Storage", "multiplier": 1.0 },
+            { "name": "Cold Storage", "multiplier": 0.7 },
+            { "name": "Archive Storage", "multiplier": 0.4 }
+        ],
+        "data_value": [
+            { "name": "Curated Training Data", "multiplier": 1.4 },
+            { "name": "Model Checkpoints", "multiplier": 1.3 },
+            { "name": "Computation Scratch Space", "multiplier": 1.1 },
+            { "name": "General Storage", "multiplier": 1.0 },
+            { "name": "Temporary Cache", "multiplier": 0.8 }
+        ]
+    },
+    "penalties": [
+        { "name": "Single point of failure", "points": -5 },
+        { "name": "No backups", "points": -8 },
+        { "name": "Old hardware (>5 years)", "points": -4 },
+        { "name": "Consumer-grade equipment", "points": -3 },
+        { "name": "Frequent disconnects", "points": -6 },
+        { "name": "Slow response times", "points": -4 },
+        { "name": "Bandwidth contention", "points": -3 }
+    ],
+    "formulas": {
+        "base_storage_score": "Base = (Performance * 0.3) + (Capacity * 0.25) + (Availability * 0.2) + (Accessibility * 0.15) + (Bandwidth * 0.1)",
+        "final_storage_score": "Final = Base * Usage_Multiplier * Data_Value_Multiplier + Redundancy_Bonuses - Penalties"
+    },
+    "examples": [
+        {
+            "name": "Enterprise NAS (Persistent Hot Storage)",
+            "inputs": {
+                "performance": 28,
+                "capacity": 23,
+                "availability": 19,
+                "accessibility": 15,
+                "bandwidth": 10,
+                "usage_multiplier": 1.3,
+                "data_value_multiplier": 1.4,
+                "redundancy_bonuses_total": 6,
+                "penalties_total": 0
+            },
+            "given_calculation": {
+                "base_score_given": 22.4,
+                "final_score_given": 46.8,
+                "classification_given": "Elite Storage"
+            },
+            "computed_calculation": {
+                "base_score_computed": 21.2,
+                "final_score_computed": 44.584,
+                "classification_computed": "Elite (close to threshold)"
+            },
+            "notes": "Given values in source differ from strict formula computation; computed values use listed formula."
+        },
+        {
+            "name": "Gaming PC NVMe (Ephemeral Fast Storage)",
+            "inputs": {
+                "performance": 22,
+                "capacity": 19,
+                "availability": 14,
+                "accessibility": 13,
+                "bandwidth": 8,
+                "usage_multiplier": 1.1,
+                "data_value_multiplier": 1.1,
+                "redundancy_bonuses_total": 0,
+                "penalties_total": 5
+            },
+            "given_calculation": {
+                "base_score_given": 17.7,
+                "final_score_given": 16.4,
+                "classification_given": "Good Storage"
+            },
+            "computed_calculation": {
+                "base_score_computed": 16.9,
+                "final_score_computed": 15.449,
+                "classification_computed": "Good Storage"
+            },
+            "notes": "Source base differs from strict formula; computed final uses formula and listed penalty."
+        },
+        {
+            "name": "External HDD Archive (Cold Storage)",
+            "inputs": {
+                "performance": 10,
+                "capacity": 20,
+                "availability": 10,
+                "accessibility": 9,
+                "bandwidth": 4,
+                "usage_multiplier": 0.7,
+                "data_value_multiplier": 1.0,
+                "redundancy_bonuses_total": 0,
+                "penalties_total": 0
+            },
+            "given_calculation": {
+                "base_score_given": 12.35,
+                "final_score_given": 8.6,
+                "classification_given": "Basic Storage"
+            },
+            "computed_calculation": {
+                "base_score_computed": 11.75,
+                "final_score_computed": 8.225,
+                "classification_computed": "Minimal/Basic"
+            },
+            "notes": "Given vs computed discrepancy present."
+        },
+        {
+            "name": "Data Center All-Flash Array",
+            "inputs": {
+                "performance": 29,
+                "capacity": 25,
+                "availability": 20,
+                "accessibility": 15,
+                "bandwidth": 10,
+                "usage_multiplier": 1.3,
+                "data_value_multiplier": 1.3,
+                "redundancy_bonuses_total": 8,
+                "penalties_total": 0
+            },
+            "given_calculation": {
+                "base_score_given": 23.7,
+                "final_score_given": 48.1,
+                "classification_given": "Premium Elite Storage"
+            },
+            "computed_calculation": {
+                "base_score_computed": 22.2,
+                "final_score_computed": 45.517999999999996,
+                "classification_computed": "Elite"
+            },
+            "notes": "Computed values strictly follow the documented formula."
+        }
+    ],
+    "classification_thresholds": [
+        { "name": "Elite", "min_score": 45, "note": "Datacenter-grade persistent storage" },
+        { "name": "Premium", "min_score": 35, "max_score": 44, "note": "High-performance reliable storage" },
+        { "name": "Advanced", "min_score": 25, "max_score": 34, "note": "Capable production storage" },
+        { "name": "Good", "min_score": 18, "max_score": 24, "note": "Solid consumer/enthusiast storage" },
+        { "name": "Basic", "min_score": 12, "max_score": 17, "note": "Limited but usable storage" },
+        { "name": "Minimal", "min_score": 6, "max_score": 11, "note": "Archive/backup quality" },
+        { "name": "Ineffective", "max_score": 5, "note": "Not suitable for HPC workloads" }
+    ],
+    "notes": "All numeric fields represent values from the original specification. Example computed values were recalculated using the documented Base and Final formulas and may differ from the original text's reported example outputs."
+}

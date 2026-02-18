@@ -60,6 +60,8 @@ class NanoSea:
         self._trainer = None
         self._scanner = None
         self._server = None
+        self._global_pool = None
+        self._peer_discovery = None
 
     def __len__(self) -> int:
         return len(self._nanos)
@@ -101,17 +103,25 @@ class NanoSea:
         # Step 6: Start mesh (if enabled)
         mesh_enabled = self._config.get("mesh_enabled", False)
         if mesh_enabled:
-            logger.info("[6/8] Starting mesh node...")
+            logger.info("[6/10] Starting mesh node...")
             await self._start_mesh()
         else:
-            logger.info("[6/8] Mesh disabled (enable with --mesh)")
+            logger.info("[6/10] Mesh disabled (enable with --mesh)")
+
+        # Step 6b: Global compute pool
+        logger.info("[7/10] Starting global compute pool...")
+        await self._start_global_pool()
+
+        # Step 6c: Peer discovery
+        logger.info("[8/10] Starting peer discovery...")
+        await self._start_peer_discovery()
 
         # Step 7: Start server
-        logger.info("[7/8] Starting API server...")
+        logger.info("[9/10] Starting API server...")
         await self._start_server()
 
         # Step 8: Start trainer
-        logger.info("[8/8] Starting background trainer...")
+        logger.info("[10/10] Starting background trainer...")
         await self._start_trainer()
 
         elapsed = time.time() - t0
@@ -304,6 +314,78 @@ class NanoSea:
 
         logger.info(f"  Mesh node online at port {mesh_port}")
 
+    # ── Step 6b: Global Compute Pool ──────────────────────────
+    async def _start_global_pool(self) -> None:
+        from mesh.global_pool import GlobalComputePool, PoolMember, PoolRole
+
+        self._global_pool = GlobalComputePool(
+            local_node_id=self._mesh_node.node_id,
+            data_dir=str(ROOT_DIR / "nano_data" / "pool"),
+        )
+
+        # Register local node
+        info = self._mesh_node.info
+        donation_pct = int(os.environ.get("NANO_DONATION_PCT", "25"))
+        is_permanent = os.environ.get("NANO_PERMANENT_NODE", "0") == "1"
+
+        local_member = PoolMember(
+            node_id=self._mesh_node.node_id,
+            username=os.environ.get("NANO_USERNAME", info.hostname),
+            hostname=info.hostname,
+            role=PoolRole.PERMANENT if is_permanent else PoolRole.DONOR,
+            compute_grade=info.compute_grade,
+            tier=info.tier,
+            has_cuda=info.has_cuda,
+            gpu_vram_gb=info.gpu_vram_gb,
+            ram_gb=info.ram_gb,
+            cpu_cores=info.cpu_cores,
+            donation_percent=donation_pct,
+            max_concurrent_jobs=max(1, info.cpu_cores // 4),
+            is_online=True,
+        )
+        local_member.last_heartbeat = time.time()
+        self._global_pool.register_member(local_member)
+
+        # Idle training setting
+        idle_training = os.environ.get("NANO_IDLE_TRAINING", "1") == "1"
+        self._global_pool._idle_training_enabled = idle_training
+
+        await self._global_pool.start()
+        logger.info(f"  Global pool active (donation={donation_pct}%, "
+                     f"permanent={'yes' if is_permanent else 'no'}, "
+                     f"idle_training={'on' if idle_training else 'off'})")
+
+    # ── Step 6c: Peer Discovery ───────────────────────────────
+    async def _start_peer_discovery(self) -> None:
+        from mesh.peer_discovery import PeerDiscovery, SharingLevel
+
+        username = os.environ.get("NANO_USERNAME", self._mesh_node.info.hostname)
+        self._peer_discovery = PeerDiscovery(
+            local_node_id=self._mesh_node.node_id,
+            username=username,
+            data_dir=str(ROOT_DIR / "nano_data" / "peers"),
+        )
+
+        # Set hardware info for announcements
+        info = self._mesh_node.info
+        self._peer_discovery.compute_grade = info.compute_grade
+        self._peer_discovery.tier = info.tier
+        self._peer_discovery.has_cuda = info.has_cuda
+        self._peer_discovery.gpu_name = info.gpu_model
+
+        # Opt-in from env (defaults to off — user must enable via UI)
+        if os.environ.get("NANO_PEER_DISCOVERY", "0") == "1":
+            level_str = os.environ.get("NANO_SHARING_LEVEL", "metadata")
+            try:
+                level = SharingLevel(level_str)
+            except ValueError:
+                level = SharingLevel.METADATA
+            self._peer_discovery.set_opt_in(True, level)
+
+        await self._peer_discovery.start(port=self._config.get("mesh_port", 5101))
+        logger.info(f"  Peer discovery active (username={username}, "
+                     f"discoverable={self._peer_discovery.is_discoverable})")
+
     # ── Step 7: Server ─────────────────────────────────────────
     async def _start_server(self) -> None:
         from server.main import create_server
@@ -317,6 +399,8 @@ class NanoSea:
             respect=self._respect,
             help_sys=self._help_system,
             scheduler=self._scheduler,
+            global_pool=self._global_pool,
+            peer_discovery=self._peer_discovery,
         )
 
         port = self._config.get("port", 5100)
@@ -360,6 +444,10 @@ class NanoSea:
         logger.info("Shutting down Sea of Nanos...")
         if self._trainer:
             await self._trainer.stop()
+        if self._peer_discovery:
+            await self._peer_discovery.stop()
+        if self._global_pool:
+            await self._global_pool.stop()
         if self._help_system:
             await self._help_system.stop()
         if self._discovery:

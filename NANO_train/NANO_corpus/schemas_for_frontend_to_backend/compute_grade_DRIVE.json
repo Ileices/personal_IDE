@@ -1,0 +1,531 @@
+{
+    "categories": [
+        {
+            "name": "NVMe Gen5 SSDs",
+            "attributes": {
+                "generation": "Gen5",
+                "interface": null,
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Crucial T700", "capacity": null, "grade": 98 },
+                { "model": "Samsung 990 Pro", "capacity": null, "grade": 96 },
+                { "model": "WD Black SN850X", "capacity": null, "grade": 95 },
+                { "model": "Seagate FireCuda 540", "capacity": null, "grade": 94 },
+                { "model": "Sabrent Rocket 5", "capacity": null, "grade": 93 },
+                { "model": "Kingston Fury Renegade", "capacity": null, "grade": 92 },
+                { "model": "Corsair MP700", "capacity": null, "grade": 91 },
+                { "model": "Gigabyte AORUS Gen5 10000", "capacity": null, "grade": 90 }
+            ]
+        },
+        {
+            "name": "NVMe Gen4 SSDs",
+            "attributes": {
+                "generation": "Gen4",
+                "interface": null,
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung 980 Pro", "capacity": null, "grade": 88 },
+                { "model": "WD Black SN850", "capacity": null, "grade": 87 },
+                { "model": "Sabrent Rocket 4 Plus", "capacity": null, "grade": 86 },
+                { "model": "Crucial P5 Plus", "capacity": null, "grade": 85 },
+                { "model": "Seagate FireCuda 530", "capacity": null, "grade": 84 },
+                { "model": "Kingston KC3000", "capacity": null, "grade": 83 },
+                { "model": "Corsair MP600 Pro", "capacity": null, "grade": 82 },
+                { "model": "ADATA XPG Gammix S70", "capacity": null, "grade": 81 }
+            ]
+        },
+        {
+            "name": "NVMe Gen3 SSDs",
+            "attributes": {
+                "generation": "Gen3",
+                "interface": null,
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung 970 EVO Plus", "capacity": null, "grade": 75 },
+                { "model": "WD Blue SN570", "capacity": null, "grade": 72 },
+                { "model": "Crucial P3", "capacity": null, "grade": 70 },
+                { "model": "Sabrent Rocket", "capacity": null, "grade": 68 },
+                { "model": "Kingston NV2", "capacity": null, "grade": 65 },
+                { "model": "Seagate BarraCuda 510", "capacity": null, "grade": 66 },
+                { "model": "Corsair MP510", "capacity": null, "grade": 67 }
+            ]
+        },
+        {
+            "name": "SATA SSDs",
+            "attributes": {
+                "generation": null,
+                "interface": "SATA",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung 870 EVO", "capacity": null, "grade": 60 },
+                { "model": "Crucial MX500", "capacity": null, "grade": 58 },
+                { "model": "WD Blue 3D NAND", "capacity": null, "grade": 56 },
+                { "model": "SanDisk Ultra 3D", "capacity": null, "grade": 55 },
+                { "model": "Seagate BarraCuda 120", "capacity": null, "grade": 54 },
+                { "model": "Kingston KC600", "capacity": null, "grade": 53 }
+            ]
+        },
+        {
+            "name": "Enterprise NVMe",
+            "attributes": {
+                "generation": null,
+                "interface": "NVMe",
+                "segment": "enterprise"
+            },
+            "items": [
+                { "model": "Samsung PM9A3", "capacity": null, "grade": 97 },
+                { "model": "Intel Optane P5800X", "capacity": null, "grade": 99 },
+                { "model": "WD Ultrastar DC SN840", "capacity": null, "grade": 96 },
+                { "model": "Micron 7450", "capacity": null, "grade": 95 },
+                { "model": "Kioxia CD7", "capacity": null, "grade": 94 },
+                { "model": "Seagate Nytro 5000", "capacity": null, "grade": 93 }
+            ]
+        },
+        {
+            "name": "Enterprise SATA",
+            "attributes": {
+                "generation": null,
+                "interface": "SATA",
+                "segment": "enterprise"
+            },
+            "items": [
+                { "model": "Samsung 883 DCT", "capacity": null, "grade": 70 },
+                { "model": "Micron 5400", "capacity": null, "grade": 68 },
+                { "model": "WD Gold", "capacity": null, "grade": 66 },
+                { "model": "Seagate IronWolf 125", "capacity": null, "grade": 65 },
+                { "model": "Intel S4520", "capacity": null, "grade": 67 }
+            ]
+        },
+        {
+            "name": "HDD 7200RPM",
+            "attributes": {
+                "rpm": 7200,
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Seagate Exos X20", "capacity": null, "grade": 45 },
+                { "model": "WD Gold", "capacity": null, "grade": 44 },
+                { "model": "Toshiba MG09", "capacity": null, "grade": 43 },
+                { "model": "Seagate IronWolf Pro", "capacity": null, "grade": 42 },
+                { "model": "WD Red Pro", "capacity": null, "grade": 41 }
+            ]
+        },
+        {
+            "name": "HDD 5400RPM",
+            "attributes": {
+                "rpm": 5400,
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "WD Blue", "capacity": null, "grade": 30 },
+                { "model": "Seagate BarraCuda", "capacity": null, "grade": 29 },
+                { "model": "Toshiba P300", "capacity": null, "grade": 28 },
+                { "model": "WD Red", "capacity": null, "grade": 27 },
+                { "model": "Seagate SkyHawk", "capacity": null, "grade": 26 }
+            ]
+        },
+        {
+            "name": "External SSDs",
+            "attributes": {
+                "interface": "external",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung T9", "capacity": null, "grade": 85 },
+                { "model": "WD Black P50", "capacity": null, "grade": 82 },
+                { "model": "SanDisk Extreme Pro", "capacity": null, "grade": 80 },
+                { "model": "Crucial X10", "capacity": null, "grade": 78 },
+                { "model": "Seagate FireCuda", "capacity": null, "grade": 76 },
+                { "model": "ADATA SE900", "capacity": null, "grade": 74 }
+            ]
+        },
+        {
+            "name": "External HDDs",
+            "attributes": {
+                "interface": "external",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "WD Black D10", "capacity": null, "grade": 40 },
+                { "model": "Seagate Expansion Desktop", "capacity": null, "grade": 35 },
+                { "model": "LaCie Rugged", "capacity": null, "grade": 38 },
+                { "model": "Toshiba Canvio Advance", "capacity": null, "grade": 32 },
+                { "model": "ADATA HD710 Pro", "capacity": null, "grade": 34 }
+            ]
+        },
+        {
+            "name": "Legacy SSDs",
+            "attributes": {
+                "generation": "legacy",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung 860 EVO", "capacity": null, "grade": 50 },
+                { "model": "Crucial BX500", "capacity": null, "grade": 45 },
+                { "model": "WD Green", "capacity": null, "grade": 42 },
+                { "model": "Kingston A400", "capacity": null, "grade": 40 },
+                { "model": "SanDisk SSD Plus", "capacity": null, "grade": 38 }
+            ]
+        },
+        {
+            "name": "Legacy HDDs",
+            "attributes": {
+                "generation": "legacy",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "WD Black", "capacity": null, "grade": 35 },
+                { "model": "Seagate FireCuda (SSHD)", "capacity": null, "grade": 30 },
+                { "model": "HGST Ultrastar", "capacity": null, "grade": 38 },
+                { "model": "Toshiba X300", "capacity": null, "grade": 33 }
+            ]
+        },
+        {
+            "name": "Optane Memory",
+            "attributes": {
+                "technology": "Intel Optane",
+                "segment": "enterprise/consumer"
+            },
+            "items": [
+                { "model": "Intel Optane 905P", "capacity": null, "grade": 90 },
+                { "model": "Intel Optane 900P", "capacity": null, "grade": 88 },
+                { "model": "Intel Optane M10", "capacity": null, "grade": 70 },
+                { "model": "Intel Optane H10", "capacity": null, "grade": 65 }
+            ]
+        },
+        {
+            "name": "U.2 Enterprise",
+            "attributes": {
+                "interface": "U.2",
+                "segment": "enterprise"
+            },
+            "items": [
+                { "model": "Intel DC P4510", "capacity": null, "grade": 80 },
+                { "model": "Samsung PM1733", "capacity": null, "grade": 92 },
+                { "model": "WD Ultrastar DC ZN540", "capacity": null, "grade": 91 },
+                { "model": "Kioxia CM6", "capacity": null, "grade": 90 },
+                { "model": "Micron 9300", "capacity": null, "grade": 89 }
+            ]
+        },
+        {
+            "name": "M.2 2242/2230",
+            "attributes": {
+                "formFactor": "M.2 2242/2230",
+                "segment": "mobile/compact"
+            },
+            "items": [
+                { "model": "WD SN740", "capacity": null, "grade": 78 },
+                { "model": "Samsung PM991a", "capacity": null, "grade": 76 },
+                { "model": "Kioxia BG5", "capacity": null, "grade": 74 },
+                { "model": "Micron 2400", "capacity": null, "grade": 75 },
+                { "model": "Sabrent Rocket Q4", "capacity": null, "grade": 72 }
+            ]
+        },
+        {
+            "name": "NVMe Gen5 SSDs (PCIe 5.0)",
+            "attributes": {
+                "generation": "Gen5",
+                "interface": "PCIe 5.0",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Crucial T700", "capacity": "4TB", "grade": 98 },
+                { "model": "Samsung 990 Pro", "capacity": "4TB", "grade": 96 },
+                { "model": "WD Black SN850X", "capacity": "4TB", "grade": 95 },
+                { "model": "Seagate FireCuda 540", "capacity": "4TB", "grade": 94 },
+                { "model": "Sabrent Rocket 5", "capacity": "4TB", "grade": 93 },
+                { "model": "Kingston Fury Renegade", "capacity": "4TB", "grade": 92 },
+                { "model": "Corsair MP700", "capacity": "4TB", "grade": 91 },
+                { "model": "Gigabyte AORUS Gen5 10000", "capacity": "2TB", "grade": 90 },
+                { "model": "Addlink A95", "capacity": "4TB", "grade": 89 },
+                { "model": "Teamgroup T-Force Cardea Z540", "capacity": "4TB", "grade": 88 }
+            ]
+        },
+        {
+            "name": "NVMe Gen4 SSDs (PCIe 4.0)",
+            "attributes": {
+                "generation": "Gen4",
+                "interface": "PCIe 4.0",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung 980 Pro", "capacity": "4TB", "grade": 87 },
+                { "model": "WD Black SN850", "capacity": "4TB", "grade": 86 },
+                { "model": "Sabrent Rocket 4 Plus", "capacity": "8TB", "grade": 88 },
+                { "model": "Crucial P5 Plus", "capacity": "4TB", "grade": 85 },
+                { "model": "Seagate FireCuda 530", "capacity": "4TB", "grade": 86 },
+                { "model": "Kingston KC3000", "capacity": "4TB", "grade": 84 },
+                { "model": "Corsair MP600 Pro", "capacity": "4TB", "grade": 83 },
+                { "model": "ADATA XPG Gammix S70", "capacity": "2TB", "grade": 82 },
+                { "model": "Silicon Power US70", "capacity": "4TB", "grade": 81 },
+                { "model": "Inland Performance Plus", "capacity": "4TB", "grade": 80 }
+            ]
+        },
+        {
+            "name": "NVMe Gen3 SSDs (PCIe 3.0)",
+            "attributes": {
+                "generation": "Gen3",
+                "interface": "PCIe 3.0",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung 970 EVO Plus", "capacity": "2TB", "grade": 75 },
+                { "model": "WD Blue SN570", "capacity": "2TB", "grade": 72 },
+                { "model": "Crucial P3", "capacity": "4TB", "grade": 70 },
+                { "model": "Sabrent Rocket", "capacity": "4TB", "grade": 73 },
+                { "model": "Kingston NV2", "capacity": "2TB", "grade": 68 },
+                { "model": "Seagate BarraCuda 510", "capacity": "2TB", "grade": 69 },
+                { "model": "Corsair MP510", "capacity": "1.92TB", "grade": 71 },
+                { "model": "Intel 665p", "capacity": "2TB", "grade": 67 },
+                { "model": "Teamgroup MP34", "capacity": "4TB", "grade": 72 },
+                { "model": "HP EX950", "capacity": "2TB", "grade": 70 }
+            ]
+        },
+        {
+            "name": "SATA SSDs (detailed)",
+            "attributes": {
+                "interface": "SATA",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung 870 EVO", "capacity": "4TB", "grade": 65 },
+                { "model": "Crucial MX500", "capacity": "4TB", "grade": 64 },
+                { "model": "WD Blue 3D NAND", "capacity": "4TB", "grade": 63 },
+                { "model": "SanDisk Ultra 3D", "capacity": "4TB", "grade": 62 },
+                { "model": "Seagate BarraCuda 120", "capacity": "4TB", "grade": 61 },
+                { "model": "Kingston KC600", "capacity": "2TB", "grade": 60 },
+                { "model": "ADATA SU800", "capacity": "2TB", "grade": 59 },
+                { "model": "PNY CS900", "capacity": "2TB", "grade": 58 },
+                { "model": "Intel 545s", "capacity": "2TB", "grade": 57 },
+                { "model": "Teamgroup GX2", "capacity": "2TB", "grade": 56 }
+            ]
+        },
+        {
+            "name": "Enterprise NVMe U.2",
+            "attributes": {
+                "interface": "U.2",
+                "segment": "enterprise"
+            },
+            "items": [
+                { "model": "Samsung PM9A3", "capacity": "7.68TB", "grade": 97 },
+                { "model": "Intel Optane P5800X", "capacity": "1.6TB", "grade": 99 },
+                { "model": "WD Ultrastar DC SN840", "capacity": "7.68TB", "grade": 96 },
+                { "model": "Micron 7450", "capacity": "7.68TB", "grade": 95 },
+                { "model": "Kioxia CD7", "capacity": "7.68TB", "grade": 94 },
+                { "model": "Seagate Nytro 5000", "capacity": "7.68TB", "grade": 93 },
+                { "model": "Solidigm P5520", "capacity": "7.68TB", "grade": 92 },
+                { "model": "Huawei ES3600", "capacity": "7.68TB", "grade": 91 },
+                { "model": "Yangtze Memory X3-9070", "capacity": "7.68TB", "grade": 90 }
+            ]
+        },
+        {
+            "name": "Enterprise SATA SSDs (detailed)",
+            "attributes": {
+                "interface": "SATA",
+                "segment": "enterprise"
+            },
+            "items": [
+                { "model": "Samsung 883 DCT", "capacity": "3.84TB", "grade": 70 },
+                { "model": "Micron 5400", "capacity": "7.68TB", "grade": 72 },
+                { "model": "WD Gold", "capacity": "7.68TB", "grade": 71 },
+                { "model": "Seagate IronWolf 125", "capacity": "3.84TB", "grade": 69 },
+                { "model": "Intel S4520", "capacity": "7.68TB", "grade": 73 },
+                { "model": "Kioxia HK6", "capacity": "3.84TB", "grade": 68 },
+                { "model": "Kingston DC500", "capacity": "3.84TB", "grade": 67 }
+            ]
+        },
+        {
+            "name": "HDD 7200RPM Enterprise",
+            "attributes": {
+                "rpm": 7200,
+                "segment": "enterprise"
+            },
+            "items": [
+                { "model": "Seagate Exos X20", "capacity": "20TB", "grade": 55 },
+                { "model": "WD Gold", "capacity": "22TB", "grade": 56 },
+                { "model": "Toshiba MG09", "capacity": "18TB", "grade": 54 },
+                { "model": "Seagate IronWolf Pro", "capacity": "22TB", "grade": 57 },
+                { "model": "WD Red Pro", "capacity": "22TB", "grade": 55 },
+                { "model": "Huawei OceanStor", "capacity": "20TB", "grade": 53 },
+                { "model": "HGST Ultrastar", "capacity": "20TB", "grade": 56 }
+            ]
+        },
+        {
+            "name": "HDD 7200RPM Consumer",
+            "attributes": {
+                "rpm": 7200,
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Seagate BarraCuda", "capacity": "8TB", "grade": 45 },
+                { "model": "WD Blue", "capacity": "8TB", "grade": 44 },
+                { "model": "Toshiba X300", "capacity": "8TB", "grade": 46 },
+                { "model": "Seagate FireCuda", "capacity": "8TB", "grade": 47 },
+                { "model": "WD Black", "capacity": "8TB", "grade": 48 }
+            ]
+        },
+        {
+            "name": "HDD 5400RPM (detailed)",
+            "attributes": {
+                "rpm": 5400,
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "WD Blue", "capacity": "6TB", "grade": 35 },
+                { "model": "Seagate BarraCuda", "capacity": "6TB", "grade": 34 },
+                { "model": "Toshiba P300", "capacity": "6TB", "grade": 36 },
+                { "model": "WD Red", "capacity": "6TB", "grade": 33 },
+                { "model": "Seagate SkyHawk", "capacity": "6TB", "grade": 32 }
+            ]
+        },
+        {
+            "name": "External SSDs (detailed)",
+            "attributes": {
+                "interface": "external",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung T9", "capacity": "4TB", "grade": 85 },
+                { "model": "WD Black P50", "capacity": "4TB", "grade": 84 },
+                { "model": "SanDisk Extreme Pro", "capacity": "4TB", "grade": 83 },
+                { "model": "Crucial X10", "capacity": "4TB", "grade": 82 },
+                { "model": "Seagate FireCuda", "capacity": "4TB", "grade": 81 },
+                { "model": "ADATA SE900", "capacity": "4TB", "grade": 80 },
+                { "model": "Sabrent Rocket XTRM", "capacity": "4TB", "grade": 83 },
+                { "model": "LaCie Rugged SSD Pro", "capacity": "4TB", "grade": 79 },
+                { "model": "Kingston XS2000", "capacity": "4TB", "grade": 78 }
+            ]
+        },
+        {
+            "name": "External HDDs (detailed)",
+            "attributes": {
+                "interface": "external",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "WD Black D10", "capacity": "18TB", "grade": 50 },
+                { "model": "Seagate Expansion Desktop", "capacity": "20TB", "grade": 52 },
+                { "model": "LaCie Rugged", "capacity": "5TB", "grade": 45 },
+                { "model": "Toshiba Canvio Advance", "capacity": "4TB", "grade": 40 },
+                { "model": "ADATA HD710 Pro", "capacity": "4TB", "grade": 42 },
+                { "model": "Samsung T7", "capacity": "4TB", "grade": 48 },
+                { "model": "G-Technology G-DRIVE", "capacity": "18TB", "grade": 51 }
+            ]
+        },
+        {
+            "name": "Legacy SSDs (detailed)",
+            "attributes": {
+                "generation": "legacy",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "Samsung 860 EVO", "capacity": "4TB", "grade": 60 },
+                { "model": "Crucial BX500", "capacity": "2TB", "grade": 55 },
+                { "model": "WD Green", "capacity": "2TB", "grade": 53 },
+                { "model": "Kingston A400", "capacity": "2TB", "grade": 52 },
+                { "model": "SanDisk SSD Plus", "capacity": "2TB", "grade": 51 },
+                { "model": "Intel 545s", "capacity": "2TB", "grade": 54 }
+            ]
+        },
+        {
+            "name": "Legacy HDDs (detailed)",
+            "attributes": {
+                "generation": "legacy",
+                "segment": "consumer"
+            },
+            "items": [
+                { "model": "WD Black", "capacity": "6TB", "grade": 40 },
+                { "model": "Seagate FireCuda (SSHD)", "capacity": "2TB", "grade": 38 },
+                { "model": "HGST Ultrastar", "capacity": "8TB", "grade": 45 },
+                { "model": "Toshiba X300", "capacity": "6TB", "grade": 42 },
+                { "model": "Seagate Constellation", "capacity": "4TB", "grade": 35 }
+            ]
+        },
+        {
+            "name": "Optane Memory (detailed)",
+            "attributes": {
+                "technology": "Intel Optane",
+                "segment": "enterprise/consumer"
+            },
+            "items": [
+                { "model": "Intel Optane 905P", "capacity": "1.5TB", "grade": 90 },
+                { "model": "Intel Optane 900P", "capacity": "480GB", "grade": 88 },
+                { "model": "Intel Optane M10", "capacity": "64GB", "grade": 70 },
+                { "model": "Intel Optane H10", "capacity": "32GB", "grade": 65 },
+                { "model": "Intel Optane DC Persistent Memory", "capacity": "512GB", "grade": 92 }
+            ]
+        },
+        {
+            "name": "M.2 2242/2230 Form Factor (detailed)",
+            "attributes": {
+                "formFactor": "M.2 2242/2230",
+                "segment": "mobile/compact"
+            },
+            "items": [
+                { "model": "WD SN740", "capacity": "2TB", "grade": 78 },
+                { "model": "Samsung PM991a", "capacity": "2TB", "grade": 77 },
+                { "model": "Kioxia BG5", "capacity": "2TB", "grade": 76 },
+                { "model": "Micron 2400", "capacity": "2TB", "grade": 75 },
+                { "model": "Sabrent Rocket Q4", "capacity": "2TB", "grade": 74 },
+                { "model": "SK Hynix BC711", "capacity": "2TB", "grade": 76 }
+            ]
+        },
+        {
+            "name": "SAS Drives",
+            "attributes": {
+                "interface": "SAS",
+                "segment": "enterprise"
+            },
+            "items": [
+                { "model": "Seagate Exos 15TB SAS", "capacity": "15TB", "grade": 65 },
+                { "model": "WD Ultrastar 18TB SAS", "capacity": "18TB", "grade": 66 },
+                { "model": "Toshiba MG08 16TB SAS", "capacity": "16TB", "grade": 64 },
+                { "model": "Huawei ES3000 SAS", "capacity": null, "grade": 63 }
+            ]
+        },
+        {
+            "name": "NAS Drives",
+            "attributes": {
+                "usage": "NAS",
+                "segment": "SMB/consumer"
+            },
+            "items": [
+                { "model": "Seagate IronWolf", "capacity": "18TB", "grade": 58 },
+                { "model": "WD Red Plus", "capacity": "18TB", "grade": 57 },
+                { "model": "Toshiba N300", "capacity": "18TB", "grade": 56 },
+                { "model": "Synology HAT5300", "capacity": "18TB", "grade": 59 },
+                { "model": "QNAP TS-1685", "capacity": "18TB", "grade": 58 }
+            ]
+        },
+        {
+            "name": "Memory Cards",
+            "attributes": {
+                "media": "memory card",
+                "segment": "professional"
+            },
+            "items": [
+                { "model": "SanDisk Extreme Pro SDXC", "capacity": "1TB", "grade": 70 },
+                { "model": "Lexar Professional CFexpress", "capacity": "1TB", "grade": 72 },
+                { "model": "Sony TOUGH SDXC", "capacity": "1TB", "grade": 71 },
+                { "model": "ProGrade Digital CFexpress", "capacity": "1TB", "grade": 73 },
+                { "model": "Angelbird AV Pro SD", "capacity": "1TB", "grade": 69 }
+            ]
+        },
+        {
+            "name": "Optical Drives",
+            "attributes": {
+                "media": "optical",
+                "segment": "legacy"
+            },
+            "items": [
+                { "model": "Pioneer BDR-213JB", "capacity": null, "grade": 20 },
+                { "model": "LG WH16NS60", "capacity": null, "grade": 19 },
+                { "model": "ASUS BW-16D1X-U", "capacity": null, "grade": 21 }
+            ]
+        }
+    ]
+}

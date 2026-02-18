@@ -6,9 +6,12 @@ from .latency import LatencyCompensator
 from .respect import RespectSystem
 from .task_queue import MeshTaskQueue
 from .help_request import HelpRequestSystem
+from .global_pool import GlobalComputePool, PoolMember, PoolJob
+from .peer_discovery import PeerDiscovery, PeerInfo, PeerGroup
 
 __all__ = [
     "MeshNode", "NodeInfo", "DiscoveryService", "MeshTransport",
     "LatencyCompensator", "RespectSystem", "MeshTaskQueue",
-    "HelpRequestSystem",
+    "HelpRequestSystem", "GlobalComputePool", "PoolMember", "PoolJob",
+    "PeerDiscovery", "PeerInfo", "PeerGroup",
 ]

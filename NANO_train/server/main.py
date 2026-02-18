@@ -85,6 +85,8 @@ class NanoServer:
         self._respect_system = None
         self._help_system = None
         self._scheduler = None
+        self._global_pool = None
+        self._peer_discovery = None
         self._start_time = time.time()
 
         # CORS
@@ -98,13 +100,16 @@ class NanoServer:
         self._register_routes()
 
     def set_systems(self, sea=None, mesh_node=None, pipeline=None,
-                    respect=None, help_sys=None, scheduler=None) -> None:
+                    respect=None, help_sys=None, scheduler=None,
+                    global_pool=None, peer_discovery=None) -> None:
         self._sea = sea
         self._mesh_node = mesh_node
         self._pipeline_executor = pipeline
         self._respect_system = respect
         self._help_system = help_sys
         self._scheduler = scheduler
+        self._global_pool = global_pool
+        self._peer_discovery = peer_discovery
 
     def _register_routes(self) -> None:
         app = self.app
@@ -214,6 +219,120 @@ class NanoServer:
                 "total_training_steps": 0,
                 "nano_count": len(self._sea) if self._sea else 0,
             }
+
+        # ── Global Pool endpoints ──────────────────────────────
+        @app.get("/v1/pool/stats")
+        async def pool_stats():
+            if self._global_pool:
+                return self._global_pool.stats
+            return {"error": "Global pool not initialized"}
+
+        @app.put("/v1/pool/donation")
+        async def set_donation(request: Request):
+            body = await request.json()
+            pct = body.get("percent", 25)
+            if self._global_pool and self._mesh_node:
+                self._global_pool.set_donation_percent(
+                    self._mesh_node.node_id, int(pct))
+                return {"success": True, "donation_percent": pct}
+            return {"error": "Pool not initialized"}
+
+        @app.put("/v1/pool/idle-training")
+        async def toggle_idle_training(request: Request):
+            body = await request.json()
+            if self._global_pool:
+                self._global_pool._idle_training_enabled = body.get("enabled", True)
+                return {"success": True, "idle_training": self._global_pool._idle_training_enabled}
+            return {"error": "Pool not initialized"}
+
+        @app.post("/v1/pool/permanent-node")
+        async def toggle_permanent_node(request: Request):
+            body = await request.json()
+            if self._global_pool and self._mesh_node:
+                if body.get("enabled", False):
+                    self._global_pool.add_permanent_node(self._mesh_node.node_id)
+                else:
+                    self._global_pool.remove_member(self._mesh_node.node_id)
+                return {"success": True}
+            return {"error": "Pool not initialized"}
+
+        # ── Peer Discovery endpoints ───────────────────────────
+        @app.get("/v1/discovery/status")
+        async def discovery_status():
+            if self._peer_discovery:
+                return self._peer_discovery.status
+            return {"error": "Peer discovery not initialized"}
+
+        @app.get("/v1/discovery/peers")
+        async def discovery_peers():
+            if self._peer_discovery:
+                return {
+                    "peers": [p.to_dict() for p in self._peer_discovery.get_all_peers()]
+                }
+            return {"peers": []}
+
+        @app.post("/v1/discovery/opt-in")
+        async def discovery_opt_in(request: Request):
+            body = await request.json()
+            if self._peer_discovery:
+                from NANO_train.mesh.peer_discovery import SharingLevel
+                level = SharingLevel(body.get("sharing_level", "metadata"))
+                self._peer_discovery.set_opt_in(body.get("enabled", True), level)
+                return {"success": True}
+            return {"error": "Discovery not initialized"}
+
+        @app.post("/v1/discovery/connect")
+        async def discovery_connect(request: Request):
+            body = await request.json()
+            node_id = body.get("node_id", "")
+            if self._peer_discovery and node_id:
+                ok = await self._peer_discovery.send_connection_request(node_id)
+                return {"success": ok}
+            return {"error": "Invalid request"}
+
+        @app.post("/v1/discovery/disconnect")
+        async def discovery_disconnect(request: Request):
+            body = await request.json()
+            node_id = body.get("node_id", "")
+            if self._peer_discovery and node_id:
+                self._peer_discovery.disconnect_peer(node_id)
+                return {"success": True}
+            return {"error": "Invalid request"}
+
+        @app.post("/v1/discovery/accept")
+        async def discovery_accept(request: Request):
+            body = await request.json()
+            node_id = body.get("node_id", "")
+            if self._peer_discovery and node_id:
+                ok = self._peer_discovery.accept_connection(node_id)
+                return {"success": ok}
+            return {"error": "Invalid request"}
+
+        @app.post("/v1/discovery/block")
+        async def discovery_block(request: Request):
+            body = await request.json()
+            node_id = body.get("node_id", "")
+            if self._peer_discovery and node_id:
+                self._peer_discovery.block_peer(node_id)
+                return {"success": True}
+            return {"error": "Invalid request"}
+
+        @app.get("/v1/discovery/groups")
+        async def discovery_groups():
+            if self._peer_discovery:
+                return {"groups": [g.to_dict() for g in self._peer_discovery.get_groups()]}
+            return {"groups": []}
+
+        @app.post("/v1/discovery/groups/create")
+        async def create_group(request: Request):
+            body = await request.json()
+            if self._peer_discovery:
+                group = self._peer_discovery.create_group(
+                    name=body.get("name", "Untitled Group"),
+                    description=body.get("description", ""),
+                )
+                return {"success": True, "group": group.to_dict()}
+            return {"error": "Discovery not initialized"}
 
     # ── Response Generation ────────────────────────────────────
     async def _complete_response(self, request: ChatCompletionRequest) -> dict:

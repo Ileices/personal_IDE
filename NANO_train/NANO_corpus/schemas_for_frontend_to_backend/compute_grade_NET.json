@@ -1,0 +1,660 @@
+{
+    "categories": [
+        {
+            "name": "Network Interface Cards (NICs)",
+            "subcategories": [
+                {
+                    "name": "100G Ethernet",
+                    "items": [
+                        { "name": "Mellanox ConnectX-7", "vendor": "Mellanox", "model": "ConnectX-7", "grade": 98 },
+                        { "name": "Intel E810-CQDA2", "vendor": "Intel", "model": "E810-CQDA2", "grade": 95 },
+                        { "name": "Marvell QL45611", "vendor": "Marvell", "model": "QL45611", "grade": 92 },
+                        { "name": "Broadcom BCM57508", "vendor": "Broadcom", "model": "BCM57508", "grade": 90 },
+                        { "name": "NVIDIA ConnectX-6", "vendor": "NVIDIA", "model": "ConnectX-6", "grade": 88 }
+                    ]
+                },
+                {
+                    "name": "25G/40G Ethernet",
+                    "items": [
+                        { "name": "Intel XXV710", "vendor": "Intel", "model": "XXV710", "grade": 82 },
+                        { "name": "Mellanox ConnectX-4", "vendor": "Mellanox", "model": "ConnectX-4", "grade": 85 },
+                        { "name": "Broadcom BCM57416", "vendor": "Broadcom", "model": "BCM57416", "grade": 78 },
+                        { "name": "Marvell FastLinQ 41264", "vendor": "Marvell", "model": "FastLinQ 41264", "grade": 80 },
+                        { "name": "Solarflare X2522", "vendor": "Solarflare", "model": "X2522", "grade": 75 }
+                    ]
+                },
+                {
+                    "name": "10G Ethernet",
+                    "items": [
+                        { "name": "Intel X710", "vendor": "Intel", "model": "X710", "grade": 72 },
+                        { "name": "Broadcom BCM57414", "vendor": "Broadcom", "model": "BCM57414", "grade": 70 },
+                        { "name": "Mellanox ConnectX-3", "vendor": "Mellanox", "model": "ConnectX-3", "grade": 68 },
+                        { "name": "Aquantia AQC107", "vendor": "Aquantia", "model": "AQC107", "grade": 65 },
+                        { "name": "Marvell FastLinQ 41232", "vendor": "Marvell", "model": "FastLinQ 41232", "grade": 67 }
+                    ]
+                },
+                {
+                    "name": "2.5G Ethernet",
+                    "items": [
+                        { "name": "Intel I225-V", "vendor": "Intel", "model": "I225-V", "grade": 55 },
+                        { "name": "Realtek RTL8125", "vendor": "Realtek", "model": "RTL8125", "grade": 52 },
+                        { "name": "Aquantia AQC111", "vendor": "Aquantia", "model": "AQC111", "grade": 53 },
+                        { "name": "Broadcom BCM57412", "vendor": "Broadcom", "model": "BCM57412", "grade": 56 }
+                    ]
+                },
+                {
+                    "name": "1G Ethernet",
+                    "items": [
+                        { "name": "Intel I210", "vendor": "Intel", "model": "I210", "grade": 45 },
+                        { "name": "Realtek RTL8111", "vendor": "Realtek", "model": "RTL8111", "grade": 42 },
+                        { "name": "Broadcom BCM5719", "vendor": "Broadcom", "model": "BCM5719", "grade": 44 },
+                        { "name": "Marvell 88E1514", "vendor": "Marvell", "model": "88E1514", "grade": 43 }
+                    ]
+                },
+                {
+                    "name": "WiFi 7",
+                    "items": [
+                        { "name": "Intel BE200", "vendor": "Intel", "model": "BE200", "grade": 85 },
+                        { "name": "Qualcomm QCNCM865", "vendor": "Qualcomm", "model": "QCNCM865", "grade": 88 },
+                        { "name": "Broadcom BCM4390", "vendor": "Broadcom", "model": "BCM4390", "grade": 86 },
+                        { "name": "MediaTek MT7927", "vendor": "MediaTek", "model": "MT7927", "grade": 82 }
+                    ]
+                },
+                {
+                    "name": "WiFi 6E",
+                    "items": [
+                        { "name": "Intel AX411", "vendor": "Intel", "model": "AX411", "grade": 78 },
+                        { "name": "Qualcomm QCNFA765", "vendor": "Qualcomm", "model": "QCNFA765", "grade": 80 },
+                        { "name": "Broadcom BCM4389", "vendor": "Broadcom", "model": "BCM4389", "grade": 79 },
+                        { "name": "MediaTek MT7922", "vendor": "MediaTek", "model": "MT7922", "grade": 75 }
+                    ]
+                },
+                {
+                    "name": "WiFi 6",
+                    "items": [
+                        { "name": "Intel AX201", "vendor": "Intel", "model": "AX201", "grade": 70 },
+                        { "name": "Qualcomm QCA6391", "vendor": "Qualcomm", "model": "QCA6391", "grade": 68 },
+                        { "name": "Broadcom BCM43684", "vendor": "Broadcom", "model": "BCM43684", "grade": 72 },
+                        { "name": "Realtek RTL8852AE", "vendor": "Realtek", "model": "RTL8852AE", "grade": 65 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Switches",
+            "subcategories": [
+                {
+                    "name": "Data Center Core",
+                    "items": [
+                        { "name": "Arista 7280R3", "vendor": "Arista", "model": "7280R3", "grade": 99 },
+                        { "name": "Cisco Nexus 92300", "vendor": "Cisco", "model": "Nexus 92300", "grade": 97 },
+                        { "name": "Juniper QFX10002", "vendor": "Juniper", "model": "QFX10002", "grade": 96 },
+                        { "name": "Mellanox SN3700", "vendor": "Mellanox", "model": "SN3700", "grade": 98 }
+                    ]
+                },
+                {
+                    "name": "Enterprise Core",
+                    "items": [
+                        { "name": "Cisco Catalyst 9500", "vendor": "Cisco", "model": "Catalyst 9500", "grade": 90 },
+                        { "name": "Aruba 8400", "vendor": "Aruba", "model": "8400", "grade": 88 },
+                        { "name": "Juniper EX4650", "vendor": "Juniper", "model": "EX4650", "grade": 87 },
+                        { "name": "Dell S5248", "vendor": "Dell", "model": "S5248", "grade": 85 }
+                    ]
+                },
+                {
+                    "name": "Access Switches",
+                    "items": [
+                        { "name": "Cisco Catalyst 9200", "vendor": "Cisco", "model": "Catalyst 9200", "grade": 75 },
+                        { "name": "Aruba 6300", "vendor": "Aruba", "model": "6300", "grade": 78 },
+                        { "name": "Juniper EX4400", "vendor": "Juniper", "model": "EX4400", "grade": 76 },
+                        { "name": "NETGEAR M4300", "vendor": "NETGEAR", "model": "M4300", "grade": 70 }
+                    ]
+                },
+                {
+                    "name": "SMB Switches",
+                    "items": [
+                        { "name": "Ubiquiti Enterprise", "vendor": "Ubiquiti", "model": "Enterprise", "grade": 65 },
+                        { "name": "TP-Link JetStream", "vendor": "TP-Link", "model": "JetStream", "grade": 60 },
+                        { "name": "Zyxel XGS", "vendor": "Zyxel", "model": "XGS", "grade": 58 },
+                        { "name": "D-Link DGS", "vendor": "D-Link", "model": "DGS", "grade": 55 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Security",
+            "subcategories": [
+                {
+                    "name": "Next-Gen Firewalls",
+                    "items": [
+                        { "name": "Palo Alto PA-3400", "vendor": "Palo", "model": "Alto PA-3400", "grade": 95 },
+                        { "name": "Fortinet FG-3700", "vendor": "Fortinet", "model": "FG-3700", "grade": 92 },
+                        { "name": "Cisco Firepower 4100", "vendor": "Cisco", "model": "Firepower 4100", "grade": 90 },
+                        { "name": "Check Point 6200", "vendor": "Check", "model": "Point 6200", "grade": 88 }
+                    ]
+                },
+                {
+                    "name": "Enterprise Firewalls",
+                    "items": [
+                        { "name": "Sophos XGS", "vendor": "Sophos", "model": "XGS", "grade": 80 },
+                        { "name": "SonicWall NSa", "vendor": "SonicWall", "model": "NSa", "grade": 78 },
+                        { "name": "WatchGuard M570", "vendor": "WatchGuard", "model": "M570", "grade": 75 },
+                        { "name": "Barracuda F180", "vendor": "Barracuda", "model": "F180", "grade": 72 }
+                    ]
+                },
+                {
+                    "name": "SMB Firewalls",
+                    "items": [
+                        { "name": "pfSense", "vendor": "pfSense", "model": "", "grade": 70 },
+                        { "name": "OPNsense", "vendor": "OPNsense", "model": "", "grade": 68 },
+                        { "name": "Untangle", "vendor": "Untangle", "model": "", "grade": 65 },
+                        { "name": "Sophos UTM", "vendor": "Sophos", "model": "UTM", "grade": 63 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Load Balancers",
+            "subcategories": [
+                {
+                    "name": "Application Delivery",
+                    "items": [
+                        { "name": "F5 BIG-IP", "vendor": "F5", "model": "BIG-IP", "grade": 92 },
+                        { "name": "Citrix ADC", "vendor": "Citrix", "model": "ADC", "grade": 90 },
+                        { "name": "A10 Thunder", "vendor": "A10", "model": "Thunder", "grade": 88 },
+                        { "name": "Kemp LoadMaster", "vendor": "Kemp", "model": "LoadMaster", "grade": 85 }
+                    ]
+                },
+                {
+                    "name": "Software Load Balancers",
+                    "items": [
+                        { "name": "HAProxy", "vendor": "HAProxy", "model": "", "grade": 82 },
+                        { "name": "Nginx Plus", "vendor": "Nginx", "model": "Plus", "grade": 85 },
+                        { "name": "Traefik", "vendor": "Traefik", "model": "", "grade": 78 },
+                        { "name": "Envoy", "vendor": "Envoy", "model": "", "grade": 80 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Wireless Access Points",
+            "subcategories": [
+                {
+                    "name": "Enterprise WiFi 7",
+                    "items": [
+                        { "name": "Aruba AP-635", "vendor": "Aruba", "model": "AP-635", "grade": 90 },
+                        { "name": "Cisco C9136", "vendor": "Cisco", "model": "C9136", "grade": 92 },
+                        { "name": "Ruckus R770", "vendor": "Ruckus", "model": "R770", "grade": 91 },
+                        { "name": "Ubiquiti U7-Pro", "vendor": "Ubiquiti", "model": "U7-Pro", "grade": 85 }
+                    ]
+                },
+                {
+                    "name": "Enterprise WiFi 6E",
+                    "items": [
+                        { "name": "Aruba AP-505", "vendor": "Aruba", "model": "AP-505", "grade": 80 },
+                        { "name": "Cisco C9117", "vendor": "Cisco", "model": "C9117", "grade": 82 },
+                        { "name": "Ruckus R750", "vendor": "Ruckus", "model": "R750", "grade": 83 },
+                        { "name": "Ubiquiti U6-Enterprise", "vendor": "Ubiquiti", "model": "U6-Enterprise", "grade": 78 }
+                    ]
+                },
+                {
+                    "name": "SMB Access Points",
+                    "items": [
+                        { "name": "TP-Link EAP683", "vendor": "TP-Link", "model": "EAP683", "grade": 70 },
+                        { "name": "NETGEAR WAX630", "vendor": "NETGEAR", "model": "WAX630", "grade": 68 },
+                        { "name": "D-Link DAP-8620", "vendor": "D-Link", "model": "DAP-8620", "grade": 65 },
+                        { "name": "Zyxel WAX650S", "vendor": "Zyxel", "model": "WAX650S", "grade": 63 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Storage",
+            "subcategories": [
+                {
+                    "name": "SAN Arrays",
+                    "items": [
+                        { "name": "Dell PowerMax", "vendor": "Dell", "model": "PowerMax", "grade": 95 },
+                        { "name": "NetApp AFF", "vendor": "NetApp", "model": "AFF", "grade": 92 },
+                        { "name": "HPE Alletra", "vendor": "HPE", "model": "Alletra", "grade": 90 },
+                        { "name": "Pure Storage FlashArray", "vendor": "Pure", "model": "Storage FlashArray", "grade": 94 }
+                    ]
+                },
+                {
+                    "name": "NAS Systems",
+                    "items": [
+                        { "name": "Synology FS6400", "vendor": "Synology", "model": "FS6400", "grade": 85 },
+                        { "name": "QNAP TS-h3088X", "vendor": "QNAP", "model": "TS-h3088X", "grade": 83 },
+                        { "name": "TrueNAS R50", "vendor": "TrueNAS", "model": "R50", "grade": 88 },
+                        { "name": "Asustor FS6712X", "vendor": "Asustor", "model": "FS6712X", "grade": 80 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Protocols",
+            "subcategories": [
+                {
+                    "name": "High Performance",
+                    "items": [
+                        { "name": "RDMA over Converged Ethernet", "vendor": "RDMA", "model": "over Converged Ethernet", "grade": 90 },
+                        { "name": "InfiniBand EDR", "vendor": "InfiniBand", "model": "EDR", "grade": 95 },
+                        { "name": "Fibre Channel 64G", "vendor": "Fibre", "model": "Channel 64G", "grade": 88 },
+                        { "name": "iSCSI Extensions", "vendor": "iSCSI", "model": "Extensions", "grade": 85 }
+                    ]
+                },
+                {
+                    "name": "Standard Protocols",
+                    "items": [
+                        { "name": "TCP/IP Offload", "vendor": "TCP/IP", "model": "Offload", "grade": 75 },
+                        { "name": "UDP Lite", "vendor": "UDP", "model": "Lite", "grade": 70 },
+                        { "name": "SMB Direct", "vendor": "SMB", "model": "Direct", "grade": 78 },
+                        { "name": "NFSv4.2", "vendor": "NFSv4.2", "model": "", "grade": 72 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Management",
+            "subcategories": [
+                {
+                    "name": "Monitoring Systems",
+                    "items": [
+                        { "name": "SolarWinds NPM", "vendor": "SolarWinds", "model": "NPM", "grade": 82 },
+                        { "name": "PRTG Network Monitor", "vendor": "PRTG", "model": "Network Monitor", "grade": 80 },
+                        { "name": "Zabbix", "vendor": "Zabbix", "model": "", "grade": 78 },
+                        { "name": "Nagios XI", "vendor": "Nagios", "model": "XI", "grade": 75 }
+                    ]
+                },
+                {
+                    "name": "SDN Controllers",
+                    "items": [
+                        { "name": "VMware NSX", "vendor": "VMware", "model": "NSX", "grade": 88 },
+                        { "name": "Cisco ACI", "vendor": "Cisco", "model": "ACI", "grade": 85 },
+                        { "name": "Juniper Contrail", "vendor": "Juniper", "model": "Contrail", "grade": 83 },
+                        { "name": "OpenDaylight", "vendor": "OpenDaylight", "model": "", "grade": 78 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Interface Cards (NICs) - Extended",
+            "subcategories": [
+                {
+                    "name": "400G Ethernet",
+                    "items": [
+                        { "name": "NVIDIA ConnectX-7", "vendor": "NVIDIA", "model": "ConnectX-7", "grade": 99 },
+                        { "name": "Intel E810-CAM2", "vendor": "Intel", "model": "E810-CAM2", "grade": 96 },
+                        { "name": "Marvell QL45611", "vendor": "Marvell", "model": "QL45611", "grade": 94 },
+                        { "name": "Broadcom BCM87518", "vendor": "Broadcom", "model": "BCM87518", "grade": 92 }
+                    ]
+                },
+                {
+                    "name": "200G Ethernet",
+                    "items": [
+                        { "name": "Mellanox ConnectX-6", "vendor": "Mellanox", "model": "ConnectX-6", "grade": 90 },
+                        { "name": "Intel E810-XXV", "vendor": "Intel", "model": "E810-XXV", "grade": 88 },
+                        { "name": "Broadcom BCM87514", "vendor": "Broadcom", "model": "BCM87514", "grade": 86 },
+                        { "name": "Marvell QL45411", "vendor": "Marvell", "model": "QL45411", "grade": 84 }
+                    ]
+                },
+                {
+                    "name": "100G Ethernet - Extended",
+                    "items": [
+                        { "name": "NVIDIA ConnectX-5", "vendor": "NVIDIA", "model": "ConnectX-5", "grade": 85 },
+                        { "name": "Intel E810-CQDA2", "vendor": "Intel", "model": "E810-CQDA2", "grade": 83 },
+                        { "name": "Broadcom BCM57416", "vendor": "Broadcom", "model": "BCM57416", "grade": 81 },
+                        { "name": "Marvell FastLinQ 41264", "vendor": "Marvell", "model": "FastLinQ 41264", "grade": 80 },
+                        { "name": "Solarflare X2542", "vendor": "Solarflare", "model": "X2542", "grade": 78 }
+                    ]
+                },
+                {
+                    "name": "50G Ethernet",
+                    "items": [
+                        { "name": "Intel E810-XXV", "vendor": "Intel", "model": "E810-XXV", "grade": 78 },
+                        { "name": "Mellanox ConnectX-4", "vendor": "Mellanox", "model": "ConnectX-4", "grade": 76 },
+                        { "name": "Broadcom BCM57412", "vendor": "Broadcom", "model": "BCM57412", "grade": 74 },
+                        { "name": "Marvell FastLinQ 41232", "vendor": "Marvell", "model": "FastLinQ 41232", "grade": 72 }
+                    ]
+                },
+                {
+                    "name": "25G Ethernet",
+                    "items": [
+                        { "name": "Intel XXV710", "vendor": "Intel", "model": "XXV710", "grade": 72 },
+                        { "name": "Broadcom BCM57414", "vendor": "Broadcom", "model": "BCM57414", "grade": 70 },
+                        { "name": "Marvell FastLinQ 41216", "vendor": "Marvell", "model": "FastLinQ 41216", "grade": 68 },
+                        { "name": "Solarflare X2522", "vendor": "Solarflare", "model": "X2522", "grade": 66 }
+                    ]
+                },
+                {
+                    "name": "10G Ethernet - Extended",
+                    "items": [
+                        { "name": "Intel X710", "vendor": "Intel", "model": "X710", "grade": 65 },
+                        { "name": "Broadcom BCM57416", "vendor": "Broadcom", "model": "BCM57416", "grade": 63 },
+                        { "name": "Marvell FastLinQ 41232", "vendor": "Marvell", "model": "FastLinQ 41232", "grade": 62 },
+                        { "name": "Aquantia AQC107", "vendor": "Aquantia", "model": "AQC107", "grade": 60 },
+                        { "name": "Realtek RTL8125", "vendor": "Realtek", "model": "RTL8125", "grade": 58 }
+                    ]
+                },
+                {
+                    "name": "2.5G Ethernet - Extended",
+                    "items": [
+                        { "name": "Intel I225-V", "vendor": "Intel", "model": "I225-V", "grade": 55 },
+                        { "name": "Realtek RTL8125B", "vendor": "Realtek", "model": "RTL8125B", "grade": 52 },
+                        { "name": "Aquantia AQC111", "vendor": "Aquantia", "model": "AQC111", "grade": 53 },
+                        { "name": "Broadcom BCM57412", "vendor": "Broadcom", "model": "BCM57412", "grade": 54 }
+                    ]
+                },
+                {
+                    "name": "1G Ethernet - Extended",
+                    "items": [
+                        { "name": "Intel I210-AT", "vendor": "Intel", "model": "I210-AT", "grade": 45 },
+                        { "name": "Realtek RTL8111H", "vendor": "Realtek", "model": "RTL8111H", "grade": 42 },
+                        { "name": "Broadcom BCM5719", "vendor": "Broadcom", "model": "BCM5719", "grade": 44 },
+                        { "name": "Marvell 88E1512", "vendor": "Marvell", "model": "88E1512", "grade": 43 }
+                    ]
+                },
+                {
+                    "name": "WiFi 7 Adapters",
+                    "items": [
+                        { "name": "Intel BE200", "vendor": "Intel", "model": "BE200", "grade": 88 },
+                        { "name": "Qualcomm QCNCM865", "vendor": "Qualcomm", "model": "QCNCM865", "grade": 90 },
+                        { "name": "Broadcom BCM4398", "vendor": "Broadcom", "model": "BCM4398", "grade": 89 },
+                        { "name": "MediaTek MT7927", "vendor": "MediaTek", "model": "MT7927", "grade": 85 },
+                        { "name": "Realtek RTL8922AE", "vendor": "Realtek", "model": "RTL8922AE", "grade": 82 }
+                    ]
+                },
+                {
+                    "name": "WiFi 6E Adapters",
+                    "items": [
+                        { "name": "Intel AX411", "vendor": "Intel", "model": "AX411", "grade": 80 },
+                        { "name": "Qualcomm QCNFA765", "vendor": "Qualcomm", "model": "QCNFA765", "grade": 82 },
+                        { "name": "Broadcom BCM4389", "vendor": "Broadcom", "model": "BCM4389", "grade": 81 },
+                        { "name": "MediaTek MT7922", "vendor": "MediaTek", "model": "MT7922", "grade": 78 },
+                        { "name": "Realtek RTL8852CE", "vendor": "Realtek", "model": "RTL8852CE", "grade": 76 }
+                    ]
+                },
+                {
+                    "name": "WiFi 6 Adapters",
+                    "items": [
+                        { "name": "Intel AX201", "vendor": "Intel", "model": "AX201", "grade": 72 },
+                        { "name": "Qualcomm QCA6391", "vendor": "Qualcomm", "model": "QCA6391", "grade": 70 },
+                        { "name": "Broadcom BCM43684", "vendor": "Broadcom", "model": "BCM43684", "grade": 74 },
+                        { "name": "Realtek RTL8852AE", "vendor": "Realtek", "model": "RTL8852AE", "grade": 68 },
+                        { "name": "MediaTek MT7921", "vendor": "MediaTek", "model": "MT7921", "grade": 66 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Switches - Extended",
+            "subcategories": [
+                {
+                    "name": "Data Center Core (400G+)",
+                    "items": [
+                        { "name": "Arista 7800R3", "vendor": "Arista", "model": "7800R3", "grade": 99 },
+                        { "name": "Cisco Nexus 92300", "vendor": "Cisco", "model": "Nexus 92300", "grade": 97 },
+                        { "name": "Juniper QFX10002", "vendor": "Juniper", "model": "QFX10002", "grade": 96 },
+                        { "name": "NVIDIA Spectrum-4", "vendor": "NVIDIA", "model": "Spectrum-4", "grade": 98 },
+                        { "name": "Aruba CX 10000", "vendor": "Aruba", "model": "CX 10000", "grade": 95 }
+                    ]
+                },
+                {
+                    "name": "Data Center Aggregation (100G)",
+                    "items": [
+                        { "name": "Cisco Nexus 9300", "vendor": "Cisco", "model": "Nexus 9300", "grade": 88 },
+                        { "name": "Arista 7050X3", "vendor": "Arista", "model": "7050X3", "grade": 90 },
+                        { "name": "Juniper EX4650", "vendor": "Juniper", "model": "EX4650", "grade": 87 },
+                        { "name": "Dell S5248", "vendor": "Dell", "model": "S5248", "grade": 85 },
+                        { "name": "HPE 5900", "vendor": "HPE", "model": "5900", "grade": 84 }
+                    ]
+                },
+                {
+                    "name": "Enterprise Core (25G/40G)",
+                    "items": [
+                        { "name": "Cisco Catalyst 9500", "vendor": "Cisco", "model": "Catalyst 9500", "grade": 82 },
+                        { "name": "Aruba 8400", "vendor": "Aruba", "model": "8400", "grade": 80 },
+                        { "name": "Juniper EX4400", "vendor": "Juniper", "model": "EX4400", "grade": 78 },
+                        { "name": "Dell S4148", "vendor": "Dell", "model": "S4148", "grade": 76 },
+                        { "name": "Extreme Networks 5520", "vendor": "Extreme", "model": "Networks 5520", "grade": 75 }
+                    ]
+                },
+                {
+                    "name": "Access Switches (10G)",
+                    "items": [
+                        { "name": "Cisco Catalyst 9200", "vendor": "Cisco", "model": "Catalyst 9200", "grade": 72 },
+                        { "name": "Aruba 6300", "vendor": "Aruba", "model": "6300", "grade": 74 },
+                        { "name": "Juniper EX4300", "vendor": "Juniper", "model": "EX4300", "grade": 70 },
+                        { "name": "NETGEAR M4300", "vendor": "NETGEAR", "model": "M4300", "grade": 68 },
+                        { "name": "TP-Link JetStream", "vendor": "TP-Link", "model": "JetStream", "grade": 66 }
+                    ]
+                },
+                {
+                    "name": "SMB Switches (2.5G/1G)",
+                    "items": [
+                        { "name": "Ubiquiti Enterprise", "vendor": "Ubiquiti", "model": "Enterprise", "grade": 62 },
+                        { "name": "Zyxel XGS", "vendor": "Zyxel", "model": "XGS", "grade": 60 },
+                        { "name": "D-Link DGS", "vendor": "D-Link", "model": "DGS", "grade": 58 },
+                        { "name": "NETGEAR GS", "vendor": "NETGEAR", "model": "GS", "grade": 56 },
+                        { "name": "TRENDnet TEG", "vendor": "TRENDnet", "model": "TEG", "grade": 54 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Security - Extended",
+            "subcategories": [
+                {
+                    "name": "Next-Gen Firewalls (Enterprise)",
+                    "items": [
+                        { "name": "Palo Alto PA-3400", "vendor": "Palo", "model": "Alto PA-3400", "grade": 95 },
+                        { "name": "Fortinet FG-3700", "vendor": "Fortinet", "model": "FG-3700", "grade": 92 },
+                        { "name": "Cisco Firepower 4100", "vendor": "Cisco", "model": "Firepower 4100", "grade": 90 },
+                        { "name": "Check Point 6200", "vendor": "Check", "model": "Point 6200", "grade": 88 },
+                        { "name": "Juniper SRX", "vendor": "Juniper", "model": "SRX", "grade": 86 }
+                    ]
+                },
+                {
+                    "name": "Mid-Range Firewalls",
+                    "items": [
+                        { "name": "Sophos XGS", "vendor": "Sophos", "model": "XGS", "grade": 80 },
+                        { "name": "SonicWall NSa", "vendor": "SonicWall", "model": "NSa", "grade": 78 },
+                        { "name": "WatchGuard M570", "vendor": "WatchGuard", "model": "M570", "grade": 76 },
+                        { "name": "Barracuda F180", "vendor": "Barracuda", "model": "F180", "grade": 74 },
+                        { "name": "pfSense", "vendor": "pfSense", "model": "", "grade": 72 }
+                    ]
+                },
+                {
+                    "name": "SMB Firewalls",
+                    "items": [
+                        { "name": "OPNsense", "vendor": "OPNsense", "model": "", "grade": 68 },
+                        { "name": "Untangle", "vendor": "Untangle", "model": "", "grade": 66 },
+                        { "name": "Sophos UTM", "vendor": "Sophos", "model": "UTM", "grade": 64 },
+                        { "name": "IPFire", "vendor": "IPFire", "model": "", "grade": 62 },
+                        { "name": "ClearOS", "vendor": "ClearOS", "model": "", "grade": 60 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Load Balancers - Extended",
+            "subcategories": [
+                {
+                    "name": "Application Delivery Controllers",
+                    "items": [
+                        { "name": "F5 BIG-IP", "vendor": "F5", "model": "BIG-IP", "grade": 94 },
+                        { "name": "Citrix ADC", "vendor": "Citrix", "model": "ADC", "grade": 92 },
+                        { "name": "A10 Thunder", "vendor": "A10", "model": "Thunder", "grade": 90 },
+                        { "name": "Kemp LoadMaster", "vendor": "Kemp", "model": "LoadMaster", "grade": 88 },
+                        { "name": "Radware Alteon", "vendor": "Radware", "model": "Alteon", "grade": 86 }
+                    ]
+                },
+                {
+                    "name": "Software Load Balancers - Extended",
+                    "items": [
+                        { "name": "HAProxy", "vendor": "HAProxy", "model": "", "grade": 84 },
+                        { "name": "Nginx Plus", "vendor": "Nginx", "model": "Plus", "grade": 82 },
+                        { "name": "Traefik", "vendor": "Traefik", "model": "", "grade": 80 },
+                        { "name": "Envoy", "vendor": "Envoy", "model": "", "grade": 78 },
+                        { "name": "Apache", "vendor": "Apache", "model": "", "grade": 76 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Wireless Access Points - Extended",
+            "subcategories": [
+                {
+                    "name": "Enterprise WiFi 7 - Extended",
+                    "items": [
+                        { "name": "Aruba AP-635", "vendor": "Aruba", "model": "AP-635", "grade": 92 },
+                        { "name": "Cisco C9136", "vendor": "Cisco", "model": "C9136", "grade": 94 },
+                        { "name": "Ruckus R770", "vendor": "Ruckus", "model": "R770", "grade": 93 },
+                        { "name": "Ubiquiti U7-Pro", "vendor": "Ubiquiti", "model": "U7-Pro", "grade": 88 },
+                        { "name": "Extreme Networks AP5050", "vendor": "Extreme", "model": "Networks AP5050", "grade": 90 }
+                    ]
+                },
+                {
+                    "name": "Enterprise WiFi 6E - Extended",
+                    "items": [
+                        { "name": "Aruba AP-505", "vendor": "Aruba", "model": "AP-505", "grade": 84 },
+                        { "name": "Cisco C9117", "vendor": "Cisco", "model": "C9117", "grade": 86 },
+                        { "name": "Ruckus R750", "vendor": "Ruckus", "model": "R750", "grade": 85 },
+                        { "name": "Ubiquiti U6-Enterprise", "vendor": "Ubiquiti", "model": "U6-Enterprise", "grade": 82 },
+                        { "name": "Meraki MR57", "vendor": "Meraki", "model": "MR57", "grade": 83 }
+                    ]
+                },
+                {
+                    "name": "SMB Access Points - Extended",
+                    "items": [
+                        { "name": "TP-Link EAP683", "vendor": "TP-Link", "model": "EAP683", "grade": 74 },
+                        { "name": "NETGEAR WAX630", "vendor": "NETGEAR", "model": "WAX630", "grade": 72 },
+                        { "name": "D-Link DAP-8620", "vendor": "D-Link", "model": "DAP-8620", "grade": 70 },
+                        { "name": "Zyxel WAX650S", "vendor": "Zyxel", "model": "WAX650S", "grade": 68 },
+                        { "name": "EnGenius EWS857", "vendor": "EnGenius", "model": "EWS857", "grade": 66 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Storage - Extended",
+            "subcategories": [
+                {
+                    "name": "SAN Arrays - Extended",
+                    "items": [
+                        { "name": "Dell PowerMax", "vendor": "Dell", "model": "PowerMax", "grade": 96 },
+                        { "name": "NetApp AFF", "vendor": "NetApp", "model": "AFF", "grade": 94 },
+                        { "name": "HPE Alletra", "vendor": "HPE", "model": "Alletra", "grade": 92 },
+                        { "name": "Pure Storage FlashArray", "vendor": "Pure", "model": "Storage FlashArray", "grade": 95 },
+                        { "name": "IBM FlashSystem", "vendor": "IBM", "model": "FlashSystem", "grade": 90 }
+                    ]
+                },
+                {
+                    "name": "NAS Systems - Extended",
+                    "items": [
+                        { "name": "Synology FS6400", "vendor": "Synology", "model": "FS6400", "grade": 88 },
+                        { "name": "QNAP TS-h3088X", "vendor": "QNAP", "model": "TS-h3088X", "grade": 86 },
+                        { "name": "TrueNAS R50", "vendor": "TrueNAS", "model": "R50", "grade": 90 },
+                        { "name": "Asustor FS6712X", "vendor": "Asustor", "model": "FS6712X", "grade": 84 },
+                        { "name": "TerraMaster F8", "vendor": "TerraMaster", "model": "F8", "grade": 82 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Protocols & Technologies - Extended",
+            "subcategories": [
+                {
+                    "name": "High Performance - Extended",
+                    "items": [
+                        { "name": "RDMA over Converged Ethernet", "vendor": "RDMA", "model": "over Converged Ethernet", "grade": 92 },
+                        { "name": "InfiniBand EDR/HDR", "vendor": "InfiniBand", "model": "EDR/HDR", "grade": 96 },
+                        { "name": "Fibre Channel 64G", "vendor": "Fibre", "model": "Channel 64G", "grade": 90 },
+                        { "name": "iSCSI Extensions", "vendor": "iSCSI", "model": "Extensions", "grade": 88 },
+                        { "name": "NVMe-oF", "vendor": "NVMe-oF", "model": "", "grade": 94 }
+                    ]
+                },
+                {
+                    "name": "Standard Protocols - Extended",
+                    "items": [
+                        { "name": "TCP/IP Offload", "vendor": "TCP/IP", "model": "Offload", "grade": 80 },
+                        { "name": "UDP Lite", "vendor": "UDP", "model": "Lite", "grade": 78 },
+                        { "name": "SMB Direct", "vendor": "SMB", "model": "Direct", "grade": 82 },
+                        { "name": "NFSv4.2", "vendor": "NFSv4.2", "model": "", "grade": 76 },
+                        { "name": "HTTP/3", "vendor": "HTTP/3", "model": "", "grade": 74 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Management - Extended",
+            "subcategories": [
+                {
+                    "name": "Monitoring Systems - Extended",
+                    "items": [
+                        { "name": "SolarWinds NPM", "vendor": "SolarWinds", "model": "NPM", "grade": 85 },
+                        { "name": "PRTG Network Monitor", "vendor": "PRTG", "model": "Network Monitor", "grade": 83 },
+                        { "name": "Zabbix", "vendor": "Zabbix", "model": "", "grade": 81 },
+                        { "name": "Nagios XI", "vendor": "Nagios", "model": "XI", "grade": 79 },
+                        { "name": "LibreNMS", "vendor": "LibreNMS", "model": "", "grade": 77 }
+                    ]
+                },
+                {
+                    "name": "SDN Controllers - Extended",
+                    "items": [
+                        { "name": "VMware NSX", "vendor": "VMware", "model": "NSX", "grade": 90 },
+                        { "name": "Cisco ACI", "vendor": "Cisco", "model": "ACI", "grade": 88 },
+                        { "name": "Juniper Contrail", "vendor": "Juniper", "model": "Contrail", "grade": 86 },
+                        { "name": "OpenDaylight", "vendor": "OpenDaylight", "model": "", "grade": 82 },
+                        { "name": "ONOS", "vendor": "ONOS", "model": "", "grade": 80 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Accelerators",
+            "subcategories": [
+                {
+                    "name": "DPUs/SmartNICs",
+                    "items": [
+                        { "name": "NVIDIA BlueField-3", "vendor": "NVIDIA", "model": "BlueField-3", "grade": 96 },
+                        { "name": "Intel IPU E2100", "vendor": "Intel", "model": "IPU E2100", "grade": 92 },
+                        { "name": "AMD Pensando", "vendor": "AMD", "model": "Pensando", "grade": 90 },
+                        { "name": "Marvell OCTEON", "vendor": "Marvell", "model": "OCTEON", "grade": 88 },
+                        { "name": "Broadcom Stingray", "vendor": "Broadcom", "model": "Stingray", "grade": 86 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Quality of Service",
+            "subcategories": [
+                {
+                    "name": "Traffic Shaping",
+                    "items": [
+                        { "name": "Cisco QoS", "vendor": "Cisco", "model": "QoS", "grade": 85 },
+                        { "name": "Juniper Class of Service", "vendor": "Juniper", "model": "Class of Service", "grade": 83 },
+                        { "name": "Palo Alto QoS", "vendor": "Palo", "model": "Alto QoS", "grade": 82 },
+                        { "name": "Fortinet Traffic Shaping", "vendor": "Fortinet", "model": "Traffic Shaping", "grade": 80 },
+                        { "name": "pfSense Limiter", "vendor": "pfSense", "model": "Limiter", "grade": 78 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Network Virtualization",
+            "subcategories": [
+                {
+                    "name": "Overlay Technologies",
+                    "items": [
+                        { "name": "VXLAN", "vendor": "VXLAN", "model": "", "grade": 84 },
+                        { "name": "Geneve", "vendor": "Geneve", "model": "", "grade": 82 },
+                        { "name": "MPLS", "vendor": "MPLS", "model": "", "grade": 80 },
+                        { "name": "GRE", "vendor": "GRE", "model": "", "grade": 78 },
+                        { "name": "STT", "vendor": "STT", "model": "", "grade": 76 }
+                    ]
+                }
+            ]
+        }
+    ]
+}

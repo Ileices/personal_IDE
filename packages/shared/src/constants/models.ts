@@ -19,6 +19,14 @@ export interface ModelDefinition {
   supportsJsonMode: boolean;
   /** Whether this is a good default for each mode */
   recommendedFor: ('ask' | 'edit' | 'plan' | 'agent')[];
+  /** Reasoning models (o3, o4-mini, DeepSeek-R1) need special parameter handling */
+  isReasoning?: boolean;
+  /** Some models reject the temperature parameter (o3, o4-mini, DeepSeek-R1) */
+  supportsTemperature?: boolean;
+  /** 'max_tokens' for most models, 'max_completion_tokens' for o-series reasoning */
+  outputTokenParam?: 'max_tokens' | 'max_completion_tokens';
+  /** Supports vision/image inputs */
+  supportsVision?: boolean;
 }
 
 /** Rate limits per tier */
@@ -83,6 +91,7 @@ export const MODELS: ModelDefinition[] = [
     supportsStreaming: true,
     supportsTools: true,
     supportsJsonMode: true,
+    supportsVision: true,
     recommendedFor: ['ask', 'edit', 'plan'],
   },
   {
@@ -96,6 +105,7 @@ export const MODELS: ModelDefinition[] = [
     supportsStreaming: true,
     supportsTools: true,
     supportsJsonMode: true,
+    supportsVision: true,
     recommendedFor: ['ask'],
   },
   {
@@ -109,6 +119,9 @@ export const MODELS: ModelDefinition[] = [
     supportsStreaming: true,
     supportsTools: true,
     supportsJsonMode: true,
+    isReasoning: true,
+    supportsTemperature: false,
+    outputTokenParam: 'max_completion_tokens',
     recommendedFor: ['plan', 'agent'],
   },
   {
@@ -122,6 +135,9 @@ export const MODELS: ModelDefinition[] = [
     supportsStreaming: true,
     supportsTools: true,
     supportsJsonMode: true,
+    isReasoning: true,
+    supportsTemperature: false,
+    outputTokenParam: 'max_completion_tokens',
     recommendedFor: ['plan', 'agent'],
   },
   // --- Meta ---
@@ -150,6 +166,8 @@ export const MODELS: ModelDefinition[] = [
     supportsStreaming: true,
     supportsTools: false,
     supportsJsonMode: false,
+    isReasoning: true,
+    supportsTemperature: false,
     recommendedFor: ['ask', 'plan'],
   },
   // --- xAI ---
@@ -192,12 +210,48 @@ export const RATE_LIMITS: Record<ModelTier, RateLimits> = {
   grok_mini:      { requestsPerMinute: 2,  requestsPerDay: 30,  maxInputTokens: 4000, maxOutputTokens: 8000, maxConcurrent: 1 },
 };
 
+/** Default model ID */
+export const DEFAULT_MODEL = 'openai/gpt-4.1';
+
 /** Get the model definition by ID */
 export function getModel(modelId: string): ModelDefinition | undefined {
   return MODELS.find(m => m.id === modelId);
 }
 
-/** Get rate limits for a model */
+/**
+ * Build the correct LLM request parameters for any model.
+ * Handles reasoning models (o3, o4-mini, DeepSeek-R1) that need
+ * different parameter names and don't support temperature.
+ */
+export function buildModelParams(
+  modelId: string,
+  options: { temperature?: number; maxTokens?: number; jsonMode?: boolean }
+): Record<string, any> {
+  const model = getModel(modelId);
+  const params: Record<string, any> = {};
+
+  // Temperature — reasoning models reject it
+  const supportsTemp = model?.supportsTemperature !== false;
+  if (supportsTemp && options.temperature !== undefined) {
+    params.temperature = options.temperature;
+  }
+
+  // Output tokens — reasoning models need max_completion_tokens
+  const tokenParam = model?.outputTokenParam || 'max_tokens';
+  if (options.maxTokens) {
+    params[tokenParam] = options.maxTokens;
+  } else {
+    params[tokenParam] = model?.maxOutputTokens || 4096;
+  }
+
+  // JSON mode — only if model supports it
+  const supportsJson = model?.supportsJsonMode !== false;
+  if (options.jsonMode && supportsJson) {
+    params.response_format = { type: 'json_object' };
+  }
+
+  return params;
+}
 export function getModelRateLimits(modelId: string): RateLimits | undefined {
   const model = getModel(modelId);
   return model ? RATE_LIMITS[model.tier] : undefined;

@@ -1,0 +1,300 @@
+{
+    "name": "SYSTEM COMPOSITE SCORING FRAMEWORK",
+    "version": "1.0",
+    "components": {
+        "weights": {
+            "GPU": 0.5,
+            "CPU": 0.2,
+            "RAM": 0.15,
+            "Storage": 0.1,
+            "Network": 0.05
+        },
+        "description": "Component scores are expected on a 0-100 scale unless otherwise noted."
+    },
+    "base_score": {
+        "formula": "sum(component_score * weight for each component)",
+        "coefficients": {
+            "GPU": 0.5,
+            "CPU": 0.2,
+            "RAM": 0.15,
+            "Storage": 0.1,
+            "Network": 0.05
+        },
+        "range": {
+            "min": 0,
+            "max": 100
+        }
+    },
+    "penalty_system": {
+        "aggregation_method": "sum_percent_then_subtract",
+        "notes": "All triggered penalties' percentages are summed and final_score = base_score * (1 - total_penalty_percent/100). Individual rules indicate percent values to add to total_penalty_percent.",
+        "categories": {
+            "cpu_gpu_mismatch": {
+                "description": "Penalties based on difference between GPU and CPU scores (absolute difference in points).",
+                "rules": [
+                    {
+                        "condition": {
+                            "type": "difference",
+                            "direction": "GPU_higher",
+                            "threshold_gt": 30
+                        },
+                        "penalty_percent": 15,
+                        "rationale": "Severe GPU-CPU mismatch (GPU >> CPU)"
+                    },
+                    {
+                        "condition": {
+                            "type": "difference",
+                            "direction": "GPU_higher",
+                            "threshold_gt": 20,
+                            "threshold_lte": 30
+                        },
+                        "penalty_percent": 10
+                    },
+                    {
+                        "condition": {
+                            "type": "difference",
+                            "direction": "GPU_higher",
+                            "threshold_gt": 10,
+                            "threshold_lte": 20
+                        },
+                        "penalty_percent": 5
+                    },
+                    {
+                        "condition": {
+                            "type": "difference",
+                            "direction": "CPU_higher",
+                            "threshold_gt": 30
+                        },
+                        "penalty_percent": 5,
+                        "rationale": "Underutilized CPU"
+                    }
+                ]
+            },
+            "ram_sufficiency": {
+                "description": "Compare system RAM to GPU VRAM multiplied by factors.",
+                "assumption": "Rules require numerical GPU_VRAM value; component 'RAM' and 'GPU_VRAM' units must match (e.g., GB).",
+                "rules": [
+                    {
+                        "condition": {
+                            "type": "less_than",
+                            "lhs": "RAM",
+                            "rhs": "GPU_VRAM * 4"
+                        },
+                        "penalty_percent": 20,
+                        "severity": "critical"
+                    },
+                    {
+                        "condition": {
+                            "type": "less_than",
+                            "lhs": "RAM",
+                            "rhs": "GPU_VRAM * 8"
+                        },
+                        "penalty_percent": 15,
+                        "severity": "major"
+                    },
+                    {
+                        "condition": {
+                            "type": "less_than",
+                            "lhs": "RAM",
+                            "rhs": "GPU_VRAM * 12"
+                        },
+                        "penalty_percent": 10,
+                        "severity": "moderate"
+                    },
+                    {
+                        "condition": {
+                            "type": "less_than",
+                            "lhs": "RAM",
+                            "rhs": "GPU_VRAM * 16"
+                        },
+                        "penalty_percent": 5,
+                        "severity": "minor"
+                    }
+                ]
+            },
+            "storage": {
+                "description": "Storage score compared to GPU score (percent of GPU score).",
+                "rules": [
+                    {
+                        "condition": {
+                            "type": "less_than_percent_of",
+                            "lhs": "Storage",
+                            "rhs": "GPU",
+                            "percent": 50
+                        },
+                        "penalty_percent": 10
+                    },
+                    {
+                        "condition": {
+                            "type": "less_than_percent_of",
+                            "lhs": "Storage",
+                            "rhs": "GPU",
+                            "percent": 30
+                        },
+                        "penalty_percent": 20
+                    }
+                ]
+            },
+            "network": {
+                "description": "Network score compared to GPU score (percent of GPU score).",
+                "rules": [
+                    {
+                        "condition": {
+                            "type": "less_than_percent_of",
+                            "lhs": "Network",
+                            "rhs": "GPU",
+                            "percent": 30
+                        },
+                        "penalty_percent": 5
+                    },
+                    {
+                        "condition": {
+                            "type": "less_than_percent_of",
+                            "lhs": "Network",
+                            "rhs": "GPU",
+                            "percent": 20
+                        },
+                        "penalty_percent": 10
+                    }
+                ]
+            }
+        }
+    },
+    "granular_tier_system": {
+        "description": "Final score mapped to tier ranges. Subtiers may include component-level requirements.",
+        "tiers": [
+            {
+                "id": "S",
+                "label": "S-TIER: DATACENTER CLASS",
+                "range": { "min": 85, "max": 100 },
+                "subtiers": [
+                    { "id": "S++", "range": { "min": 97, "max": 100 }, "requirements": { "no_bottlenecks": true, "min_component_score": 90 } },
+                    { "id": "S+", "range": { "min": 93, "max": 96 }, "requirements": { "max_bottleneck_severity": "minor", "min_component_score": 85 } },
+                    { "id": "S", "range": { "min": 89, "max": 92 }, "requirements": { "max_bottleneck_severity": "moderate", "min_component_score": 80 } },
+                    { "id": "S-", "range": { "min": 85, "max": 88 }, "requirements": { "max_bottleneck_severity": "manageable", "min_component_score": 75 } }
+                ]
+            },
+            {
+                "id": "A",
+                "label": "A-TIER: HIGH-END WORKSTATION",
+                "range": { "min": 70, "max": 84 },
+                "subtiers": [
+                    { "id": "A+", "range": { "min": 82, "max": 84 }, "requirements": { "GPU_min": 80 } },
+                    { "id": "A", "range": { "min": 78, "max": 81 }, "requirements": { "GPU_range": [75, 80] } },
+                    { "id": "A-", "range": { "min": 74, "max": 77 } },
+                    { "id": "A--", "range": { "min": 70, "max": 73 } }
+                ]
+            },
+            {
+                "id": "B",
+                "label": "B-TIER: MAINSTREAM SYSTEMS",
+                "range": { "min": 55, "max": 69 },
+                "subtiers": [
+                    { "id": "B+", "range": { "min": 67, "max": 69 } },
+                    { "id": "B", "range": { "min": 63, "max": 66 } },
+                    { "id": "B-", "range": { "min": 59, "max": 62 } },
+                    { "id": "B--", "range": { "min": 55, "max": 58 } }
+                ]
+            },
+            {
+                "id": "C",
+                "label": "C-TIER: ENTRY-LEVEL SYSTEMS",
+                "range": { "min": 40, "max": 54 },
+                "subtiers": [
+                    { "id": "C+", "range": { "min": 52, "max": 54 } },
+                    { "id": "C", "range": { "min": 48, "max": 51 } },
+                    { "id": "C-", "range": { "min": 44, "max": 47 } },
+                    { "id": "C--", "range": { "min": 40, "max": 43 } }
+                ]
+            },
+            {
+                "id": "D",
+                "label": "D-TIER: LEGACY/LOW-POWER",
+                "range": { "min": 25, "max": 39 },
+                "subtiers": [
+                    { "id": "D+", "range": { "min": 37, "max": 39 } },
+                    { "id": "D", "range": { "min": 33, "max": 36 } },
+                    { "id": "D-", "range": { "min": 29, "max": 32 } },
+                    { "id": "D--", "range": { "min": 25, "max": 28 } }
+                ]
+            },
+            {
+                "id": "E",
+                "label": "E-TIER: OBSOLETE/SPECIALIZED",
+                "range": { "min": 10, "max": 24 },
+                "subtiers": [
+                    { "id": "E+", "range": { "min": 22, "max": 24 } },
+                    { "id": "E", "range": { "min": 18, "max": 21 } },
+                    { "id": "E-", "range": { "min": 14, "max": 17 } },
+                    { "id": "E--", "range": { "min": 10, "max": 13 } }
+                ]
+            }
+        ]
+    },
+    "examples": [
+        {
+            "title": "Balanced High-End System",
+            "components": { "GPU": 85, "CPU": 80, "RAM": 78, "Storage": 82, "Network": 75 },
+            "calc": {
+                "base_score": 82.05,
+                "applied_penalties": [],
+                "final_score": 82.05,
+                "rounded_final_score": 82,
+                "tier": "A+"
+            }
+        },
+        {
+            "title": "Bottlenecked Gaming PC",
+            "components": { "GPU": 78, "CPU": 45, "RAM": 60, "Storage": 70, "Network": 45, "GPU_VRAM_GB": null },
+            "calc": {
+                "base_score": 68.75,
+                "applied_penalties": [
+                    { "rule": "cpu_gpu_mismatch", "reason": "GPU 33 > CPU", "penalty_percent": 15 },
+                    { "rule": "ram_sufficiency", "reason": "RAM insufficient relative to GPU VRAM (example indicates -10%)", "penalty_percent": 10 }
+                ],
+                "total_penalty_percent": 25,
+                "final_score": 51.5625,
+                "rounded_final_score": 52,
+                "tier": "C+"
+            },
+            "notes": "Example sums penalties (15% + 10%) then multiplies base_score by (1 - 0.25)."
+        },
+        {
+            "title": "Server-Class System",
+            "components": { "GPU": 95, "CPU": 90, "RAM": 92, "Storage": 88, "Network": 95 },
+            "calc": { "base_score": 93.05, "applied_penalties": [], "final_score": 93.05, "rounded_final_score": 93, "tier": "S+" }
+        }
+    ],
+    "special_considerations": {
+        "multi_gpu": {
+            "description": "Apply diminishing-returns multipliers to combined GPU score.",
+            "rules": [
+                { "n_gpus": 2, "combined_multiplier": 1.8 },
+                { "n_gpus": [3, 4], "combined_multiplier": 2.5 },
+                { "n_gpus": [5, 8], "combined_multiplier": 3.0 },
+                { "n_gpus": ">=9", "combined_multiplier": 3.5, "note": "plus additional scaling factor as needed" }
+            ],
+            "note": "Combined GPU score should be computed prior to applying component weights; implementer must decide how to combine individual GPU scores into one 'GPU' component value."
+        },
+        "mobile_edge": {
+            "multipliers": [
+                { "condition": "mobile_or_edge_thermal_power_constraints", "multiplier": 0.9 },
+                { "condition": "dedicated_edge_ai_hardware", "action": "use_specialized_scoring" }
+            ]
+        },
+        "availability_multipliers": {
+            "description": "Multiply final system score by availability factor.",
+            "map": {
+                "24/7": 1.0,
+                "12hrs/day": 0.8,
+                "6hrs/day": 0.6,
+                "2hrs/day": 0.3
+            }
+        }
+    },
+    "implementation_notes": {
+        "score_scaling": "All component inputs expected 0-100. GPU_VRAM and RAM comparisons require consistent units (e.g., GB).",
+        "penalty_application_order": "Penalties are independent and additive in percent; apply after computing base_score, then apply availability/mode multipliers last.",
+        "edge_cases": "Cap final computed score to 0-100. Implementers may choose to clamp total_penalty_percent <= 100."
+    }
+}

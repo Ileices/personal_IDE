@@ -1,0 +1,570 @@
+{
+    "categories": [
+        {
+            "original_title": "AMD Ryzen 7000 Series (Zen 4)",
+            "vendor": "AMD",
+            "family": "Ryzen",
+            "series": "7000",
+            "architecture": "Zen 4",
+            "processors": [
+                { "model": "Ryzen 9 7950X", "grade": 42 },
+                { "model": "Ryzen 9 7900X", "grade": 38 },
+                { "model": "Ryzen 7 7800X3D", "grade": 35 },
+                { "model": "Ryzen 7 7700X", "grade": 32 },
+                { "model": "Ryzen 5 7600X", "grade": 28 },
+                { "model": "Ryzen 5 7600", "grade": 26 }
+            ]
+        },
+        {
+            "original_title": "AMD Ryzen 5000 Series (Zen 3)",
+            "vendor": "AMD",
+            "family": "Ryzen",
+            "series": "5000",
+            "architecture": "Zen 3",
+            "processors": [
+                { "model": "Ryzen 9 5950X", "grade": 38 },
+                { "model": "Ryzen 9 5900X", "grade": 35 },
+                { "model": "Ryzen 7 5800X3D", "grade": 34 },
+                { "model": "Ryzen 7 5800X", "grade": 30 },
+                { "model": "Ryzen 5 5600X", "grade": 25 },
+                { "model": "Ryzen 5 5600", "grade": 23 }
+            ]
+        },
+        {
+            "original_title": "AMD Ryzen 4000 Series (Zen 2)",
+            "vendor": "AMD",
+            "family": "Ryzen",
+            "series": "4000",
+            "architecture": "Zen 2",
+            "processors": [
+                { "model": "Ryzen 9 4950X", "grade": 32 },
+                { "model": "Ryzen 9 4900X", "grade": 30 },
+                { "model": "Ryzen 7 4800X", "grade": 28 },
+                { "model": "Ryzen 5 4600X", "grade": 22 },
+                { "model": "Ryzen 5 4600", "grade": 20 }
+            ]
+        },
+        {
+            "original_title": "AMD Ryzen 3000 Series (Zen 2)",
+            "vendor": "AMD",
+            "family": "Ryzen",
+            "series": "3000",
+            "architecture": "Zen 2",
+            "processors": [
+                { "model": "Ryzen 9 3950X", "grade": 30 },
+                { "model": "Ryzen 9 3900X", "grade": 28 },
+                { "model": "Ryzen 7 3800X", "grade": 25 },
+                { "model": "Ryzen 5 3600X", "grade": 20 },
+                { "model": "Ryzen 5 3600", "grade": 18 }
+            ]
+        },
+        {
+            "original_title": "AMD Ryzen 2000 Series (Zen+)",
+            "vendor": "AMD",
+            "family": "Ryzen",
+            "series": "2000",
+            "architecture": "Zen+",
+            "processors": [
+                { "model": "Ryzen 7 2700X", "grade": 18 },
+                { "model": "Ryzen 5 2600X", "grade": 15 },
+                { "model": "Ryzen 5 2600", "grade": 14 }
+            ]
+        },
+        {
+            "original_title": "AMD Ryzen 1000 Series (Zen)",
+            "vendor": "AMD",
+            "family": "Ryzen",
+            "series": "1000",
+            "architecture": "Zen",
+            "processors": [
+                { "model": "Ryzen 7 1800X", "grade": 15 },
+                { "model": "Ryzen 5 1600X", "grade": 12 },
+                { "model": "Ryzen 5 1600", "grade": 11 }
+            ]
+        },
+        {
+            "original_title": "AMD Threadripper Pro (Zen 3/4)",
+            "vendor": "AMD",
+            "family": "Threadripper Pro",
+            "series": null,
+            "architecture": "Zen 3/4",
+            "processors": [
+                { "model": "Threadripper Pro 7995WX", "grade": 65 },
+                { "model": "Threadripper Pro 5995WX", "grade": 55 },
+                { "model": "Threadripper Pro 5975WX", "grade": 50 },
+                { "model": "Threadripper Pro 5965WX", "grade": 45 }
+            ]
+        },
+        {
+            "original_title": "AMD Threadripper (Zen 2/3)",
+            "vendor": "AMD",
+            "family": "Threadripper",
+            "series": null,
+            "architecture": "Zen 2/3",
+            "processors": [
+                { "model": "Threadripper 3990X", "grade": 48 },
+                { "model": "Threadripper 3970X", "grade": 42 },
+                { "model": "Threadripper 3960X", "grade": 38 }
+            ]
+        },
+        {
+            "original_title": "AMD EPYC Server (Zen 4)",
+            "vendor": "AMD",
+            "family": "EPYC",
+            "series": null,
+            "architecture": "Zen 4",
+            "processors": [
+                { "model": "EPYC 9654", "grade": 75 },
+                { "model": "EPYC 9554", "grade": 68 },
+                { "model": "EPYC 9474F", "grade": 65 },
+                { "model": "EPYC 9374F", "grade": 60 }
+            ]
+        },
+        {
+            "original_title": "AMD EPYC Server (Zen 3)",
+            "vendor": "AMD",
+            "family": "EPYC",
+            "series": null,
+            "architecture": "Zen 3",
+            "processors": [
+                { "model": "EPYC 7773X", "grade": 58 },
+                { "model": "EPYC 7763", "grade": 55 },
+                { "model": "EPYC 7663", "grade": 50 },
+                { "model": "EPYC 7543", "grade": 45 }
+            ]
+        },
+        {
+            "original_title": "AMD EPYC Server (Zen 2)",
+            "vendor": "AMD",
+            "family": "EPYC",
+            "series": null,
+            "architecture": "Zen 2",
+            "processors": [
+                { "model": "EPYC 7742", "grade": 42 },
+                { "model": "EPYC 7702", "grade": 40 },
+                { "model": "EPYC 7662", "grade": 38 },
+                { "model": "EPYC 7542", "grade": 32 }
+            ]
+        },
+        {
+            "original_title": "AMD Ryzen Mobile",
+            "vendor": "AMD",
+            "family": "Ryzen",
+            "series": "Mobile",
+            "architecture": null,
+            "processors": [
+                { "model": "Ryzen 9 7940HS", "grade": 28 },
+                { "model": "Ryzen 7 7840HS", "grade": 25 },
+                { "model": "Ryzen 5 7640HS", "grade": 22 },
+                { "model": "Ryzen 9 6900HX", "grade": 24 },
+                { "model": "Ryzen 7 6800H", "grade": 22 },
+                { "model": "Ryzen 5 6600H", "grade": 18 }
+            ]
+        },
+        {
+            "original_title": "AMD Legacy (Pre-Ryzen)",
+            "vendor": "AMD",
+            "family": "Legacy",
+            "series": "Pre-Ryzen",
+            "architecture": null,
+            "processors": [
+                { "model": "FX-9590", "grade": 8 },
+                { "model": "FX-8350", "grade": 6 },
+                { "model": "FX-6300", "grade": 4 },
+                { "model": "A10-7890K", "grade": 5 },
+                { "model": "A8-7650K", "grade": 3 },
+                { "model": "Athlon X4", "grade": 4 }
+            ]
+        },
+        {
+            "original_title": "Intel Core 14th Gen (Raptor Lake Refresh)",
+            "vendor": "Intel",
+            "family": "Core",
+            "series": "14th Gen",
+            "architecture": "Raptor Lake Refresh",
+            "processors": [
+                { "model": "i9-14900K", "grade": 48 },
+                { "model": "i9-14900", "grade": 46 },
+                { "model": "i7-14700K", "grade": 42 },
+                { "model": "i7-14700", "grade": 40 },
+                { "model": "i5-14600K", "grade": 35 },
+                { "model": "i5-14600", "grade": 33 },
+                { "model": "i5-14500", "grade": 30 }
+            ]
+        },
+        {
+            "original_title": "Intel Core 13th Gen (Raptor Lake)",
+            "vendor": "Intel",
+            "family": "Core",
+            "series": "13th Gen",
+            "architecture": "Raptor Lake",
+            "processors": [
+                { "model": "i9-13900K", "grade": 45 },
+                { "model": "i9-13900", "grade": 43 },
+                { "model": "i7-13700K", "grade": 40 },
+                { "model": "i7-13700", "grade": 38 },
+                { "model": "i5-13600K", "grade": 35 },
+                { "model": "i5-13600", "grade": 32 },
+                { "model": "i5-13500", "grade": 28 }
+            ]
+        },
+        {
+            "original_title": "Intel Core 12th Gen (Alder Lake)",
+            "vendor": "Intel",
+            "family": "Core",
+            "series": "12th Gen",
+            "architecture": "Alder Lake",
+            "processors": [
+                { "model": "i9-12900K", "grade": 38 },
+                { "model": "i9-12900", "grade": 36 },
+                { "model": "i7-12700K", "grade": 34 },
+                { "model": "i7-12700", "grade": 32 },
+                { "model": "i5-12600K", "grade": 28 },
+                { "model": "i5-12600", "grade": 25 },
+                { "model": "i5-12500", "grade": 22 }
+            ]
+        },
+        {
+            "original_title": "Intel Core 11th Gen (Rocket Lake)",
+            "vendor": "Intel",
+            "family": "Core",
+            "series": "11th Gen",
+            "architecture": "Rocket Lake",
+            "processors": [
+                { "model": "i9-11900K", "grade": 25 },
+                { "model": "i7-11700K", "grade": 22 },
+                { "model": "i5-11600K", "grade": 18 },
+                { "model": "i5-11500", "grade": 16 }
+            ]
+        },
+        {
+            "original_title": "Intel Core 10th Gen (Comet Lake)",
+            "vendor": "Intel",
+            "family": "Core",
+            "series": "10th Gen",
+            "architecture": "Comet Lake",
+            "processors": [
+                { "model": "i9-10900K", "grade": 22 },
+                { "model": "i7-10700K", "grade": 20 },
+                { "model": "i5-10600K", "grade": 16 },
+                { "model": "i5-10400", "grade": 14 }
+            ]
+        },
+        {
+            "original_title": "Intel Xeon Scalable (Sapphire Rapids)",
+            "vendor": "Intel",
+            "family": "Xeon Scalable",
+            "series": null,
+            "architecture": "Sapphire Rapids",
+            "processors": [
+                { "model": "Xeon Platinum 8490H", "grade": 65 },
+                { "model": "Xeon Platinum 8480+", "grade": 60 },
+                { "model": "Xeon Gold 6448Y", "grade": 52 },
+                { "model": "Xeon Gold 6430", "grade": 45 },
+                { "model": "Xeon Silver 4410Y", "grade": 35 }
+            ]
+        },
+        {
+            "original_title": "Intel Xeon Scalable (Ice Lake)",
+            "vendor": "Intel",
+            "family": "Xeon Scalable",
+            "series": null,
+            "architecture": "Ice Lake",
+            "processors": [
+                { "model": "Xeon Platinum 8380", "grade": 48 },
+                { "model": "Xeon Gold 6348", "grade": 40 },
+                { "model": "Xeon Gold 6314U", "grade": 38 },
+                { "model": "Xeon Silver 4314", "grade": 30 }
+            ]
+        },
+        {
+            "original_title": "Intel Xeon W-Series (Workstation)",
+            "vendor": "Intel",
+            "family": "Xeon W-Series",
+            "series": "Workstation",
+            "architecture": null,
+            "processors": [
+                { "model": "Xeon w9-3495X", "grade": 58 },
+                { "model": "Xeon w7-2495X", "grade": 45 },
+                { "model": "Xeon w5-2465X", "grade": 38 },
+                { "model": "Xeon w-3375", "grade": 35 },
+                { "model": "Xeon w-3275", "grade": 32 }
+            ]
+        },
+        {
+            "original_title": "Intel Core Mobile (Latest)",
+            "vendor": "Intel",
+            "family": "Core Mobile",
+            "series": "Latest",
+            "architecture": null,
+            "processors": [
+                { "model": "i9-14900HX", "grade": 38 },
+                { "model": "i7-14700HX", "grade": 35 },
+                { "model": "i5-14500HX", "grade": 28 },
+                { "model": "i9-13900H", "grade": 32 },
+                { "model": "i7-13700H", "grade": 28 },
+                { "model": "i5-13500H", "grade": 22 }
+            ]
+        },
+        {
+            "original_title": "Intel Legacy (8th-9th Gen)",
+            "vendor": "Intel",
+            "family": "Legacy",
+            "series": "8th-9th Gen",
+            "architecture": null,
+            "processors": [
+                { "model": "i9-9900K", "grade": 18 },
+                { "model": "i7-9700K", "grade": 15 },
+                { "model": "i5-9600K", "grade": 12 },
+                { "model": "i9-8950HK", "grade": 14 },
+                { "model": "i7-8750H", "grade": 12 }
+            ]
+        },
+        {
+            "original_title": "Intel Legacy (6th-7th Gen)",
+            "vendor": "Intel",
+            "family": "Legacy",
+            "series": "6th-7th Gen",
+            "architecture": null,
+            "processors": [
+                { "model": "i7-7700K", "grade": 10 },
+                { "model": "i7-6700K", "grade": 8 },
+                { "model": "i5-7600K", "grade": 7 },
+                { "model": "i5-6600K", "grade": 6 }
+            ]
+        },
+        {
+            "original_title": "Intel Legacy (Pre-6th Gen)",
+            "vendor": "Intel",
+            "family": "Legacy",
+            "series": "Pre-6th Gen",
+            "architecture": null,
+            "processors": [
+                { "model": "i7-4790K", "grade": 6 },
+                { "model": "i7-3770K", "grade": 4 },
+                { "model": "i5-4690K", "grade": 4 },
+                { "model": "i5-3570K", "grade": 3 }
+            ]
+        },
+        {
+            "original_title": "Apple Silicon",
+            "vendor": "Apple",
+            "family": "Apple Silicon",
+            "series": "M-series",
+            "architecture": null,
+            "processors": [
+                { "model": "M4 Ultra", "grade": 65 },
+                { "model": "M4 Max", "grade": 55 },
+                { "model": "M4 Pro", "grade": 45 },
+                { "model": "M4", "grade": 40 },
+                { "model": "M3 Ultra", "grade": 58 },
+                { "model": "M3 Max", "grade": 50 },
+                { "model": "M3 Pro", "grade": 42 },
+                { "model": "M3", "grade": 38 },
+                { "model": "M2 Ultra", "grade": 48 },
+                { "model": "M2 Max", "grade": 40 },
+                { "model": "M2 Pro", "grade": 35 },
+                { "model": "M2", "grade": 32 },
+                { "model": "M1 Ultra", "grade": 42 },
+                { "model": "M1 Max", "grade": 35 },
+                { "model": "M1 Pro", "grade": 30 },
+                { "model": "M1", "grade": 25 }
+            ]
+        },
+        {
+            "original_title": "Amazon AWS",
+            "vendor": "Amazon",
+            "family": "Graviton",
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "Graviton4", "grade": 70 },
+                { "model": "Graviton3", "grade": 55 },
+                { "model": "Graviton2", "grade": 40 },
+                { "model": "Graviton1", "grade": 25 }
+            ]
+        },
+        {
+            "original_title": "Ampere Computing",
+            "vendor": "Ampere Computing",
+            "family": null,
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "AmpereOne", "grade": 65 },
+                { "model": "Altra Max", "grade": 50 },
+                { "model": "Altra", "grade": 40 }
+            ]
+        },
+        {
+            "original_title": "Fujitsu",
+            "vendor": "Fujitsu",
+            "family": null,
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "A64FX", "grade": 45 }
+            ]
+        },
+        {
+            "original_title": "IBM",
+            "vendor": "IBM",
+            "family": "POWER",
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "POWER10", "grade": 60 },
+                { "model": "POWER9", "grade": 40 }
+            ]
+        },
+        {
+            "original_title": "Qualcomm",
+            "vendor": "Qualcomm",
+            "family": "Snapdragon",
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "Snapdragon X Elite", "grade": 35 },
+                { "model": "Snapdragon 8 Gen 4", "grade": 25 },
+                { "model": "Snapdragon 8 Gen 3", "grade": 20 }
+            ]
+        },
+        {
+            "original_title": "Google",
+            "vendor": "Google",
+            "family": "Tensor",
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "Tensor G4", "grade": 22 },
+                { "model": "Tensor G3", "grade": 18 },
+                { "model": "Tensor G2", "grade": 15 }
+            ]
+        },
+        {
+            "original_title": "Samsung",
+            "vendor": "Samsung",
+            "family": "Exynos",
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "Exynos 2500", "grade": 24 },
+                { "model": "Exynos 2400", "grade": 20 }
+            ]
+        },
+        {
+            "original_title": "MediaTek",
+            "vendor": "MediaTek",
+            "family": "Dimensity",
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "Dimensity 9400", "grade": 26 },
+                { "model": "Dimensity 9300", "grade": 22 }
+            ]
+        },
+        {
+            "original_title": "Phytium",
+            "vendor": "Phytium",
+            "family": null,
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "FTC663", "grade": 18 }
+            ]
+        },
+        {
+            "original_title": "Zhaoxin",
+            "vendor": "Zhaoxin",
+            "family": null,
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "KX-7000", "grade": 15 }
+            ]
+        },
+        {
+            "original_title": "SiFive",
+            "vendor": "SiFive",
+            "family": null,
+            "series": null,
+            "architecture": "RISC-V",
+            "processors": [
+                { "model": "P870", "grade": 20 }
+            ]
+        },
+        {
+            "original_title": "RISC-V",
+            "vendor": "RISC-V",
+            "family": null,
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "SG2380", "grade": 16 }
+            ]
+        },
+        {
+            "original_title": "Marvell",
+            "vendor": "Marvell",
+            "family": "ThunderX",
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "ThunderX3", "grade": 35 },
+                { "model": "ThunderX2", "grade": 25 }
+            ]
+        },
+        {
+            "original_title": "NVIDIA",
+            "vendor": "NVIDIA",
+            "family": null,
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "Grace CPU Superchip", "grade": 75 }
+            ]
+        },
+        {
+            "original_title": "HiSilicon",
+            "vendor": "HiSilicon",
+            "family": null,
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "Kirin 9010", "grade": 18 },
+                { "model": "Kunpeng 920", "grade": 30 }
+            ]
+        },
+        {
+            "original_title": "Google TPU",
+            "vendor": "Google",
+            "family": "TPU",
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "TPU v5", "grade": 85 },
+                { "model": "TPU v4", "grade": 70 }
+            ]
+        },
+        {
+            "original_title": "Cerebras",
+            "vendor": "Cerebras",
+            "family": null,
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "CS-3", "grade": 90 }
+            ]
+        },
+        {
+            "original_title": "Groq",
+            "vendor": "Groq",
+            "family": null,
+            "series": null,
+            "architecture": null,
+            "processors": [
+                { "model": "LPU", "grade": 60 }
+            ]
+        }
+    ]
+}

@@ -4,6 +4,7 @@
 import type OpenAI from 'openai';
 import type { FastifyReply } from 'fastify';
 import type { ChatStreamEvent } from '@personal-ide/shared';
+import { buildModelParams } from '@personal-ide/shared';
 
 /** Strip provider prefix from model ID (e.g. 'ollama/codellama:latest' -> 'codellama:latest') */
 function stripModelPrefix(model: string): string {
@@ -48,13 +49,16 @@ export async function streamChatResponse(
   };
 
   try {
+    const modelParams = buildModelParams(model, {
+      temperature: options?.temperature,
+      maxTokens: options?.maxTokens,
+      jsonMode: options?.jsonMode,
+    });
     const stream = await client.chat.completions.create({
       model: stripModelPrefix(model),
       messages,
       stream: true,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
-      ...(options?.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+      ...modelParams,
     });
 
     let fullContent = '';
@@ -118,12 +122,15 @@ export async function completeChatResponse(
   }
 ): Promise<{ content: string; usage: any; headers?: Record<string, string>; statusCode?: number }> {
   // Use .withResponse() to capture HTTP headers for rate limit tracking
+  const modelParams = buildModelParams(model, {
+    temperature: options?.temperature,
+    maxTokens: options?.maxTokens,
+    jsonMode: options?.jsonMode,
+  });
   const { data: response, response: rawResponse } = await client.chat.completions.create({
     model: stripModelPrefix(model),
     messages,
-    temperature: options?.temperature ?? 0.7,
-    max_tokens: options?.maxTokens ?? 4096,
-    ...(options?.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+    ...modelParams,
   }).withResponse();
 
   // Extract rate-limit-relevant headers

@@ -1,0 +1,324 @@
+{
+    "title": "SPECIALIZED HARDWARE ACCELERATORS GRADING SYSTEM",
+    "component_weights": {
+        "performance": 0.35,
+        "memory": 0.25,
+        "architecture": 0.20,
+        "software": 0.15,
+        "power": 0.05
+    },
+    "sections": [
+        {
+            "name": "FPGA_ACCELERATORS",
+            "tiers": [
+                {
+                    "name": "Tier 1: High-End FPGAs",
+                    "score_range": {
+                        "min": 85,
+                        "max": 100
+                    },
+                    "devices": [
+                        {
+                            "name": "Xilinx Alveo U55C",
+                            "min_score": 95,
+                            "max_score": 100
+                        },
+                        {
+                            "name": "Intel Agilex 7 F-Series",
+                            "min_score": 92,
+                            "max_score": 98
+                        },
+                        {
+                            "name": "Xilinx Virtex UltraScale+",
+                            "min_score": 90,
+                            "max_score": 95
+                        },
+                        {
+                            "name": "Intel Stratix 10 MX",
+                            "min_score": 88,
+                            "max_score": 92
+                        }
+                    ]
+                },
+                {
+                    "name": "Tier 2: Mid-Range FPGAs",
+                    "score_range": {
+                        "min": 70,
+                        "max": 84
+                    },
+                    "devices": [
+                        { "name": "Xilinx Alveo U50", "min_score": 82, "max_score": 85 },
+                        { "name": "Intel Stratix 10 GX", "min_score": 80, "max_score": 83 },
+                        { "name": "Xilinx Alveo U280", "min_score": 78, "max_score": 81 },
+                        { "name": "Intel Agilex 5", "min_score": 75, "max_score": 78 },
+                        { "name": "Xilinx Kintex UltraScale+", "min_score": 72, "max_score": 75 },
+                        { "name": "Intel Arria 10", "min_score": 70, "max_score": 72 }
+                    ]
+                },
+                {
+                    "name": "Tier 3: Entry-Level FPGAs",
+                    "score_range": {
+                        "min": 55,
+                        "max": 69
+                    },
+                    "devices": [
+                        { "name": "Xilinx Artix UltraScale+", "min_score": 65, "max_score": 68 },
+                        { "name": "Intel Cyclone 10 GX", "min_score": 62, "max_score": 65 },
+                        { "name": "Xilinx Spartan-7", "min_score": 58, "max_score": 61 },
+                        { "name": "Lattice ECP5", "min_score": 55, "max_score": 57 }
+                    ]
+                }
+            ],
+            "scoring_factors": {
+                "logic_elements_dsp_slices": 0.40,
+                "memory_capacity_bandwidth": 0.30,
+                "interface_support_pcie_gen": 0.20,
+                "development_tooling": 0.10
+            }
+        },
+        {
+            "name": "MOBILE_DEDICATED_AI_ACCELERATORS",
+            "tiers": [
+                {
+                    "name": "Tier 1: Flagship Mobile NPUs",
+                    "score_range": { "min": 80, "max": 95 },
+                    "devices": [
+                        { "name": "Apple Neural Engine (M4)", "min_score": 92, "max_score": 95 },
+                        { "name": "Google Tensor G4 TPU", "min_score": 90, "max_score": 93 },
+                        { "name": "Qualcomm Hexagon 800", "min_score": 88, "max_score": 91 },
+                        { "name": "Samsung NPU 3.0", "min_score": 85, "max_score": 88 },
+                        { "name": "MediaTek APU 790", "min_score": 82, "max_score": 85 },
+                        { "name": "Apple Neural Engine (A18 Pro)", "min_score": 80, "max_score": 83 }
+                    ]
+                },
+                {
+                    "name": "Tier 2: High-End Mobile NPUs",
+                    "score_range": { "min": 65, "max": 79 },
+                    "devices": [
+                        { "name": "Qualcomm Hexagon 700", "min_score": 75, "max_score": 79 },
+                        { "name": "Google Tensor G3 TPU", "min_score": 72, "max_score": 76 },
+                        { "name": "Samsung NPU 2.0", "min_score": 70, "max_score": 73 },
+                        { "name": "MediaTek APU 690", "min_score": 68, "max_score": 71 },
+                        { "name": "Huawei Da Vinci", "min_score": 65, "max_score": 68 }
+                    ]
+                },
+                {
+                    "name": "Tier 3: Mid-Range Mobile NPUs",
+                    "score_range": { "min": 50, "max": 64 },
+                    "devices": [
+                        { "name": "Qualcomm Hexagon 600", "min_score": 60, "max_score": 64 },
+                        { "name": "MediaTek APU 550", "min_score": 57, "max_score": 60 },
+                        { "name": "Unisoc T-Engine", "min_score": 54, "max_score": 57 },
+                        { "name": "Older Generation NPUs", "min_score": 50, "max_score": 53 }
+                    ]
+                }
+            ],
+            "scoring_factors": {
+                "tops_performance": 0.50,
+                "memory_bandwidth": 0.25,
+                "precision_support": 0.15,
+                "framework_support": 0.10
+            }
+        },
+        {
+            "name": "EDGE_AI_ACCELERATORS",
+            "tiers": [
+                {
+                    "name": "Tier 1: High-Performance Edge",
+                    "score_range": { "min": 75, "max": 90 },
+                    "devices": [
+                        { "name": "Google Edge TPU v3", "min_score": 88, "max_score": 90 },
+                        { "name": "NVIDIA Jetson Orin NPU", "min_score": 85, "max_score": 88 },
+                        { "name": "Intel Movidius Myriad X", "min_score": 82, "max_score": 85 },
+                        { "name": "Hailo-8 AI Processor", "min_score": 80, "max_score": 83 },
+                        { "name": "Kendryte K510", "min_score": 77, "max_score": 80 },
+                        { "name": "Google Edge TPU v2", "min_score": 75, "max_score": 77 }
+                    ]
+                },
+                {
+                    "name": "Tier 2: Mid-Range Edge",
+                    "score_range": { "min": 60, "max": 74 },
+                    "devices": [
+                        { "name": "Google Coral Edge TPU", "min_score": 70, "max_score": 74 },
+                        { "name": "NVIDIA Jetson Xavier NPU", "min_score": 68, "max_score": 71 },
+                        { "name": "Intel Movidius Myriad 2", "min_score": 65, "max_score": 68 },
+                        { "name": "Rockchip NPU", "min_score": 62, "max_score": 65 },
+                        { "name": "Amlogic NPU", "min_score": 60, "max_score": 62 }
+                    ]
+                },
+                {
+                    "name": "Tier 3: Entry-Level Edge",
+                    "score_range": { "min": 45, "max": 59 },
+                    "devices": [
+                        { "name": "Raspberry Pi AI kits", "min_score": 55, "max_score": 59 },
+                        { "name": "Low-power edge chips", "min_score": 50, "max_score": 54 },
+                        { "name": "MCU-based AI", "min_score": 45, "max_score": 49 }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "DSP_AND_OTHER_ACCELERATORS",
+            "tiers": [
+                {
+                    "name": "Tier 1: High-Performance DSP",
+                    "score_range": { "min": 70, "max": 85 },
+                    "devices": [
+                        { "name": "TI C7x DSP", "min_score": 82, "max_score": 85 },
+                        { "name": "Qualcomm Hexagon DSP", "min_score": 80, "max_score": 83 },
+                        { "name": "CEVA-XM DSP", "min_score": 77, "max_score": 80 },
+                        { "name": "Cadence Tensilica", "min_score": 74, "max_score": 77 },
+                        { "name": "Analog Devices SHARC", "min_score": 70, "max_score": 73 }
+                    ]
+                },
+                {
+                    "name": "Tier 2: Specialized Accelerators",
+                    "score_range": { "min": 55, "max": 69 },
+                    "devices": [
+                        { "name": "Groq LPU", "min_score": 85, "max_score": 90, "note": "specialized for LLMs" },
+                        { "name": "Graphcore IPU", "min_score": 80, "max_score": 85 },
+                        { "name": "Cerebras Wafer Scale", "min_score": 95, "max_score": 100, "note": "special elite tier" },
+                        { "name": "Habana Gaudi", "min_score": 75, "max_score": 80 }
+                    ]
+                }
+            ]
+        }
+    ],
+    "performance_metrics_grading": {
+        "tops_per_watt_efficiency": [
+            { "condition": ">50 TOPS/Watt", "points": 15 },
+            { "condition": "20-50 TOPS/Watt", "points": 10 },
+            { "condition": "10-20 TOPS/Watt", "points": 5 },
+            { "condition": "<10 TOPS/Watt", "points": 0 }
+        ],
+        "memory_bandwidth_scoring": [
+            { "condition": ">1TB/s", "points": 25 },
+            { "condition": "500GB/s-1TB/s", "points": 20 },
+            { "condition": "200-500GB/s", "points": 15 },
+            { "condition": "100-200GB/s", "points": 10 },
+            { "condition": "<100GB/s", "points": 5 }
+        ],
+        "precision_support_multipliers": {
+            "FP64": 1.2,
+            "FP32": 1.1,
+            "FP16_BF16": 1.0,
+            "INT8_INT4": 0.9,
+            "BINARY_TERNARY": 0.8
+        }
+    },
+    "software_ecosystem_scoring": {
+        "framework_support": [
+            { "condition": "TensorFlow/PyTorch native", "points_range": [13, 15] },
+            { "condition": "ONNX Runtime support", "points_range": [11, 13] },
+            { "condition": "Custom SDK required", "points_range": [8, 10] },
+            { "condition": "Limited framework support", "points_range": [5, 7] },
+            { "condition": "Proprietary only", "points_range": [3, 5] }
+        ],
+        "development_experience": {
+            "mature_toolchain": 5,
+            "good_documentation": 3,
+            "community_support": 2,
+            "limited_resources": -3
+        }
+    },
+    "power_efficiency_bonuses": {
+        "power_performance_ratio": [
+            { "condition": "<10W for >50 TOPS", "points": 10 },
+            { "condition": "10-25W for >100 TOPS", "points": 8 },
+            { "condition": "25-50W for >200 TOPS", "points": 5 },
+            { "condition": ">50W for <100 TOPS", "points": -5 }
+        ],
+        "cooling_requirements": [
+            { "condition": "Passive cooling possible", "points": 3 },
+            { "condition": "Simple active cooling", "points": 1 },
+            { "condition": "Complex/liquid cooling", "points": -2 }
+        ]
+    },
+    "formulas": {
+        "base_score": {
+            "description": "Weighted sum of core components",
+            "expression": "BaseScore = (Performance * 0.35) + (Memory * 0.25) + (Architecture * 0.2) + (Software * 0.15) + (Power * 0.05)",
+            "components": {
+                "Performance": 0.35,
+                "Memory": 0.25,
+                "Architecture": 0.20,
+                "Software": 0.15,
+                "Power": 0.05
+            }
+        },
+        "final_score": {
+            "description": "Apply precision multiplier and add bonuses",
+            "expression": "FinalScore = (BaseScore * PrecisionMultiplier) + EfficiencyBonuses + EcosystemBonuses",
+            "notes": "PrecisionMultiplier from precision_support_multipliers; bonuses from power_efficiency_bonuses and development_experience"
+        }
+    },
+    "examples": [
+        {
+            "device": "Google Edge TPU v3",
+            "attributes": {
+                "performance": { "value": 24, "score": 82, "unit": "TOPS" },
+                "memory": { "value": "8GB LPDDR4", "score": 70 },
+                "architecture": { "description": "Efficient inference", "score": 85 },
+                "software": { "description": "Good framework support", "score": 75 },
+                "power": { "value": "4W", "description": "high efficiency", "score": 90 },
+                "precision": "INT8"
+            },
+            "calculation": {
+                "base_score": 79.2,
+                "precision_multiplier": 0.9,
+                "efficiency_bonus": 10,
+                "final_score": 81.3,
+                "classification": "High-Performance Edge"
+            }
+        },
+        {
+            "device": "Apple Neural Engine M4",
+            "attributes": {
+                "performance": { "value": 38, "score": 92, "unit": "TOPS" },
+                "memory": { "description": "Shared system RAM", "score": 80 },
+                "architecture": { "description": "Advanced neural engine", "score": 95 },
+                "software": { "description": "Core ML excellent", "score": 90 },
+                "power": { "description": "Ultra-efficient", "score": 95 },
+                "precision": "FP16/INT8 mixed"
+            },
+            "calculation": {
+                "base_score": 89.9,
+                "precision_multiplier": 1.0,
+                "efficiency_bonus": 15,
+                "final_score": 104.9,
+                "classification": "Flagship Mobile"
+            }
+        },
+        {
+            "device": "Xilinx Alveo U55C",
+            "attributes": {
+                "performance": { "description": "Custom compute", "score": 88 },
+                "memory": { "description": "HBM2e, 460GB/s", "score": 92 },
+                "architecture": { "description": "High-end FPGA", "score": 95 },
+                "software": { "description": "Vitis ecosystem", "score": 80 },
+                "power": { "value_watts": 150, "score": 70 },
+                "precision": "FP64/FP32/FP16"
+            },
+            "calculation": {
+                "base_score": 87.3,
+                "precision_multiplier": 1.2,
+                "development_bonus": 5,
+                "final_score": 109.8,
+                "classification": "Elite FPGA"
+            }
+        }
+    ],
+    "accelerator_tier_classification": [
+        { "name": "Elite", "min_score": 100, "max_score": null, "description": "Datacenter-class accelerators" },
+        { "name": "Premium", "min_score": 85, "max_score": 99, "description": "High-end specialized hardware" },
+        { "name": "Advanced", "min_score": 70, "max_score": 84, "description": "Strong performance accelerators" },
+        { "name": "Competent", "min_score": 55, "max_score": 69, "description": "Mid-range capable accelerators" },
+        { "name": "Basic", "min_score": 40, "max_score": 54, "description": "Entry-level specialized hardware" },
+        { "name": "Limited", "min_score": 25, "max_score": 39, "description": "Minimal acceleration capability" },
+        { "name": "Ineffective", "min_score": 0, "max_score": 24, "description": "Not suitable for HPC workloads" }
+    ],
+    "notes": {
+        "purpose": "This JSON encodes the grading system, device tiers, scoring factors, metrics, formulas, and example calculations for machine readability and programmatic evaluation.",
+        "usage": "Consume the objects to compute BaseScore and FinalScore; apply precision multipliers and bonuses per device attributes."
+    }
+}

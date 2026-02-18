@@ -1,0 +1,387 @@
+{
+    "document_title": "UPTIME & AVAILABILITY GRADING SYSTEM",
+    "version": 1,
+    "tiers": [
+        {
+            "id": 1,
+            "name": "TIER 1: DEDICATED COMPUTE",
+            "points_range": { "min": 90, "max": 100 },
+            "levels": [
+                {
+                    "code": "T1-S+",
+                    "points_range": { "min": 98, "max": 100 },
+                    "uptime": { "comparator": "gte", "min_percent": 99.9, "max_percent": 100 },
+                    "donation": { "min_percent": 95, "max_percent": 100 },
+                    "description": "99.9%+ uptime, 95-100% compute donation"
+                },
+                {
+                    "code": "T1-S",
+                    "points_range": { "min": 95, "max": 97 },
+                    "uptime": { "comparator": "gte", "min_percent": 99.5, "max_percent": 100 },
+                    "donation": { "min_percent": 90, "max_percent": 94 },
+                    "description": "99.5%+ uptime, 90-94% compute donation"
+                },
+                {
+                    "code": "T1-A+",
+                    "points_range": { "min": 92, "max": 94 },
+                    "uptime": { "comparator": "gte", "min_percent": 99.0, "max_percent": 100 },
+                    "donation": { "min_percent": 85, "max_percent": 89 },
+                    "description": "99%+ uptime, 85-89% compute donation"
+                },
+                {
+                    "code": "T1-A",
+                    "points_range": { "min": 90, "max": 91 },
+                    "uptime": { "comparator": "gte", "min_percent": 98.0, "max_percent": 100 },
+                    "donation": { "min_percent": 80, "max_percent": 84 },
+                    "description": "98%+ uptime, 80-84% compute donation"
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "name": "TIER 2: HIGH AVAILABILITY",
+            "points_range": { "min": 75, "max": 89 },
+            "levels": [
+                {
+                    "code": "T2-B+",
+                    "points_range": { "min": 87, "max": 89 },
+                    "uptime": { "comparator": "gte", "min_percent": 97, "max_percent": 100 },
+                    "donation": { "min_percent": 75, "max_percent": 79 },
+                    "description": "97%+ uptime, 75-79% compute donation"
+                },
+                {
+                    "code": "T2-B",
+                    "points_range": { "min": 83, "max": 86 },
+                    "uptime": { "comparator": "gte", "min_percent": 95, "max_percent": 100 },
+                    "donation": { "min_percent": 70, "max_percent": 74 },
+                    "description": "95%+ uptime, 70-74% compute donation"
+                },
+                {
+                    "code": "T2-C+",
+                    "points_range": { "min": 79, "max": 82 },
+                    "uptime": { "comparator": "gte", "min_percent": 92, "max_percent": 100 },
+                    "donation": { "min_percent": 65, "max_percent": 69 },
+                    "description": "92%+ uptime, 65-69% compute donation"
+                },
+                {
+                    "code": "T2-C",
+                    "points_range": { "min": 75, "max": 78 },
+                    "uptime": { "comparator": "gte", "min_percent": 90, "max_percent": 100 },
+                    "donation": { "min_percent": 60, "max_percent": 64 },
+                    "description": "90%+ uptime, 60-64% compute donation"
+                }
+            ]
+        },
+        {
+            "id": 3,
+            "name": "TIER 3: REGULAR AVAILABILITY",
+            "points_range": { "min": 55, "max": 74 },
+            "levels": [
+                {
+                    "code": "T3-D+",
+                    "points_range": { "min": 72, "max": 74 },
+                    "uptime": { "comparator": "gte", "min_percent": 85, "max_percent": 100 },
+                    "donation": { "min_percent": 55, "max_percent": 59 },
+                    "description": "85%+ uptime, 55-59% compute donation"
+                },
+                {
+                    "code": "T3-D",
+                    "points_range": { "min": 68, "max": 71 },
+                    "uptime": { "comparator": "gte", "min_percent": 80, "max_percent": 100 },
+                    "donation": { "min_percent": 50, "max_percent": 54 },
+                    "description": "80%+ uptime, 50-54% compute donation"
+                },
+                {
+                    "code": "T3-E+",
+                    "points_range": { "min": 64, "max": 67 },
+                    "uptime": { "comparator": "gte", "min_percent": 75, "max_percent": 100 },
+                    "donation": { "min_percent": 45, "max_percent": 49 },
+                    "description": "75%+ uptime, 45-49% compute donation"
+                },
+                {
+                    "code": "T3-E",
+                    "points_range": { "min": 60, "max": 63 },
+                    "uptime": { "comparator": "gte", "min_percent": 70, "max_percent": 100 },
+                    "donation": { "min_percent": 40, "max_percent": 44 },
+                    "description": "70%+ uptime, 40-44% compute donation"
+                },
+                {
+                    "code": "T3-F",
+                    "points_range": { "min": 55, "max": 59 },
+                    "uptime": { "comparator": "gte", "min_percent": 65, "max_percent": 100 },
+                    "donation": { "min_percent": 35, "max_percent": 39 },
+                    "description": "65%+ uptime, 35-39% compute donation"
+                }
+            ]
+        },
+        {
+            "id": 4,
+            "name": "TIER 4: PART-TIME CONTRIBUTORS",
+            "points_range": { "min": 35, "max": 54 },
+            "levels": [
+                {
+                    "code": "T4-G+",
+                    "points_range": { "min": 52, "max": 54 },
+                    "uptime": { "comparator": "gte", "min_percent": 60, "max_percent": 100 },
+                    "donation": { "min_percent": 30, "max_percent": 34 },
+                    "description": "60%+ uptime, 30-34% compute donation"
+                },
+                {
+                    "code": "T4-G",
+                    "points_range": { "min": 48, "max": 51 },
+                    "uptime": { "comparator": "gte", "min_percent": 55, "max_percent": 100 },
+                    "donation": { "min_percent": 25, "max_percent": 29 },
+                    "description": "55%+ uptime, 25-29% compute donation"
+                },
+                {
+                    "code": "T4-H+",
+                    "points_range": { "min": 44, "max": 47 },
+                    "uptime": { "comparator": "gte", "min_percent": 50, "max_percent": 100 },
+                    "donation": { "min_percent": 20, "max_percent": 24 },
+                    "description": "50%+ uptime, 20-24% compute donation"
+                },
+                {
+                    "code": "T4-H",
+                    "points_range": { "min": 40, "max": 43 },
+                    "uptime": { "comparator": "gte", "min_percent": 45, "max_percent": 100 },
+                    "donation": { "min_percent": 15, "max_percent": 19 },
+                    "description": "45%+ uptime, 15-19% compute donation"
+                },
+                {
+                    "code": "T4-I",
+                    "points_range": { "min": 35, "max": 39 },
+                    "uptime": { "comparator": "gte", "min_percent": 40, "max_percent": 100 },
+                    "donation": { "min_percent": 10, "max_percent": 14 },
+                    "description": "40%+ uptime, 10-14% compute donation"
+                }
+            ]
+        },
+        {
+            "id": 5,
+            "name": "TIER 5: OCCASIONAL CONTRIBUTORS",
+            "points_range": { "min": 15, "max": 34 },
+            "levels": [
+                {
+                    "code": "T5-J+",
+                    "points_range": { "min": 32, "max": 34 },
+                    "uptime": { "comparator": "gte", "min_percent": 35, "max_percent": 100 },
+                    "donation": { "min_percent": 8, "max_percent": 9 },
+                    "description": "35%+ uptime, 8-9% compute donation"
+                },
+                {
+                    "code": "T5-J",
+                    "points_range": { "min": 28, "max": 31 },
+                    "uptime": { "comparator": "gte", "min_percent": 30, "max_percent": 100 },
+                    "donation": { "min_percent": 6, "max_percent": 7 },
+                    "description": "30%+ uptime, 6-7% compute donation"
+                },
+                {
+                    "code": "T5-K+",
+                    "points_range": { "min": 24, "max": 27 },
+                    "uptime": { "comparator": "gte", "min_percent": 25, "max_percent": 100 },
+                    "donation": { "min_percent": 4, "max_percent": 5 },
+                    "description": "25%+ uptime, 4-5% compute donation"
+                },
+                {
+                    "code": "T5-K",
+                    "points_range": { "min": 20, "max": 23 },
+                    "uptime": { "comparator": "gte", "min_percent": 20, "max_percent": 100 },
+                    "donation": { "min_percent": 2, "max_percent": 3 },
+                    "description": "20%+ uptime, 2-3% compute donation"
+                },
+                {
+                    "code": "T5-L",
+                    "points_range": { "min": 15, "max": 19 },
+                    "uptime": { "comparator": "gte", "min_percent": 15, "max_percent": 100 },
+                    "donation": { "min_percent": 1, "max_percent": 1 },
+                    "description": "15%+ uptime, 1% compute donation"
+                }
+            ]
+        },
+        {
+            "id": 6,
+            "name": "TIER 6: MINIMAL PARTICIPATION",
+            "points_range": { "min": 1, "max": 14 },
+            "levels": [
+                {
+                    "code": "T6-M",
+                    "points_range": { "min": 10, "max": 14 },
+                    "uptime": { "comparator": "lt", "max_percent": 15 },
+                    "donation": { "comparator": "lt", "max_percent": 1 },
+                    "description": "<15% uptime, <1% compute donation"
+                },
+                {
+                    "code": "T6-N",
+                    "points_range": { "min": 5, "max": 9 },
+                    "uptime": { "comparator": "lt", "max_percent": 10 },
+                    "donation": { "description": "minimal compute donation" },
+                    "description": "<10% uptime, minimal compute donation"
+                },
+                {
+                    "code": "T6-O",
+                    "points_range": { "min": 1, "max": 4 },
+                    "uptime": { "comparator": "lt", "max_percent": 5 },
+                    "donation": { "description": "trace compute donation" },
+                    "description": "<5% uptime, trace compute donation"
+                }
+            ]
+        }
+    ],
+    "donation_multipliers": [
+        { "range": "95-100", "min_percent": 95, "max_percent": 100, "multiplier": 1.25 },
+        { "range": "90-94", "min_percent": 90, "max_percent": 94, "multiplier": 1.20 },
+        { "range": "85-89", "min_percent": 85, "max_percent": 89, "multiplier": 1.15 },
+        { "range": "80-84", "min_percent": 80, "max_percent": 84, "multiplier": 1.10 },
+        { "range": "75-79", "min_percent": 75, "max_percent": 79, "multiplier": 1.05 },
+        { "range": "70-74", "min_percent": 70, "max_percent": 74, "multiplier": 1.00 },
+        { "range": "65-69", "min_percent": 65, "max_percent": 69, "multiplier": 0.95 },
+        { "range": "60-64", "min_percent": 60, "max_percent": 64, "multiplier": 0.90 },
+        { "range": "55-59", "min_percent": 55, "max_percent": 59, "multiplier": 0.85 },
+        { "range": "50-54", "min_percent": 50, "max_percent": 54, "multiplier": 0.80 },
+        { "range": "45-49", "min_percent": 45, "max_percent": 49, "multiplier": 0.75 },
+        { "range": "40-44", "min_percent": 40, "max_percent": 44, "multiplier": 0.70 },
+        { "range": "35-39", "min_percent": 35, "max_percent": 39, "multiplier": 0.65 },
+        { "range": "30-34", "min_percent": 30, "max_percent": 34, "multiplier": 0.60 },
+        { "range": "25-29", "min_percent": 25, "max_percent": 29, "multiplier": 0.55 },
+        { "range": "20-24", "min_percent": 20, "max_percent": 24, "multiplier": 0.50 },
+        { "range": "15-19", "min_percent": 15, "max_percent": 19, "multiplier": 0.45 },
+        { "range": "10-14", "min_percent": 10, "max_percent": 14, "multiplier": 0.40 },
+        { "range": "5-9", "min_percent": 5, "max_percent": 9, "multiplier": 0.30 },
+        { "range": "1-4", "min_percent": 1, "max_percent": 4, "multiplier": 0.20 }
+    ],
+    "uptime_reliability_bonuses": {
+        "consistency": [
+            { "condition": "30+ days without interruption", "days_min": 30, "bonus_points": 5 },
+            { "condition": "90+ days without interruption", "days_min": 90, "bonus_points": 10 },
+            { "condition": "180+ days without interruption", "days_min": 180, "bonus_points": 15 },
+            { "condition": "365+ days without interruption", "days_min": 365, "bonus_points": 20 }
+        ],
+        "predictability": [
+            { "condition": "Scheduled availability (consistent hours)", "bonus_points": 8 },
+            { "condition": "Geographic stability (same location)", "bonus_points": 5 },
+            { "condition": "Network stability (consistent IP)", "bonus_points": 3 }
+        ],
+        "penalties": [
+            { "condition": "Frequent disconnects (>5/day)", "penalty_points": 10 },
+            { "condition": "Unpredictable availability", "penalty_points": 15 },
+            { "condition": "Geographic/IP hopping", "penalty_points": 8 }
+        ]
+    },
+    "scoring": {
+        "formula_string": "Final Availability Score = (Base Uptime Tier Points) * (Donation Multiplier) + (Consistency Bonus) + (Predictability Bonus) - (Penalties Total)",
+        "components": {
+            "base_uptime_tier_points": "numeric points assigned by tier/level (see tiers[].levels[].points_range)",
+            "donation_multiplier": "value selected from donation_multipliers based on donation percent",
+            "consistency_bonus": "sum of matching consistency bonuses",
+            "predictability_bonus": "sum of matching predictability bonuses",
+            "penalties_total": "sum of applicable penalties"
+        },
+        "example_evaluation": "score = (base_points * multiplier) + consistency_bonus + predictability_bonus - penalties_total"
+    },
+    "examples": [
+        {
+            "title": "Enterprise Server",
+            "inputs": {
+                "uptime_percent": 99.5,
+                "selected_level": "T1-S",
+                "base_points_assigned": 96,
+                "donation_percent": 90,
+                "consistency_days": 180,
+                "predictability_flags": ["Scheduled availability"],
+                "penalties": []
+            },
+            "document_final_score_text": "Final Score: (96 × 1.20) + 15 + 8 = 133.2 (Elite Tier)",
+            "computed_by_formula": {
+                "donation_multiplier_used": 1.20,
+                "consistency_bonus": 15,
+                "predictability_bonus": 8,
+                "penalties_total": 0,
+                "calculation": "(96 * 1.20) + 15 + 8",
+                "result": 138.2,
+                "notes": "Document example value (133.2) differs from direct formula result (138.2)."
+            }
+        },
+        {
+            "title": "Gaming PC Contributor",
+            "inputs": {
+                "uptime_percent": 85,
+                "selected_level": "T3-D+",
+                "base_points_assigned": 73,
+                "donation_percent": 70,
+                "consistency_days": 30,
+                "predictability_flags": [],
+                "penalties": []
+            },
+            "document_final_score_text": "Final Score: (73 × 1.00) + 5 = 78 (T2-C+ Tier)",
+            "computed_by_formula": {
+                "donation_multiplier_used": 1.00,
+                "consistency_bonus": 5,
+                "predictability_bonus": 0,
+                "penalties_total": 0,
+                "calculation": "(73 * 1.00) + 5",
+                "result": 78.0
+            }
+        },
+        {
+            "title": "Office Workstation",
+            "inputs": {
+                "uptime_percent": 40,
+                "selected_level": "T4-I",
+                "base_points_assigned": 37,
+                "donation_percent": 50,
+                "consistency_days": 0,
+                "predictability_flags": ["Scheduled nights/weekends"],
+                "penalties": []
+            },
+            "document_final_score_text": "Final Score: (37 × 0.80) + 8 = 37.6 (T4-H Tier)",
+            "computed_by_formula": {
+                "donation_multiplier_used": 0.80,
+                "consistency_bonus": 0,
+                "predictability_bonus": 8,
+                "penalties_total": 0,
+                "calculation": "(37 * 0.80) + 8",
+                "result": 37.6
+            }
+        },
+        {
+            "title": "Laptop Contributor",
+            "inputs": {
+                "uptime_percent": 25,
+                "selected_level": "T5-K+",
+                "base_points_assigned": 26,
+                "donation_percent": 30,
+                "consistency_days": 0,
+                "predictability_flags": [],
+                "penalties": ["Frequent moves"]
+            },
+            "document_final_score_text": "Final Score: (26 × 0.60) - 8 = 7.6 (T6-N Tier)",
+            "computed_by_formula": {
+                "donation_multiplier_used": 0.60,
+                "consistency_bonus": 0,
+                "predictability_bonus": 0,
+                "penalties_total": 8,
+                "calculation": "(26 * 0.60) - 8",
+                "result": 7.6
+            }
+        }
+    ],
+    "tier_rewards_multiplier": {
+        "formula_string": "Final System Value = (Hardware Composite Score) * (Availability Score / 100)",
+        "components": {
+            "hardware_composite_score": "numeric score representing hardware capability",
+            "availability_score": "Final Availability Score computed by scoring formula"
+        },
+        "example": {
+            "hardware": 82,
+            "availability_used_in_document": 133,
+            "document_calculation": "82 × (133/100) = 109.06",
+            "computed": 109.06
+        }
+    },
+    "notes": {
+        "original_document_text_preserved": true,
+        "consistency_checks": [
+            "Some provided example numeric outputs in the original text do not match the direct evaluation of the stated formula. Example: Enterprise Server."
+        ]
+    }
+}

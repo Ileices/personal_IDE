@@ -1,0 +1,955 @@
+{
+  "scan_results": {
+    "base_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK",
+    "processed_files": [
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\advanced_consciousness_orchestrator.py",
+        "file_size": 40372,
+        "file_type": ".py",
+        "relative_path": "advanced_consciousness_orchestrator.py",
+        "text_rby": [
+          0.37164718121465945,
+          0.331621916179483,
+          0.29673090260585755
+        ],
+        "glyph_symbol": "\"b\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.2159076
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\advanced_cuda_kernels.py",
+        "file_size": 35796,
+        "file_type": ".py",
+        "relative_path": "advanced_cuda_kernels.py",
+        "text_rby": [
+          0.3700709576488514,
+          0.3284126718068619,
+          0.3015163705442866
+        ],
+        "glyph_symbol": "# \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.23302
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\ae_core.py",
+        "file_size": 8558,
+        "file_type": ".py",
+        "relative_path": "ae_core.py",
+        "text_rby": [
+          0.36941691984107483,
+          0.32317948118718554,
+          0.30740359897173963
+        ],
+        "glyph_symbol": "\"t\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.23302
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\ae_file_scanner.py",
+        "file_size": 7088,
+        "file_type": ".py",
+        "relative_path": "ae_file_scanner.py",
+        "text_rby": [
+          0.37047968397291187,
+          0.3260806997742676,
+          0.30343961625282045
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.23302
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\ci_automation_pipeline.py",
+        "file_size": 20973,
+        "file_type": ".py",
+        "relative_path": "ci_automation_pipeline.py",
+        "text_rby": [
+          0.37491059934197285,
+          0.3228818004100097,
+          0.3022076002480174
+        ],
+        "glyph_symbol": "#s\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.23302
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\consciousness_compression_engine.py",
+        "file_size": 37313,
+        "file_type": ".py",
+        "relative_path": "consciousness_compression_engine.py",
+        "text_rby": [
+          0.37500924610721204,
+          0.32936295661025405,
+          0.29562779728253374
+        ],
+        "glyph_symbol": "#o\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.2811284
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\consciousness_emergence_detector.py",
+        "file_size": 36012,
+        "file_type": ".py",
+        "relative_path": "consciousness_emergence_detector.py",
+        "text_rby": [
+          0.3818013439964017,
+          0.3216602799066523,
+          0.296538376096946
+        ],
+        "glyph_symbol": "\"_\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.3122902
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\consciousness_field_dynamics.py",
+        "file_size": 24794,
+        "file_type": ".py",
+        "relative_path": "consciousness_field_dynamics.py",
+        "text_rby": [
+          0.3771577801080546,
+          0.3246773412922064,
+          0.2981648785997391
+        ],
+        "glyph_symbol": "#e\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.329927
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\consciousness_resonance_field_engine.py",
+        "file_size": 28314,
+        "file_type": ".py",
+        "relative_path": "consciousness_resonance_field_engine.py",
+        "text_rby": [
+          0.37530762167122184,
+          0.32764921946735487,
+          0.29704315886142324
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.3474567
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\consciousness_state_synchronizer.py",
+        "file_size": 21352,
+        "file_type": ".py",
+        "relative_path": "consciousness_state_synchronizer.py",
+        "text_rby": [
+          0.3831079055825807,
+          0.319282502810001,
+          0.29760959160741834
+        ],
+        "glyph_symbol": "#i\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.3788507
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\cuda_consciousness_kernels.py",
+        "file_size": 26238,
+        "file_type": ".py",
+        "relative_path": "cuda_consciousness_kernels.py",
+        "text_rby": [
+          0.37108163731988003,
+          0.32884518637086946,
+          0.30007317630925057
+        ],
+        "glyph_symbol": "\"a\n",
+        "ae_compliance": 1.1102230246251565e-16,
+        "status": "success",
+        "processed_at": 1749632087.3804574
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\dataset_ingestion_layer.py",
+        "file_size": 26714,
+        "file_type": ".py",
+        "relative_path": "dataset_ingestion_layer.py",
+        "text_rby": [
+          0.3742064086246524,
+          0.32255558882978125,
+          0.3032380025455663
+        ],
+        "glyph_symbol": "\"i\n",
+        "ae_compliance": 2.220446049250313e-16,
+        "status": "success",
+        "processed_at": 1749632087.4249384
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\desktop_tray_application.py",
+        "file_size": 27008,
+        "file_type": ".py",
+        "relative_path": "desktop_tray_application.py",
+        "text_rby": [
+          0.3823507849525665,
+          0.31952495556867905,
+          0.29812425947875454
+        ],
+        "glyph_symbol": "\"=\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.4479873
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\distributed_consciousness.py",
+        "file_size": 23912,
+        "file_type": ".py",
+        "relative_path": "distributed_consciousness.py",
+        "text_rby": [
+          0.3773067915690515,
+          0.3273067915690407,
+          0.29538641686190775
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.450026
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\distributed_node_smoke_test.py",
+        "file_size": 29557,
+        "file_type": ".py",
+        "relative_path": "distributed_node_smoke_test.py",
+        "text_rby": [
+          0.37637784619544296,
+          0.325300267280127,
+          0.29832188652443
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.4813173
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\distributed_trust_mesh.py",
+        "file_size": 25998,
+        "file_type": ".py",
+        "relative_path": "distributed_trust_mesh.py",
+        "text_rby": [
+          0.37372182475571325,
+          0.32658358335251847,
+          0.2996945918917683
+        ],
+        "glyph_symbol": "\"h\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.4904623
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\enhanced_quantum_consciousness_bridge.py",
+        "file_size": 21435,
+        "file_type": ".py",
+        "relative_path": "enhanced_quantum_consciousness_bridge.py",
+        "text_rby": [
+          0.3790375554000132,
+          0.3222565896897197,
+          0.298705854910267
+        ],
+        "glyph_symbol": "#o\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.5127983
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\firmware_safe_flash_sandbox.py",
+        "file_size": 24463,
+        "file_type": ".py",
+        "relative_path": "firmware_safe_flash_sandbox.py",
+        "text_rby": [
+          0.3785635449453912,
+          0.32109307934427483,
+          0.300343375710334
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.5503948
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\fractal_consciousness_architecture.py",
+        "file_size": 34970,
+        "file_type": ".py",
+        "relative_path": "fractal_consciousness_architecture.py",
+        "text_rby": [
+          0.37464083500138307,
+          0.32529568201311115,
+          0.30006348298550567
+        ],
+        "glyph_symbol": "#,\n",
+        "ae_compliance": 1.1102230246251565e-16,
+        "status": "success",
+        "processed_at": 1749632087.5644789
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\global_consciousness_orchestrator.py",
+        "file_size": 40429,
+        "file_type": ".py",
+        "relative_path": "global_consciousness_orchestrator.py",
+        "text_rby": [
+          0.3758151327017246,
+          0.3255294466842641,
+          0.29865542061401135
+        ],
+        "glyph_symbol": "#r\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.5787103
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\hardware_optimization.py",
+        "file_size": 38281,
+        "file_type": ".py",
+        "relative_path": "hardware_optimization.py",
+        "text_rby": [
+          0.37534991248917376,
+          0.32651628745326233,
+          0.29813380005756396
+        ],
+        "glyph_symbol": "\"p\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.5813115
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\hardware_optimization_kernels.py",
+        "file_size": 31821,
+        "file_type": ".py",
+        "relative_path": "hardware_optimization_kernels.py",
+        "text_rby": [
+          0.37827786681746395,
+          0.32603877942235093,
+          0.2956833537601852
+        ],
+        "glyph_symbol": "\"z\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.5935507
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\hello_organism_demo.py",
+        "file_size": 22934,
+        "file_type": ".py",
+        "relative_path": "hello_organism_demo.py",
+        "text_rby": [
+          0.3740520624400079,
+          0.32074256562305115,
+          0.305205371936941
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6103284
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\ic_ae_consciousness_physics.py",
+        "file_size": 18729,
+        "file_type": ".py",
+        "relative_path": "ic_ae_consciousness_physics.py",
+        "text_rby": [
+          0.37312563404343313,
+          0.3292044423086835,
+          0.2976699236478833
+        ],
+        "glyph_symbol": "\"o\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6133428
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\ic_ae_mathematical_foundation.py",
+        "file_size": 34892,
+        "file_type": ".py",
+        "relative_path": "ic_ae_mathematical_foundation.py",
+        "text_rby": [
+          0.3758941877793877,
+          0.32297088157739473,
+          0.30113493064321767
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6239753
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\ic_ae_mutator.py",
+        "file_size": 10663,
+        "file_type": ".py",
+        "relative_path": "ic_ae_mutator.py",
+        "text_rby": [
+          0.37747163087309693,
+          0.325291193847871,
+          0.2972371752790321
+        ],
+        "glyph_symbol": "\"B\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6269274
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\integration_test_system.py",
+        "file_size": 43644,
+        "file_type": ".py",
+        "relative_path": "integration_test_system.py",
+        "text_rby": [
+          0.3789127944275983,
+          0.32302195032530967,
+          0.2980652552470919
+        ],
+        "glyph_symbol": "#t\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6310253
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\manifest_driven_evolution.py",
+        "file_size": 45944,
+        "file_type": ".py",
+        "relative_path": "manifest_driven_evolution.py",
+        "text_rby": [
+          0.3835229845028765,
+          0.3247819084101662,
+          0.2916951070869573
+        ],
+        "glyph_symbol": "\"e\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6477942
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\manifest_driven_evolution_engine.py",
+        "file_size": 46739,
+        "file_type": ".py",
+        "relative_path": "manifest_driven_evolution_engine.py",
+        "text_rby": [
+          0.3831498320460449,
+          0.32414129527796454,
+          0.2927088726759906
+        ],
+        "glyph_symbol": "\"n\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6477942
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\master_consciousness_orchestrator.py",
+        "file_size": 36993,
+        "file_type": ".py",
+        "relative_path": "master_consciousness_orchestrator.py",
+        "text_rby": [
+          0.3777520071364385,
+          0.3236120347092251,
+          0.2986359581543365
+        ],
+        "glyph_symbol": "#r\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6645827
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\multidimensional_consciousness_mapper.py",
+        "file_size": 26788,
+        "file_type": ".py",
+        "relative_path": "multidimensional_consciousness_mapper.py",
+        "text_rby": [
+          0.37955166492455894,
+          0.32842056144537607,
+          0.2920277736300651
+        ],
+        "glyph_symbol": "\"g\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.672924
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\neural_fractal_kernels.py",
+        "file_size": 21640,
+        "file_type": ".py",
+        "relative_path": "neural_fractal_kernels.py",
+        "text_rby": [
+          0.37846256931604677,
+          0.3254727356746346,
+          0.29606469500931865
+        ],
+        "glyph_symbol": "\"e\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6759593
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\neural_quantum_fusion_kernel.py",
+        "file_size": 34767,
+        "file_type": ".py",
+        "relative_path": "neural_quantum_fusion_kernel.py",
+        "text_rby": [
+          0.3809192625190086,
+          0.32362067477776507,
+          0.29546006270322633
+        ],
+        "glyph_symbol": "\"l\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6812468
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\nlp_to_code_engine.py",
+        "file_size": 28769,
+        "file_type": ".py",
+        "relative_path": "nlp_to_code_engine.py",
+        "text_rby": [
+          0.37676839653790273,
+          0.32733324064091923,
+          0.2958983628211781
+        ],
+        "glyph_symbol": "\"s\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.6935496
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\Nothing_Fake_Allowed.md",
+        "file_size": 105967,
+        "file_type": ".md",
+        "relative_path": "Nothing_Fake_Allowed.md",
+        "text_rby": [
+          0.37957024356655283,
+          0.32300640765539973,
+          0.2974233487780475
+        ],
+        "glyph_symbol": "yn\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632087.966879
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\package_publish_pipeline.py",
+        "file_size": 28704,
+        "file_type": ".py",
+        "relative_path": "package_publish_pipeline.py",
+        "text_rby": [
+          0.3762562709029687,
+          0.32472338350051727,
+          0.299020345596514
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.0037348
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\perceptual_field_dynamics.py",
+        "file_size": 31070,
+        "file_type": ".py",
+        "relative_path": "perceptual_field_dynamics.py",
+        "text_rby": [
+          0.3746636626970996,
+          0.3295719343417618,
+          0.2957644029611387
+        ],
+        "glyph_symbol": "\"g\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.0113065
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\policy_security_systems.py",
+        "file_size": 32250,
+        "file_type": ".py",
+        "relative_path": "policy_security_systems.py",
+        "text_rby": [
+          0.37510666666662346,
+          0.3247500775193312,
+          0.3001432558140453
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.0217009
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\pure_ae_foundation.py",
+        "file_size": 154258,
+        "file_type": ".py",
+        "relative_path": "pure_ae_foundation.py",
+        "text_rby": [
+          0.36866924243848037,
+          0.326264958706021,
+          0.30506579885549856
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.0562198
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\pure_ae_foundation_clean.py",
+        "file_size": 155614,
+        "file_type": ".py",
+        "relative_path": "pure_ae_foundation_clean.py",
+        "text_rby": [
+          0.36862904365980365,
+          0.3263417173266853,
+          0.30502923901351087
+        ],
+        "glyph_symbol": "\"s\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.0917697
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\quantum_consciousness_bridge.py",
+        "file_size": 22765,
+        "file_type": ".py",
+        "relative_path": "quantum_consciousness_bridge.py",
+        "text_rby": [
+          0.38240017570828766,
+          0.32288776630789,
+          0.2947120579838224
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.0917697
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\quantum_consciousness_bridge_v2.py",
+        "file_size": 61145,
+        "file_type": ".py",
+        "relative_path": "quantum_consciousness_bridge_v2.py",
+        "text_rby": [
+          0.38196500122667787,
+          0.3225766620328588,
+          0.29545833674046323
+        ],
+        "glyph_symbol": "#{\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.111612
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\quantum_consciousness_bridge_v2_clean.py",
+        "file_size": 26767,
+        "file_type": ".py",
+        "relative_path": "quantum_consciousness_bridge_v2_clean.py",
+        "text_rby": [
+          0.3808667388948685,
+          0.3223618634885808,
+          0.29677139761655075
+        ],
+        "glyph_symbol": "# \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.1242454
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\rby_core_engine.py",
+        "file_size": 14609,
+        "file_type": ".py",
+        "relative_path": "rby_core_engine.py",
+        "text_rby": [
+          0.37825723868846145,
+          0.32932849613249704,
+          0.2924142651790415
+        ],
+        "glyph_symbol": "\"\n\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.1278353
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\rby_encryption_core.py",
+        "file_size": 15500,
+        "file_type": ".py",
+        "relative_path": "rby_encryption_core.py",
+        "text_rby": [
+          0.370876774193525,
+          0.327921935483841,
+          0.30120129032263393
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.13217
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\README.md",
+        "file_size": 11297,
+        "file_type": ".md",
+        "relative_path": "README.md",
+        "text_rby": [
+          0.3884836682304941,
+          0.32836151190580315,
+          0.28315481986370283
+        ],
+        "glyph_symbol": "#z\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.1628418
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\realtime_consciousness_monitor.py",
+        "file_size": 24164,
+        "file_type": ".py",
+        "relative_path": "realtime_consciousness_monitor.py",
+        "text_rby": [
+          0.3761935110080756,
+          0.3227627876179029,
+          0.30104370137402164
+        ],
+        "glyph_symbol": "\"l\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.1699586
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\realtime_system_integration_hub.py",
+        "file_size": 34057,
+        "file_type": ".py",
+        "relative_path": "realtime_system_integration_hub.py",
+        "text_rby": [
+          0.37296532284107975,
+          0.3283489444166655,
+          0.29868573274225474
+        ],
+        "glyph_symbol": "\"g\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.1741028
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\recursive_intelligence_evolution.py",
+        "file_size": 41496,
+        "file_type": ".py",
+        "relative_path": "recursive_intelligence_evolution.py",
+        "text_rby": [
+          0.38166859456328767,
+          0.321643531906644,
+          0.2966878735300683
+        ],
+        "glyph_symbol": "\"i\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.1848269
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\requirements.txt",
+        "file_size": 1587,
+        "file_type": ".txt",
+        "relative_path": "requirements.txt",
+        "text_rby": [
+          0.3774921235034697,
+          0.32752362948960223,
+          0.294984247006928
+        ],
+        "glyph_symbol": "#e\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.1908057
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\robust_edge_case_tests.py",
+        "file_size": 19249,
+        "file_type": ".py",
+        "relative_path": "robust_edge_case_tests.py",
+        "text_rby": [
+          0.3786175905241543,
+          0.32445373785647624,
+          0.29692867161936953
+        ],
+        "glyph_symbol": "#i\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.2063155
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\self_modifying_code.py",
+        "file_size": 56081,
+        "file_type": ".py",
+        "relative_path": "self_modifying_code.py",
+        "text_rby": [
+          0.3766737397693081,
+          0.3300180096645513,
+          0.2933082505661407
+        ],
+        "glyph_symbol": "\" \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.2197669
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\self_modifying_consciousness_kernel.py",
+        "file_size": 19294,
+        "file_type": ".py",
+        "relative_path": "self_modifying_consciousness_kernel.py",
+        "text_rby": [
+          0.37809785425517667,
+          0.32462008914684704,
+          0.2972820565979764
+        ],
+        "glyph_symbol": "\"_\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.2257023
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\temporal_consciousness_synchronizer.py",
+        "file_size": 25568,
+        "file_type": ".py",
+        "relative_path": "temporal_consciousness_synchronizer.py",
+        "text_rby": [
+          0.3902507040049707,
+          0.31839525969958216,
+          0.29135403629544715
+        ],
+        "glyph_symbol": "\"_\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.2319465
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\test_ae_core.py",
+        "file_size": 5143,
+        "file_type": ".py",
+        "relative_path": "test_ae_core.py",
+        "text_rby": [
+          0.38204938751701284,
+          0.32013999611122407,
+          0.297810616371763
+        ],
+        "glyph_symbol": "\"1\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.2340107
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\tighten_the_bolts_master.py",
+        "file_size": 31414,
+        "file_type": ".py",
+        "relative_path": "tighten_the_bolts_master.py",
+        "text_rby": [
+          0.37737314573115793,
+          0.3225058890939911,
+          0.3001209651748511
+        ],
+        "glyph_symbol": "\"r\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.2661963
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\topology_manager.py",
+        "file_size": 17971,
+        "file_type": ".py",
+        "relative_path": "topology_manager.py",
+        "text_rby": [
+          0.3707300651048601,
+          0.3284452729397034,
+          0.3008246619554364
+        ],
+        "glyph_symbol": "\"r\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.270645
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\twmrto_compression.py",
+        "file_size": 20009,
+        "file_type": ".py",
+        "relative_path": "twmrto_compression.py",
+        "text_rby": [
+          0.3773446948872692,
+          0.32696236693484204,
+          0.29569293817788883
+        ],
+        "glyph_symbol": "\"t\n",
+        "ae_compliance": 1.1102230246251565e-16,
+        "status": "success",
+        "processed_at": 1749632088.2749226
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\unified_framework_master.py",
+        "file_size": 38522,
+        "file_type": ".py",
+        "relative_path": "unified_framework_master.py",
+        "text_rby": [
+          0.3775902081926769,
+          0.3306404132702906,
+          0.29176937853703233
+        ],
+        "glyph_symbol": "\"f\n",
+        "ae_compliance": 2.220446049250313e-16,
+        "status": "success",
+        "processed_at": 1749632088.285219
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\unified_integration_test.py",
+        "file_size": 11780,
+        "file_type": ".py",
+        "relative_path": "unified_integration_test.py",
+        "text_rby": [
+          0.38312988115448565,
+          0.3270008488964177,
+          0.2898692699490967
+        ],
+        "glyph_symbol": "# \n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.300735
+      },
+      {
+        "file_path": "C:\\Users\\lokee\\Documents\\absoluteexistence10files\\ae update\\overviews\\ATTACK\\zero_trust_mesh_agent.py",
+        "file_size": 30764,
+        "file_type": ".py",
+        "relative_path": "zero_trust_mesh_agent.py",
+        "text_rby": [
+          0.37293947471065625,
+          0.32409017032890985,
+          0.30297035496043373
+        ],
+        "glyph_symbol": "#t\n",
+        "ae_compliance": 0.0,
+        "status": "success",
+        "processed_at": 1749632088.307387
+      }
+    ],
+    "summary": {
+      "total_files_processed": 61,
+      "total_content_size": 2020945,
+      "average_rby": [
+        0.37711612182697185,
+        0.32517895497402427,
+        0.29770492319900405
+      ],
+      "average_ae_compliance": 1.2740264217009993e-17,
+      "file_type_distribution": {
+        ".py": 58,
+        ".md": 2,
+        ".txt": 1
+      },
+      "final_processor_state": {
+        "current_state": [
+          0.3779729031558978,
+          0.32552683779952263,
+          0.29650025904457966
+        ],
+        "glyph_count": 61,
+        "total_usage": 61,
+        "average_rby": [
+          0.37711612182697185,
+          0.32517895497402427,
+          0.29770492319900405
+        ],
+        "ae_compliance": 0.0,
+        "processing_steps": 61
+      },
+      "processing_quality": "excellent"
+    }
+  },
+  "processor_export": "{\n  \"current_state\": [\n    0.3779729031558978,\n    0.32552683779952263,\n    0.29650025904457966\n  ],\n  \"memory_glyphs\": [\n    {\n      \"glyph_symbol\": \"\\\"b\\n\",\n      \"rby\": [\n        0.37164718121465945,\n        0.331621916179483,\n        0.29673090260585755\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 40372,\n      \"created_at\": 1749632087.2159076\n    },\n    {\n      \"glyph_symbol\": \"# \\n\",\n      \"rby\": [\n        0.3700709576488514,\n        0.3284126718068619,\n        0.3015163705442866\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 35796,\n      \"created_at\": 1749632087.23302\n    },\n    {\n      \"glyph_symbol\": \"\\\"t\\n\",\n      \"rby\": [\n        0.36941691984107483,\n        0.32317948118718554,\n        0.30740359897173963\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 8558,\n      \"created_at\": 1749632087.23302\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.37047968397291187,\n        0.3260806997742676,\n        0.30343961625282045\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 7088,\n      \"created_at\": 1749632087.23302\n    },\n    {\n      \"glyph_symbol\": \"#s\\n\",\n      \"rby\": [\n        0.37491059934197285,\n        0.3228818004100097,\n        0.3022076002480174\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 20973,\n      \"created_at\": 1749632087.23302\n    },\n    {\n      \"glyph_symbol\": \"#o\\n\",\n      \"rby\": [\n        0.37500924610721204,\n        0.32936295661025405,\n        0.29562779728253374\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 37313,\n      \"created_at\": 1749632087.2811284\n    },\n    {\n      \"glyph_symbol\": \"\\\"_\\n\",\n      \"rby\": [\n        0.3818013439964017,\n        0.3216602799066523,\n        0.296538376096946\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 36012,\n      \"created_at\": 1749632087.310387\n    },\n    {\n      \"glyph_symbol\": \"#e\\n\",\n      \"rby\": [\n        0.3771577801080546,\n        0.3246773412922064,\n        0.2981648785997391\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 24794,\n      \"created_at\": 1749632087.329927\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.37530762167122184,\n        0.32764921946735487,\n        0.29704315886142324\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 28314,\n      \"created_at\": 1749632087.3474567\n    },\n    {\n      \"glyph_symbol\": \"#i\\n\",\n      \"rby\": [\n        0.3831079055825807,\n        0.319282502810001,\n        0.29760959160741834\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 21352,\n      \"created_at\": 1749632087.3778534\n    },\n    {\n      \"glyph_symbol\": \"\\\"a\\n\",\n      \"rby\": [\n        0.37108163731988003,\n        0.32884518637086946,\n        0.30007317630925057\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 26238,\n      \"created_at\": 1749632087.3804574\n    },\n    {\n      \"glyph_symbol\": \"\\\"i\\n\",\n      \"rby\": [\n        0.3742064086246524,\n        0.32255558882978125,\n        0.3032380025455663\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 26714,\n      \"created_at\": 1749632087.42397\n    },\n    {\n      \"glyph_symbol\": \"\\\"=\\n\",\n      \"rby\": [\n        0.3823507849525665,\n        0.31952495556867905,\n        0.29812425947875454\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 27008,\n      \"created_at\": 1749632087.4477794\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.3773067915690515,\n        0.3273067915690407,\n        0.29538641686190775\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 23912,\n      \"created_at\": 1749632087.450026\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.37637784619544296,\n        0.325300267280127,\n        0.29832188652443\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 29557,\n      \"created_at\": 1749632087.4813173\n    },\n    {\n      \"glyph_symbol\": \"\\\"h\\n\",\n      \"rby\": [\n        0.37372182475571325,\n        0.32658358335251847,\n        0.2996945918917683\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 25998,\n      \"created_at\": 1749632087.4904623\n    },\n    {\n      \"glyph_symbol\": \"#o\\n\",\n      \"rby\": [\n        0.3790375554000132,\n        0.3222565896897197,\n        0.298705854910267\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 21435,\n      \"created_at\": 1749632087.5127983\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.3785635449453912,\n        0.32109307934427483,\n        0.300343375710334\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 24463,\n      \"created_at\": 1749632087.5503948\n    },\n    {\n      \"glyph_symbol\": \"#,\\n\",\n      \"rby\": [\n        0.37464083500138307,\n        0.32529568201311115,\n        0.30006348298550567\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 34970,\n      \"created_at\": 1749632087.5644789\n    },\n    {\n      \"glyph_symbol\": \"#r\\n\",\n      \"rby\": [\n        0.3758151327017246,\n        0.3255294466842641,\n        0.29865542061401135\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 40429,\n      \"created_at\": 1749632087.5787103\n    },\n    {\n      \"glyph_symbol\": \"\\\"p\\n\",\n      \"rby\": [\n        0.37534991248917376,\n        0.32651628745326233,\n        0.29813380005756396\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 38281,\n      \"created_at\": 1749632087.5813115\n    },\n    {\n      \"glyph_symbol\": \"\\\"z\\n\",\n      \"rby\": [\n        0.37827786681746395,\n        0.32603877942235093,\n        0.2956833537601852\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 31821,\n      \"created_at\": 1749632087.5935507\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.3740520624400079,\n        0.32074256562305115,\n        0.305205371936941\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 22934,\n      \"created_at\": 1749632087.6103284\n    },\n    {\n      \"glyph_symbol\": \"\\\"o\\n\",\n      \"rby\": [\n        0.37312563404343313,\n        0.3292044423086835,\n        0.2976699236478833\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 18729,\n      \"created_at\": 1749632087.6133428\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.3758941877793877,\n        0.32297088157739473,\n        0.30113493064321767\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 34892,\n      \"created_at\": 1749632087.6239753\n    },\n    {\n      \"glyph_symbol\": \"\\\"B\\n\",\n      \"rby\": [\n        0.37747163087309693,\n        0.325291193847871,\n        0.2972371752790321\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 10663,\n      \"created_at\": 1749632087.6269274\n    },\n    {\n      \"glyph_symbol\": \"#t\\n\",\n      \"rby\": [\n        0.3789127944275983,\n        0.32302195032530967,\n        0.2980652552470919\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 43644,\n      \"created_at\": 1749632087.6310253\n    },\n    {\n      \"glyph_symbol\": \"\\\"e\\n\",\n      \"rby\": [\n        0.3835229845028765,\n        0.3247819084101662,\n        0.2916951070869573\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 45944,\n      \"created_at\": 1749632087.6477942\n    },\n    {\n      \"glyph_symbol\": \"\\\"n\\n\",\n      \"rby\": [\n        0.3831498320460449,\n        0.32414129527796454,\n        0.2927088726759906\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 46739,\n      \"created_at\": 1749632087.6477942\n    },\n    {\n      \"glyph_symbol\": \"#r\\n\",\n      \"rby\": [\n        0.3777520071364385,\n        0.3236120347092251,\n        0.2986359581543365\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 36993,\n      \"created_at\": 1749632087.6645827\n    },\n    {\n      \"glyph_symbol\": \"\\\"g\\n\",\n      \"rby\": [\n        0.37955166492455894,\n        0.32842056144537607,\n        0.2920277736300651\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 26788,\n      \"created_at\": 1749632087.672924\n    },\n    {\n      \"glyph_symbol\": \"\\\"e\\n\",\n      \"rby\": [\n        0.37846256931604677,\n        0.3254727356746346,\n        0.29606469500931865\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 21640,\n      \"created_at\": 1749632087.6759593\n    },\n    {\n      \"glyph_symbol\": \"\\\"l\\n\",\n      \"rby\": [\n        0.3809192625190086,\n        0.32362067477776507,\n        0.29546006270322633\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 34767,\n      \"created_at\": 1749632087.6812468\n    },\n    {\n      \"glyph_symbol\": \"\\\"s\\n\",\n      \"rby\": [\n        0.37676839653790273,\n        0.32733324064091923,\n        0.2958983628211781\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 28769,\n      \"created_at\": 1749632087.6935496\n    },\n    {\n      \"glyph_symbol\": \"yn\\n\",\n      \"rby\": [\n        0.37957024356655283,\n        0.32300640765539973,\n        0.2974233487780475\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 105967,\n      \"created_at\": 1749632087.966879\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.3762562709029687,\n        0.32472338350051727,\n        0.299020345596514\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 28704,\n      \"created_at\": 1749632088.0037348\n    },\n    {\n      \"glyph_symbol\": \"\\\"g\\n\",\n      \"rby\": [\n        0.3746636626970996,\n        0.3295719343417618,\n        0.2957644029611387\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 31070,\n      \"created_at\": 1749632088.0113065\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.37510666666662346,\n        0.3247500775193312,\n        0.3001432558140453\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 32250,\n      \"created_at\": 1749632088.0217009\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.36866924243848037,\n        0.326264958706021,\n        0.30506579885549856\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 154258,\n      \"created_at\": 1749632088.0562198\n    },\n    {\n      \"glyph_symbol\": \"\\\"s\\n\",\n      \"rby\": [\n        0.36862904365980365,\n        0.3263417173266853,\n        0.30502923901351087\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 155614,\n      \"created_at\": 1749632088.090703\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.38240017570828766,\n        0.32288776630789,\n        0.2947120579838224\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 22765,\n      \"created_at\": 1749632088.0917697\n    },\n    {\n      \"glyph_symbol\": \"#{\\n\",\n      \"rby\": [\n        0.38196500122667787,\n        0.3225766620328588,\n        0.29545833674046323\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 61145,\n      \"created_at\": 1749632088.111612\n    },\n    {\n      \"glyph_symbol\": \"# \\n\",\n      \"rby\": [\n        0.3808667388948685,\n        0.3223618634885808,\n        0.29677139761655075\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 26767,\n      \"created_at\": 1749632088.1242454\n    },\n    {\n      \"glyph_symbol\": \"\\\"\\n\\n\",\n      \"rby\": [\n        0.37825723868846145,\n        0.32932849613249704,\n        0.2924142651790415\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 14609,\n      \"created_at\": 1749632088.1278353\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.370876774193525,\n        0.327921935483841,\n        0.30120129032263393\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 15500,\n      \"created_at\": 1749632088.13217\n    },\n    {\n      \"glyph_symbol\": \"#z\\n\",\n      \"rby\": [\n        0.3884836682304941,\n        0.32836151190580315,\n        0.28315481986370283\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 11297,\n      \"created_at\": 1749632088.1628418\n    },\n    {\n      \"glyph_symbol\": \"\\\"l\\n\",\n      \"rby\": [\n        0.3761935110080756,\n        0.3227627876179029,\n        0.30104370137402164\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 24164,\n      \"created_at\": 1749632088.168961\n    },\n    {\n      \"glyph_symbol\": \"\\\"g\\n\",\n      \"rby\": [\n        0.37296532284107975,\n        0.3283489444166655,\n        0.29868573274225474\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 34057,\n      \"created_at\": 1749632088.1741028\n    },\n    {\n      \"glyph_symbol\": \"\\\"i\\n\",\n      \"rby\": [\n        0.38166859456328767,\n        0.321643531906644,\n        0.2966878735300683\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 41496,\n      \"created_at\": 1749632088.1848269\n    },\n    {\n      \"glyph_symbol\": \"#e\\n\",\n      \"rby\": [\n        0.3774921235034697,\n        0.32752362948960223,\n        0.294984247006928\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 1587,\n      \"created_at\": 1749632088.1908057\n    },\n    {\n      \"glyph_symbol\": \"#i\\n\",\n      \"rby\": [\n        0.3786175905241543,\n        0.32445373785647624,\n        0.29692867161936953\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 19249,\n      \"created_at\": 1749632088.2063155\n    },\n    {\n      \"glyph_symbol\": \"\\\" \\n\",\n      \"rby\": [\n        0.3766737397693081,\n        0.3300180096645513,\n        0.2933082505661407\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 56081,\n      \"created_at\": 1749632088.2197669\n    },\n    {\n      \"glyph_symbol\": \"\\\"_\\n\",\n      \"rby\": [\n        0.37809785425517667,\n        0.32462008914684704,\n        0.2972820565979764\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 19294,\n      \"created_at\": 1749632088.2254472\n    },\n    {\n      \"glyph_symbol\": \"\\\"_\\n\",\n      \"rby\": [\n        0.3902507040049707,\n        0.31839525969958216,\n        0.29135403629544715\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 25568,\n      \"created_at\": 1749632088.2318325\n    },\n    {\n      \"glyph_symbol\": \"\\\"1\\n\",\n      \"rby\": [\n        0.38204938751701284,\n        0.32013999611122407,\n        0.297810616371763\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 5143,\n      \"created_at\": 1749632088.2339897\n    },\n    {\n      \"glyph_symbol\": \"\\\"r\\n\",\n      \"rby\": [\n        0.37737314573115793,\n        0.3225058890939911,\n        0.3001209651748511\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 31414,\n      \"created_at\": 1749632088.2651994\n    },\n    {\n      \"glyph_symbol\": \"\\\"r\\n\",\n      \"rby\": [\n        0.3707300651048601,\n        0.3284452729397034,\n        0.3008246619554364\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 17971,\n      \"created_at\": 1749632088.27022\n    },\n    {\n      \"glyph_symbol\": \"\\\"t\\n\",\n      \"rby\": [\n        0.3773446948872692,\n        0.32696236693484204,\n        0.29569293817788883\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 20009,\n      \"created_at\": 1749632088.2749226\n    },\n    {\n      \"glyph_symbol\": \"\\\"f\\n\",\n      \"rby\": [\n        0.3775902081926769,\n        0.3306404132702906,\n        0.29176937853703233\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 38522,\n      \"created_at\": 1749632088.285219\n    },\n    {\n      \"glyph_symbol\": \"# \\n\",\n      \"rby\": [\n        0.38312988115448565,\n        0.3270008488964177,\n        0.2898692699490967\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 11780,\n      \"created_at\": 1749632088.2997353\n    },\n    {\n      \"glyph_symbol\": \"#t\\n\",\n      \"rby\": [\n        0.37293947471065625,\n        0.32409017032890985,\n        0.30297035496043373\n      ],\n      \"usage_count\": 1,\n      \"content_length\": 30764,\n      \"created_at\": 1749632088.307387\n    }\n  ],\n  \"processing_history\": [\n    {\n      \"text_rby\": [\n        0.37164718121465945,\n        0.331621916179483,\n        0.29673090260585755\n      ],\n      \"new_state\": [\n        0.334164718121466,\n        0.33016219161794835,\n        0.3356730902605858\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"b\\n\",\n        \"rby\": [\n          0.37164718121465945,\n          0.331621916179483,\n          0.29673090260585755\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 40372,\n        \"created_at\": 1749632087.2159076\n      },\n      \"context\": \"advanced_consciousness_orchestrator.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.2159076\n    },\n    {\n      \"text_rby\": [\n        0.3700709576488514,\n        0.3284126718068619,\n        0.3015163705442866\n      ],\n      \"new_state\": [\n        0.33775534207420455,\n        0.32998723963683974,\n        0.33225741828895583\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"# \\n\",\n        \"rby\": [\n          0.3700709576488514,\n          0.3284126718068619,\n          0.3015163705442866\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 35796,\n        \"created_at\": 1749632087.23302\n      },\n      \"context\": \"advanced_cuda_kernels.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.23302\n    },\n    {\n      \"text_rby\": [\n        0.36941691984107483,\n        0.32317948118718554,\n        0.30740359897173963\n      ],\n      \"new_state\": [\n        0.34092149985089154,\n        0.32930646379187434,\n        0.3297720363572342\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"t\\n\",\n        \"rby\": [\n          0.36941691984107483,\n          0.32317948118718554,\n          0.30740359897173963\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 8558,\n        \"created_at\": 1749632087.23302\n      },\n      \"context\": \"ae_core.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.23302\n    },\n    {\n      \"text_rby\": [\n        0.37047968397291187,\n        0.3260806997742676,\n        0.30343961625282045\n      ],\n      \"new_state\": [\n        0.3438773182630936,\n        0.3289838873901137,\n        0.32713879434679277\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.37047968397291187,\n          0.3260806997742676,\n          0.30343961625282045\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 7088,\n        \"created_at\": 1749632087.23302\n      },\n      \"context\": \"ae_file_scanner.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.23302\n    },\n    {\n      \"text_rby\": [\n        0.37491059934197285,\n        0.3228818004100097,\n        0.3022076002480174\n      ],\n      \"new_state\": [\n        0.3469806463709815,\n        0.3283736786921033,\n        0.3246456749369152\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#s\\n\",\n        \"rby\": [\n          0.37491059934197285,\n          0.3228818004100097,\n          0.3022076002480174\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 20973,\n        \"created_at\": 1749632087.23302\n      },\n      \"context\": \"ci_automation_pipeline.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.23302\n    },\n    {\n      \"text_rby\": [\n        0.37500924610721204,\n        0.32936295661025405,\n        0.29562779728253374\n      ],\n      \"new_state\": [\n        0.3497835063446046,\n        0.3284726064839184,\n        0.32174388717147706\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#o\\n\",\n        \"rby\": [\n          0.37500924610721204,\n          0.32936295661025405,\n          0.29562779728253374\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 37313,\n        \"created_at\": 1749632087.2811284\n      },\n      \"context\": \"consciousness_compression_engine.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.2811284\n    },\n    {\n      \"text_rby\": [\n        0.3818013439964017,\n        0.3216602799066523,\n        0.296538376096946\n      ],\n      \"new_state\": [\n        0.3529852901097843,\n        0.32779137382619183,\n        0.319223336064024\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"_\\n\",\n        \"rby\": [\n          0.3818013439964017,\n          0.3216602799066523,\n          0.296538376096946\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 36012,\n        \"created_at\": 1749632087.310387\n      },\n      \"context\": \"consciousness_emergence_detector.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.310387\n    },\n    {\n      \"text_rby\": [\n        0.3771577801080546,\n        0.3246773412922064,\n        0.2981648785997391\n      ],\n      \"new_state\": [\n        0.3554025391096113,\n        0.32747997057279327,\n        0.31711749031759545\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#e\\n\",\n        \"rby\": [\n          0.3771577801080546,\n          0.3246773412922064,\n          0.2981648785997391\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 24794,\n        \"created_at\": 1749632087.329927\n      },\n      \"context\": \"consciousness_field_dynamics.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.329927\n    },\n    {\n      \"text_rby\": [\n        0.37530762167122184,\n        0.32764921946735487,\n        0.29704315886142324\n      ],\n      \"new_state\": [\n        0.3573930473657724,\n        0.3274968954622494,\n        0.3151100571719782\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.37530762167122184,\n          0.32764921946735487,\n          0.29704315886142324\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 28314,\n        \"created_at\": 1749632087.3474567\n      },\n      \"context\": \"consciousness_resonance_field_engine.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.3474567\n    },\n    {\n      \"text_rby\": [\n        0.3831079055825807,\n        0.319282502810001,\n        0.29760959160741834\n      ],\n      \"new_state\": [\n        0.35996453318745325,\n        0.3266754561970246,\n        0.3133600106155222\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#i\\n\",\n        \"rby\": [\n          0.3831079055825807,\n          0.319282502810001,\n          0.29760959160741834\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 21352,\n        \"created_at\": 1749632087.3778534\n      },\n      \"context\": \"consciousness_state_synchronizer.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.3778534\n    },\n    {\n      \"text_rby\": [\n        0.37108163731988003,\n        0.32884518637086946,\n        0.30007317630925057\n      ],\n      \"new_state\": [\n        0.3610762436006959,\n        0.32689242921440903,\n        0.312031327184895\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"a\\n\",\n        \"rby\": [\n          0.37108163731988003,\n          0.32884518637086946,\n          0.30007317630925057\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 26238,\n        \"created_at\": 1749632087.3804574\n      },\n      \"context\": \"cuda_consciousness_kernels.py\",\n      \"ae_compliance\": 1.1102230246251565e-16,\n      \"timestamp\": 1749632087.3804574\n    },\n    {\n      \"text_rby\": [\n        0.3742064086246524,\n        0.32255558882978125,\n        0.3032380025455663\n      ],\n      \"new_state\": [\n        0.3623892601030916,\n        0.32645874517594636,\n        0.31115199472096217\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"i\\n\",\n        \"rby\": [\n          0.3742064086246524,\n          0.32255558882978125,\n          0.3032380025455663\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 26714,\n        \"created_at\": 1749632087.42397\n      },\n      \"context\": \"dataset_ingestion_layer.py\",\n      \"ae_compliance\": 2.220446049250313e-16,\n      \"timestamp\": 1749632087.42397\n    },\n    {\n      \"text_rby\": [\n        0.3823507849525665,\n        0.31952495556867905,\n        0.29812425947875454\n      ],\n      \"new_state\": [\n        0.3643854125880391,\n        0.3257653662152196,\n        0.3098492211967414\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"=\\n\",\n        \"rby\": [\n          0.3823507849525665,\n          0.31952495556867905,\n          0.29812425947875454\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 27008,\n        \"created_at\": 1749632087.4477794\n      },\n      \"context\": \"desktop_tray_application.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.447879\n    },\n    {\n      \"text_rby\": [\n        0.3773067915690515,\n        0.3273067915690407,\n        0.29538641686190775\n      ],\n      \"new_state\": [\n        0.3656775504861403,\n        0.32591950875060177,\n        0.308402940763258\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.3773067915690515,\n          0.3273067915690407,\n          0.29538641686190775\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 23912,\n        \"created_at\": 1749632087.450026\n      },\n      \"context\": \"distributed_consciousness.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.450026\n    },\n    {\n      \"text_rby\": [\n        0.37637784619544296,\n        0.325300267280127,\n        0.29832188652443\n      ],\n      \"new_state\": [\n        0.3667475800570706,\n        0.3258575846035543,\n        0.3073948353393753\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.37637784619544296,\n          0.325300267280127,\n          0.29832188652443\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 29557,\n        \"created_at\": 1749632087.4813173\n      },\n      \"context\": \"distributed_node_smoke_test.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.4813173\n    },\n    {\n      \"text_rby\": [\n        0.37372182475571325,\n        0.32658358335251847,\n        0.2996945918917683\n      ],\n      \"new_state\": [\n        0.36744500452693485,\n        0.3259301844784507,\n        0.3066248109946146\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"h\\n\",\n        \"rby\": [\n          0.37372182475571325,\n          0.32658358335251847,\n          0.2996945918917683\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 25998,\n        \"created_at\": 1749632087.4904623\n      },\n      \"context\": \"distributed_trust_mesh.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.4904623\n    },\n    {\n      \"text_rby\": [\n        0.3790375554000132,\n        0.3222565896897197,\n        0.298705854910267\n      ],\n      \"new_state\": [\n        0.3686042596142427,\n        0.32556282499957756,\n        0.30583291538617985\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#o\\n\",\n        \"rby\": [\n          0.3790375554000132,\n          0.3222565896897197,\n          0.298705854910267\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 21435,\n        \"created_at\": 1749632087.5127983\n      },\n      \"context\": \"enhanced_quantum_consciousness_bridge.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.5127983\n    },\n    {\n      \"text_rby\": [\n        0.3785635449453912,\n        0.32109307934427483,\n        0.300343375710334\n      ],\n      \"new_state\": [\n        0.36960018814735757,\n        0.32511585043404734,\n        0.30528396141859526\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.3785635449453912,\n          0.32109307934427483,\n          0.300343375710334\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 24463,\n        \"created_at\": 1749632087.5503948\n      },\n      \"context\": \"firmware_safe_flash_sandbox.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.5503948\n    },\n    {\n      \"text_rby\": [\n        0.37464083500138307,\n        0.32529568201311115,\n        0.30006348298550567\n      ],\n      \"new_state\": [\n        0.37010425283276005,\n        0.32513383359195364,\n        0.30476191357528626\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#,\\n\",\n        \"rby\": [\n          0.37464083500138307,\n          0.32529568201311115,\n          0.30006348298550567\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 34970,\n        \"created_at\": 1749632087.5644789\n      },\n      \"context\": \"fractal_consciousness_architecture.py\",\n      \"ae_compliance\": 1.1102230246251565e-16,\n      \"timestamp\": 1749632087.5644789\n    },\n    {\n      \"text_rby\": [\n        0.3758151327017246,\n        0.3255294466842641,\n        0.29865542061401135\n      ],\n      \"new_state\": [\n        0.37067534081965653,\n        0.3251733949011847,\n        0.3041512642791588\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#r\\n\",\n        \"rby\": [\n          0.3758151327017246,\n          0.3255294466842641,\n          0.29865542061401135\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 40429,\n        \"created_at\": 1749632087.5787103\n      },\n      \"context\": \"global_consciousness_orchestrator.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.5787103\n    },\n    {\n      \"text_rby\": [\n        0.37534991248917376,\n        0.32651628745326233,\n        0.29813380005756396\n      ],\n      \"new_state\": [\n        0.3711427979866082,\n        0.32530768415639244,\n        0.3035495178569993\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"p\\n\",\n        \"rby\": [\n          0.37534991248917376,\n          0.32651628745326233,\n          0.29813380005756396\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 38281,\n        \"created_at\": 1749632087.5813115\n      },\n      \"context\": \"hardware_optimization.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.5813115\n    },\n    {\n      \"text_rby\": [\n        0.37827786681746395,\n        0.32603877942235093,\n        0.2956833537601852\n      ],\n      \"new_state\": [\n        0.3718563048696938,\n        0.3253807936829883,\n        0.3027629014473179\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"z\\n\",\n        \"rby\": [\n          0.37827786681746395,\n          0.32603877942235093,\n          0.2956833537601852\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 31821,\n        \"created_at\": 1749632087.5935507\n      },\n      \"context\": \"hardware_optimization_kernels.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.5935507\n    },\n    {\n      \"text_rby\": [\n        0.3740520624400079,\n        0.32074256562305115,\n        0.305205371936941\n      ],\n      \"new_state\": [\n        0.3720758806267252,\n        0.32491697087699456,\n        0.3030071484962802\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.3740520624400079,\n          0.32074256562305115,\n          0.305205371936941\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 22934,\n        \"created_at\": 1749632087.6103284\n      },\n      \"context\": \"hello_organism_demo.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6103284\n    },\n    {\n      \"text_rby\": [\n        0.37312563404343313,\n        0.3292044423086835,\n        0.2976699236478833\n      ],\n      \"new_state\": [\n        0.372180855968396,\n        0.3253457180201635,\n        0.30247342601144056\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"o\\n\",\n        \"rby\": [\n          0.37312563404343313,\n          0.3292044423086835,\n          0.2976699236478833\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 18729,\n        \"created_at\": 1749632087.6133428\n      },\n      \"context\": \"ic_ae_consciousness_physics.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6133428\n    },\n    {\n      \"text_rby\": [\n        0.3758941877793877,\n        0.32297088157739473,\n        0.30113493064321767\n      ],\n      \"new_state\": [\n        0.37255218914949517,\n        0.3251082343758866,\n        0.3023395764746183\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.3758941877793877,\n          0.32297088157739473,\n          0.30113493064321767\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 34892,\n        \"created_at\": 1749632087.6239753\n      },\n      \"context\": \"ic_ae_mathematical_foundation.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6239753\n    },\n    {\n      \"text_rby\": [\n        0.37747163087309693,\n        0.325291193847871,\n        0.2972371752790321\n      ],\n      \"new_state\": [\n        0.3730441333218554,\n        0.32512653032308503,\n        0.30182933635505965\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"B\\n\",\n        \"rby\": [\n          0.37747163087309693,\n          0.325291193847871,\n          0.2972371752790321\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 10663,\n        \"created_at\": 1749632087.6269274\n      },\n      \"context\": \"ic_ae_mutator.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6269274\n    },\n    {\n      \"text_rby\": [\n        0.3789127944275983,\n        0.32302195032530967,\n        0.2980652552470919\n      ],\n      \"new_state\": [\n        0.37363099943242967,\n        0.3249160723233075,\n        0.3014529282442629\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#t\\n\",\n        \"rby\": [\n          0.3789127944275983,\n          0.32302195032530967,\n          0.2980652552470919\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 43644,\n        \"created_at\": 1749632087.6310253\n      },\n      \"context\": \"integration_test_system.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6310253\n    },\n    {\n      \"text_rby\": [\n        0.3835229845028765,\n        0.3247819084101662,\n        0.2916951070869573\n      ],\n      \"new_state\": [\n        0.3746201979394744,\n        0.32490265593199336,\n        0.3004771461285323\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"e\\n\",\n        \"rby\": [\n          0.3835229845028765,\n          0.3247819084101662,\n          0.2916951070869573\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 45944,\n        \"created_at\": 1749632087.6477942\n      },\n      \"context\": \"manifest_driven_evolution.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6477942\n    },\n    {\n      \"text_rby\": [\n        0.3831498320460449,\n        0.32414129527796454,\n        0.2927088726759906\n      ],\n      \"new_state\": [\n        0.3754731613501314,\n        0.32482651986659045,\n        0.2997003187832782\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"n\\n\",\n        \"rby\": [\n          0.3831498320460449,\n          0.32414129527796454,\n          0.2927088726759906\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 46739,\n        \"created_at\": 1749632087.6477942\n      },\n      \"context\": \"manifest_driven_evolution_engine.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6477942\n    },\n    {\n      \"text_rby\": [\n        0.3777520071364385,\n        0.3236120347092251,\n        0.2986359581543365\n      ],\n      \"new_state\": [\n        0.3757010459287622,\n        0.3247050713508539,\n        0.299593882720384\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#r\\n\",\n        \"rby\": [\n          0.3777520071364385,\n          0.3236120347092251,\n          0.2986359581543365\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 36993,\n        \"created_at\": 1749632087.6645827\n      },\n      \"context\": \"master_consciousness_orchestrator.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6645827\n    },\n    {\n      \"text_rby\": [\n        0.37955166492455894,\n        0.32842056144537607,\n        0.2920277736300651\n      ],\n      \"new_state\": [\n        0.3760861078283418,\n        0.3250766203603061,\n        0.2988372718113521\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"g\\n\",\n        \"rby\": [\n          0.37955166492455894,\n          0.32842056144537607,\n          0.2920277736300651\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 26788,\n        \"created_at\": 1749632087.672924\n      },\n      \"context\": \"multidimensional_consciousness_mapper.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.672924\n    },\n    {\n      \"text_rby\": [\n        0.37846256931604677,\n        0.3254727356746346,\n        0.29606469500931865\n      ],\n      \"new_state\": [\n        0.37632375397711226,\n        0.32511623189173894,\n        0.2985600141311488\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"e\\n\",\n        \"rby\": [\n          0.37846256931604677,\n          0.3254727356746346,\n          0.29606469500931865\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 21640,\n        \"created_at\": 1749632087.6759593\n      },\n      \"context\": \"neural_fractal_kernels.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6759593\n    },\n    {\n      \"text_rby\": [\n        0.3809192625190086,\n        0.32362067477776507,\n        0.29546006270322633\n      ],\n      \"new_state\": [\n        0.37678330483130196,\n        0.3249666761803416,\n        0.2982500189883565\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"l\\n\",\n        \"rby\": [\n          0.3809192625190086,\n          0.32362067477776507,\n          0.29546006270322633\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 34767,\n        \"created_at\": 1749632087.6812468\n      },\n      \"context\": \"neural_quantum_fusion_kernel.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6812468\n    },\n    {\n      \"text_rby\": [\n        0.37676839653790273,\n        0.32733324064091923,\n        0.2958983628211781\n      ],\n      \"new_state\": [\n        0.37678181400196203,\n        0.32520333262639933,\n        0.2980148533716387\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"s\\n\",\n        \"rby\": [\n          0.37676839653790273,\n          0.32733324064091923,\n          0.2958983628211781\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 28769,\n        \"created_at\": 1749632087.6935496\n      },\n      \"context\": \"nlp_to_code_engine.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.6935496\n    },\n    {\n      \"text_rby\": [\n        0.37957024356655283,\n        0.32300640765539973,\n        0.2974233487780475\n      ],\n      \"new_state\": [\n        0.3770606569584211,\n        0.32498364012929937,\n        0.2979557029122796\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"yn\\n\",\n        \"rby\": [\n          0.37957024356655283,\n          0.32300640765539973,\n          0.2974233487780475\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 105967,\n        \"created_at\": 1749632087.966879\n      },\n      \"context\": \"Nothing_Fake_Allowed.md\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632087.966879\n    },\n    {\n      \"text_rby\": [\n        0.3762562709029687,\n        0.32472338350051727,\n        0.299020345596514\n      ],\n      \"new_state\": [\n        0.3769802183528759,\n        0.32495761446642113,\n        0.29806216718070305\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.3762562709029687,\n          0.32472338350051727,\n          0.299020345596514\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 28704,\n        \"created_at\": 1749632088.0037348\n      },\n      \"context\": \"package_publish_pipeline.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.0037348\n    },\n    {\n      \"text_rby\": [\n        0.3746636626970996,\n        0.3295719343417618,\n        0.2957644029611387\n      ],\n      \"new_state\": [\n        0.37674856278729824,\n        0.3254190464539552,\n        0.2978323907587466\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"g\\n\",\n        \"rby\": [\n          0.3746636626970996,\n          0.3295719343417618,\n          0.2957644029611387\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 31070,\n        \"created_at\": 1749632088.0113065\n      },\n      \"context\": \"perceptual_field_dynamics.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.0113065\n    },\n    {\n      \"text_rby\": [\n        0.37510666666662346,\n        0.3247500775193312,\n        0.3001432558140453\n      ],\n      \"new_state\": [\n        0.3765843731752308,\n        0.3253521495604928,\n        0.2980634772642765\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.37510666666662346,\n          0.3247500775193312,\n          0.3001432558140453\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 32250,\n        \"created_at\": 1749632088.0217009\n      },\n      \"context\": \"policy_security_systems.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.0217009\n    },\n    {\n      \"text_rby\": [\n        0.36866924243848037,\n        0.326264958706021,\n        0.30506579885549856\n      ],\n      \"new_state\": [\n        0.37579286010155577,\n        0.32544343047504565,\n        0.2987637094233987\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.36866924243848037,\n          0.326264958706021,\n          0.30506579885549856\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 154258,\n        \"created_at\": 1749632088.0562198\n      },\n      \"context\": \"pure_ae_foundation.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.0562198\n    },\n    {\n      \"text_rby\": [\n        0.36862904365980365,\n        0.3263417173266853,\n        0.30502923901351087\n      ],\n      \"new_state\": [\n        0.37507647845738057,\n        0.32553325916020964,\n        0.2993902623824099\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"s\\n\",\n        \"rby\": [\n          0.36862904365980365,\n          0.3263417173266853,\n          0.30502923901351087\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 155614,\n        \"created_at\": 1749632088.090703\n      },\n      \"context\": \"pure_ae_foundation_clean.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.090703\n    },\n    {\n      \"text_rby\": [\n        0.38240017570828766,\n        0.32288776630789,\n        0.2947120579838224\n      ],\n      \"new_state\": [\n        0.3758088481824712,\n        0.32526870987497764,\n        0.29892244194255113\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.38240017570828766,\n          0.32288776630789,\n          0.2947120579838224\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 22765,\n        \"created_at\": 1749632088.0917697\n      },\n      \"context\": \"quantum_consciousness_bridge.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.0917697\n    },\n    {\n      \"text_rby\": [\n        0.38196500122667787,\n        0.3225766620328588,\n        0.29545833674046323\n      ],\n      \"new_state\": [\n        0.37642446348689185,\n        0.3249995050907658,\n        0.29857603142234235\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#{\\n\",\n        \"rby\": [\n          0.38196500122667787,\n          0.3225766620328588,\n          0.29545833674046323\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 61145,\n        \"created_at\": 1749632088.111612\n      },\n      \"context\": \"quantum_consciousness_bridge_v2.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.111612\n    },\n    {\n      \"text_rby\": [\n        0.3808667388948685,\n        0.3223618634885808,\n        0.29677139761655075\n      ],\n      \"new_state\": [\n        0.3768686910276895,\n        0.32473574093054736,\n        0.2983955680417632\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"# \\n\",\n        \"rby\": [\n          0.3808667388948685,\n          0.3223618634885808,\n          0.29677139761655075\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 26767,\n        \"created_at\": 1749632088.1242454\n      },\n      \"context\": \"quantum_consciousness_bridge_v2_clean.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.1242454\n    },\n    {\n      \"text_rby\": [\n        0.37825723868846145,\n        0.32932849613249704,\n        0.2924142651790415\n      ],\n      \"new_state\": [\n        0.3770075457937667,\n        0.32519501645074234,\n        0.29779743775549106\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"\\n\\n\",\n        \"rby\": [\n          0.37825723868846145,\n          0.32932849613249704,\n          0.2924142651790415\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 14609,\n        \"created_at\": 1749632088.1278353\n      },\n      \"context\": \"rby_core_engine.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.1278353\n    },\n    {\n      \"text_rby\": [\n        0.370876774193525,\n        0.327921935483841,\n        0.30120129032263393\n      ],\n      \"new_state\": [\n        0.37639446863374254,\n        0.3254677083540522,\n        0.29813782301220537\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.370876774193525,\n          0.327921935483841,\n          0.30120129032263393\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 15500,\n        \"created_at\": 1749632088.13217\n      },\n      \"context\": \"rby_encryption_core.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.13217\n    },\n    {\n      \"text_rby\": [\n        0.3884836682304941,\n        0.32836151190580315,\n        0.28315481986370283\n      ],\n      \"new_state\": [\n        0.37760338859341763,\n        0.32575708870922726,\n        0.2966395226973551\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#z\\n\",\n        \"rby\": [\n          0.3884836682304941,\n          0.32836151190580315,\n          0.28315481986370283\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 11297,\n        \"created_at\": 1749632088.1628418\n      },\n      \"context\": \"README.md\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.1628418\n    },\n    {\n      \"text_rby\": [\n        0.3761935110080756,\n        0.3227627876179029,\n        0.30104370137402164\n      ],\n      \"new_state\": [\n        0.3774624008348834,\n        0.32545765860009485,\n        0.29707994056502174\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"l\\n\",\n        \"rby\": [\n          0.3761935110080756,\n          0.3227627876179029,\n          0.30104370137402164\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 24164,\n        \"created_at\": 1749632088.168961\n      },\n      \"context\": \"realtime_consciousness_monitor.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.168961\n    },\n    {\n      \"text_rby\": [\n        0.37296532284107975,\n        0.3283489444166655,\n        0.29868573274225474\n      ],\n      \"new_state\": [\n        0.37701269303550305,\n        0.32574678718175193,\n        0.29724051978274507\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"g\\n\",\n        \"rby\": [\n          0.37296532284107975,\n          0.3283489444166655,\n          0.29868573274225474\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 34057,\n        \"created_at\": 1749632088.1741028\n      },\n      \"context\": \"realtime_system_integration_hub.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.1741028\n    },\n    {\n      \"text_rby\": [\n        0.38166859456328767,\n        0.321643531906644,\n        0.2966878735300683\n      ],\n      \"new_state\": [\n        0.3774782831882815,\n        0.3253364616542411,\n        0.2971852551574774\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"i\\n\",\n        \"rby\": [\n          0.38166859456328767,\n          0.321643531906644,\n          0.2966878735300683\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 41496,\n        \"created_at\": 1749632088.1848269\n      },\n      \"context\": \"recursive_intelligence_evolution.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.1848269\n    },\n    {\n      \"text_rby\": [\n        0.3774921235034697,\n        0.32752362948960223,\n        0.294984247006928\n      ],\n      \"new_state\": [\n        0.3774796672198003,\n        0.32555517843777726,\n        0.2969651543424225\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#e\\n\",\n        \"rby\": [\n          0.3774921235034697,\n          0.32752362948960223,\n          0.294984247006928\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 1587,\n        \"created_at\": 1749632088.1908057\n      },\n      \"context\": \"requirements.txt\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.1908057\n    },\n    {\n      \"text_rby\": [\n        0.3786175905241543,\n        0.32445373785647624,\n        0.29692867161936953\n      ],\n      \"new_state\": [\n        0.3775934595502357,\n        0.32544503437964717,\n        0.29696150607011723\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#i\\n\",\n        \"rby\": [\n          0.3786175905241543,\n          0.32445373785647624,\n          0.29692867161936953\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 19249,\n        \"created_at\": 1749632088.2063155\n      },\n      \"context\": \"robust_edge_case_tests.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.2063155\n    },\n    {\n      \"text_rby\": [\n        0.3766737397693081,\n        0.3300180096645513,\n        0.2933082505661407\n      ],\n      \"new_state\": [\n        0.37750148757214297,\n        0.32590233190813755,\n        0.2965961805197196\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\" \\n\",\n        \"rby\": [\n          0.3766737397693081,\n          0.3300180096645513,\n          0.2933082505661407\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 56081,\n        \"created_at\": 1749632088.2197669\n      },\n      \"context\": \"self_modifying_code.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.2197669\n    },\n    {\n      \"text_rby\": [\n        0.37809785425517667,\n        0.32462008914684704,\n        0.2972820565979764\n      ],\n      \"new_state\": [\n        0.37756112424044636,\n        0.32577410763200854,\n        0.2966647681275453\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"_\\n\",\n        \"rby\": [\n          0.37809785425517667,\n          0.32462008914684704,\n          0.2972820565979764\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 19294,\n        \"created_at\": 1749632088.2254472\n      },\n      \"context\": \"self_modifying_consciousness_kernel.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.2254472\n    },\n    {\n      \"text_rby\": [\n        0.3902507040049707,\n        0.31839525969958216,\n        0.29135403629544715\n      ],\n      \"new_state\": [\n        0.3788300822168988,\n        0.3250362228387659,\n        0.29613369494433545\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"_\\n\",\n        \"rby\": [\n          0.3902507040049707,\n          0.31839525969958216,\n          0.29135403629544715\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 25568,\n        \"created_at\": 1749632088.2318325\n      },\n      \"context\": \"temporal_consciousness_synchronizer.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.2318325\n    },\n    {\n      \"text_rby\": [\n        0.38204938751701284,\n        0.32013999611122407,\n        0.297810616371763\n      ],\n      \"new_state\": [\n        0.3791520127469102,\n        0.32454660016601167,\n        0.2963013870870782\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"1\\n\",\n        \"rby\": [\n          0.38204938751701284,\n          0.32013999611122407,\n          0.297810616371763\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 5143,\n        \"created_at\": 1749632088.2339897\n      },\n      \"context\": \"test_ae_core.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.2340107\n    },\n    {\n      \"text_rby\": [\n        0.37737314573115793,\n        0.3225058890939911,\n        0.3001209651748511\n      ],\n      \"new_state\": [\n        0.37897412604533487,\n        0.3243425290588096,\n        0.29668334489585546\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"r\\n\",\n        \"rby\": [\n          0.37737314573115793,\n          0.3225058890939911,\n          0.3001209651748511\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 31414,\n        \"created_at\": 1749632088.2651994\n      },\n      \"context\": \"tighten_the_bolts_master.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.2651994\n    },\n    {\n      \"text_rby\": [\n        0.3707300651048601,\n        0.3284452729397034,\n        0.3008246619554364\n      ],\n      \"new_state\": [\n        0.37814971995128743,\n        0.32475280344689905,\n        0.29709747660181357\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"r\\n\",\n        \"rby\": [\n          0.3707300651048601,\n          0.3284452729397034,\n          0.3008246619554364\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 17971,\n        \"created_at\": 1749632088.27022\n      },\n      \"context\": \"topology_manager.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.27022\n    },\n    {\n      \"text_rby\": [\n        0.3773446948872692,\n        0.32696236693484204,\n        0.29569293817788883\n      ],\n      \"new_state\": [\n        0.37806921744488553,\n        0.3249737597956933,\n        0.29695702275942104\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"t\\n\",\n        \"rby\": [\n          0.3773446948872692,\n          0.32696236693484204,\n          0.29569293817788883\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 20009,\n        \"created_at\": 1749632088.2749226\n      },\n      \"context\": \"twmrto_compression.py\",\n      \"ae_compliance\": 1.1102230246251565e-16,\n      \"timestamp\": 1749632088.2749226\n    },\n    {\n      \"text_rby\": [\n        0.3775902081926769,\n        0.3306404132702906,\n        0.29176937853703233\n      ],\n      \"new_state\": [\n        0.37802131651966475,\n        0.3255404251431531,\n        0.29643825833718224\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"\\\"f\\n\",\n        \"rby\": [\n          0.3775902081926769,\n          0.3306404132702906,\n          0.29176937853703233\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 38522,\n        \"created_at\": 1749632088.285219\n      },\n      \"context\": \"unified_framework_master.py\",\n      \"ae_compliance\": 2.220446049250313e-16,\n      \"timestamp\": 1749632088.285219\n    },\n    {\n      \"text_rby\": [\n        0.38312988115448565,\n        0.3270008488964177,\n        0.2898692699490967\n      ],\n      \"new_state\": [\n        0.3785321729831469,\n        0.32568646751847957,\n        0.2957813594983737\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"# \\n\",\n        \"rby\": [\n          0.38312988115448565,\n          0.3270008488964177,\n          0.2898692699490967\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 11780,\n        \"created_at\": 1749632088.2997353\n      },\n      \"context\": \"unified_integration_test.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.2997353\n    },\n    {\n      \"text_rby\": [\n        0.37293947471065625,\n        0.32409017032890985,\n        0.30297035496043373\n      ],\n      \"new_state\": [\n        0.3779729031558978,\n        0.32552683779952263,\n        0.29650025904457966\n      ],\n      \"glyph\": {\n        \"glyph_symbol\": \"#t\\n\",\n        \"rby\": [\n          0.37293947471065625,\n          0.32409017032890985,\n          0.30297035496043373\n        ],\n        \"usage_count\": 1,\n        \"content_length\": 30764,\n        \"created_at\": 1749632088.307387\n      },\n      \"context\": \"zero_trust_mesh_agent.py\",\n      \"ae_compliance\": 0.0,\n      \"timestamp\": 1749632088.307387\n    }\n  ],\n  \"export_timestamp\": 1749632088.310343\n}"
+}

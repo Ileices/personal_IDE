@@ -445,7 +445,7 @@ Order steps so that each builds on completed previous steps.
 Group related changes together.
 Mark which steps can be parallelized.
 
-CRITICAL: This plan must be granular enough that each step can be executed by an LLM with a 4000-token context window. If a step requires more, split it further.
+CRITICAL: This plan must be granular enough that each step can be executed by an LLM within its token context window. If a step requires more context than available, split it further.
 
 ${STRUCTURED_OUTPUT_BLOCK}`;
 }

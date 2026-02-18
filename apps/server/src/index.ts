@@ -18,6 +18,7 @@ import { knowledgeRoutes } from './routes/knowledge.js';
 import { tierRoutes } from './routes/tiers.js';
 import { conversationIndexRoutes } from './routes/conversationIndex.js';
 import { ollamaRoutes } from './routes/ollama.js';
+import { nanoRoutes } from './routes/nano.js';
 
 async function main() {
   // Initialize the database
@@ -60,6 +61,7 @@ async function main() {
   await app.register(tierRoutes, { prefix: '/api/tiers' });
   await app.register(conversationIndexRoutes, { prefix: '/api/conversation-index' });
   await app.register(ollamaRoutes, { prefix: '/api/ollama' });
+  await app.register(nanoRoutes, { prefix: '/api/nano' });
 
   // Health check
   app.get('/api/health', async () => ({
