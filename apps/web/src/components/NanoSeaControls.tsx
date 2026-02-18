@@ -1,12 +1,13 @@
 // ============================================
-// Nano Sea Controls — Full Settings Popup
+// Nano Sea Controls — Real Settings Popup
 //
 // One-stop panel for everything Nano Sea:
+//   - Environment check (Python found? NANO_train exists?)
 //   - Start / Stop / Restart the Python backend
 //   - Mesh toggle, port config
 //   - Global pool: donation %, permanent node, idle training
 //   - Peer discovery: opt-in, sharing level, peer list
-//   - Live logs viewer
+//   - Live logs viewer with real-time updates
 //   - Node status (grade, tier, nanos, uptime)
 // ============================================
 import React, { useEffect, useState, useRef, useCallback } from 'react';
@@ -14,7 +15,8 @@ import {
   X, Play, Square, RotateCw, Wifi, WifiOff, Globe, Users,
   Cpu, HardDrive, Zap, Shield, UserPlus, UserMinus, Eye,
   ChevronDown, ChevronUp, Loader2, Activity, Server,
-  Settings, Waves, Link, Unlink, Ban, Check,
+  Settings, Waves, Link, Unlink, Ban, Check, AlertTriangle,
+  Terminal, RefreshCw,
 } from 'lucide-react';
 
 const API = 'http://localhost:3001/api/nano';
@@ -26,6 +28,9 @@ interface NanoStatus {
   config: NanoConfig;
   api: { status: string; nano_count?: number; uptime_s?: number } | null;
   logLines: number;
+  lastError: string | null;
+  pythonFound: boolean;
+  nanoDirExists: boolean;
 }
 
 interface NanoConfig {
@@ -38,6 +43,18 @@ interface NanoConfig {
   username: string;
   peerDiscovery: boolean;
   sharingLevel: string;
+}
+
+interface EnvCheck {
+  ready: boolean;
+  python: { bin: string; extraArgs: string[] } | null;
+  pythonFound: boolean;
+  nanoDir: string;
+  nanoDirExists: boolean;
+  mainPyExists: boolean;
+  requirementsExist: boolean;
+  platform: string;
+  errors: string[];
 }
 
 interface MeshInfo {
@@ -90,9 +107,10 @@ interface DiscoveryStatus {
 }
 
 // ── Helpers ─────────────────────────────────────────────────
-async function fetchJson(url: string, opts?: RequestInit) {
+async function fetchJson<T = any>(url: string, opts?: RequestInit): Promise<T | null> {
   try {
     const res = await fetch(url, opts);
+    if (!res.ok) return null;
     return await res.json();
   } catch {
     return null;
@@ -107,6 +125,7 @@ function Badge({ children, color = 'blue' }: { children: React.ReactNode; color?
     yellow: 'bg-yellow-500/15 text-yellow-400',
     purple: 'bg-purple-500/15 text-purple-400',
     gray: 'bg-white/5 text-ide-text-dim',
+    cyan: 'bg-cyan-500/15 text-cyan-400',
   };
   return (
     <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${colors[color] || colors.blue}`}>
@@ -115,11 +134,12 @@ function Badge({ children, color = 'blue' }: { children: React.ReactNode; color?
   );
 }
 
-function Section({ title, icon: Icon, children, defaultOpen = true }: {
+function Section({ title, icon: Icon, children, defaultOpen = true, badge }: {
   title: string;
   icon: React.ElementType;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  badge?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -131,6 +151,7 @@ function Section({ title, icon: Icon, children, defaultOpen = true }: {
         <div className="flex items-center gap-2">
           <Icon className="w-4 h-4 text-ide-accent" />
           <span className="text-xs font-semibold">{title}</span>
+          {badge}
         </div>
         {open ? <ChevronUp className="w-3 h-3 text-ide-text-dim" /> : <ChevronDown className="w-3 h-3 text-ide-text-dim" />}
       </button>
@@ -139,16 +160,17 @@ function Section({ title, icon: Icon, children, defaultOpen = true }: {
   );
 }
 
-function Toggle({ checked, onChange, label, desc }: {
+function Toggle({ checked, onChange, label, desc, disabled }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
   desc?: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-start gap-2.5 cursor-pointer">
+    <label className={`flex items-start gap-2.5 ${disabled ? 'opacity-40' : 'cursor-pointer'}`}>
       <div
-        onClick={() => onChange(!checked)}
+        onClick={() => !disabled && onChange(!checked)}
         className={`w-8 h-4.5 flex-shrink-0 rounded-full transition-colors relative mt-0.5 ${
           checked ? 'bg-ide-accent' : 'bg-ide-border'
         }`}
@@ -200,6 +222,7 @@ function Slider({ value, onChange, min = 0, max = 100, label, suffix = '%' }: {
 // ═══════════════════════════════════════════════════════════════
 export function NanoSeaControls({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<NanoStatus | null>(null);
+  const [envCheck, setEnvCheck] = useState<EnvCheck | null>(null);
   const [meshInfo, setMeshInfo] = useState<MeshInfo | null>(null);
   const [poolStats, setPoolStats] = useState<PoolStats | null>(null);
   const [discoveryStatus, setDiscoveryStatus] = useState<DiscoveryStatus | null>(null);
@@ -207,6 +230,8 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [serverReachable, setServerReachable] = useState(true);
 
   // Config form state
   const [cfg, setCfg] = useState<NanoConfig>({
@@ -222,21 +247,28 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
   });
 
   const logsRef = useRef<HTMLDivElement>(null);
+  const rapidPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Data Fetching ─────────────────────────────────────────
   const refresh = useCallback(async () => {
-    const [s, m, p, d, pr, l] = await Promise.all([
-      fetchJson(`${API}/status`),
-      fetchJson(`${API}/mesh/info`),
-      fetchJson(`${API}/pool/stats`),
-      fetchJson(`${API}/discovery/status`),
-      fetchJson(`${API}/discovery/peers`),
-      fetchJson(`${API}/logs?tail=100`),
-    ]);
-    if (s) {
-      setStatus(s);
-      if (s.config) setCfg(s.config);
+    const s = await fetchJson<NanoStatus>(`${API}/status`);
+    if (!s) {
+      setServerReachable(false);
+      setLoading(false);
+      return;
     }
+    setServerReachable(true);
+    setStatus(s);
+    if (s.config) setCfg(prev => ({ ...prev, ...s.config }));
+
+    // Fetch secondary data in parallel
+    const [m, p, d, pr, l] = await Promise.all([
+      fetchJson<MeshInfo>(`${API}/mesh/info`),
+      fetchJson<PoolStats>(`${API}/pool/stats`),
+      fetchJson<DiscoveryStatus>(`${API}/discovery/status`),
+      fetchJson<{ peers: DiscoveredPeer[] }>(`${API}/discovery/peers`),
+      fetchJson<{ lines: string[]; total: number }>(`${API}/logs?tail=200`),
+    ]);
     if (m) setMeshInfo(m);
     if (p) setPoolStats(p);
     if (d) setDiscoveryStatus(d);
@@ -245,6 +277,14 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
     setLoading(false);
   }, []);
 
+  // Initial env check
+  useEffect(() => {
+    fetchJson<EnvCheck>(`${API}/check`).then(c => {
+      if (c) setEnvCheck(c);
+    });
+  }, []);
+
+  // Regular polling
   useEffect(() => {
     refresh();
     const interval = setInterval(refresh, 5000);
@@ -258,34 +298,71 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
     }
   }, [logs]);
 
+  // ── Rapid poll after actions ──────────────────────────────
+  // Poll every 500ms for 15 seconds after start/stop/restart
+  function startRapidPoll() {
+    if (rapidPollRef.current) clearInterval(rapidPollRef.current);
+    let count = 0;
+    rapidPollRef.current = setInterval(async () => {
+      count++;
+      await refresh();
+      if (count >= 30) { // 30 × 500ms = 15 seconds
+        if (rapidPollRef.current) clearInterval(rapidPollRef.current);
+        rapidPollRef.current = null;
+      }
+    }, 500);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (rapidPollRef.current) clearInterval(rapidPollRef.current);
+    };
+  }, []);
+
   // ── Actions ───────────────────────────────────────────────
   async function startNano() {
     setActionLoading('start');
-    await fetchJson(`${API}/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cfg),
-    });
-    await new Promise(r => setTimeout(r, 1500));
+    setActionError(null);
+    const result = await fetchJson<{ success: boolean; error?: string; pid?: number }>(
+      `${API}/start`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg),
+      }
+    );
+    if (result && !result.success) {
+      setActionError(result.error || 'Unknown error starting Nano Sea');
+    }
+    startRapidPoll();
     await refresh();
     setActionLoading('');
   }
 
   async function stopNano() {
     setActionLoading('stop');
+    setActionError(null);
     await fetchJson(`${API}/stop`, { method: 'POST' });
+    startRapidPoll();
     await refresh();
     setActionLoading('');
   }
 
   async function restartNano() {
     setActionLoading('restart');
-    await fetchJson(`${API}/restart`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cfg),
-    });
-    await new Promise(r => setTimeout(r, 2000));
+    setActionError(null);
+    const result = await fetchJson<{ success: boolean; error?: string }>(
+      `${API}/restart`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg),
+      }
+    );
+    if (result && !result.success) {
+      setActionError(result.error || 'Unknown error restarting');
+    }
+    startRapidPoll();
     await refresh();
     setActionLoading('');
   }
@@ -316,9 +393,24 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
     await refresh();
   }
 
+  async function recheckEnv() {
+    setEnvCheck(null);
+    const c = await fetchJson<EnvCheck>(`${API}/check`);
+    if (c) setEnvCheck(c);
+  }
+
   const isRunning = status?.running ?? false;
   const nanoCount = status?.api?.nano_count ?? 0;
   const uptimeMin = status?.api?.uptime_s ? Math.floor(status.api.uptime_s / 60) : 0;
+  const apiReady = status?.api?.status === 'ok' || (status?.api?.nano_count ?? 0) > 0;
+  const isStarting = isRunning && !apiReady;
+
+  // Compute status label
+  let statusLabel = 'Offline';
+  let statusColor = 'red';
+  if (!serverReachable) { statusLabel = 'Server Unreachable'; statusColor = 'red'; }
+  else if (isStarting) { statusLabel = 'Starting…'; statusColor = 'yellow'; }
+  else if (isRunning && apiReady) { statusLabel = 'Online'; statusColor = 'green'; }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -330,13 +422,10 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
             <Waves className="w-5 h-5 text-cyan-400" />
             <h2 className="text-lg font-semibold">Nano Sea Controls</h2>
             <div className="flex items-center gap-1.5">
-              {isRunning ? (
-                <Badge color="green">● Online</Badge>
-              ) : (
-                <Badge color="red">● Offline</Badge>
-              )}
+              <Badge color={statusColor}>● {statusLabel}</Badge>
               {nanoCount > 0 && <Badge color="blue">{nanoCount} nanos</Badge>}
               {uptimeMin > 0 && <Badge color="gray">{uptimeMin}m</Badge>}
+              {status?.pid && <Badge color="cyan">PID {status.pid}</Badge>}
             </div>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-ide-bg rounded transition-colors">
@@ -349,40 +438,108 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-ide-accent" />
+              <span className="ml-2 text-xs text-ide-text-dim">Connecting to server…</span>
+            </div>
+          ) : !serverReachable ? (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-center">
+              <AlertTriangle className="w-6 h-6 text-red-400 mx-auto mb-2" />
+              <p className="text-sm text-red-300 font-medium">Cannot reach IDE server</p>
+              <p className="text-xs text-ide-text-dim mt-1">
+                Make sure the server is running at <code className="text-ide-accent">localhost:3001</code>
+              </p>
+              <button onClick={refresh} className="mt-3 px-3 py-1 text-xs bg-ide-accent/20 text-ide-accent rounded hover:bg-ide-accent/30 transition-colors">
+                <RefreshCw className="w-3 h-3 inline mr-1" /> Retry
+              </button>
             </div>
           ) : (
             <>
+              {/* ── Environment Check ─────────────────────────── */}
+              {envCheck && !envCheck.ready && (
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                    <span className="text-xs font-semibold text-yellow-300">Environment Issues</span>
+                    <button onClick={recheckEnv} className="ml-auto text-[10px] text-ide-accent hover:underline flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3" /> Recheck
+                    </button>
+                  </div>
+                  <ul className="space-y-1">
+                    {envCheck.errors.map((e, i) => (
+                      <li key={i} className="text-xs text-yellow-200/80 flex items-start gap-1.5">
+                        <span className="text-yellow-400 mt-0.5">•</span>
+                        {e}
+                      </li>
+                    ))}
+                  </ul>
+                  {envCheck.nanoDir && (
+                    <p className="text-[10px] text-ide-text-dim mt-2">
+                      Looking for NANO_train at: <code className="text-ide-accent">{envCheck.nanoDir}</code>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── Action Error Banner ──────────────────────── */}
+              {(actionError || status?.lastError) && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <span className="text-xs text-red-300">{actionError || status?.lastError}</span>
+                  </div>
+                  <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-300 flex-shrink-0">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
               {/* ── Start / Stop Controls ─────────────────────── */}
-              <Section title="Process Control" icon={Zap}>
+              <Section title="Process Control" icon={Zap} badge={
+                envCheck?.ready ? <Badge color="green">Ready</Badge> :
+                envCheck ? <Badge color="yellow">Setup needed</Badge> : null
+              }>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={startNano}
-                    disabled={isRunning || !!actionLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30 disabled:opacity-30 transition-colors"
+                    disabled={isRunning || !!actionLoading || !envCheck?.ready}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title={!envCheck?.ready ? 'Fix environment issues first' : isRunning ? 'Already running' : 'Start Nano Sea'}
                   >
                     {actionLoading === 'start' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                    Start
+                    {actionLoading === 'start' ? 'Starting…' : 'Start'}
                   </button>
                   <button
                     onClick={stopNano}
                     disabled={!isRunning || !!actionLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-red-600/20 text-red-400 hover:bg-red-600/30 disabled:opacity-30 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-red-600/20 text-red-400 hover:bg-red-600/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     {actionLoading === 'stop' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Square className="w-3 h-3" />}
-                    Stop
+                    {actionLoading === 'stop' ? 'Stopping…' : 'Stop'}
                   </button>
                   <button
                     onClick={restartNano}
-                    disabled={!!actionLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30 disabled:opacity-30 transition-colors"
+                    disabled={!!actionLoading || !envCheck?.ready}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     {actionLoading === 'restart' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
-                    Restart
+                    {actionLoading === 'restart' ? 'Restarting…' : 'Restart'}
                   </button>
-                  {status?.pid && (
-                    <span className="text-[10px] text-ide-text-dim ml-2">PID: {status.pid}</span>
-                  )}
                 </div>
+
+                {/* Starting progress indicator */}
+                {isStarting && (
+                  <div className="flex items-center gap-2 bg-yellow-500/10 rounded p-2 mt-1">
+                    <Loader2 className="w-3 h-3 animate-spin text-yellow-400" />
+                    <span className="text-xs text-yellow-300">Python backend is starting up… Waiting for API to respond.</span>
+                  </div>
+                )}
+
+                {envCheck?.python && (
+                  <div className="text-[10px] text-ide-text-dim mt-1 flex items-center gap-1.5">
+                    <Terminal className="w-3 h-3" />
+                    Python: <code className="text-ide-accent">{envCheck.python.bin}</code>
+                    {envCheck.platform && <span>({envCheck.platform})</span>}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   <Toggle
@@ -390,6 +547,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                     onChange={v => { setCfg(c => ({ ...c, meshEnabled: v })); saveConfig(); }}
                     label="Mesh Networking"
                     desc="Enable P2P mesh for distributed compute"
+                    disabled={isRunning}
                   />
                   <div>
                     <label className="text-xs font-medium block mb-1">API Port</label>
@@ -398,7 +556,8 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                       value={cfg.port}
                       onChange={e => setCfg(c => ({ ...c, port: Number(e.target.value) }))}
                       onBlur={saveConfig}
-                      className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none"
+                      disabled={isRunning}
+                      className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none disabled:opacity-40"
                     />
                   </div>
                 </div>
@@ -411,7 +570,8 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                     onChange={e => setCfg(c => ({ ...c, scanPaths: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
                     onBlur={saveConfig}
                     placeholder="Paths to scan for AE seed, comma-separated"
-                    className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none"
+                    disabled={isRunning}
+                    className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none disabled:opacity-40"
                   />
                   <p className="text-[10px] text-ide-text-dim mt-0.5">
                     Comma-separated paths. The AE scanner reads your filesystem to create a unique seed.
@@ -464,12 +624,12 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
 
                 <Slider
                   value={cfg.donationPercent}
-                  onChange={v => { setCfg(c => ({ ...c, donationPercent: v })); }}
+                  onChange={v => setCfg(c => ({ ...c, donationPercent: v }))}
                   label="Compute Donation"
                   suffix="% of idle"
                 />
                 <button
-                  onClick={() => { saveConfig(); }}
+                  onClick={saveConfig}
                   className="text-[10px] text-ide-accent hover:underline mt-1"
                 >
                   Apply
@@ -494,7 +654,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                   <div className="grid grid-cols-3 gap-2 mt-2">
                     {[
                       { label: 'Online', value: poolStats.online_members ?? 0, icon: Users },
-                      { label: 'Capacity', value: poolStats.total_pool_capacity?.toFixed(0) ?? 0, icon: Activity },
+                      { label: 'Capacity', value: poolStats.total_pool_capacity?.toFixed(0) ?? '0', icon: Activity },
                       { label: 'Jobs Done', value: poolStats.total_jobs_completed ?? 0, icon: Check },
                     ].map(s => (
                       <div key={s.label} className="bg-ide-bg rounded p-2 text-center">
@@ -596,19 +756,15 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                             <button
                               onClick={() => disconnectPeer(p.node_id)}
                               className="flex items-center gap-1 px-2 py-1 text-[10px] rounded bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                              title="Disconnect"
                             >
-                              <Unlink className="w-3 h-3" />
-                              Disconnect
+                              <Unlink className="w-3 h-3" /> Disconnect
                             </button>
                           ) : p.state === 'pending_in' ? (
                             <button
                               onClick={() => connectPeer(p.node_id)}
                               className="flex items-center gap-1 px-2 py-1 text-[10px] rounded bg-green-500/10 text-green-400 hover:bg-green-500/20"
-                              title="Accept"
                             >
-                              <Check className="w-3 h-3" />
-                              Accept
+                              <Check className="w-3 h-3" /> Accept
                             </button>
                           ) : p.state === 'blocked' ? (
                             <Badge color="red">Blocked</Badge>
@@ -616,10 +772,8 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                             <button
                               onClick={() => connectPeer(p.node_id)}
                               className="flex items-center gap-1 px-2 py-1 text-[10px] rounded bg-ide-accent/10 text-ide-accent hover:bg-ide-accent/20"
-                              title="Connect"
                             >
-                              <Link className="w-3 h-3" />
-                              Connect
+                              <Link className="w-3 h-3" /> Connect
                             </button>
                           )}
                         </div>
@@ -636,18 +790,24 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
               </Section>
 
               {/* ── Logs ──────────────────────────────────────── */}
-              <Section title="Process Logs" icon={Activity} defaultOpen={false}>
+              <Section title="Process Logs" icon={Terminal} defaultOpen={isRunning || logs.length > 0} badge={
+                logs.length > 0 ? <Badge color="gray">{logs.length} lines</Badge> : null
+              }>
                 <div
                   ref={logsRef}
-                  className="bg-black/40 rounded p-2 font-mono text-[10px] text-green-300/80 max-h-48 overflow-y-auto leading-relaxed"
+                  className="bg-black/50 rounded p-2 font-mono text-[10px] text-green-300/80 max-h-56 overflow-y-auto leading-relaxed"
+                  style={{ minHeight: 80 }}
                 >
                   {logs.length === 0 ? (
-                    <div className="text-ide-text-dim">No logs yet. Start the Nano Sea to see output.</div>
+                    <div className="text-ide-text-dim text-center py-4">
+                      No logs yet. Start the Nano Sea to see output.
+                    </div>
                   ) : (
                     logs.map((line, i) => (
                       <div key={i} className={
-                        line.includes('[ERR]') ? 'text-red-400' :
+                        line.includes('[ERR]') || line.includes('ERROR') ? 'text-red-400' :
                         line.includes('[IDE]') ? 'text-cyan-300' :
+                        line.includes('SPAWN ERROR') ? 'text-red-500 font-bold' :
                         ''
                       }>
                         {line}
@@ -670,6 +830,9 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
             <span>Port {cfg.port}</span>
             {isRunning && status?.api?.uptime_s && (
               <span>Uptime: {Math.floor(status.api.uptime_s / 60)}m {Math.floor(status.api.uptime_s % 60)}s</span>
+            )}
+            {envCheck?.python && (
+              <span>{envCheck.python.bin}</span>
             )}
           </div>
         </div>

@@ -10,7 +10,8 @@
     "dev:server": "pnpm --filter @personal-ide/server dev",
     "dev:web": "pnpm --filter @personal-ide/web dev",
     "clean": "rimraf apps/*/dist packages/*/dist",
-    "setup": "pnpm install && pnpm build"
+    "setup": "node scripts/setup.js",
+    "postinstall": "pnpm --filter @personal-ide/shared build"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
