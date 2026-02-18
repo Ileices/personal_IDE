@@ -236,6 +236,8 @@ export function buildAgentSystemPrompt(params: {
   tierContext?: string;
   logHealthContext?: string;
   conversationIndexContext?: string;
+  // ── v3: platform awareness ──
+  platformContext?: string;
 }): string {
   const isCorpusScale = params.codebaseOverview?.includes('lines') &&
     parseInt(params.codebaseOverview.match(/(\d[\d,]+)\s*lines/)?.[1]?.replace(/,/g, '') || '0') > 10000;
@@ -366,6 +368,8 @@ ${STRUCTURED_OUTPUT_BLOCK}
 **Iteration**: ${params.iteration}/${params.maxIterations}
 ${params.projectLanguages?.length ? `**Project Languages**: ${params.projectLanguages.join(', ')}` : ''}
 ${isCorpusScale ? '**MODE**: CORPUS-SCALE SURGICAL — Use patches, never full rewrites' : ''}
+
+${params.platformContext ? `### Host Platform & Cross-Platform Build Rules\n${params.platformContext}\n` : ''}
 
 ${params.tierContext ? `### Project Tier & Language Rules\n${params.tierContext}\n` : ''}
 

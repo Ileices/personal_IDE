@@ -35,6 +35,7 @@ import { LogWriter } from './logWriter.js';
 import { LoopDetector } from './loopDetector.js';
 import { webSearch, formatSearchForLLM } from './webSearch.js';
 import { CodeIndexer } from './codeIndexer.js';
+import { detectPlatform, formatPlatformForLLM, type PlatformInfo } from './platformDetector.js';
 
 type EventCallback = (event: any) => void;
 
@@ -93,6 +94,8 @@ export class EnhancedAgentLoop {
   private codeIndexer: CodeIndexer;
   private messageQueue: QueuedMessage[] = [];
   private discoveredContextLimits: Map<string, number> = new Map();
+  private platformContext = '';
+  private platformInfo: PlatformInfo | null = null;
 
   constructor(
     private db: Database.Database,
@@ -248,6 +251,15 @@ export class EnhancedAgentLoop {
 
     // ── Phase 0: Environment Analysis ──
     this.setState('planning');
+
+    // Detect host platform for cross-platform build instructions
+    try {
+      this.platformInfo = detectPlatform();
+      this.platformContext = formatPlatformForLLM(this.platformInfo);
+      this.emit({ type: 'info', message: 'Host: ' + this.platformInfo.hostOS + ' ' + this.platformInfo.arch + ' | Runtimes: ' + Object.keys(this.platformInfo.runtimes).join(', ') });
+    } catch (err: any) {
+      this.emit({ type: 'info', message: 'Platform detection: ' + err.message });
+    }
 
     try {
       const stack = detectProjectStack(this.config.projectRoot);
@@ -417,6 +429,7 @@ export class EnhancedAgentLoop {
           tierContext: this.tierContext,
           logHealthContext: this.logHealthContext,
           conversationIndexContext: this.conversationIndexContext,
+          platformContext: this.platformContext,
         });
 
         // Build Messages
