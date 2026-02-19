@@ -228,6 +228,8 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
   const [discoveryStatus, setDiscoveryStatus] = useState<DiscoveryStatus | null>(null);
   const [peers, setPeers] = useState<DiscoveredPeer[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
+  const [trainingStatus, setTrainingStatus] = useState<any>(null);
+  const [computeStatus, setComputeStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
@@ -248,6 +250,11 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
 
   const logsRef = useRef<HTMLDivElement>(null);
   const rapidPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const configDirtyRef = useRef(false); // true while user has unsaved changes
+  const cfgRef = useRef(cfg);           // always-current config for saveConfig
+
+  // Keep cfgRef in sync
+  useEffect(() => { cfgRef.current = cfg; }, [cfg]);
 
   // ── Data Fetching ─────────────────────────────────────────
   const refresh = useCallback(async () => {
@@ -259,21 +266,26 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
     }
     setServerReachable(true);
     setStatus(s);
-    if (s.config) setCfg(prev => ({ ...prev, ...s.config }));
+    // Only sync config from server when user hasn't made local changes
+    if (s.config && !configDirtyRef.current) setCfg(prev => ({ ...prev, ...s.config }));
 
     // Fetch secondary data in parallel
-    const [m, p, d, pr, l] = await Promise.all([
+    const [m, p, d, pr, l, tr, comp] = await Promise.all([
       fetchJson<MeshInfo>(`${API}/mesh/info`),
       fetchJson<PoolStats>(`${API}/pool/stats`),
       fetchJson<DiscoveryStatus>(`${API}/discovery/status`),
       fetchJson<{ peers: DiscoveredPeer[] }>(`${API}/discovery/peers`),
       fetchJson<{ lines: string[]; total: number }>(`${API}/logs?tail=200`),
+      fetchJson(`${API}/training/status`),
+      fetchJson(`${API}/compute/status`),
     ]);
     if (m) setMeshInfo(m);
     if (p) setPoolStats(p);
     if (d) setDiscoveryStatus(d);
     if (pr?.peers) setPeers(pr.peers);
     if (l?.lines) setLogs(l.lines);
+    if (tr) setTrainingStatus(tr);
+    if (comp) setComputeStatus(comp);
     setLoading(false);
   }, []);
 
@@ -367,12 +379,18 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
     setActionLoading('');
   }
 
-  async function saveConfig() {
+  async function saveConfig(overrideCfg?: Partial<NanoConfig>) {
+    const toSave = overrideCfg ? { ...cfgRef.current, ...overrideCfg } : cfgRef.current;
+    // Optimistic: update local state immediately
+    if (overrideCfg) setCfg(prev => ({ ...prev, ...overrideCfg }));
+    configDirtyRef.current = true;
     await fetchJson(`${API}/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cfg),
+      body: JSON.stringify(toSave),
     });
+    // Allow server sync after save completes
+    setTimeout(() => { configDirtyRef.current = false; }, 200);
   }
 
   async function connectPeer(nodeId: string) {
@@ -544,7 +562,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   <Toggle
                     checked={cfg.meshEnabled}
-                    onChange={v => { setCfg(c => ({ ...c, meshEnabled: v })); saveConfig(); }}
+                    onChange={v => saveConfig({ meshEnabled: v })}
                     label="Mesh Networking"
                     desc="Enable P2P mesh for distributed compute"
                     disabled={isRunning}
@@ -555,7 +573,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                       type="number"
                       value={cfg.port}
                       onChange={e => setCfg(c => ({ ...c, port: Number(e.target.value) }))}
-                      onBlur={saveConfig}
+                      onBlur={() => saveConfig()}
                       disabled={isRunning}
                       className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none disabled:opacity-40"
                     />
@@ -568,7 +586,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                     type="text"
                     value={cfg.scanPaths.join(', ')}
                     onChange={e => setCfg(c => ({ ...c, scanPaths: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
-                    onBlur={saveConfig}
+                    onBlur={() => saveConfig()}
                     placeholder="Paths to scan for AE seed, comma-separated"
                     disabled={isRunning}
                     className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none disabled:opacity-40"
@@ -616,6 +634,125 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                 </Section>
               )}
 
+              {/* ── Training & Models ─────────────────────────── */}
+              <Section title="Training & Models" icon={Activity} badge={
+                trainingStatus?.running
+                  ? <Badge color="green">Training</Badge>
+                  : <Badge color="gray">Idle</Badge>
+              }>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-ide-text-dim">Status</span>
+                      <span className={trainingStatus?.running ? 'text-green-400' : 'text-ide-text-dim'}>
+                        {trainingStatus?.running ? '● Training' : '○ Idle'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ide-text-dim">Device</span>
+                      <Badge color={trainingStatus?.device === 'cpu' ? 'yellow' : 'green'}>
+                        {computeStatus?.gpu_name || trainingStatus?.device || 'cpu'}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ide-text-dim">Total Steps</span>
+                      <span className="font-mono text-ide-accent">{trainingStatus?.total_steps ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ide-text-dim">Epochs</span>
+                      <span className="font-mono">{trainingStatus?.epochs_completed ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ide-text-dim">Pairs Collected</span>
+                      <span className="font-mono">{trainingStatus?.total_pairs_collected ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ide-text-dim">Buffer Size</span>
+                      <span className="font-mono">{trainingStatus?.buffer_size ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ide-text-dim">Model Format</span>
+                      <Badge color="purple">PyTorch .pt</Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-ide-text-dim">Checkpoints</span>
+                      <span className="font-mono">{trainingStatus?.checkpoints?.total_checkpoints ?? 0}</span>
+                    </div>
+                  </div>
+
+                  {/* Recent training sessions */}
+                  {trainingStatus?.recent_sessions?.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-[10px] text-ide-text-dim mb-1">Recent Sessions</div>
+                      <div className="space-y-1 max-h-24 overflow-y-auto">
+                        {trainingStatus.recent_sessions.map((s: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between text-[10px] bg-ide-bg/50 px-2 py-1 rounded">
+                            <span className="text-ide-text-dim">{s.id}</span>
+                            <span>{s.steps} steps</span>
+                            <span className="text-ide-accent">{s.avg_loss != null ? `loss: ${s.avg_loss.toFixed(4)}` : '—'}</span>
+                            <span className="text-ide-text-dim">{s.nanos_trained?.length ?? 0} nanos</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Registered nanos for training */}
+                  {trainingStatus?.registered_nanos?.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-[10px] text-ide-text-dim mb-1">Nanos Being Trained</div>
+                      <div className="flex flex-wrap gap-1">
+                        {trainingStatus.registered_nanos.map((n: string) => (
+                          <Badge key={n} color="cyan">{n}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* GPU/Compute info */}
+                  {computeStatus && !computeStatus.error && (
+                    <div className="mt-2">
+                      <div className="text-[10px] text-ide-text-dim mb-1">Compute Backend</div>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-ide-text-dim">Backend</span>
+                          <Badge color={computeStatus.backend === 'cuda' ? 'green' : computeStatus.backend === 'cpu' ? 'yellow' : 'blue'}>
+                            {computeStatus.backend}
+                          </Badge>
+                        </div>
+                        {computeStatus.vram_gb > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-ide-text-dim">VRAM</span>
+                            <span className="font-mono">{computeStatus.vram_gb} GB</span>
+                          </div>
+                        )}
+                      </div>
+                      {computeStatus.all_gpus?.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {computeStatus.all_gpus.map((g: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between text-[10px] bg-ide-bg/30 px-2 py-0.5 rounded">
+                              <span>{g.name}</span>
+                              <Badge color={g.backend === 'cuda' ? 'green' : 'blue'}>{g.backend}</Badge>
+                              <span className="text-ide-text-dim">{g.vram_gb}GB</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Checkpoint directory info */}
+                  {trainingStatus?.checkpoint_dir && (
+                    <div className="mt-1 text-[10px] text-ide-text-dim">
+                      📁 {trainingStatus.checkpoint_dir}
+                      {trainingStatus.checkpoints?.total_size_bytes > 0 && (
+                        <span className="ml-2">({(trainingStatus.checkpoints.total_size_bytes / 1024).toFixed(1)} KB)</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Section>
+
               {/* ── Global Compute Pool ──────────────────────── */}
               <Section title="Global Compute Pool" icon={Globe}>
                 <p className="text-[10px] text-ide-text-dim mb-2">
@@ -629,7 +766,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                   suffix="% of idle"
                 />
                 <button
-                  onClick={saveConfig}
+                  onClick={() => saveConfig()}
                   className="text-[10px] text-ide-accent hover:underline mt-1"
                 >
                   Apply
@@ -638,13 +775,13 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <Toggle
                     checked={cfg.permanentNode}
-                    onChange={v => { setCfg(c => ({ ...c, permanentNode: v })); saveConfig(); }}
+                    onChange={v => saveConfig({ permanentNode: v })}
                     label="Permanent Node"
                     desc="Always part of the pool (anchors the network)"
                   />
                   <Toggle
                     checked={cfg.idleTraining}
-                    onChange={v => { setCfg(c => ({ ...c, idleTraining: v })); saveConfig(); }}
+                    onChange={v => saveConfig({ idleTraining: v })}
                     label="Idle Training"
                     desc="Auto-train nanos when pool is idle"
                   />
@@ -676,7 +813,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                 <div className="grid grid-cols-2 gap-3">
                   <Toggle
                     checked={cfg.peerDiscovery}
-                    onChange={v => { setCfg(c => ({ ...c, peerDiscovery: v })); saveConfig(); }}
+                    onChange={v => saveConfig({ peerDiscovery: v })}
                     label="Enable Discovery"
                     desc="Make yourself visible to other IDE instances"
                   />
@@ -684,7 +821,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                     <label className="text-xs font-medium block mb-1">Sharing Level</label>
                     <select
                       value={cfg.sharingLevel}
-                      onChange={e => { setCfg(c => ({ ...c, sharingLevel: e.target.value })); saveConfig(); }}
+                      onChange={e => saveConfig({ sharingLevel: e.target.value })}
                       className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none"
                     >
                       <option value="none">None — Discovery only</option>
@@ -702,7 +839,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                     type="text"
                     value={cfg.username}
                     onChange={e => setCfg(c => ({ ...c, username: e.target.value }))}
-                    onBlur={saveConfig}
+                    onBlur={() => saveConfig()}
                     placeholder="Visible to other peers"
                     className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none"
                   />

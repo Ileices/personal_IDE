@@ -35,6 +35,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nano-sea")
 
+# Initialize structured log dumper (writes machine-readable JSONL files)
+try:
+    from log_system.log_dumper import init_log_dumper as _init_log_dumper
+    _log_dumper = _init_log_dumper(
+        log_dir=str(ROOT_DIR / "logs"),
+        max_file_bytes=10 * 1024 * 1024,  # 10 MB per file
+        max_files_per_channel=5,
+        compress_rotated=True,
+    )
+    logger.info("Structured log dumper initialized → logs/*.jsonl")
+except Exception as e:
+    _log_dumper = None
+    logger.warning(f"Log dumper init failed: {e}")
+
 
 class NanoSea:
     """The living sea of nanos — manages all subsystems."""
@@ -401,6 +415,7 @@ class NanoSea:
             scheduler=self._scheduler,
             global_pool=self._global_pool,
             peer_discovery=self._peer_discovery,
+            trainer=self._trainer,
         )
 
         port = self._config.get("port", 5100)
@@ -421,6 +436,7 @@ class NanoSea:
 
         self._trainer = NanoTrainer(
             data_dir=str(ROOT_DIR / "nano_data" / "training"),
+            checkpoint_dir=str(ROOT_DIR / "checkpoints"),
             batch_size=4,  # small for weak hardware
             training_interval=120.0,  # train every 2 min
         )
@@ -436,6 +452,10 @@ class NanoSea:
 
         await self._trainer.start()
         logger.info(f"  Trainer running ({len(priority_nanos)} priority nanos)")
+
+        # Wire trainer into server (server was started before trainer)
+        if self._server:
+            self._server._trainer = self._trainer
 
     # ══════════════════════════════════════════════════════════
     # SHUTDOWN

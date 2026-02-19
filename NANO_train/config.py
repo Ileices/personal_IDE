@@ -210,20 +210,34 @@ def detect_local_hardware() -> HardwareProfile:
     disk = psutil.disk_usage("/") if os.name != "nt" else psutil.disk_usage("C:\\")
 
     gpus = []
+    # Try unified GPU detection first (handles CUDA, DirectML, ROCm, Vulkan, OpenCL)
     try:
-        import torch
-        if torch.cuda.is_available():
-            for i in range(torch.cuda.device_count()):
-                props = torch.cuda.get_device_properties(i)
-                gpus.append(GPUProfile(
-                    name=props.name,
-                    vram_gb=props.total_mem / (1024**3),
-                    cuda_capable=True,
-                    compute_capability=float(f"{props.major}.{props.minor}"),
-                    grade=min(95, int(props.total_mem / (1024**3) * 4)),
-                ))
+        from compute.gpu_detect import detect_all_gpus
+        all_detected = detect_all_gpus()
+        for g in all_detected:
+            gpus.append(GPUProfile(
+                name=g.name,
+                vram_gb=g.vram_gb,
+                cuda_capable=g.backend.value in ("cuda", "rocm"),
+                compute_capability=float(g.compute_capability) if g.compute_capability else 0.0,
+                grade=g.grade,
+            ))
     except ImportError:
-        pass
+        # Fallback: basic CUDA-only detection
+        try:
+            import torch
+            if torch.cuda.is_available():
+                for i in range(torch.cuda.device_count()):
+                    props = torch.cuda.get_device_properties(i)
+                    gpus.append(GPUProfile(
+                        name=props.name,
+                        vram_gb=props.total_mem / (1024**3),
+                        cuda_capable=True,
+                        compute_capability=float(f"{props.major}.{props.minor}"),
+                        grade=min(95, int(props.total_mem / (1024**3) * 4)),
+                    ))
+        except ImportError:
+            pass
 
     cpu_grade = min(65, psutil.cpu_count(logical=False) * 4)
     gpu_grade = max((g.grade for g in gpus), default=0)

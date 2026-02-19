@@ -87,6 +87,7 @@ class NanoServer:
         self._scheduler = None
         self._global_pool = None
         self._peer_discovery = None
+        self._trainer = None
         self._start_time = time.time()
 
         # CORS
@@ -101,7 +102,8 @@ class NanoServer:
 
     def set_systems(self, sea=None, mesh_node=None, pipeline=None,
                     respect=None, help_sys=None, scheduler=None,
-                    global_pool=None, peer_discovery=None) -> None:
+                    global_pool=None, peer_discovery=None,
+                    trainer=None) -> None:
         self._sea = sea
         self._mesh_node = mesh_node
         self._pipeline_executor = pipeline
@@ -110,6 +112,7 @@ class NanoServer:
         self._scheduler = scheduler
         self._global_pool = global_pool
         self._peer_discovery = peer_discovery
+        self._trainer = trainer
 
     def _register_routes(self) -> None:
         app = self.app
@@ -214,11 +217,37 @@ class NanoServer:
         # ── Training Status ────────────────────────────────────
         @app.get("/v1/training/status")
         async def training_status():
+            if self._trainer:
+                status = self._trainer.status
+                status["nano_count"] = len(self._sea) if self._sea else 0
+                return status
             return {
-                "status": "idle",
-                "total_training_steps": 0,
+                "running": False,
+                "status": "no_trainer",
+                "total_steps": 0,
                 "nano_count": len(self._sea) if self._sea else 0,
             }
+
+        @app.post("/v1/training/observe")
+        async def training_observe(request: Request):
+            """Feed an observation (query/response pair) to the trainer."""
+            body = await request.json()
+            if self._trainer:
+                self._trainer.add_observation(
+                    query=body.get("query", ""),
+                    response=body.get("response", ""),
+                    source=body.get("source", "api"),
+                    quality=body.get("quality", 0.8),
+                )
+                return {"success": True, "buffer_size": len(self._trainer._buffer)}
+            return {"success": False, "error": "Trainer not initialized"}
+
+        @app.get("/v1/training/checkpoints")
+        async def training_checkpoints():
+            """Get info about all saved model checkpoints."""
+            if self._trainer:
+                return self._trainer.get_checkpoint_info()
+            return {"checkpoint_dir": "", "nanos": {}, "total_checkpoints": 0}
 
         # ── Global Pool endpoints ──────────────────────────────
         @app.get("/v1/pool/stats")
@@ -333,6 +362,46 @@ class NanoServer:
                 )
                 return {"success": True, "group": group.to_dict()}
             return {"error": "Discovery not initialized"}
+
+        # ── Log Query endpoints ────────────────────────────────────
+        @app.get("/v1/logs/query")
+        async def query_logs(
+            channel: Optional[str] = None,
+            level: Optional[str] = None,
+            since: Optional[float] = None,
+            limit: int = 100,
+            search: Optional[str] = None,
+        ):
+            """Query structured logs with optional filters."""
+            try:
+                from log_system.log_dumper import get_log_dumper
+                dumper = get_log_dumper()
+                return {
+                    "entries": dumper.query(
+                        channel=channel, level=level,
+                        since=since, limit=limit, search=search,
+                    ),
+                }
+            except Exception as e:
+                return {"entries": [], "error": str(e)}
+
+        @app.get("/v1/logs/stats")
+        async def log_stats():
+            """Get log system statistics."""
+            try:
+                from log_system.log_dumper import get_log_dumper
+                return get_log_dumper().stats
+            except Exception as e:
+                return {"error": str(e)}
+
+        @app.get("/v1/compute/status")
+        async def compute_status():
+            """Get GPU/compute device information."""
+            try:
+                from compute.device_manager import get_device_manager
+                return get_device_manager().status()
+            except Exception as e:
+                return {"error": str(e), "device": "cpu"}
 
     # ── Response Generation ────────────────────────────────────
     async def _complete_response(self, request: ChatCompletionRequest) -> dict:

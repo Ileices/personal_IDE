@@ -404,4 +404,16 @@ export async function nanoRoutes(app: FastifyInstance) {
   proxyGet('/discovery/status', '/v1/discovery/status');
   proxyPost('/discovery/connect', '/v1/discovery/connect');
   proxyPost('/discovery/disconnect', '/v1/discovery/disconnect');
+
+  // Training + checkpoint endpoints
+  proxyGet('/training/status', '/v1/training/status');
+  proxyGet('/training/checkpoints', '/v1/training/checkpoints');
+  proxyPost('/training/observe', '/v1/training/observe');
+
+  // Log query endpoints
+  proxyGet('/logs/query', '/v1/logs/query');
+  proxyGet('/logs/stats', '/v1/logs/stats');
+
+  // Compute/GPU status
+  proxyGet('/compute/status', '/v1/compute/status');
 }
