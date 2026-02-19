@@ -88,7 +88,7 @@ export async function agentRoutes(app: FastifyInstance) {
     activeAgent = new EnhancedAgentLoop(db, config);
 
     // Start in background (don't await)
-    activeAgent.start(body.projectId, body.task).catch(err => {
+    activeAgent.start(body.projectId, body.task).catch((err: any) => {
       console.error('Agent loop error:', err);
     });
 
@@ -145,7 +145,7 @@ export async function agentRoutes(app: FastifyInstance) {
       return;
     }
 
-    const unsubscribe = activeAgent.onEvent((event) => {
+    const unsubscribe = activeAgent.onEvent((event: any) => {
       try {
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
       } catch {

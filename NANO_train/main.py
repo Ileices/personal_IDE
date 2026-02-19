@@ -77,6 +77,12 @@ class NanoSea:
         self._global_pool = None
         self._peer_discovery = None
 
+        # Core framework subsystems (wired in boot)
+        self._lifecycle = None
+        self._fitness = None
+        self._storage = None
+        self._ic_ae = None
+
     def __len__(self) -> int:
         return len(self._nanos)
 
@@ -103,46 +109,58 @@ class NanoSea:
         await self._start_ae_scan()
 
         # Step 3: Spawn all nanos
-        logger.info("[3/8] Spawning the sea...")
+        logger.info("[3/12] Spawning the sea...")
         await self._spawn_nanos()
 
+        # Step 3b: Initialize AE framework subsystems
+        logger.info("[4/12] Initializing AE framework (lifecycle, fitness, storage, IC-AE)...")
+        await self._init_framework()
+
         # Step 4: Wire connections
-        logger.info("[4/8] Wiring ripple connections...")
+        logger.info("[5/12] Wiring ripple connections...")
         await self._wire_connections()
 
         # Step 5: Start orchestration
-        logger.info("[5/8] Starting orchestration layer...")
+        logger.info("[6/12] Starting orchestration layer...")
         await self._start_orchestration()
 
         # Step 6: Start mesh (if enabled)
         mesh_enabled = self._config.get("mesh_enabled", False)
         if mesh_enabled:
-            logger.info("[6/10] Starting mesh node...")
+            logger.info("[7/12] Starting mesh node...")
             await self._start_mesh()
         else:
-            logger.info("[6/10] Mesh disabled (enable with --mesh)")
+            logger.info("[7/12] Mesh disabled (enable with --mesh)")
 
-        # Step 6b: Global compute pool
-        logger.info("[7/10] Starting global compute pool...")
+        # Step 7: Global compute pool
+        logger.info("[8/12] Starting global compute pool...")
         await self._start_global_pool()
 
-        # Step 6c: Peer discovery
-        logger.info("[8/10] Starting peer discovery...")
+        # Step 8: Peer discovery
+        logger.info("[9/12] Starting peer discovery...")
         await self._start_peer_discovery()
 
-        # Step 7: Start server
-        logger.info("[9/10] Starting API server...")
+        # Step 9: Start server
+        logger.info("[10/12] Starting API server...")
         await self._start_server()
 
-        # Step 8: Start trainer
-        logger.info("[10/10] Starting background trainer...")
+        # Step 10: Start trainer
+        logger.info("[11/12] Starting background trainer...")
         await self._start_trainer()
+
+        # Step 11: Start lifecycle monitor
+        logger.info("[12/12] Starting lifecycle monitor...")
+        await self._start_lifecycle_monitor()
 
         elapsed = time.time() - t0
         logger.info("=" * 60)
         logger.info(f"  SEA IS ALIVE — {len(self._nanos)} nanos spawned in {elapsed:.1f}s")
         logger.info(f"  API: http://localhost:{self._config.get('port', 5100)}")
         logger.info(f"  Hardware tier: {self._mesh_node.info.tier if self._mesh_node else '?'}")
+        logger.info(f"  Framework: lifecycle={self._lifecycle is not None}, "
+                     f"fitness={self._fitness is not None}, "
+                     f"storage={self._storage is not None}, "
+                     f"ic_ae={self._ic_ae is not None}")
         logger.info("=" * 60)
 
     # ── Step 1: Hardware ───────────────────────────────────────
@@ -209,6 +227,51 @@ class NanoSea:
                 logger.warning(f"  Failed to spawn {nano_type}: {e}")
 
         logger.info(f"  Spawned {len(self._nanos)} nanos on {device}")
+
+    # ── Step 3b: AE Framework ──────────────────────────────────
+    async def _init_framework(self) -> None:
+        """Initialize IC-AE, lifecycle, fitness evaluator, and tiered storage."""
+        from core.ic_ae import ICAEEngine
+        from core.lifecycle import LifecycleManager
+        from core.fitness import FitnessEvaluator
+        from core.storage import TieredStorageManager
+
+        # IC-AE Recursive Infection Engine
+        from nanos.base import create_nano as nano_factory
+        self._ic_ae = ICAEEngine(
+            max_depth=self._config.get("ic_ae_max_depth", 5),
+            max_children=self._config.get("ic_ae_max_children", 500),
+            max_total=self._config.get("ic_ae_max_total", 2000),
+        )
+        self._ic_ae.set_nano_factory(nano_factory)
+        logger.info(f"  IC-AE engine ready (max_depth={self._ic_ae._max_depth}, "
+                     f"max_total={self._ic_ae._max_total})")
+
+        # Lifecycle Manager — tracks expansion→absularity→compression cycles
+        self._lifecycle = LifecycleManager(
+            epsilon=self._config.get("lifecycle_epsilon", 0.01),
+            eta=self._config.get("lifecycle_eta", 0.05),
+        )
+        logger.info(f"  Lifecycle manager ready (phase={self._lifecycle.get_phase_name()})")
+
+        # Fitness Evaluator — survival of the fittest
+        self._fitness = FitnessEvaluator()
+        for nano_type, nano in self._nanos.items():
+            self._fitness.register(
+                nano_id=nano.nano_id,
+                nano_type=nano_type,
+                param_count=nano.param_count,
+            )
+        logger.info(f"  Fitness evaluator tracking {len(self._nanos)} nanos")
+
+        # Tiered Storage — hot/warm/cold/frozen/compressed
+        storage_path = ROOT_DIR / "nano_data" / "storage"
+        self._storage = TieredStorageManager(
+            base_path=storage_path,
+            hot_capacity_mb=self._config.get("hot_capacity_mb", 256),
+            warm_capacity_mb=self._config.get("warm_capacity_mb", 512),
+        )
+        logger.info(f"  Tiered storage ready at {storage_path}")
 
     # ── Step 4: Wire Connections ───────────────────────────────
     async def _wire_connections(self) -> None:
@@ -457,11 +520,92 @@ class NanoSea:
         if self._server:
             self._server._trainer = self._trainer
 
+    # ── Step 11: Lifecycle Monitor ─────────────────────────────
+    async def _start_lifecycle_monitor(self) -> None:
+        """Background task: monitors expansion, triggers evolution, handles absularity."""
+        self._lifecycle_task = asyncio.create_task(self._lifecycle_loop())
+        logger.info("  Lifecycle monitor running (evolution + absularity detection)")
+
+    async def _lifecycle_loop(self) -> None:
+        """Periodic lifecycle management: fitness evaluation, evolution, absularity check."""
+        cycle_interval = self._config.get("lifecycle_interval", 300.0)  # 5 min
+        evolution_interval = self._config.get("evolution_interval", 600.0)  # 10 min
+        last_evolution = time.time()
+
+        while True:
+            try:
+                await asyncio.sleep(cycle_interval)
+
+                # ── Fitness evaluation ──
+                if self._fitness:
+                    for nano_type, nano in self._nanos.items():
+                        record = self._fitness.get_record(nano.nano_id)
+                        if record:
+                            record.record_usage(self._lifecycle.cycle_id if self._lifecycle else 0)
+                    rankings = self._fitness.rank_all()
+                    if rankings:
+                        top = rankings[:3]
+                        bottom = rankings[-3:]
+                        logger.debug(f"Fitness top 3: {[(r[0][:20], f'{r[1]:.3f}') for r in top]}")
+                        logger.debug(f"Fitness bottom 3: {[(r[0][:20], f'{r[1]:.3f}') for r in bottom]}")
+
+                # ── Evolution (tournament selection) ──
+                now = time.time()
+                if self._trainer and (now - last_evolution) >= evolution_interval:
+                    last_evolution = now
+                    # Evolve the lowest-performing trained nanos
+                    if self._fitness:
+                        candidates = self._fitness.get_pruning_candidates(keep_ratio=0.9)
+                        for nano_id in candidates[:2]:  # evolve up to 2 per cycle
+                            # Find nano_type from nano_id
+                            for nt, n in self._nanos.items():
+                                if n.nano_id == nano_id:
+                                    try:
+                                        best_fitness = await self._trainer.evolve(nt, population_size=4)
+                                        if best_fitness is not None:
+                                            logger.info(f"  Evolved {nt}: fitness={best_fitness:.4f}")
+                                    except Exception as e:
+                                        logger.debug(f"Evolution skipped for {nt}: {e}")
+                                    break
+
+                # ── Absularity check ──
+                if self._lifecycle:
+                    # Compute expansion volume: total param bytes across all nanos
+                    total_bytes = sum(n.size_bytes for n in self._nanos.values())
+                    # Track volume growth rate
+                    dv_dt = total_bytes / max(1, time.time() - self._start_time)
+                    d2v_dt2 = 0.0  # simplified — full tracking would use a history
+
+                    absularity = self._lifecycle.check_absularity(
+                        dv_dt=dv_dt,
+                        d2v_dt2=d2v_dt2,
+                    )
+                    if absularity:
+                        logger.warning("⚡ ABSULARITY DETECTED — expansion has plateaued")
+                        # In future: trigger compression cycle
+                        # self._lifecycle.transition(LifecycleState.COMPRESSION)
+
+                # ── Tiered storage maintenance ──
+                if self._storage and self._storage.needs_compression:
+                    logger.info("Storage approaching capacity — compression recommended")
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Lifecycle monitor error: {e}", exc_info=True)
+
     # ══════════════════════════════════════════════════════════
     # SHUTDOWN
     # ══════════════════════════════════════════════════════════
     async def shutdown(self) -> None:
         logger.info("Shutting down Sea of Nanos...")
+        # Cancel lifecycle monitor
+        if hasattr(self, '_lifecycle_task') and self._lifecycle_task:
+            self._lifecycle_task.cancel()
+            try:
+                await self._lifecycle_task
+            except asyncio.CancelledError:
+                pass
         if self._trainer:
             await self._trainer.stop()
         if self._peer_discovery:

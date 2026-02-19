@@ -435,8 +435,8 @@ class NanoTrainer:
 
                 # Match tokenizer to this nano's sizes
                 tokenizer = CharTokenizer(
-                    input_size=getattr(nano, 'DEFAULT_INPUT', 128),
-                    output_size=getattr(nano, 'DEFAULT_OUTPUT', 64),
+                    input_size=getattr(nano, 'input_size', getattr(nano, 'DEFAULT_INPUT', 128)),
+                    output_size=getattr(nano, 'output_size', getattr(nano, 'DEFAULT_OUTPUT', 64)),
                 )
 
                 optimizer = torch.optim.AdamW(nano.parameters(), lr=self._lr)

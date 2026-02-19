@@ -92,6 +92,11 @@ class BaseNano(nn.Module):
         ins = input_size or self.DEFAULT_INPUT
         outs = output_size or self.DEFAULT_OUTPUT
 
+        # Store sizes as instance attributes for pipeline access
+        self.input_size = ins
+        self.hidden_size = hs
+        self.output_size = outs
+
         self.net = nn.Sequential(
             nn.Linear(ins, hs),
             nn.GELU(),
