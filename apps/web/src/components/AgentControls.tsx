@@ -398,7 +398,7 @@ export function AgentControls() {
               className="text-[10px] text-ide-text-dim hover:text-ide-accent flex items-center gap-0.5"
               title="Copy event feed to clipboard"
             >
-              {copiedFeed ? <Check className="w-3 h-3 text-ide-success" /> : <Copy className="w-3 h-3" />}
+              {copiedFeed ? <><Check className="w-3 h-3 text-ide-success" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
             </button>
             <button onClick={clearEvents} className="text-[10px] text-ide-text-dim hover:text-ide-accent">Clear</button>
           </div>
@@ -452,7 +452,7 @@ export function AgentControls() {
                   }>
                     [{event.type}]
                   </span>
-                  <span className="text-ide-text-dim truncate">
+                  <span className="text-ide-text-dim break-words select-text">
                     {event.data?.step?.action?.slice(0, 120) || event.data?.summary || event.data?.error || event.data?.question || event.data?.state || event.data?.message?.slice(0, 120) || event.data?.change?.path || ''}
                   </span>
                 </div>

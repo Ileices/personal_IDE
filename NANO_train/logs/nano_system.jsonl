@@ -1,0 +1,35 @@
+{"ts": 1771496459.823034, "t": "2026-02-19T02:20:59.823034", "ch": "nano_system", "lv": "info", "msg": "Structured log dumper initialized → logs/*.jsonl", "src": "nano-sea", "sid": "20260219_022059", "seq": 1}
+{"ts": 1771496460.655566, "t": "2026-02-19T02:21:00.655566", "ch": "nano_system", "lv": "info", "msg": "============================================================", "src": "nano-sea", "sid": "20260219_022059", "seq": 2}
+{"ts": 1771496460.655566, "t": "2026-02-19T02:21:00.655566", "ch": "nano_system", "lv": "info", "msg": "  THE BIG BANG — Sea of Nanos initializing...", "src": "nano-sea", "sid": "20260219_022059", "seq": 3}
+{"ts": 1771496460.804297, "t": "2026-02-19T02:21:00.804296", "ch": "nano_system", "lv": "info", "msg": "============================================================", "src": "nano-sea", "sid": "20260219_022059", "seq": 4}
+{"ts": 1771496460.804297, "t": "2026-02-19T02:21:00.804296", "ch": "nano_system", "lv": "info", "msg": "[1/8] Detecting hardware...", "src": "nano-sea", "sid": "20260219_022059", "seq": 5}
+{"ts": 1771496668.623338, "t": "2026-02-19T02:24:28.623338", "ch": "nano_system", "lv": "info", "msg": "  CPU: Intel64 Family 6 Model 165 Stepping 5, GenuineIntel (16 cores)", "src": "nano-sea", "sid": "20260219_022059", "seq": 7}
+{"ts": 1771496668.623338, "t": "2026-02-19T02:24:28.623338", "ch": "nano_system", "lv": "info", "msg": "  RAM: 11.9 GB", "src": "nano-sea", "sid": "20260219_022059", "seq": 8}
+{"ts": 1771496668.623338, "t": "2026-02-19T02:24:28.623338", "ch": "nano_system", "lv": "info", "msg": "  GPU: None (0.0 GB VRAM)", "src": "nano-sea", "sid": "20260219_022059", "seq": 9}
+{"ts": 1771496668.623338, "t": "2026-02-19T02:24:28.623338", "ch": "nano_system", "lv": "info", "msg": "  Grade: 18.6 → Tier 8", "src": "nano-sea", "sid": "20260219_022059", "seq": 10}
+{"ts": 1771496668.6238828, "t": "2026-02-19T02:24:28.623882", "ch": "nano_system", "lv": "info", "msg": "[2/8] Starting AE filesystem scan (background)...", "src": "nano-sea", "sid": "20260219_022059", "seq": 11}
+{"ts": 1771496669.065908, "t": "2026-02-19T02:24:29.065908", "ch": "nano_system", "lv": "info", "msg": "  Using cached AE seed: R=0.5902 B=0.2706 Y=0.1392", "src": "nano-sea", "sid": "20260219_022059", "seq": 12}
+{"ts": 1771496669.065908, "t": "2026-02-19T02:24:29.065908", "ch": "nano_system", "lv": "info", "msg": "[3/8] Spawning the sea...", "src": "nano-sea", "sid": "20260219_022059", "seq": 13}
+{"ts": 1771496680.3106077, "t": "2026-02-19T02:24:40.310607", "ch": "nano_system", "lv": "info", "msg": "  Registry contains 296 nano types", "src": "nano-sea", "sid": "20260219_022059", "seq": 14}
+{"ts": 1771496682.651775, "t": "2026-02-19T02:24:42.651774", "ch": "nano_system", "lv": "info", "msg": "  Spawned 296 nanos on cpu", "src": "nano-sea", "sid": "20260219_022059", "seq": 15}
+{"ts": 1771496682.651775, "t": "2026-02-19T02:24:42.651774", "ch": "nano_system", "lv": "info", "msg": "[4/8] Wiring ripple connections...", "src": "nano-sea", "sid": "20260219_022059", "seq": 16}
+{"ts": 1771496683.126907, "t": "2026-02-19T02:24:43.126907", "ch": "nano_system", "lv": "info", "msg": "  4990 ripple connections wired", "src": "nano-sea", "sid": "20260219_022059", "seq": 17}
+{"ts": 1771496683.126907, "t": "2026-02-19T02:24:43.126907", "ch": "nano_system", "lv": "info", "msg": "[5/8] Starting orchestration layer...", "src": "nano-sea", "sid": "20260219_022059", "seq": 18}
+{"ts": 1771496683.128045, "t": "2026-02-19T02:24:43.128045", "ch": "nano_system", "lv": "info", "msg": "Message bus started", "src": "orchestrator.message_bus", "sid": "20260219_022059", "seq": 19}
+{"ts": 1771496683.128045, "t": "2026-02-19T02:24:43.128045", "ch": "nano_system", "lv": "info", "msg": "PTAIE Scheduler started", "src": "orchestrator.scheduler", "sid": "20260219_022059", "seq": 20}
+{"ts": 1771496683.128045, "t": "2026-02-19T02:24:43.128045", "ch": "nano_system", "lv": "info", "msg": "  Message bus + scheduler + pipeline running", "src": "nano-sea", "sid": "20260219_022059", "seq": 21}
+{"ts": 1771496683.1285906, "t": "2026-02-19T02:24:43.128590", "ch": "nano_system", "lv": "info", "msg": "[6/10] Starting mesh node...", "src": "nano-sea", "sid": "20260219_022059", "seq": 22}
+{"ts": 1771496685.4499545, "t": "2026-02-19T02:24:45.449954", "ch": "nano_system", "lv": "info", "msg": "  Mesh node online at port 5101", "src": "nano-sea", "sid": "20260219_022059", "seq": 29}
+{"ts": 1771496685.4499545, "t": "2026-02-19T02:24:45.449954", "ch": "nano_system", "lv": "info", "msg": "[7/10] Starting global compute pool...", "src": "nano-sea", "sid": "20260219_022059", "seq": 30}
+{"ts": 1771496685.6256695, "t": "2026-02-19T02:24:45.625669", "ch": "nano_system", "lv": "info", "msg": "  Global pool active (donation=78%, permanent=yes, idle_training=on)", "src": "nano-sea", "sid": "20260219_022059", "seq": 33}
+{"ts": 1771496685.626213, "t": "2026-02-19T02:24:45.626213", "ch": "nano_system", "lv": "info", "msg": "[8/10] Starting peer discovery...", "src": "nano-sea", "sid": "20260219_022059", "seq": 34}
+{"ts": 1771496685.7010927, "t": "2026-02-19T02:24:45.701092", "ch": "nano_system", "lv": "info", "msg": "  Peer discovery active (username=Anonymous, discoverable=True)", "src": "nano-sea", "sid": "20260219_022059", "seq": 37}
+{"ts": 1771496685.7010927, "t": "2026-02-19T02:24:45.701092", "ch": "nano_system", "lv": "info", "msg": "[9/10] Starting API server...", "src": "nano-sea", "sid": "20260219_022059", "seq": 38}
+{"ts": 1771496703.5591803, "t": "2026-02-19T02:25:03.559180", "ch": "nano_system", "lv": "info", "msg": "  API server running on http://0.0.0.0:5100", "src": "nano-sea", "sid": "20260219_022059", "seq": 39}
+{"ts": 1771496703.5591803, "t": "2026-02-19T02:25:03.559180", "ch": "nano_system", "lv": "info", "msg": "[10/10] Starting background trainer...", "src": "nano-sea", "sid": "20260219_022059", "seq": 40}
+{"ts": 1771496727.1480381, "t": "2026-02-19T02:25:27.148038", "ch": "nano_system", "lv": "info", "msg": "  Trainer running (6 priority nanos)", "src": "nano-sea", "sid": "20260219_022059", "seq": 47}
+{"ts": 1771496727.1480381, "t": "2026-02-19T02:25:27.148038", "ch": "nano_system", "lv": "info", "msg": "============================================================", "src": "nano-sea", "sid": "20260219_022059", "seq": 48}
+{"ts": 1771496727.148605, "t": "2026-02-19T02:25:27.148605", "ch": "nano_system", "lv": "info", "msg": "  SEA IS ALIVE — 296 nanos spawned in 266.3s", "src": "nano-sea", "sid": "20260219_022059", "seq": 49}
+{"ts": 1771496727.148605, "t": "2026-02-19T02:25:27.148605", "ch": "nano_system", "lv": "info", "msg": "  API: http://localhost:5100", "src": "nano-sea", "sid": "20260219_022059", "seq": 50}
+{"ts": 1771496727.148605, "t": "2026-02-19T02:25:27.148605", "ch": "nano_system", "lv": "info", "msg": "  Hardware tier: 8", "src": "nano-sea", "sid": "20260219_022059", "seq": 51}
+{"ts": 1771496727.148605, "t": "2026-02-19T02:25:27.148605", "ch": "nano_system", "lv": "info", "msg": "============================================================", "src": "nano-sea", "sid": "20260219_022059", "seq": 52}

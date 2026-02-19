@@ -1,0 +1,2 @@
+{"ts": 1771496727.1474774, "t": "2026-02-19T02:25:27.147477", "ch": "nano_train", "lv": "info", "msg": "Nano trainer starting on device: cpu", "src": "training.trainer", "sid": "20260219_022059", "seq": 45}
+{"ts": 1771496727.1480381, "t": "2026-02-19T02:25:27.148038", "ch": "nano_train", "lv": "info", "msg": "Nano trainer running (6 nanos, 0 pairs buffered)", "src": "training.trainer", "sid": "20260219_022059", "seq": 46}

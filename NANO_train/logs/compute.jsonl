@@ -1,0 +1,4 @@
+{"ts": 1771496704.291879, "t": "2026-02-19T02:25:04.291879", "ch": "compute", "lv": "info", "msg": "Detecting all GPUs across all backends...", "src": "compute.gpu_detect", "sid": "20260219_022059", "seq": 41}
+{"ts": 1771496727.1463826, "t": "2026-02-19T02:25:27.146382", "ch": "compute", "lv": "info", "msg": "OpenCL: found 1 GPU(s)", "src": "compute.gpu_detect", "sid": "20260219_022059", "seq": 42}
+{"ts": 1771496727.146913, "t": "2026-02-19T02:25:27.146913", "ch": "compute", "lv": "info", "msg": "  [opencl] NVIDIA GeForce GT 1030 (2.0GB, grade=10)", "src": "compute.gpu_detect", "sid": "20260219_022059", "seq": 43}
+{"ts": 1771496727.1474774, "t": "2026-02-19T02:25:27.147477", "ch": "compute", "lv": "info", "msg": "Selected device: [opencl] NVIDIA GeForce GT 1030 (2.0GB, grade=10) → cpu", "src": "compute.device_manager", "sid": "20260219_022059", "seq": 44}

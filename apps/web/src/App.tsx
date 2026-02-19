@@ -73,7 +73,7 @@ export default function App() {
   const showAgent = mode === 'agent';
 
   return (
-    <div className="h-screen flex flex-col bg-ide-bg text-ide-text select-none overflow-hidden">
+    <div className="h-screen flex flex-col bg-ide-bg text-ide-text overflow-hidden">
       {/* Top Bar */}
       <TopBar />
 

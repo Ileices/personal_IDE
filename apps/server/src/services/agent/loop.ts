@@ -199,15 +199,16 @@ export class AgentLoop {
           this.emit({ type: 'step_complete', output: structured });
 
           // Log questions
-          for (const q of structured.questionsForUser) {
+          const questions = structured.questionsForUser || [];
+          for (const q of questions) {
             this.pendingQuestions.push(q);
             this.memory.logQuestion(projectId, q, this.runId);
             this.emit({ type: 'question_logged', question: q });
           }
 
           // Auto-answer questions if enabled
-          if (this.config.autoAnswerQuestions && structured.questionsForUser.length > 0) {
-            for (const q of structured.questionsForUser) {
+          if (this.config.autoAnswerQuestions && questions.length > 0) {
+            for (const q of questions) {
               this.emit({ type: 'auto_answer', question: q, answer: 'Auto-resolved: proceeding with best practices.' });
             }
           }
@@ -220,7 +221,7 @@ export class AgentLoop {
             title: `Step ${this.currentIteration}: ${structured.summary.slice(0, 100)}`,
             content: structured.summary,
             tags: ['agent', `step-${this.currentIteration}`],
-            relatedFiles: structured.filesChanged.map(f => f.path),
+            relatedFiles: (structured.filesChanged || []).map(f => f.path),
             importance: 60,
             conversationId: this.conversationId,
           });
@@ -238,7 +239,7 @@ export class AgentLoop {
               title: `Completed: ${initialTask.slice(0, 100)}`,
               content: `Task: ${initialTask}\n\nFinal Summary: ${structured.summary}\nSteps: ${this.currentIteration}\nFiles Changed: ${this.totalFilesChanged}`,
               tags: ['completed', 'summary'],
-              relatedFiles: structured.filesChanged.map(f => f.path),
+              relatedFiles: (structured.filesChanged || []).map(f => f.path),
               importance: 90,
               conversationId: this.conversationId,
             });
@@ -247,7 +248,7 @@ export class AgentLoop {
           }
 
           // Build next task from next steps
-          if (structured.nextSteps.length > 0) {
+          if ((structured.nextSteps || []).length > 0) {
             currentTask = structured.nextSteps
               .map(s => `${s.stepNumber}. ${s.action}: ${s.detail} (target: ${s.target})`)
               .join('\n');

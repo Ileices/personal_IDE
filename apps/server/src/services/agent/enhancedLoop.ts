@@ -104,11 +104,12 @@ export class EnhancedAgentLoop {
     this.memory = new MemoryService(db);
     this.checkpoint = new CheckpointService(db);
     this.analyzer = new CodebaseAnalyzer(db);
-    // Use model's actual token limit, not a fantasy 128K default
+    // Use model's actual token limit, respect user overrides within model bounds
     const modelDef = getModel(config.model);
-    this.contextWindow = config.contextWindow && config.contextWindow <= 16000
+    const modelMax = modelDef?.maxInputTokens || 8000;
+    this.contextWindow = config.contextWindow && config.contextWindow > 0 && config.contextWindow <= modelMax
       ? config.contextWindow
-      : modelDef?.maxInputTokens || 8000;
+      : modelMax;
     this.relationshipIndex = new RelationshipIndexService(db);
     this.logManager = new LogBloatManager(db);
     this.tierEngine = new ProjectTierEngine(db);
@@ -852,14 +853,15 @@ export class EnhancedAgentLoop {
         if (structured) {
           this.emit({ type: 'step_complete', output: structured });
 
-          for (const q of structured.questionsForUser) {
+          const questions = structured.questionsForUser || [];
+          for (const q of questions) {
             this.pendingQuestions.push(q);
             this.memory.logQuestion(projectId, q, this.runId);
             this.emit({ type: 'question_logged', question: q });
           }
 
-          if (this.config.autoAnswerQuestions && structured.questionsForUser.length > 0) {
-            for (const q of structured.questionsForUser) {
+          if (this.config.autoAnswerQuestions && questions.length > 0) {
+            for (const q of questions) {
               this.emit({ type: 'auto_answer', question: q, answer: 'Proceeding with best practices.' });
             }
           }
@@ -871,13 +873,13 @@ export class EnhancedAgentLoop {
             title: 'Step ' + this.currentIteration + ': ' + structured.summary.slice(0, 100),
             content: structured.summary,
             tags: ['agent', 'step-' + this.currentIteration, 'run-' + this.runId],
-            relatedFiles: structured.filesChanged.map(f => f.path),
+            relatedFiles: (structured.filesChanged || []).map(f => f.path),
             importance: 60,
             conversationId: this.conversationId,
           });
 
           // Update task tracker
-          if (this.config.taskId && structured.done === false && structured.nextSteps.length > 0) {
+          if (this.config.taskId && structured.done === false && (structured.nextSteps || []).length > 0) {
             try {
               const tracker = this.analyzer.getTaskTracker(this.config.taskId) as any;
               if (tracker) {
@@ -911,7 +913,7 @@ export class EnhancedAgentLoop {
                 title: 'Cycle Complete: ' + initialTask.slice(0, 100),
                 content: 'Task: ' + initialTask + '\nSummary: ' + structured.summary + '\nSteps: ' + this.currentIteration + '\nFiles Changed: ' + this.totalFilesChanged + '\nTokens: ' + this.totalTokens,
                 tags: ['completed', 'summary', 'continuous-mode'],
-                relatedFiles: structured.filesChanged.map(f => f.path),
+                relatedFiles: (structured.filesChanged || []).map(f => f.path),
                 importance: 90,
                 conversationId: this.conversationId,
               });
@@ -945,7 +947,7 @@ export class EnhancedAgentLoop {
               title: 'Completed: ' + initialTask.slice(0, 100),
               content: 'Task: ' + initialTask + '\nSummary: ' + structured.summary + '\nSteps: ' + this.currentIteration + '\nFiles Changed: ' + this.totalFilesChanged + '\nTokens: ' + this.totalTokens,
               tags: ['completed', 'summary'],
-              relatedFiles: structured.filesChanged.map(f => f.path),
+              relatedFiles: (structured.filesChanged || []).map(f => f.path),
               importance: 90,
               conversationId: this.conversationId,
             });
@@ -967,7 +969,7 @@ export class EnhancedAgentLoop {
             }
           }
 
-          if (structured.nextSteps.length > 0) {
+          if ((structured.nextSteps || []).length > 0) {
             nextTask += structured.nextSteps
               .map(s => s.stepNumber + '. ' + s.action + ': ' + s.detail + ' (target: ' + s.target + ')')
               .join('\n');

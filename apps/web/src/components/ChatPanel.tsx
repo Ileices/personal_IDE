@@ -86,7 +86,7 @@ export function ChatPanel() {
                 ? 'bg-ide-user-msg border border-ide-border'
                 : 'bg-ide-assistant-msg border border-ide-border'
             } ${msg.status === 'error' ? 'border-ide-error/30' : ''}`}>
-              <div className="prose prose-invert prose-sm max-w-none">
+              <div className="prose prose-invert prose-sm max-w-none select-text">
                 <ReactMarkdown
                   components={{
                     code({ className, children, ...props }) {
@@ -147,7 +147,7 @@ export function ChatPanel() {
               <Bot className="w-4 h-4 text-ide-accent" />
             </div>
             <div className="max-w-[85%] rounded-lg px-4 py-3 bg-ide-assistant-msg border border-ide-border">
-              <div className="prose prose-invert prose-sm max-w-none streaming-cursor">
+              <div className="prose prose-invert prose-sm max-w-none streaming-cursor select-text">
                 <ReactMarkdown>{streamingContent}</ReactMarkdown>
               </div>
             </div>
