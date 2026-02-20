@@ -54,6 +54,7 @@ export interface FeedingHistoryEntry {
   model: string;
   input: string;
   outputSnippet: string;
+  fullOutput?: string;
   quality: number;
   tokensUsed: number;
   fedToNano: boolean;

@@ -296,21 +296,58 @@ class ProductionRateLimiter {
     return result;
   }
 
-  /** Find a fallback model that isn't rate limited */
-  findFallback(preferredModelId: string, mode?: string): string | null {
+  /** Find a fallback model that isn't rate limited — picks the model with
+   *  the most remaining headroom so we naturally round-robin through capacity.
+   *  If an ordered fallback chain is provided, prefer that order first. */
+  findFallback(preferredModelId: string, mode?: string, orderedFallbacks?: string[]): string | null {
     const preferred = MODELS.find(m => m.id === preferredModelId);
     if (!preferred) return null;
 
-    const candidates = MODELS
-      .filter(m => m.id !== preferredModelId && (!mode || m.recommendedFor.includes(mode as any)))
-      .sort((a, b) => {
-        // Prefer same publisher first
-        const sameA = a.publisher === preferred.publisher ? 0 : 1;
-        const sameB = b.publisher === preferred.publisher ? 0 : 1;
-        return sameA - sameB;
-      });
+    // If caller provides an explicit fallback chain (midwife / agent config), try those in order first
+    if (orderedFallbacks?.length) {
+      for (const fbId of orderedFallbacks) {
+        if (fbId === preferredModelId) continue;
+        const check = this.canRequest(fbId);
+        if (check.allowed) return fbId;
+      }
+    }
 
-    for (const candidate of candidates) {
+    // Score each candidate by remaining capacity headroom
+    const candidates = MODELS
+      .filter(m => m.id !== preferredModelId && (!mode || m.recommendedFor.includes(mode as any)));
+
+    const scored = candidates.map(m => {
+      const p = this.primary.get(m.id);
+      const limits = this.getLimitsForModel(m.id);
+      let score = 0;
+
+      if (p && limits) {
+        // Remaining minute headroom (higher = better)
+        const minuteUsed = p.serverRemaining != null
+          ? (p.serverLimit || limits.requestsPerMinute) - p.serverRemaining
+          : p.minuteCount;
+        const minuteCapacity = limits.requestsPerMinute;
+        score += (minuteCapacity - minuteUsed) * 10; // weight minute capacity highly
+
+        // Remaining daily headroom
+        const dailyCapacity = limits.requestsPerDay;
+        score += (dailyCapacity - p.dailyCount);
+
+        // Prefer same publisher (slight bonus)
+        if (m.publisher === preferred.publisher) score += 5;
+      } else {
+        // No usage data yet — assume full capacity
+        score = limits ? (limits.requestsPerMinute * 10 + limits.requestsPerDay) : 100;
+        if (m.publisher === preferred.publisher) score += 5;
+      }
+
+      return { model: m, score };
+    });
+
+    // Sort by score descending (most headroom first)
+    scored.sort((a, b) => b.score - a.score);
+
+    for (const { model: candidate } of scored) {
       const check = this.canRequest(candidate.id);
       if (check.allowed) return candidate.id;
     }

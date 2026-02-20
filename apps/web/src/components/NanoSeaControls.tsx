@@ -600,7 +600,8 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                     <input
                       type="number"
                       value={cfg.port}
-                      onChange={e => setCfg(c => ({ ...c, port: Number(e.target.value) }))}
+                      onFocus={() => { configDirtyRef.current = true; }}
+                      onChange={e => { configDirtyRef.current = true; setCfg(c => ({ ...c, port: Number(e.target.value) })); }}
                       onBlur={() => saveConfig()}
                       disabled={isRunning}
                       className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none disabled:opacity-40"
@@ -613,8 +614,18 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                   <input
                     type="text"
                     value={cfg.scanPaths.join(', ')}
-                    onChange={e => setCfg(c => ({ ...c, scanPaths: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
-                    onBlur={() => saveConfig()}
+                    onFocus={() => { configDirtyRef.current = true; }}
+                    onChange={e => {
+                      configDirtyRef.current = true;
+                      // Keep raw segments during editing (don't filter empties)
+                      const parts = e.target.value.split(',').map(s => s.trim());
+                      setCfg(c => ({ ...c, scanPaths: parts.length > 0 ? parts : ['.'] }));
+                    }}
+                    onBlur={() => {
+                      // Clean up on blur, then save
+                      setCfg(c => ({ ...c, scanPaths: c.scanPaths.filter(Boolean).length ? c.scanPaths.filter(Boolean) : ['.'] }));
+                      saveConfig();
+                    }}
                     placeholder="Paths to scan for AE seed, comma-separated"
                     disabled={isRunning}
                     className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none disabled:opacity-40"
@@ -866,7 +877,11 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                   <input
                     type="text"
                     value={cfg.username}
-                    onChange={e => setCfg(c => ({ ...c, username: e.target.value }))}
+                    onFocus={() => { configDirtyRef.current = true; }}
+                    onChange={e => {
+                      configDirtyRef.current = true;
+                      setCfg(c => ({ ...c, username: e.target.value }));
+                    }}
                     onBlur={() => saveConfig()}
                     placeholder="Visible to other peers"
                     className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none"

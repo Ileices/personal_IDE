@@ -65,18 +65,22 @@ export interface FeedingHistoryEntry {
   model: string;
   input: string;
   outputSnippet: string;
+  fullOutput: string;
   quality: number;
   tokensUsed: number;
   fedToNano: boolean;
 }
 
 // ── Default Task Definitions ────────────────────────────────
+// Model priority strategy: high-throughput models (mini/nano: 15rpm, 150rpd) for
+// routine tasks. Premium models (gpt-4.1: 10rpm, 50rpd) for complex tasks.
+// Include cross-publisher fallbacks for resilience.
 const DEFAULT_TASKS: TaskModelAssignment[] = [
   {
     taskType: 'code_generation',
     label: 'Code Generation',
     description: 'Generate diverse code samples for nano training',
-    assignedModels: ['openai/gpt-4.1-mini', 'openai/gpt-4.1-nano'],
+    assignedModels: ['openai/gpt-4.1-mini', 'openai/gpt-4.1-nano', 'openai/gpt-4o-mini', 'meta/llama-4-maverick'],
     cooldownMs: 5000,
     enabled: true,
     promptTemplate: `Generate a high-quality {language} code example that demonstrates {concept}. Include proper error handling, comments, and best practices. Output ONLY the code.`,
@@ -85,7 +89,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'code_explanation',
     label: 'Code Explanation',
     description: 'Generate code-explanation pairs for understanding',
-    assignedModels: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini'],
+    assignedModels: ['openai/gpt-4o-mini', 'openai/gpt-4.1-mini', 'openai/gpt-4.1-nano', 'meta/llama-4-maverick'],
     cooldownMs: 5000,
     enabled: true,
     promptTemplate: `Explain this code clearly and concisely:\n\n{code}\n\nProvide: 1) Purpose, 2) How it works step-by-step, 3) Key patterns used.`,
@@ -94,7 +98,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'test_generation',
     label: 'Test Generation',
     description: 'Generate test cases to train testing nanos',
-    assignedModels: ['openai/gpt-4.1-mini'],
+    assignedModels: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini', 'openai/gpt-4.1-nano'],
     cooldownMs: 8000,
     enabled: true,
     promptTemplate: `Write comprehensive unit tests for this code:\n\n{code}\n\nCover: happy path, edge cases, error cases. Use appropriate test framework.`,
@@ -103,7 +107,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'documentation',
     label: 'Documentation',
     description: 'Generate documentation for training doc nanos',
-    assignedModels: ['openai/gpt-4.1-mini', 'openai/gpt-4.1-nano'],
+    assignedModels: ['openai/gpt-4.1-nano', 'openai/gpt-4.1-mini', 'openai/gpt-4o-mini'],
     cooldownMs: 6000,
     enabled: true,
     promptTemplate: `Generate clear, professional documentation for:\n\n{code}\n\nInclude: purpose, parameters, return values, examples, edge cases.`,
@@ -112,7 +116,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'refactoring',
     label: 'Refactoring',
     description: 'Generate before/after refactoring pairs',
-    assignedModels: ['openai/gpt-4.1', 'openai/gpt-4.1-mini'],
+    assignedModels: ['openai/gpt-4.1', 'openai/gpt-4.1-mini', 'openai/gpt-4o', 'meta/llama-4-maverick'],
     cooldownMs: 10000,
     enabled: false,
     promptTemplate: `Refactor this code for better readability, performance, and maintainability:\n\n{code}\n\nExplain each change.`,
@@ -121,7 +125,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'debugging',
     label: 'Debugging',
     description: 'Generate bug-finding pairs for debugging nanos',
-    assignedModels: ['openai/gpt-4.1-mini'],
+    assignedModels: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini', 'openai/gpt-4.1-nano'],
     cooldownMs: 8000,
     enabled: false,
     promptTemplate: `Analyze this code for bugs, potential issues, and improvements:\n\n{code}\n\nFor each issue: describe the bug, its impact, and the fix.`,
@@ -130,7 +134,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'data_generation',
     label: 'Dataset Regurgitation',
     description: 'Generate diverse training data for all nano types',
-    assignedModels: ['openai/gpt-4.1-mini', 'openai/gpt-4.1-nano', 'openai/gpt-4o-mini'],
+    assignedModels: ['openai/gpt-4.1-nano', 'openai/gpt-4.1-mini', 'openai/gpt-4o-mini', 'meta/llama-4-maverick'],
     cooldownMs: 3000,
     enabled: true,
     promptTemplate: `Generate a diverse set of {count} training examples for a {domain} task. Each example should have an input and expected output. Format as JSON array: [{"input": "...", "output": "..."}]`,
@@ -139,7 +143,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'architecture',
     label: 'Architecture Review',
     description: 'Generate architecture analysis pairs',
-    assignedModels: ['openai/gpt-4.1', 'openai/gpt-4o'],
+    assignedModels: ['openai/gpt-4.1', 'openai/gpt-4o', 'openai/gpt-4.1-mini'],
     cooldownMs: 15000,
     enabled: false,
     promptTemplate: `Analyze this system architecture and provide recommendations:\n\n{description}\n\nCover: scalability, maintainability, security, performance.`,
@@ -148,7 +152,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'security_review',
     label: 'Security Review',
     description: 'Generate security analysis pairs',
-    assignedModels: ['openai/gpt-4.1', 'openai/gpt-4o'],
+    assignedModels: ['openai/gpt-4.1', 'openai/gpt-4o', 'openai/gpt-4.1-mini'],
     cooldownMs: 15000,
     enabled: false,
     promptTemplate: `Perform a security review of this code:\n\n{code}\n\nCheck for: injection, XSS, CSRF, auth bypass, data exposure, insecure crypto.`,
@@ -330,16 +334,13 @@ export class MidwifeService {
       }
     }
 
-    // Auto-rotate: try any available model
+    // Auto-rotate: use smart fallback with headroom scoring
     if (!selectedModel && this.config.autoRotateOnRateLimit) {
-      const allModels = MODELS.filter(m => !task.assignedModels.includes(m.id));
-      for (const m of allModels) {
-        const check = rateLimiter.canRequest(m.id);
-        if (check.allowed) {
-          selectedModel = m.id;
-          break;
-        }
-      }
+      selectedModel = rateLimiter.findFallback(
+        task.assignedModels[0],
+        undefined,
+        task.assignedModels.slice(1)
+      );
     }
 
     if (!selectedModel) {
@@ -395,7 +396,7 @@ export class MidwifeService {
         this.session.totalTokensUsed += tokensUsed;
       }
 
-      // Feed to nano trainer
+      // Feed to nano trainer (correct format: query/response/source/quality)
       let fedToNano = false;
       if (this.config.feedToNanoTrainer && output.length > 10) {
         try {
@@ -403,11 +404,10 @@ export class MidwifeService {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              pairs: [{
-                input: prompt.input.slice(0, 4000),
-                output: output.slice(0, 8000),
-                quality: 0.85,
-              }],
+              query: prompt.input.slice(0, 4000),
+              response: output.slice(0, 8000),
+              source: 'midwife',
+              quality: 0.85,
             }),
           });
           fedToNano = res.ok;
@@ -417,13 +417,33 @@ export class MidwifeService {
         } catch { /* nano not running */ }
       }
 
-      // Record in history
+      // Save to disk as JSONL (persists even if nano trainer isn't running)
+      try {
+        const { appendFileSync, mkdirSync } = await import('fs');
+        const { join } = await import('path');
+        const dir = join(process.cwd(), '..', 'NANO_train', 'nano_data', 'training', 'midwife');
+        mkdirSync(dir, { recursive: true });
+        const line = JSON.stringify({
+          timestamp: new Date().toISOString(),
+          task: task.taskType,
+          model: selectedModel,
+          input: prompt.input,
+          output,
+          quality: 0.85,
+          tokens: tokensUsed,
+          fed: fedToNano,
+        });
+        appendFileSync(join(dir, 'feeding_data.jsonl'), line + '\n');
+      } catch { /* disk save non-critical */ }
+
+      // Record in history (store full output for expandable view)
       this.history.push({
         timestamp: new Date().toISOString(),
         taskType: task.taskType,
         model: selectedModel,
-        input: prompt.input.slice(0, 200),
+        input: prompt.input.slice(0, 500),
         outputSnippet: output.slice(0, 200),
+        fullOutput: output,
         quality: 0.85,
         tokensUsed,
         fedToNano,

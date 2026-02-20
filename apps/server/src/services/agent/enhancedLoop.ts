@@ -55,6 +55,8 @@ interface EnhancedAgentConfig extends AgentConfig {
   autoRunTests: boolean;
   analyzeCodebase: boolean;
   taskId?: string;
+  /** Ordered fallback models when primary is rate-limited */
+  fallbackModels?: string[];
 }
 
 export class EnhancedAgentLoop {
@@ -370,9 +372,12 @@ export class EnhancedAgentLoop {
         if (!this.config.bypassRateLimits) {
           const canProceed = rateLimiter.canRequest(this.config.model, 'agent');
           if (!canProceed.allowed) {
-            if (canProceed.fallbackModel) {
-              this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + canProceed.fallbackModel });
-              this.config.model = canProceed.fallbackModel;
+            // Try ordered fallback chain first, then smart headroom-based fallback
+            const fallback = canProceed.fallbackModel
+              || rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
+            if (fallback) {
+              this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + fallback });
+              this.config.model = fallback;
             } else if (this.config.continuousMode) {
               const waitMs = canProceed.retryAfterMs || 60000;
               this.emit({ type: 'cooldown', ms: waitMs, reason: 'Rate limited: ' + canProceed.reason + '. Waiting...' } as any);
@@ -614,11 +619,13 @@ export class EnhancedAgentLoop {
             if (statusCode === 429 || statusCode === 403) {
               const check = rateLimiter.canRequest(this.config.model);
               this.emit({ type: 'info', message: `Rate limited (${statusCode}): ${check.reason || 'backing off'}` });
-              if (check.fallbackModel) {
-                this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + check.fallbackModel });
-                this.config.model = check.fallbackModel;
+              const fallback = check.fallbackModel
+                || rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
+              if (fallback) {
+                this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + fallback });
+                this.config.model = fallback;
                 // Update contextWindow for the new model
-                const fallbackModelDef = getModel(check.fallbackModel);
+                const fallbackModelDef = getModel(fallback);
                 if (fallbackModelDef) {
                   this.contextWindow = fallbackModelDef.maxInputTokens;
                 }
@@ -782,11 +789,10 @@ export class EnhancedAgentLoop {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              pairs: [{
-                input: currentTask.slice(0, 4000),
-                output: content.slice(0, 8000),
-                quality: 0.8,
-              }],
+              query: currentTask.slice(0, 4000),
+              response: content.slice(0, 8000),
+              source: 'agent',
+              quality: 0.8,
             }),
           }).catch(() => {}); // nano may not be running
         } catch { /* non-critical */ }

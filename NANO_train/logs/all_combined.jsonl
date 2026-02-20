@@ -72,3 +72,22 @@
 {"ts": 1771564327.134597, "t": "2026-02-19T21:12:07.134597", "ch": "nano_system", "lv": "info", "msg": "Shutting down Sea of Nanos...", "src": "nano-sea", "sid": "20260219_211028", "seq": 17}
 {"ts": 1771564327.134597, "t": "2026-02-19T21:12:07.134597", "ch": "nano_mesh", "lv": "info", "msg": "Node dff9d0af554f... is OFFLINE", "src": "mesh.node", "sid": "20260219_211028", "seq": 18}
 {"ts": 1771564327.134597, "t": "2026-02-19T21:12:07.134597", "ch": "nano_system", "lv": "info", "msg": "Sea of Nanos shut down after 98s. Goodbye.", "src": "nano-sea", "sid": "20260219_211028", "seq": 19}
+{"ts": 1771585091.651842, "t": "2026-02-20T02:58:11.651842", "ch": "nano_system", "lv": "info", "msg": "Structured log dumper initialized → logs/*.jsonl", "src": "nano-sea", "sid": "20260220_025811", "seq": 1}
+{"ts": 1771585091.797802, "t": "2026-02-20T02:58:11.797802", "ch": "nano_system", "lv": "info", "msg": "============================================================", "src": "nano-sea", "sid": "20260220_025811", "seq": 2}
+{"ts": 1771585091.7983422, "t": "2026-02-20T02:58:11.798342", "ch": "nano_system", "lv": "info", "msg": "  THE BIG BANG — Sea of Nanos initializing...", "src": "nano-sea", "sid": "20260220_025811", "seq": 3}
+{"ts": 1771585091.7983422, "t": "2026-02-20T02:58:11.798342", "ch": "nano_system", "lv": "info", "msg": "============================================================", "src": "nano-sea", "sid": "20260220_025811", "seq": 4}
+{"ts": 1771585091.7983422, "t": "2026-02-20T02:58:11.798342", "ch": "nano_system", "lv": "info", "msg": "[1/8] Detecting hardware...", "src": "nano-sea", "sid": "20260220_025811", "seq": 5}
+{"ts": 1771585292.365295, "t": "2026-02-20T03:01:32.365294", "ch": "nano_mesh", "lv": "info", "msg": "Loaded node identity: dff9d0af554fe9b8...", "src": "mesh.node", "sid": "20260220_025811", "seq": 6}
+{"ts": 1771585292.7031102, "t": "2026-02-20T03:01:32.703110", "ch": "nano_system", "lv": "info", "msg": "  CPU: Intel64 Family 6 Model 165 Stepping 5, GenuineIntel (16 cores)", "src": "nano-sea", "sid": "20260220_025811", "seq": 7}
+{"ts": 1771585292.7031102, "t": "2026-02-20T03:01:32.703110", "ch": "nano_system", "lv": "info", "msg": "  RAM: 11.9 GB", "src": "nano-sea", "sid": "20260220_025811", "seq": 8}
+{"ts": 1771585292.7031102, "t": "2026-02-20T03:01:32.703110", "ch": "nano_system", "lv": "info", "msg": "  GPU: None (0.0 GB VRAM)", "src": "nano-sea", "sid": "20260220_025811", "seq": 9}
+{"ts": 1771585292.9186082, "t": "2026-02-20T03:01:32.918608", "ch": "nano_system", "lv": "info", "msg": "  Grade: 18.6 → Tier 8", "src": "nano-sea", "sid": "20260220_025811", "seq": 10}
+{"ts": 1771585292.9186082, "t": "2026-02-20T03:01:32.918608", "ch": "nano_system", "lv": "info", "msg": "[2/8] Starting AE filesystem scan (background)...", "src": "nano-sea", "sid": "20260220_025811", "seq": 11}
+{"ts": 1771585293.5560787, "t": "2026-02-20T03:01:33.556078", "ch": "nano_system", "lv": "info", "msg": "  Using cached AE seed: R=0.5902 B=0.2706 Y=0.1392", "src": "nano-sea", "sid": "20260220_025811", "seq": 12}
+{"ts": 1771585293.556632, "t": "2026-02-20T03:01:33.556632", "ch": "nano_system", "lv": "info", "msg": "[3/12] Spawning the sea...", "src": "nano-sea", "sid": "20260220_025811", "seq": 13}
+{"ts": 1771585303.6027405, "t": "2026-02-20T03:01:43.602740", "ch": "nano_system", "lv": "info", "msg": "  Registry contains 296 nano types", "src": "nano-sea", "sid": "20260220_025811", "seq": 14}
+{"ts": 1771585307.070202, "t": "2026-02-20T03:01:47.070202", "ch": "nano_system", "lv": "info", "msg": "  Spawned 296 nanos on cpu", "src": "nano-sea", "sid": "20260220_025811", "seq": 15}
+{"ts": 1771585307.070202, "t": "2026-02-20T03:01:47.070202", "ch": "nano_system", "lv": "info", "msg": "[4/12] Initializing AE framework (lifecycle, fitness, storage, IC-AE)...", "src": "nano-sea", "sid": "20260220_025811", "seq": 16}
+{"ts": 1771585307.070202, "t": "2026-02-20T03:01:47.070202", "ch": "nano_system", "lv": "info", "msg": "Shutting down Sea of Nanos...", "src": "nano-sea", "sid": "20260220_025811", "seq": 17}
+{"ts": 1771585307.070202, "t": "2026-02-20T03:01:47.070202", "ch": "nano_mesh", "lv": "info", "msg": "Node dff9d0af554f... is OFFLINE", "src": "mesh.node", "sid": "20260220_025811", "seq": 18}
+{"ts": 1771585307.0707805, "t": "2026-02-20T03:01:47.070780", "ch": "nano_system", "lv": "info", "msg": "Sea of Nanos shut down after 215s. Goodbye.", "src": "nano-sea", "sid": "20260220_025811", "seq": 19}

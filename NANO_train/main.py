@@ -241,11 +241,11 @@ class NanoSea:
         self._ic_ae = ICAEEngine(
             max_depth=self._config.get("ic_ae_max_depth", 5),
             max_children=self._config.get("ic_ae_max_children", 500),
-            max_total=self._config.get("ic_ae_max_total", 2000),
+            max_total_sandboxes=self._config.get("ic_ae_max_total", 2000),
         )
         self._ic_ae.set_nano_factory(nano_factory)
-        logger.info(f"  IC-AE engine ready (max_depth={self._ic_ae._max_depth}, "
-                     f"max_total={self._ic_ae._max_total})")
+        logger.info(f"  IC-AE engine ready (max_depth={self._ic_ae.max_depth}, "
+                     f"max_total={self._ic_ae.max_total})")
 
         # Lifecycle Manager — tracks expansion→absularity→compression cycles
         self._lifecycle = LifecycleManager(

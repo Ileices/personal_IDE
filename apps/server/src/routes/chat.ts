@@ -143,11 +143,10 @@ export async function chatRoutes(app: FastifyInstance) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              pairs: [{
-                input: body.message,
-                output: fullContent.slice(0, 8000),
-                quality: structured?.confidence ? structured.confidence / 100 : 0.7,
-              }],
+              query: body.message.slice(0, 4000),
+              response: fullContent.slice(0, 8000),
+              source: 'chat',
+              quality: structured?.confidence ? structured.confidence / 100 : 0.7,
             }),
           }).catch(() => {}); // nano may not be running
         } catch { /* non-critical */ }
