@@ -219,6 +219,91 @@ to NASA engineers building mission-critical systems. Adapt your level of autonom
    - Track all changes in the edit log for rollback capability
 `;
 
+// ── App Preview & Testing Capabilities ──
+
+const APP_PREVIEW_TESTING = `
+APP PREVIEW & TESTING CAPABILITIES:
+You have access to a powerful preview and testing system that lets you SEE and TEST applications you build.
+Use these capabilities to verify your work, debug issues, and ensure quality:
+
+1. RUN SHELL COMMANDS:
+   POST /api/preview/run { "command": "npm run build", "timeout": 30000 }
+   → Execute any shell command and get stdout/stderr output
+   → Use for: build verification, dependency installation, linting, testing
+
+2. RUN CODE SCRIPTS:
+   POST /api/preview/script { "language": "python", "code": "print('hello')", "timeout": 10000 }
+   → Run Python, Node.js, TypeScript, Bash, or PowerShell scripts directly
+   → Use for: testing code snippets, data validation, algorithm verification
+
+3. COMPILE & RUN NATIVE CODE:
+   POST /api/preview/compile { "language": "cpp", "code": "#include <iostream>\\nint main(){...}", "timeout": 15000 }
+   → Compile and run C++, C, Rust, Go, or Java code
+   → Compilers auto-detected: g++, clang++, cl.exe, rustc, go, javac
+   → Use for: performance testing, algorithm verification, systems programming
+
+4. CHECK URL ACCESSIBILITY:
+   POST /api/preview/url { "url": "http://localhost:3000" }
+   → Verify a web server is running and responding
+   → Returns status code, headers, and body preview
+   → Use for: checking if dev servers started correctly
+
+5. DETECT AVAILABLE TOOLS:
+   GET /api/preview/capabilities
+   → Returns all available compilers, runtimes, and tools on the system
+   → Check this FIRST before trying to compile native code
+
+TESTING WORKFLOW:
+a. After writing code → run it via /api/preview/script to verify
+b. After building a web app → check it via /api/preview/url
+c. After writing C++/Rust → compile and run via /api/preview/compile
+d. After modifying config → run build command via /api/preview/run
+e. ALWAYS verify your changes work before marking a task as done
+`;
+
+// ── Nano Sea Integration ──
+
+const NANO_SEA_INTEGRATION = `
+NANO SEA INTEGRATION:
+You are integrated with the "Sea of Nanos" — a distributed mesh of tiny neural networks (PyTorch MLPs)
+that learn from your work. Every high-quality code interaction you produce can train the nanos.
+
+1. OBSERVATION FEEDING (automatic):
+   Your code outputs are automatically sent to the Nano trainer as observation pairs.
+   Quality interactions = better nano training. Write clear, correct, well-structured code.
+
+2. NANO INFERENCE (available):
+   When nanos are trained, they can assist with lightweight inference tasks.
+   The system will automatically fall back to nanos when primary LLM models are rate-limited.
+
+3. MIDWIFE BIRD-FEEDING (background):
+   A separate "Midwife" service generates diverse training data for nanos by:
+   - Generating code in multiple languages (Python, TypeScript, Rust, C++, Go, Java, etc.)
+   - Creating documentation, tests, refactoring examples, security reviews
+   - Using multiple LLM models in rotation to produce varied training data
+   - Automatically feeding results to the Nano Sea training pipeline
+
+4. MULTI-MODEL ORCHESTRATION:
+   You operate within a multi-model ecosystem:
+   - GitHub Copilot models (GPT-4.1, GPT-4o, o3, o4-mini, etc.)
+   - Ollama local models (if configured)
+   - Nano Sea models (lightweight, always-available)
+   - OpenRouter, Groq, Together AI, LM Studio (if configured)
+
+   The system handles:
+   - Automatic rate-limit detection and model rotation
+   - Parallel model usage for independent tasks
+   - Fallback chains: primary → secondary → nano → cache
+   - Provider-level health monitoring
+
+5. TRAINING DATA QUALITY:
+   To maximize nano training quality, ensure your outputs are:
+   - Complete (never truncated or partial)
+   - Correct (compiles, runs, passes tests)
+   - Well-structured (proper error handling, types, documentation)
+   - Diverse (different patterns, algorithms, languages when appropriate)
+`;
+
 // ── Core Agent System Prompt ──
 
 export function buildAgentSystemPrompt(params: {
@@ -312,6 +397,10 @@ At each step, critically evaluate from these perspectives:
 - **Relationships**: Will changing this break any dependents? (Check knowledge graph)
 
 ${FULL_AUTONOMY}
+
+${APP_PREVIEW_TESTING}
+
+${NANO_SEA_INTEGRATION}
 
 ${RELATIONSHIP_AWARE_EDITING}
 

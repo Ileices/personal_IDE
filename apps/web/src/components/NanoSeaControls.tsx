@@ -402,6 +402,34 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
     await refresh();
   }
 
+  async function acceptPeer(nodeId: string) {
+    await fetchJson(`${API}/discovery/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ node_id: nodeId }),
+    });
+    await refresh();
+  }
+
+  // Forward live config changes to Python backend (proxy endpoints)
+  async function forwardPoolConfig(field: string, value: any) {
+    if (!status?.running) return; // Only forward when Python is running
+    const endpoints: Record<string, { path: string; method: string }> = {
+      donationPercent: { path: '/pool/donation', method: 'PUT' },
+      idleTraining: { path: '/pool/idle-training', method: 'PUT' },
+      permanentNode: { path: '/pool/permanent-node', method: 'POST' },
+      peerDiscovery: { path: '/discovery/opt-in', method: 'POST' },
+      sharingLevel: { path: '/discovery/opt-in', method: 'POST' },
+    };
+    const ep = endpoints[field];
+    if (!ep) return;
+    fetchJson(`${API}${ep.path}`, {
+      method: ep.method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    }).catch(() => {}); // fire-and-forget
+  }
+
   async function disconnectPeer(nodeId: string) {
     await fetchJson(`${API}/discovery/disconnect`, {
       method: 'POST',
@@ -766,7 +794,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                   suffix="% of idle"
                 />
                 <button
-                  onClick={() => saveConfig()}
+                  onClick={() => { saveConfig(); forwardPoolConfig('donationPercent', cfg.donationPercent); }}
                   className="text-[10px] text-ide-accent hover:underline mt-1"
                 >
                   Apply
@@ -775,13 +803,13 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <Toggle
                     checked={cfg.permanentNode}
-                    onChange={v => saveConfig({ permanentNode: v })}
+                    onChange={v => { saveConfig({ permanentNode: v }); forwardPoolConfig('permanentNode', v); }}
                     label="Permanent Node"
                     desc="Always part of the pool (anchors the network)"
                   />
                   <Toggle
                     checked={cfg.idleTraining}
-                    onChange={v => saveConfig({ idleTraining: v })}
+                    onChange={v => { saveConfig({ idleTraining: v }); forwardPoolConfig('idleTraining', v); }}
                     label="Idle Training"
                     desc="Auto-train nanos when pool is idle"
                   />
@@ -813,7 +841,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                 <div className="grid grid-cols-2 gap-3">
                   <Toggle
                     checked={cfg.peerDiscovery}
-                    onChange={v => saveConfig({ peerDiscovery: v })}
+                    onChange={v => { saveConfig({ peerDiscovery: v }); forwardPoolConfig('peerDiscovery', v); }}
                     label="Enable Discovery"
                     desc="Make yourself visible to other IDE instances"
                   />
@@ -821,7 +849,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                     <label className="text-xs font-medium block mb-1">Sharing Level</label>
                     <select
                       value={cfg.sharingLevel}
-                      onChange={e => saveConfig({ sharingLevel: e.target.value })}
+                      onChange={e => { saveConfig({ sharingLevel: e.target.value }); forwardPoolConfig('sharingLevel', e.target.value); }}
                       className="w-full text-xs bg-ide-bg border border-ide-border rounded px-2 py-1.5 focus:border-ide-accent focus:outline-none"
                     >
                       <option value="none">None — Discovery only</option>
@@ -898,7 +926,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
                             </button>
                           ) : p.state === 'pending_in' ? (
                             <button
-                              onClick={() => connectPeer(p.node_id)}
+                              onClick={() => acceptPeer(p.node_id)}
                               className="flex items-center gap-1 px-2 py-1 text-[10px] rounded bg-green-500/10 text-green-400 hover:bg-green-500/20"
                             >
                               <Check className="w-3 h-3" /> Accept

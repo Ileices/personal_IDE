@@ -33,3 +33,20 @@
 {"ts": 1771496727.148605, "t": "2026-02-19T02:25:27.148605", "ch": "nano_system", "lv": "info", "msg": "  API: http://localhost:5100", "src": "nano-sea", "sid": "20260219_022059", "seq": 50}
 {"ts": 1771496727.148605, "t": "2026-02-19T02:25:27.148605", "ch": "nano_system", "lv": "info", "msg": "  Hardware tier: 8", "src": "nano-sea", "sid": "20260219_022059", "seq": 51}
 {"ts": 1771496727.148605, "t": "2026-02-19T02:25:27.148605", "ch": "nano_system", "lv": "info", "msg": "============================================================", "src": "nano-sea", "sid": "20260219_022059", "seq": 52}
+{"ts": 1771564228.7472563, "t": "2026-02-19T21:10:28.747256", "ch": "nano_system", "lv": "info", "msg": "Structured log dumper initialized → logs/*.jsonl", "src": "nano-sea", "sid": "20260219_211028", "seq": 1}
+{"ts": 1771564228.9672623, "t": "2026-02-19T21:10:28.967262", "ch": "nano_system", "lv": "info", "msg": "============================================================", "src": "nano-sea", "sid": "20260219_211028", "seq": 2}
+{"ts": 1771564228.9672623, "t": "2026-02-19T21:10:28.967262", "ch": "nano_system", "lv": "info", "msg": "  THE BIG BANG — Sea of Nanos initializing...", "src": "nano-sea", "sid": "20260219_211028", "seq": 3}
+{"ts": 1771564228.9678986, "t": "2026-02-19T21:10:28.967898", "ch": "nano_system", "lv": "info", "msg": "============================================================", "src": "nano-sea", "sid": "20260219_211028", "seq": 4}
+{"ts": 1771564228.9678986, "t": "2026-02-19T21:10:28.967898", "ch": "nano_system", "lv": "info", "msg": "[1/8] Detecting hardware...", "src": "nano-sea", "sid": "20260219_211028", "seq": 5}
+{"ts": 1771564308.383504, "t": "2026-02-19T21:11:48.383504", "ch": "nano_system", "lv": "info", "msg": "  CPU: Intel64 Family 6 Model 165 Stepping 5, GenuineIntel (16 cores)", "src": "nano-sea", "sid": "20260219_211028", "seq": 7}
+{"ts": 1771564308.383504, "t": "2026-02-19T21:11:48.383504", "ch": "nano_system", "lv": "info", "msg": "  RAM: 11.9 GB", "src": "nano-sea", "sid": "20260219_211028", "seq": 8}
+{"ts": 1771564308.383504, "t": "2026-02-19T21:11:48.383504", "ch": "nano_system", "lv": "info", "msg": "  GPU: None (0.0 GB VRAM)", "src": "nano-sea", "sid": "20260219_211028", "seq": 9}
+{"ts": 1771564308.383504, "t": "2026-02-19T21:11:48.383504", "ch": "nano_system", "lv": "info", "msg": "  Grade: 18.6 → Tier 8", "src": "nano-sea", "sid": "20260219_211028", "seq": 10}
+{"ts": 1771564308.3840787, "t": "2026-02-19T21:11:48.384078", "ch": "nano_system", "lv": "info", "msg": "[2/8] Starting AE filesystem scan (background)...", "src": "nano-sea", "sid": "20260219_211028", "seq": 11}
+{"ts": 1771564308.5863714, "t": "2026-02-19T21:11:48.586371", "ch": "nano_system", "lv": "info", "msg": "  Using cached AE seed: R=0.5902 B=0.2706 Y=0.1392", "src": "nano-sea", "sid": "20260219_211028", "seq": 12}
+{"ts": 1771564308.5863714, "t": "2026-02-19T21:11:48.586371", "ch": "nano_system", "lv": "info", "msg": "[3/12] Spawning the sea...", "src": "nano-sea", "sid": "20260219_211028", "seq": 13}
+{"ts": 1771564326.3441467, "t": "2026-02-19T21:12:06.344146", "ch": "nano_system", "lv": "info", "msg": "  Registry contains 296 nano types", "src": "nano-sea", "sid": "20260219_211028", "seq": 14}
+{"ts": 1771564327.1340623, "t": "2026-02-19T21:12:07.134062", "ch": "nano_system", "lv": "info", "msg": "  Spawned 296 nanos on cpu", "src": "nano-sea", "sid": "20260219_211028", "seq": 15}
+{"ts": 1771564327.1340623, "t": "2026-02-19T21:12:07.134062", "ch": "nano_system", "lv": "info", "msg": "[4/12] Initializing AE framework (lifecycle, fitness, storage, IC-AE)...", "src": "nano-sea", "sid": "20260219_211028", "seq": 16}
+{"ts": 1771564327.134597, "t": "2026-02-19T21:12:07.134597", "ch": "nano_system", "lv": "info", "msg": "Shutting down Sea of Nanos...", "src": "nano-sea", "sid": "20260219_211028", "seq": 17}
+{"ts": 1771564327.134597, "t": "2026-02-19T21:12:07.134597", "ch": "nano_system", "lv": "info", "msg": "Sea of Nanos shut down after 98s. Goodbye.", "src": "nano-sea", "sid": "20260219_211028", "seq": 19}

@@ -19,6 +19,8 @@ import { tierRoutes } from './routes/tiers.js';
 import { conversationIndexRoutes } from './routes/conversationIndex.js';
 import { ollamaRoutes } from './routes/ollama.js';
 import { nanoRoutes } from './routes/nano.js';
+import { midwifeRoutes } from './routes/midwife.js';
+import { previewRoutes } from './routes/preview.js';
 
 async function main() {
   // Initialize the database
@@ -62,7 +64,8 @@ async function main() {
   await app.register(conversationIndexRoutes, { prefix: '/api/conversation-index' });
   await app.register(ollamaRoutes, { prefix: '/api/ollama' });
   await app.register(nanoRoutes, { prefix: '/api/nano' });
-
+  await app.register(midwifeRoutes, { prefix: '/api/midwife' });
+  await app.register(previewRoutes, { prefix: '/api/preview' });
   // Health check
   app.get('/api/health', async () => ({
     status: 'ok',

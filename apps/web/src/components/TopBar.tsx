@@ -8,10 +8,11 @@ import { useProjectStore } from '../stores/projectStore';
 import { MODELS } from '@personal-ide/shared';
 import {
   LogOut, User, ChevronDown, MessageSquare, Pencil, ListChecks, Bot,
-  Zap, Gauge, Settings, Waves
+  Zap, Gauge, Settings, Waves, Bird
 } from 'lucide-react';
 import { ProviderSettings } from './ProviderSettings';
 import { NanoSeaControls } from './NanoSeaControls';
+import { MidwifePanel } from './MidwifePanel';
 
 const API_BASE = 'http://localhost:3001';
 
@@ -39,6 +40,7 @@ export function TopBar() {
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showProviderSettings, setShowProviderSettings] = useState(false);
   const [showNanoSea, setShowNanoSea] = useState(false);
+  const [showMidwife, setShowMidwife] = useState(false);
   const [dynamicModels, setDynamicModels] = useState<DynamicModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [providerErrors, setProviderErrors] = useState<{ provider: string; error: string }[]>([]);
@@ -219,6 +221,19 @@ export function TopBar() {
 
       {showNanoSea && (
         <NanoSeaControls onClose={() => setShowNanoSea(false)} />
+      )}
+
+      {/* Midwife Bird-Feeding */}
+      <button
+        onClick={() => setShowMidwife(true)}
+        className="p-1.5 hover:bg-ide-bg rounded text-ide-text-dim hover:text-amber-400 transition-colors"
+        title="Midwife Bird-Feeding"
+      >
+        <Bird className="w-4 h-4" />
+      </button>
+
+      {showMidwife && (
+        <MidwifePanel onClose={() => setShowMidwife(false)} />
       )}
 
       {/* Provider Settings */}

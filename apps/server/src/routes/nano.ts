@@ -131,7 +131,7 @@ function spawnNano(py: { bin: string; extraArgs: string[] }): ChildProcess {
   if (currentConfig.meshEnabled) pyArgs.push('--mesh');
   pyArgs.push('--port', String(currentConfig.port));
   if (currentConfig.scanPaths.length) {
-    pyArgs.push('--scan', ...currentConfig.scanPaths);
+    pyArgs.push('--scan-paths', ...currentConfig.scanPaths);
   }
 
   appendLog(`[IDE] Command: ${py.bin} ${pyArgs.join(' ')}`);
@@ -396,19 +396,52 @@ export async function nanoRoutes(app: FastifyInstance) {
     });
   };
 
+  const proxyPut = (route: string, backendPath: string) => {
+    app.put(route, async (req) => {
+      try {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 3000);
+        const res = await fetch(`http://localhost:${currentConfig.port}${backendPath}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req.body),
+          signal: c.signal,
+        });
+        clearTimeout(t);
+        return await res.json();
+      } catch {
+        return { error: 'Nano Sea not reachable' };
+      }
+    });
+  };
+
+  // Mesh & pool
   proxyGet('/mesh/info', '/v1/mesh/info');
   proxyGet('/mesh/peers', '/v1/mesh/peers');
   proxyGet('/mesh/stats', '/v1/mesh/stats');
   proxyGet('/pool/stats', '/v1/pool/stats');
+  proxyPut('/pool/donation', '/v1/pool/donation');
+  proxyPut('/pool/idle-training', '/v1/pool/idle-training');
+  proxyPost('/pool/permanent-node', '/v1/pool/permanent-node');
+
+  // Discovery (full set)
   proxyGet('/discovery/peers', '/v1/discovery/peers');
   proxyGet('/discovery/status', '/v1/discovery/status');
+  proxyGet('/discovery/groups', '/v1/discovery/groups');
   proxyPost('/discovery/connect', '/v1/discovery/connect');
   proxyPost('/discovery/disconnect', '/v1/discovery/disconnect');
+  proxyPost('/discovery/opt-in', '/v1/discovery/opt-in');
+  proxyPost('/discovery/accept', '/v1/discovery/accept');
+  proxyPost('/discovery/block', '/v1/discovery/block');
 
   // Training + checkpoint endpoints
   proxyGet('/training/status', '/v1/training/status');
   proxyGet('/training/checkpoints', '/v1/training/checkpoints');
   proxyPost('/training/observe', '/v1/training/observe');
+
+  // Inference
+  proxyGet('/models', '/v1/models');
+  proxyGet('/health', '/v1/health');
 
   // Log query endpoints
   proxyGet('/logs/query', '/v1/logs/query');

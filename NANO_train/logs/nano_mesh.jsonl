@@ -11,3 +11,5 @@
 {"ts": 1771496787.1499856, "t": "2026-02-19T02:26:27.149985", "ch": "nano_mesh", "lv": "info", "msg": "Job submitted: a461fdf20c744eeb (idle_training, 1 shards)", "src": "mesh.global_pool", "sid": "20260219_022059", "seq": 53}
 {"ts": 1771496787.1499856, "t": "2026-02-19T02:26:27.149985", "ch": "nano_mesh", "lv": "info", "msg": "Job a461fdf20c744eeb distributed to 1 workers", "src": "mesh.global_pool", "sid": "20260219_022059", "seq": 54}
 {"ts": 1771496907.1549673, "t": "2026-02-19T02:28:27.154967", "ch": "nano_mesh", "lv": "warn", "msg": "Job a461fdf20c744eeb timed out after 120s", "src": "mesh.global_pool", "x": {"module": "global_pool", "funcName": "_job_watcher_loop", "lineno": 386}, "sid": "20260219_022059", "seq": 55}
+{"ts": 1771564308.1959434, "t": "2026-02-19T21:11:48.195943", "ch": "nano_mesh", "lv": "info", "msg": "Loaded node identity: dff9d0af554fe9b8...", "src": "mesh.node", "sid": "20260219_211028", "seq": 6}
+{"ts": 1771564327.134597, "t": "2026-02-19T21:12:07.134597", "ch": "nano_mesh", "lv": "info", "msg": "Node dff9d0af554f... is OFFLINE", "src": "mesh.node", "sid": "20260219_211028", "seq": 18}

@@ -776,6 +776,21 @@ export class EnhancedAgentLoop {
           this.discoveredContextLimits.set(this.config.model, this.contextWindow);
         }
 
+        // ── Bird-feed observation to Nano trainer (fire-and-forget) ──
+        try {
+          fetch('http://localhost:5100/v1/training/observe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pairs: [{
+                input: currentTask.slice(0, 4000),
+                output: content.slice(0, 8000),
+                quality: 0.8,
+              }],
+            }),
+          }).catch(() => {}); // nano may not be running
+        } catch { /* non-critical */ }
+
         // Index conversation messages
         try {
           this.conversationIndexer.indexMessage(projectId, this.conversationId, 'user-' + this.currentIteration, currentTask, 'user');
