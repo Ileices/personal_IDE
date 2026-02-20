@@ -1,0 +1,26 @@
+{
+  "nano_type": "SearchNano",
+  "nano_id": "SearchNano_77b6c1a7",
+  "param_count": 16576,
+  "input_size": 128,
+  "output_size": 64,
+  "hidden_size": 64,
+  "training_steps": 0,
+  "best_loss": null,
+  "last_loss": null,
+  "fitness_score": 0.0,
+  "created_at": "1771598475.802979",
+  "updated_at": "2026-02-20T06:42:12.958499",
+  "format": "pytorch_state_dict",
+  "framework": "PyTorch",
+  "device_trained_on": "cpu",
+  "total_pairs_seen": 0,
+  "rby": [
+    0.4,
+    0.5,
+    0.1
+  ],
+  "lifecycle_state": "dormant",
+  "checkpoint_file": "SearchNano_20260220_064212.pt",
+  "checkpoint_size_bytes": 69689
+}

@@ -27,12 +27,14 @@ export function createGitHubClient(token: string): OpenAI {
 
 /** Create an Ollama client */
 export function createOllamaClient(baseURL: string = 'http://localhost:11434'): OpenAI {
-  return createProviderClient('ollama', `${baseURL}/v1`);
+  const cleanURL = baseURL.replace(/\/v1\/?$/, '');
+  return createProviderClient('ollama', `${cleanURL}/v1`);
 }
 
 /** Create a Nano Sea client */
 export function createNanoClient(baseURL: string = 'http://localhost:5100'): OpenAI {
-  return createProviderClient('nano', `${baseURL}/v1`, 'nano-local');
+  const cleanURL = baseURL.replace(/\/v1\/?$/, '');
+  return createProviderClient('nano', `${cleanURL}/v1`, 'nano-local');
 }
 
 /** Get client from DB using stored encrypted token */

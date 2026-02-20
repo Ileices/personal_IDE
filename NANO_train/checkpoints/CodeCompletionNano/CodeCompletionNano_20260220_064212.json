@@ -1,0 +1,26 @@
+{
+  "nano_type": "CodeCompletionNano",
+  "nano_id": "CodeCompletionNano_55efee98",
+  "param_count": 41280,
+  "input_size": 128,
+  "output_size": 64,
+  "hidden_size": 128,
+  "training_steps": 0,
+  "best_loss": null,
+  "last_loss": null,
+  "fitness_score": 0.0,
+  "created_at": "1771598475.8859725",
+  "updated_at": "2026-02-20T06:42:12.946125",
+  "format": "pytorch_state_dict",
+  "framework": "PyTorch",
+  "device_trained_on": "cpu",
+  "total_pairs_seen": 0,
+  "rby": [
+    0.4,
+    0.4,
+    0.2
+  ],
+  "lifecycle_state": "dormant",
+  "checkpoint_file": "CodeCompletionNano_20260220_064212.pt",
+  "checkpoint_size_bytes": 168601
+}

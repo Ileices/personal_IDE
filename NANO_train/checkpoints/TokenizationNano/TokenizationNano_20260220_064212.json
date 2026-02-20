@@ -1,0 +1,26 @@
+{
+  "nano_type": "TokenizationNano",
+  "nano_id": "TokenizationNano_66d7f388",
+  "param_count": 16576,
+  "input_size": 128,
+  "output_size": 64,
+  "hidden_size": 64,
+  "training_steps": 0,
+  "best_loss": null,
+  "last_loss": null,
+  "fitness_score": 0.0,
+  "created_at": "1771598475.7286248",
+  "updated_at": "2026-02-20T06:42:12.953138",
+  "format": "pytorch_state_dict",
+  "framework": "PyTorch",
+  "device_trained_on": "cpu",
+  "total_pairs_seen": 0,
+  "rby": [
+    0.30000000000000004,
+    0.6000000000000001,
+    0.10000000000000002
+  ],
+  "lifecycle_state": "dormant",
+  "checkpoint_file": "TokenizationNano_20260220_064212.pt",
+  "checkpoint_size_bytes": 69761
+}
