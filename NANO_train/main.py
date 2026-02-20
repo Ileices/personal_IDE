@@ -74,6 +74,8 @@ class NanoSea:
         self._trainer = None
         self._scanner = None
         self._server = None
+        self._uvicorn_server = None
+        self._server_task = None
         self._global_pool = None
         self._peer_discovery = None
 
@@ -488,10 +490,38 @@ class NanoSea:
             port=port,
             log_level="warning",
         )
-        server = uvicorn.Server(config)
-        # Run in background
-        asyncio.create_task(server.serve())
-        logger.info(f"  API server running on http://0.0.0.0:{port}")
+        self._uvicorn_server = uvicorn.Server(config)
+
+        # Wrap serve() so SystemExit from a port-bind failure
+        # doesn't kill the entire process (Python 3.9 propagates
+        # SystemExit out of asyncio tasks).
+        self._bind_error: Optional[str] = None
+
+        async def _safe_serve():
+            try:
+                await self._uvicorn_server.serve()
+            except SystemExit:
+                if not self._uvicorn_server.started:
+                    self._bind_error = (
+                        f"Port {port} already in use — is another Nano Sea running? "
+                        f"Kill the old process or use --port {port + 1}"
+                    )
+
+        self._server_task = asyncio.create_task(_safe_serve())
+
+        # Wait for the server to actually bind (or fail)
+        for _ in range(50):  # up to 5 seconds
+            await asyncio.sleep(0.1)
+            if self._uvicorn_server.started:
+                break
+            if self._server_task.done():
+                break
+
+        if self._uvicorn_server.started:
+            logger.info(f"  API server running on http://0.0.0.0:{port}")
+        else:
+            msg = self._bind_error or f"API server failed to start on port {port}"
+            raise RuntimeError(msg)
 
     # ── Step 8: Trainer ────────────────────────────────────────
     async def _start_trainer(self) -> None:
@@ -606,6 +636,14 @@ class NanoSea:
                 await self._lifecycle_task
             except asyncio.CancelledError:
                 pass
+        # Stop uvicorn server
+        if hasattr(self, '_uvicorn_server') and self._uvicorn_server:
+            self._uvicorn_server.should_exit = True
+            if hasattr(self, '_server_task') and self._server_task:
+                try:
+                    await asyncio.wait_for(self._server_task, timeout=3.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pass
         if self._trainer:
             await self._trainer.stop()
         if self._peer_discovery:
@@ -681,6 +719,8 @@ async def main():
             await asyncio.sleep(3600)
     except KeyboardInterrupt:
         pass
+    except RuntimeError as e:
+        logger.error(f"BOOT FAILED: {e}")
     finally:
         await sea.shutdown()
 
