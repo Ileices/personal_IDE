@@ -268,8 +268,8 @@ class NanoSea:
         storage_path = ROOT_DIR / "nano_data" / "storage"
         self._storage = TieredStorageManager(
             base_path=storage_path,
-            hot_capacity_mb=self._config.get("hot_capacity_mb", 256),
-            warm_capacity_mb=self._config.get("warm_capacity_mb", 512),
+            hot_max_mb=self._config.get("hot_capacity_mb", 256),
+            warm_max_mb=self._config.get("warm_capacity_mb", 512),
         )
         logger.info(f"  Tiered storage ready at {storage_path}")
 
