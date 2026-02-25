@@ -217,11 +217,13 @@ export function AgentControls() {
           {/* Agent Count Selector (fleet mode only) */}
           {fleetMode && (
             <div className="flex items-center justify-between">
-              <label className="text-xs text-ide-text-dim flex items-center gap-1">
+              <label htmlFor="agent-count" className="text-xs text-ide-text-dim flex items-center gap-1">
                 <Cpu className="w-3 h-3 text-cyan-400" /> Agents ({selectedAgentCount})
               </label>
               <div className="flex items-center gap-1">
                 <input
+                  id="agent-count"
+                  name="agent-count"
                   type="range"
                   value={selectedAgentCount}
                   onChange={e => setSelectedAgentCount(parseInt(e.target.value))}
@@ -296,11 +298,13 @@ export function AgentControls() {
 
           {/* Cooldown Slider */}
           <div className="flex items-center justify-between">
-            <label className="text-xs text-ide-text-dim flex items-center gap-1">
+            <label htmlFor="agent-cooldown" className="text-xs text-ide-text-dim flex items-center gap-1">
               <Timer className="w-3 h-3" /> Cooldown
             </label>
             <div className="flex items-center gap-1">
               <input
+                id="agent-cooldown"
+                name="agent-cooldown"
                 type="range"
                 value={cooldownMs}
                 onChange={e => setCooldownMs(parseInt(e.target.value))}
@@ -319,8 +323,10 @@ export function AgentControls() {
           {/* Max Iterations (hidden in 24/7 mode) */}
           {!continuousMode && (
             <div className="flex items-center justify-between">
-              <label className="text-xs text-ide-text-dim">Max Iterations</label>
+              <label htmlFor="max-iterations" className="text-xs text-ide-text-dim">Max Iterations</label>
               <input
+                id="max-iterations"
+                name="max-iterations"
                 type="number"
                 value={maxIterations}
                 onChange={e => setMaxIterations(parseInt(e.target.value) || 50)}
@@ -334,11 +340,13 @@ export function AgentControls() {
 
           {/* Step Delay */}
           <div className="flex items-center justify-between">
-            <label className="text-xs text-ide-text-dim flex items-center gap-1">
+            <label htmlFor="step-delay" className="text-xs text-ide-text-dim flex items-center gap-1">
               <Clock className="w-3 h-3" /> Step Delay
             </label>
             <div className="flex items-center gap-1">
               <input
+                id="step-delay"
+                name="step-delay"
                 type="range"
                 value={stepDelayMs}
                 onChange={e => setStepDelay(parseInt(e.target.value))}
@@ -352,8 +360,10 @@ export function AgentControls() {
           </div>
 
           <div className="flex items-center justify-between">
-            <label className="text-xs text-ide-text-dim">Auto-approve file changes</label>
+            <label htmlFor="auto-approve" className="text-xs text-ide-text-dim">Auto-approve file changes</label>
             <input
+              id="auto-approve"
+              name="auto-approve"
               type="checkbox"
               checked={autoApprove}
               onChange={e => setAutoApprove(e.target.checked)}
@@ -361,8 +371,10 @@ export function AgentControls() {
             />
           </div>
           <div className="flex items-center justify-between">
-            <label className="text-xs text-ide-text-dim">Auto-answer questions</label>
+            <label htmlFor="auto-answer" className="text-xs text-ide-text-dim">Auto-answer questions</label>
             <input
+              id="auto-answer"
+              name="auto-answer"
               type="checkbox"
               checked={autoAnswer}
               onChange={e => setAutoAnswer(e.target.checked)}

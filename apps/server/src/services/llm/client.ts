@@ -9,7 +9,7 @@ export function createLLMClient(token: string): OpenAI {
   return new OpenAI({
     baseURL: 'https://models.github.ai/inference',
     apiKey: token,
-    timeout: 2 * 60_000,  // 2 minute timeout for cloud API
+    timeout: 5 * 60_000,  // 5 minute timeout for cloud API
     maxRetries: 1,
   });
 }

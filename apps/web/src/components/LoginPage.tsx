@@ -124,10 +124,12 @@ export function LoginPage() {
             </h3>
 
             <div className="mb-3">
-              <label className="block text-xs text-ide-text-dim mb-1.5">
+              <label htmlFor="login-pat" className="block text-xs text-ide-text-dim mb-1.5">
                 Personal Access Token
               </label>
               <input
+                id="login-pat"
+                name="login-pat"
                 type="password"
                 value={pat}
                 onChange={e => setPat(e.target.value)}

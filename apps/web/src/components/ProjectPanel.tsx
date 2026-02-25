@@ -87,6 +87,8 @@ export function ProjectPanel() {
             {showNewProject ? (
               <div className="bg-ide-bg rounded p-2 mt-1 border border-ide-border">
                 <input
+                  id="project-name"
+                  name="project-name"
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   placeholder="Project name"
@@ -94,12 +96,16 @@ export function ProjectPanel() {
                   autoFocus
                 />
                 <input
+                  id="project-path"
+                  name="project-path"
                   value={newPath}
                   onChange={e => setNewPath(e.target.value)}
                   placeholder="Root path (e.g. C:\Users\you\project)"
                   className="w-full bg-ide-sidebar border border-ide-border rounded px-2 py-1.5 text-xs mb-1.5 focus:outline-none focus:border-ide-accent"
                 />
                 <input
+                  id="project-desc"
+                  name="project-desc"
                   value={newDesc}
                   onChange={e => setNewDesc(e.target.value)}
                   placeholder="Description (optional)"

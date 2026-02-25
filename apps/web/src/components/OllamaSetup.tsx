@@ -281,6 +281,8 @@ export function OllamaSetup({ onClose }: { onClose: () => void }) {
                     </button>
                     <div className="flex items-center gap-1.5 mt-2">
                       <input
+                        id="ollama-url"
+                        name="ollama-url"
                         value={customUrl}
                         onChange={e => setCustomUrl(e.target.value)}
                         placeholder="http://localhost:11434"

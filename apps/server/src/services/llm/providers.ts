@@ -15,8 +15,9 @@ export function createProviderClient(
   apiKey?: string
 ): OpenAI {
   // Local providers (Ollama/LMStudio/Nano) get longer timeout since local inference can be slow
+  // especially with multiple fleet agents queuing requests on a single GPU
   const isLocal = ['ollama', 'lmstudio', 'nano'].includes(provider);
-  const timeoutMs = isLocal ? 5 * 60_000 : 2 * 60_000; // 5min local, 2min cloud
+  const timeoutMs = isLocal ? 10 * 60_000 : 5 * 60_000; // 10min local, 5min cloud
 
   return new OpenAI({
     baseURL,

@@ -44,61 +44,80 @@ export function MemoryPanel() {
   // Edit form
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // Memoize the active project ID to avoid stale closures
+  const projectId = activeProject?.id;
 
   useEffect(() => {
-    if (activeProject) fetchNotes();
-  }, [activeProject?.id]);
+    if (projectId) {
+      setNotes([]);
+      setError(null);
+      fetchNotesForProject(projectId);
+    }
+  }, [projectId]);
 
   // Auto-refresh notes every 15 seconds while the panel is visible
   useEffect(() => {
-    if (!activeProject || !expanded) return;
-    const interval = setInterval(fetchNotes, 15000);
+    if (!projectId || !expanded) return;
+    const interval = setInterval(() => fetchNotesForProject(projectId), 15000);
     return () => clearInterval(interval);
-  }, [activeProject?.id, expanded]);
+  }, [projectId, expanded]);
 
-  async function fetchNotes() {
-    if (!activeProject) return;
+  async function fetchNotesForProject(pid: string) {
+    if (!pid) return;
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/memory/notes/${activeProject.id}?limit=200`);
+      const res = await fetch(`${API_BASE}/api/memory/notes/${pid}?limit=200`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
       setNotes((data.notes || []).map(mapNote));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch notes:', err);
+      setError(err.message || 'Failed to load notes');
     } finally {
       setLoading(false);
     }
   }
 
+  // Convenience wrapper for actions that need current project
+  function fetchNotes() {
+    if (projectId) fetchNotesForProject(projectId);
+  }
+
   async function searchNotes() {
-    if (!activeProject || !searchQuery.trim()) {
+    if (!projectId || !searchQuery.trim()) {
       fetchNotes();
       return;
     }
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API_BASE}/api/memory/notes/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: activeProject.id, query: searchQuery, limit: 100 }),
+        body: JSON.stringify({ projectId, query: searchQuery, limit: 100 }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
       setNotes((data.notes || []).map(mapNote));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Search failed:', err);
+      setError(err.message || 'Search failed');
     } finally {
       setLoading(false);
     }
   }
 
   async function createNote() {
-    if (!activeProject || !newTitle.trim()) return;
+    if (!projectId || !newTitle.trim()) return;
     try {
       await fetch(`${API_BASE}/api/memory/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId: activeProject.id,
+          projectId,
           source: 'user_note',
           category: newCategory,
           title: newTitle,
@@ -213,6 +232,8 @@ export function MemoryPanel() {
             <div className="flex-1 flex items-center bg-ide-bg rounded border border-ide-border">
               <Search className="w-3 h-3 text-ide-text-dim ml-1.5" />
               <input
+                id="memory-search"
+                name="memory-search"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && searchNotes()}
@@ -238,12 +259,16 @@ export function MemoryPanel() {
           {showCreate && (
             <div className="mx-2 mb-2 p-2 bg-ide-bg rounded border border-ide-accent/30 space-y-1.5">
               <input
+                id="note-title"
+                name="note-title"
                 value={newTitle}
                 onChange={e => setNewTitle(e.target.value)}
                 placeholder="Note title..."
                 className="w-full text-[11px] bg-ide-sidebar border border-ide-border rounded px-2 py-1 focus:outline-none focus:border-ide-accent"
               />
               <textarea
+                id="note-content"
+                name="note-content"
                 value={newContent}
                 onChange={e => setNewContent(e.target.value)}
                 placeholder="Note content..."
@@ -252,6 +277,8 @@ export function MemoryPanel() {
               />
               <div className="flex gap-1.5">
                 <input
+                  id="note-tags"
+                  name="note-tags"
                   value={newTags}
                   onChange={e => setNewTags(e.target.value)}
                   placeholder="Tags (comma sep)"
@@ -271,8 +298,10 @@ export function MemoryPanel() {
                 </select>
               </div>
               <div className="flex items-center gap-1.5">
-                <label className="text-[10px] text-ide-text-dim">Priority:</label>
+                <label htmlFor="note-priority" className="text-[10px] text-ide-text-dim">Priority:</label>
                 <input
+                  id="note-priority"
+                  name="note-priority"
                   type="range"
                   min={0}
                   max={100}
@@ -302,7 +331,17 @@ export function MemoryPanel() {
 
           {/* Notes List */}
           <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
-            {loading ? (
+            {error ? (
+              <div className="text-center py-4">
+                <p className="text-[10px] text-ide-error mb-1">{error}</p>
+                <button
+                  onClick={fetchNotes}
+                  className="text-[10px] text-ide-accent hover:underline"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : loading ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="w-4 h-4 animate-spin text-ide-accent" />
               </div>
@@ -326,11 +365,15 @@ export function MemoryPanel() {
                   {editingId === note.id ? (
                     <div className="space-y-1">
                       <input
+                        id="edit-title"
+                        name="edit-title"
                         value={editTitle}
                         onChange={e => setEditTitle(e.target.value)}
                         className="w-full text-[11px] bg-ide-sidebar border border-ide-border rounded px-1.5 py-0.5 focus:outline-none focus:border-ide-accent"
                       />
                       <textarea
+                        id="edit-content"
+                        name="edit-content"
                         value={editContent}
                         onChange={e => setEditContent(e.target.value)}
                         rows={3}

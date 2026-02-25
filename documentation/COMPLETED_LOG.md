@@ -192,3 +192,79 @@ Created 9-document documentation suite in `documentation/` directory.
 | `documentation/TODO_ROADMAP.md` | Marked path scrubbing as complete |
 | `NANO_train/NANO_corpus/ML_CODE/*` | Scrubbed personal paths from 8 files |
 | `NANO_train/NANO_corpus/schemas_for_frontend_to_backend/*` | Scrubbed personal paths |
+
+---
+
+## Session 3 — Fleet/Agent Failure Fixes & Form Accessibility
+
+### Fix 18: Timeout Cascade — All Fleet Agents Aborting at 3 Minutes
+**Problem**: Every fleet agent request hit `AbortSignal.timeout(3 * 60_000)` in `completeChatResponse()`. Ollama processes requests sequentially, so with 6 agents queuing, each waited 3+ minutes → abort signal fired → "Request was aborted" → retry → same failure.
+
+**Fixes**:
+- `providers.ts`: Local provider timeout 5min → 10min, cloud 2min → 5min
+- `streaming.ts`: Both `streamChatResponse` and `completeChatResponse` AbortSignal 3min → 10min
+- `client.ts`: Legacy client timeout 2min → 5min
+
+### Fix 19: Fleet Stagger Too Short — 6 Agents Overwhelming Ollama Queue
+**Problem**: 3-second local stagger meant all 6 agents fired within 15s. Ollama serializes requests, so agents pile up and timeout.
+
+**Fixes**:
+- `fleet.ts`: Agent launch stagger 3s → 15s local, 1.5s → 3s cloud
+- `fleet.ts`: Step delay per agent `max(5000, 3000*count)` → `max(10000, 10000*count)`
+
+### Fix 20: Prompt Overflow — 12K Tokens Sent to 4K Context Model
+**Problem**: Agent loop built system prompt + file list + history + task without checking total against model's actual context window. Ollama truncated to 4096, causing garbage responses.
+
+**Fixes**:
+- `enhancedLoop.ts`: Added ~40-line EARLY BUDGET ENFORCEMENT block before LLM call
+- Enforces: system prompt ≤ 40% of budget, drops PROJECT FILES message, drops oldest history, truncates task — in priority order
+- History budget reduced from 20% → 15% of context window
+
+### Fix 21: Connection Error Detection Gaps
+**Problem**: "Request was aborted", "timeout", "socket hang up" errors weren't recognized as connection errors, so agents didn't trigger provider fallback.
+
+**Fixes**:
+- `enhancedLoop.ts`: Added 5 new patterns to connection error detection: "request was aborted", "aborterror", "the operation was aborted", "timeout", "socket hang up"
+
+### Fix 22: Memory Panel Stale Closure Bug
+**Problem**: `useEffect` auto-refresh called `fetchNotes()` via `setInterval`, but `fetchNotes` captured `activeProject` from the render closure. When project changed, the interval still referenced old closure → fetched wrong project or failed silently.
+
+**Fixes**:
+- `MemoryPanel.tsx`: Extracted `const projectId = activeProject?.id` for stable reference
+- Replaced `fetchNotes()` with `fetchNotesForProject(pid)` that takes explicit project ID
+- Auto-refresh `useEffect` now uses `[projectId, expanded]` deps and closure-safe callback
+- Added `error` state with error display and retry button
+- Added HTTP status checking on all fetch calls
+
+### Fix 23: Form Field Accessibility — Missing id/name/label Associations
+**Problem**: 24+ inputs across 8 components missing `id` and `name` attributes. 15+ labels missing `htmlFor` attribute. Browser console warned about inaccessible form fields.
+
+**Fixes** (8 files):
+- `LoginPage.tsx`: PAT input + label association
+- `ProviderSettings.tsx`: GitHub PAT input + dynamic API key inputs
+- `ChatPanel.tsx`: Chat textarea
+- `OllamaSetup.tsx`: Custom URL input
+- `AgentControls.tsx`: 6 inputs (agent count, cooldown, max iterations, step delay, auto-approve, auto-answer) + 6 labels
+- `ProjectPanel.tsx`: 3 inputs (name, path, description)
+- `MemoryPanel.tsx`: 7 inputs (search, title, content, tags, priority, edit title, edit content) + 1 label
+- `MidwifePanel.tsx`: 4 inputs (bulk cooldown, task cooldown, global cooldown, nano port) + 3 labels
+
+---
+
+## Files Modified (Session 3)
+
+| File | Changes |
+|------|---------|
+| `apps/server/src/services/llm/providers.ts` | Timeout 5→10min local, 2→5min cloud |
+| `apps/server/src/services/llm/streaming.ts` | AbortSignal 3→10min in both functions |
+| `apps/server/src/services/llm/client.ts` | Timeout 2→5min |
+| `apps/server/src/services/agent/fleet.ts` | Stagger 3→15s local, step delay 3→10s/agent |
+| `apps/server/src/services/agent/enhancedLoop.ts` | Early budget enforcement, history 20→15%, +5 error patterns |
+| `apps/web/src/components/MemoryPanel.tsx` | Stale closure fix, error state, id/name attrs |
+| `apps/web/src/components/AgentControls.tsx` | 6 inputs + 6 labels: id/name/htmlFor |
+| `apps/web/src/components/MidwifePanel.tsx` | 4 inputs + 3 labels: id/name/htmlFor |
+| `apps/web/src/components/LoginPage.tsx` | PAT input: id/name/htmlFor |
+| `apps/web/src/components/ProviderSettings.tsx` | 2 inputs: id/name |
+| `apps/web/src/components/ChatPanel.tsx` | Textarea: id/name |
+| `apps/web/src/components/OllamaSetup.tsx` | URL input: id/name |
+| `apps/web/src/components/ProjectPanel.tsx` | 3 inputs: id/name |

@@ -184,6 +184,8 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
                 </p>
                 <div className="flex gap-1.5">
                   <input
+                    id="github-pat"
+                    name="github-pat"
                     type="password"
                     placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                     value={githubPat}
@@ -368,6 +370,8 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
                 {p.requiresApiKey && (
                   <div className="mt-2 flex gap-1.5">
                     <input
+                      id={`api-key-${p.id}`}
+                      name={`api-key-${p.id}`}
                       type="password"
                       placeholder={p.hasApiKey ? '••••••••• (key saved)' : 'Enter API key...'}
                       value={apiKeys[p.id] || ''}

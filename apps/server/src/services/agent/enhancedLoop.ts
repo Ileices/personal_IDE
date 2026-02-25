@@ -459,7 +459,8 @@ export class EnhancedAgentLoop {
         }
 
         // Conversation history (limited by token budget)
-        const historyBudget = Math.floor(this.contextWindow * 0.2);
+        // For small-context models (e.g. Ollama 4k), history gets minimal space
+        const historyBudget = Math.floor(this.contextWindow * 0.15);
         const history = this.memory.getMessages(this.conversationId);
         let historyTokens = 0;
         const recentHistory: any[] = [];
@@ -523,6 +524,55 @@ export class EnhancedAgentLoop {
           step: { stepNumber: this.currentIteration, action: currentTask.slice(0, 200), target: '', detail: '', priority: 'high' as const },
           iteration: this.currentIteration,
         });
+
+        // ── EARLY BUDGET ENFORCEMENT ──
+        // Before any LLM call, aggressively fit messages into the model's actual context window.
+        // This prevents sending 12k tokens to a 4k model (which caused Ollama truncation + timeouts).
+        const outputReserve = Math.min(this.config.maxTokensPerStep || 4096, Math.floor(this.contextWindow * 0.25));
+        const maxInputTokens = this.contextWindow - outputReserve;
+        let totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+
+        if (totalEstimated > maxInputTokens) {
+          this.emit({ type: 'info', message: 'Budget enforcement: ' + totalEstimated + '/' + maxInputTokens + ' tokens. Trimming...' });
+
+          // 1. Truncate system prompt (largest contributor) to 40% of budget
+          const systemBudget = Math.floor(maxInputTokens * 0.4);
+          if (estimateTokens(messages[0].content) > systemBudget) {
+            messages[0] = { role: 'system', content: truncateToFit(messages[0].content, systemBudget) };
+          }
+
+          // 2. Drop file list if still over
+          totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+          if (totalEstimated > maxInputTokens && messages.length > 2) {
+            const fileListIdx = messages.findIndex((m, i) => i > 0 && m.role === 'system' && m.content.startsWith('PROJECT FILES:'));
+            if (fileListIdx > 0) {
+              messages.splice(fileListIdx, 1);
+            }
+          }
+
+          // 3. Drop oldest history messages until fits
+          totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+          while (totalEstimated > maxInputTokens && messages.length > 2) {
+            // Remove the second message (first non-system, oldest history)
+            const removed = messages.splice(1, 1);
+            totalEstimated -= estimateTokens(removed[0]?.content || '');
+          }
+
+          // 4. If STILL over (system + task alone too big), truncate the task
+          totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+          if (totalEstimated > maxInputTokens) {
+            const taskBudget = maxInputTokens - estimateTokens(messages[0].content) - 100;
+            if (taskBudget > 500) {
+              messages[messages.length - 1] = {
+                role: 'user',
+                content: truncateToFit(currentTask, Math.max(500, taskBudget)),
+              };
+            }
+          }
+
+          totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+          this.emit({ type: 'info', message: 'After trimming: ' + totalEstimated + '/' + maxInputTokens + ' tokens (' + messages.length + ' messages)' });
+        }
 
         // Token Limit Check — use real model limit, proactively chunk if too big
         const totalContent = messages.map(m => m.content).join('\n');
@@ -1074,7 +1124,12 @@ export class EnhancedAgentLoop {
           errMsg.includes('enotfound') ||
           errMsg.includes('etimedout') ||
           errMsg.includes('fetch failed') ||
-          errMsg.includes('network error');
+          errMsg.includes('network error') ||
+          errMsg.includes('request was aborted') ||
+          errMsg.includes('aborterror') ||
+          errMsg.includes('the operation was aborted') ||
+          errMsg.includes('timeout') ||
+          errMsg.includes('socket hang up');
 
         if (isConnectionError) {
           this.emit({ type: 'error', error: 'Connection error on ' + this.config.provider + '/' + this.config.model + ': ' + err.message });

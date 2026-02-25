@@ -59,7 +59,7 @@ export async function streamChatResponse(
       messages,
       stream: true,
       ...modelParams,
-    }, { signal: options?.signal ?? AbortSignal.timeout(3 * 60_000) });
+    }, { signal: options?.signal ?? AbortSignal.timeout(10 * 60_000) });
 
     let fullContent = '';
 
@@ -130,8 +130,9 @@ export async function completeChatResponse(
     jsonMode: options?.jsonMode,
   });
 
-  // Create a timeout signal if none provided — 3 min default safety net
-  const signal = options?.signal ?? AbortSignal.timeout(options?.timeoutMs ?? 3 * 60_000);
+  // Create a timeout signal if none provided — 10 min default to accommodate
+  // local models (Ollama) that process sequentially and fleet queue buildup
+  const signal = options?.signal ?? AbortSignal.timeout(options?.timeoutMs ?? 10 * 60_000);
 
   const { data: response, response: rawResponse } = await client.chat.completions.create({
     model: stripModelPrefix(model),

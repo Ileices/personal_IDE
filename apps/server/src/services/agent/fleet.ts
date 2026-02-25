@@ -243,11 +243,12 @@ export class AgentFleet {
         agentPromises.push(promise);
 
         // Stagger agent launches to avoid slamming the LLM with concurrent requests.
-        // Local providers (Ollama, LMStudio, Nano) process sequentially — longer delay.
+        // Local providers (Ollama, LMStudio, Nano) process sequentially — much longer delay
+        // to allow each agent’s first request to complete before the next agent starts.
         // Cloud providers still need staggering to avoid 429 rate-limit stampede —
         // all agents firing at once triggers per-minute request caps.
         const isLocal = ['ollama', 'lmstudio', 'nano'].includes(this.config.provider);
-        const staggerMs = isLocal ? 3000 : 1500;
+        const staggerMs = isLocal ? 15000 : 3000;
         await new Promise(resolve => setTimeout(resolve, staggerMs));
       }
 
@@ -639,8 +640,9 @@ export class AgentFleet {
   private buildAgentConfig(subtask: SubTask): any {
     const modelDef = getModel(this.config.model);
     const isLocal = ['ollama', 'lmstudio', 'nano'].includes(this.config.provider || '');
-    // Local models process requests sequentially — longer delays prevent queue pileup
-    const stepDelay = isLocal ? Math.max(5000, 3000 * this.config.agentCount) : 2000;
+    // Local models process requests sequentially — each agent must wait for others.
+    // Step delay = 10s per agent to prevent queue saturation and timeout cascades.
+    const stepDelay = isLocal ? Math.max(10000, 10000 * this.config.agentCount) : 3000;
     return {
       maxIterations: this.config.maxIterationsPerAgent || (this.config.continuousMode ? Infinity : 200),
       stepDelayMs: stepDelay,

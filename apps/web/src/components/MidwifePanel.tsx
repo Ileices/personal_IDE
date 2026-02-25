@@ -300,6 +300,8 @@ function TasksTab({
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] text-ide-text-dim w-20">Cooldown:</span>
               <input
+                id="bulk-cooldown"
+                name="bulk-cooldown"
                 type="range"
                 min={1000}
                 max={60000}
@@ -388,10 +390,12 @@ function TasksTab({
 
                 {/* Cooldown */}
                 <div>
-                  <label className="text-[10px] text-ide-text-dim block mb-1">
+                  <label htmlFor={`cooldown-${task.taskType}`} className="text-[10px] text-ide-text-dim block mb-1">
                     Cooldown: {(task.cooldownMs / 1000).toFixed(1)}s
                   </label>
                   <input
+                    id={`cooldown-${task.taskType}`}
+                    name={`cooldown-${task.taskType}`}
                     type="range"
                     min={1000}
                     max={60000}
@@ -429,10 +433,12 @@ function ConfigTab({
     <div className="space-y-4">
       {/* Global Cooldown */}
       <div>
-        <label className="text-[10px] text-ide-text-dim block mb-1">
+        <label htmlFor="global-cooldown" className="text-[10px] text-ide-text-dim block mb-1">
           Global Cooldown: {(config.globalCooldownMs / 1000).toFixed(1)}s (minimum between any LLM call)
         </label>
         <input
+          id="global-cooldown"
+          name="global-cooldown"
           type="range"
           min={500}
           max={30000}
@@ -461,8 +467,10 @@ function ConfigTab({
 
       {/* Nano Port */}
       <div>
-        <label className="text-[10px] text-ide-text-dim block mb-1">Nano Trainer Port</label>
+        <label htmlFor="nano-port" className="text-[10px] text-ide-text-dim block mb-1">Nano Trainer Port</label>
         <input
+          id="nano-port"
+          name="nano-port"
           type="number"
           value={config.nanoPort}
           onChange={e => updateConfig({ nanoPort: parseInt(e.target.value) || 5100 })}
