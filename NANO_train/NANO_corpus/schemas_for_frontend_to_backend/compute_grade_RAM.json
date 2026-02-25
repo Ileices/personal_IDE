@@ -1,0 +1,142 @@
+{
+    "source_file": "./new stuff/FOAM/HPC/compute_grade_RAM.txt",
+    "generated_at": null,
+    "categories": [
+        {
+            "name": "DDR5 (Current Generation)",
+            "status": "current",
+            "entries": [
+                { "model": "DDR5-8400", "standard": "DDR5", "speed_mt_s": 8400, "unit": "MT/s", "grade": 95, "attributes": [] },
+                { "model": "DDR5-8000", "standard": "DDR5", "speed_mt_s": 8000, "unit": "MT/s", "grade": 90, "attributes": [] },
+                { "model": "DDR5-7600", "standard": "DDR5", "speed_mt_s": 7600, "unit": "MT/s", "grade": 85, "attributes": [] },
+                { "model": "DDR5-7200", "standard": "DDR5", "speed_mt_s": 7200, "unit": "MT/s", "grade": 80, "attributes": [] },
+                { "model": "DDR5-6800", "standard": "DDR5", "speed_mt_s": 6800, "unit": "MT/s", "grade": 75, "attributes": [] },
+                { "model": "DDR5-6400", "standard": "DDR5", "speed_mt_s": 6400, "unit": "MT/s", "grade": 70, "attributes": [] },
+                { "model": "DDR5-6000", "standard": "DDR5", "speed_mt_s": 6000, "unit": "MT/s", "grade": 65, "attributes": [] },
+                { "model": "DDR5-5600", "standard": "DDR5", "speed_mt_s": 5600, "unit": "MT/s", "grade": 60, "attributes": [] },
+                { "model": "DDR5-5200", "standard": "DDR5", "speed_mt_s": 5200, "unit": "MT/s", "grade": 55, "attributes": [] },
+                { "model": "DDR5-4800", "standard": "DDR5", "speed_mt_s": 4800, "unit": "MT/s", "grade": 50, "attributes": [] }
+            ]
+        },
+        {
+            "name": "DDR4 (Previous Generation)",
+            "status": "previous",
+            "entries": [
+                { "model": "DDR4-5100", "standard": "DDR4", "speed_mt_s": 5100, "unit": "MT/s", "grade": 48, "attributes": [] },
+                { "model": "DDR4-4800", "standard": "DDR4", "speed_mt_s": 4800, "unit": "MT/s", "grade": 45, "attributes": [] },
+                { "model": "DDR4-4600", "standard": "DDR4", "speed_mt_s": 4600, "unit": "MT/s", "grade": 42, "attributes": [] },
+                { "model": "DDR4-4400", "standard": "DDR4", "speed_mt_s": 4400, "unit": "MT/s", "grade": 40, "attributes": [] },
+                { "model": "DDR4-4266", "standard": "DDR4", "speed_mt_s": 4266, "unit": "MT/s", "grade": 38, "attributes": [] },
+                { "model": "DDR4-4133", "standard": "DDR4", "speed_mt_s": 4133, "unit": "MT/s", "grade": 36, "attributes": [] },
+                { "model": "DDR4-4000", "standard": "DDR4", "speed_mt_s": 4000, "unit": "MT/s", "grade": 34, "attributes": [] },
+                { "model": "DDR4-3866", "standard": "DDR4", "speed_mt_s": 3866, "unit": "MT/s", "grade": 32, "attributes": [] },
+                { "model": "DDR4-3733", "standard": "DDR4", "speed_mt_s": 3733, "unit": "MT/s", "grade": 30, "attributes": [] },
+                { "model": "DDR4-3600", "standard": "DDR4", "speed_mt_s": 3600, "unit": "MT/s", "grade": 28, "attributes": [] },
+                { "model": "DDR4-3466", "standard": "DDR4", "speed_mt_s": 3466, "unit": "MT/s", "grade": 26, "attributes": [] },
+                { "model": "DDR4-3333", "standard": "DDR4", "speed_mt_s": 3333, "unit": "MT/s", "grade": 24, "attributes": [] },
+                { "model": "DDR4-3200", "standard": "DDR4", "speed_mt_s": 3200, "unit": "MT/s", "grade": 22, "attributes": [] },
+                { "model": "DDR4-3000", "standard": "DDR4", "speed_mt_s": 3000, "unit": "MT/s", "grade": 20, "attributes": [] },
+                { "model": "DDR4-2933", "standard": "DDR4", "speed_mt_s": 2933, "unit": "MT/s", "grade": 18, "attributes": [] },
+                { "model": "DDR4-2800", "standard": "DDR4", "speed_mt_s": 2800, "unit": "MT/s", "grade": 16, "attributes": [] },
+                { "model": "DDR4-2666", "standard": "DDR4", "speed_mt_s": 2666, "unit": "MT/s", "grade": 15, "attributes": [] },
+                { "model": "DDR4-2400", "standard": "DDR4", "speed_mt_s": 2400, "unit": "MT/s", "grade": 14, "attributes": [] },
+                { "model": "DDR4-2133", "standard": "DDR4", "speed_mt_s": 2133, "unit": "MT/s", "grade": 12, "attributes": [] }
+            ]
+        },
+        {
+            "name": "DDR3 (Legacy)",
+            "status": "legacy",
+            "entries": [
+                { "model": "DDR3-3000", "standard": "DDR3", "speed_mt_s": 3000, "unit": "MT/s", "grade": 18, "attributes": [] },
+                { "model": "DDR3-2933", "standard": "DDR3", "speed_mt_s": 2933, "unit": "MT/s", "grade": 17, "attributes": [] },
+                { "model": "DDR3-2800", "standard": "DDR3", "speed_mt_s": 2800, "unit": "MT/s", "grade": 16, "attributes": [] },
+                { "model": "DDR3-2666", "standard": "DDR3", "speed_mt_s": 2666, "unit": "MT/s", "grade": 15, "attributes": [] },
+                { "model": "DDR3-2600", "standard": "DDR3", "speed_mt_s": 2600, "unit": "MT/s", "grade": 14, "attributes": [] },
+                { "model": "DDR3-2500", "standard": "DDR3", "speed_mt_s": 2500, "unit": "MT/s", "grade": 13, "attributes": [] },
+                { "model": "DDR3-2400", "standard": "DDR3", "speed_mt_s": 2400, "unit": "MT/s", "grade": 12, "attributes": [] },
+                { "model": "DDR3-2200", "standard": "DDR3", "speed_mt_s": 2200, "unit": "MT/s", "grade": 11, "attributes": [] },
+                { "model": "DDR3-2133", "standard": "DDR3", "speed_mt_s": 2133, "unit": "MT/s", "grade": 10, "attributes": [] },
+                { "model": "DDR3-2000", "standard": "DDR3", "speed_mt_s": 2000, "unit": "MT/s", "grade": 9, "attributes": [] },
+                { "model": "DDR3-1866", "standard": "DDR3", "speed_mt_s": 1866, "unit": "MT/s", "grade": 8, "attributes": [] },
+                { "model": "DDR3-1800", "standard": "DDR3", "speed_mt_s": 1800, "unit": "MT/s", "grade": 7, "attributes": [] },
+                { "model": "DDR3-1600", "standard": "DDR3", "speed_mt_s": 1600, "unit": "MT/s", "grade": 6, "attributes": [] },
+                { "model": "DDR3-1333", "standard": "DDR3", "speed_mt_s": 1333, "unit": "MT/s", "grade": 5, "attributes": [] },
+                { "model": "DDR3-1066", "standard": "DDR3", "speed_mt_s": 1066, "unit": "MT/s", "grade": 4, "attributes": [] }
+            ]
+        },
+        {
+            "name": "DDR2 (Obsolete)",
+            "status": "obsolete",
+            "entries": [
+                { "model": "DDR2-1200", "standard": "DDR2", "speed_mt_s": 1200, "unit": "MT/s", "grade": 4, "attributes": [] },
+                { "model": "DDR2-1066", "standard": "DDR2", "speed_mt_s": 1066, "unit": "MT/s", "grade": 3, "attributes": [] },
+                { "model": "DDR2-800", "standard": "DDR2", "speed_mt_s": 800, "unit": "MT/s", "grade": 2, "attributes": [] },
+                { "model": "DDR2-667", "standard": "DDR2", "speed_mt_s": 667, "unit": "MT/s", "grade": 1, "attributes": [] },
+                { "model": "DDR2-533", "standard": "DDR2", "speed_mt_s": 533, "unit": "MT/s", "grade": 1, "attributes": [] }
+            ]
+        },
+        {
+            "name": "Server Memory (ECC/Registered)",
+            "status": "server",
+            "notes": "ECC/Registered (RDIMM) parts and server-grade DDR",
+            "entries": [
+                { "model": "DDR5-8800 RDIMM", "standard": "DDR5", "speed_mt_s": 8800, "unit": "MT/s", "grade": 98, "attributes": ["RDIMM", "ECC", "Registered"] },
+                { "model": "DDR5-8000 RDIMM", "standard": "DDR5", "speed_mt_s": 8000, "unit": "MT/s", "grade": 92, "attributes": ["RDIMM", "ECC", "Registered"] },
+                { "model": "DDR5-7200 RDIMM", "standard": "DDR5", "speed_mt_s": 7200, "unit": "MT/s", "grade": 85, "attributes": ["RDIMM", "ECC", "Registered"] },
+                { "model": "DDR5-6400 RDIMM", "standard": "DDR5", "speed_mt_s": 6400, "unit": "MT/s", "grade": 78, "attributes": ["RDIMM", "ECC", "Registered"] },
+                { "model": "DDR5-5600 RDIMM", "standard": "DDR5", "speed_mt_s": 5600, "unit": "MT/s", "grade": 70, "attributes": ["RDIMM", "ECC", "Registered"] },
+                { "model": "DDR4-3200 RDIMM", "standard": "DDR4", "speed_mt_s": 3200, "unit": "MT/s", "grade": 45, "attributes": ["RDIMM", "ECC", "Registered"] },
+                { "model": "DDR4-2933 RDIMM", "standard": "DDR4", "speed_mt_s": 2933, "unit": "MT/s", "grade": 40, "attributes": ["RDIMM", "ECC", "Registered"] },
+                { "model": "DDR4-2666 RDIMM", "standard": "DDR4", "speed_mt_s": 2666, "unit": "MT/s", "grade": 35, "attributes": ["RDIMM", "ECC", "Registered"] }
+            ]
+        },
+        {
+            "name": "LPDDR (Low Power)",
+            "status": "low_power",
+            "entries": [
+                { "model": "LPDDR5X-9600", "standard": "LPDDR5X", "speed_mt_s": 9600, "unit": "MT/s", "grade": 90, "attributes": ["Low Power"] },
+                { "model": "LPDDR5X-8533", "standard": "LPDDR5X", "speed_mt_s": 8533, "unit": "MT/s", "grade": 85, "attributes": ["Low Power"] },
+                { "model": "LPDDR5X-7500", "standard": "LPDDR5X", "speed_mt_s": 7500, "unit": "MT/s", "grade": 78, "attributes": ["Low Power"] },
+                { "model": "LPDDR5-6400", "standard": "LPDDR5", "speed_mt_s": 6400, "unit": "MT/s", "grade": 70, "attributes": ["Low Power"] },
+                { "model": "LPDDR5-5500", "standard": "LPDDR5", "speed_mt_s": 5500, "unit": "MT/s", "grade": 65, "attributes": ["Low Power"] },
+                { "model": "LPDDR4X-4266", "standard": "LPDDR4X", "speed_mt_s": 4266, "unit": "MT/s", "grade": 50, "attributes": ["Low Power"] },
+                { "model": "LPDDR4X-3733", "standard": "LPDDR4X", "speed_mt_s": 3733, "unit": "MT/s", "grade": 45, "attributes": ["Low Power"] },
+                { "model": "LPDDR4-3200", "standard": "LPDDR4", "speed_mt_s": 3200, "unit": "MT/s", "grade": 40, "attributes": ["Low Power"] },
+                { "model": "LPDDR3-2133", "standard": "LPDDR3", "speed_mt_s": 2133, "unit": "MT/s", "grade": 25, "attributes": ["Low Power"] }
+            ]
+        },
+        {
+            "name": "HBM (High Bandwidth Memory)",
+            "status": "specialized",
+            "entries": [
+                { "model": "HBM3e", "standard": "HBM", "variant": "3e", "speed_mt_s": null, "unit": null, "grade": 100, "attributes": ["Stacked", "Wide I/O"] },
+                { "model": "HBM3", "standard": "HBM", "variant": "3", "speed_mt_s": null, "unit": null, "grade": 95, "attributes": ["Stacked", "Wide I/O"] },
+                { "model": "HBM2e", "standard": "HBM", "variant": "2e", "speed_mt_s": null, "unit": null, "grade": 85, "attributes": ["Stacked", "Wide I/O"] },
+                { "model": "HBM2", "standard": "HBM", "variant": "2", "speed_mt_s": null, "unit": null, "grade": 75, "attributes": ["Stacked", "Wide I/O"] },
+                { "model": "HBM1", "standard": "HBM", "variant": "1", "speed_mt_s": null, "unit": null, "grade": 60, "attributes": ["Stacked", "Wide I/O"] }
+            ]
+        },
+        {
+            "name": "GDDR (Graphics Memory)",
+            "status": "graphics",
+            "entries": [
+                { "model": "GDDR7", "standard": "GDDR", "variant": "7", "speed_mt_s": null, "unit": null, "grade": 98, "attributes": ["Graphics"] },
+                { "model": "GDDR6X", "standard": "GDDR", "variant": "6X", "speed_mt_s": null, "unit": null, "grade": 90, "attributes": ["Graphics"] },
+                { "model": "GDDR6", "standard": "GDDR", "variant": "6", "speed_mt_s": null, "unit": null, "grade": 80, "attributes": ["Graphics"] },
+                { "model": "GDDR5X", "standard": "GDDR", "variant": "5X", "speed_mt_s": null, "unit": null, "grade": 65, "attributes": ["Graphics"] },
+                { "model": "GDDR5", "standard": "GDDR", "variant": "5", "speed_mt_s": null, "unit": null, "grade": 55, "attributes": ["Graphics"] },
+                { "model": "GDDR4", "standard": "GDDR", "variant": "4", "speed_mt_s": null, "unit": null, "grade": 35, "attributes": ["Graphics"] }
+            ]
+        },
+        {
+            "name": "Legacy RAM",
+            "status": "legacy",
+            "entries": [
+                { "model": "DDR-500", "standard": "DDR", "speed_mt_s": 500, "unit": "MT/s", "grade": 3, "attributes": ["Legacy"] },
+                { "model": "DDR-400", "standard": "DDR", "speed_mt_s": 400, "unit": "MT/s", "grade": 2, "attributes": ["Legacy"] },
+                { "model": "SDRAM-133", "standard": "SDRAM", "speed_mt_s": 133, "unit": "MT/s", "grade": 1, "attributes": ["Legacy"] },
+                { "model": "RDRAM-1066", "standard": "RDRAM", "speed_mt_s": 1066, "unit": "MT/s", "grade": 4, "attributes": ["Legacy"] }
+            ]
+        }
+    ]
+}

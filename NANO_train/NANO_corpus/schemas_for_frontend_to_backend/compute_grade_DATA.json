@@ -1,0 +1,321 @@
+{
+    "title": "DATA CONTRIBUTION & HOARDING GRADING SYSTEM",
+    "version": "1.0",
+    "units": {
+        "GB": 1e9,
+        "TB": 1e12,
+        "PB": 1e15,
+        "EB": 1e18
+    },
+    "consumer_scale": {
+        "description": "Bytes → Terabytes",
+        "tiers": [
+            {
+                "tier": "Tier 1: Data Philanthropists",
+                "score_range": [90, 100],
+                "grades": [
+                    {
+                        "code": "T1-S+",
+                        "score_range": [98, 100],
+                        "data_threshold": { "min": 10, "min_unit": "TB", "min_bytes": 10e12 },
+                        "accessibility": { "min_pct": 100, "description": "100% open access" }
+                    },
+                    {
+                        "code": "T1-S",
+                        "score_range": [95, 97],
+                        "data_threshold": { "min": 5, "max": 10, "unit": "TB", "min_bytes": 5e12, "max_bytes": 10e12 },
+                        "accessibility": { "min_pct": 95, "description": "95%+ accessibility" }
+                    },
+                    {
+                        "code": "T1-A+",
+                        "score_range": [92, 94],
+                        "data_threshold": { "min": 2, "max": 5, "unit": "TB", "min_bytes": 2e12, "max_bytes": 5e12 },
+                        "accessibility": { "min_pct": 90, "description": "90%+ accessibility" }
+                    },
+                    {
+                        "code": "T1-A",
+                        "score_range": [90, 91],
+                        "data_threshold": { "min": 1, "max": 2, "unit": "TB", "min_bytes": 1e12, "max_bytes": 2e12 },
+                        "accessibility": { "min_pct": 85, "description": "85%+ accessibility" }
+                    }
+                ]
+            },
+            {
+                "tier": "Tier 2: Data Contributors",
+                "score_range": [75, 89],
+                "grades": [
+                    { "code": "T2-B+", "score_range": [87, 89], "data_threshold": { "min": 500, "max": 1000, "unit": "GB", "min_bytes": 500e9, "max_bytes": 1e12 }, "accessibility": { "min_pct": 80 } },
+                    { "code": "T2-B", "score_range": [83, 86], "data_threshold": { "min": 250, "max": 500, "unit": "GB", "min_bytes": 250e9, "max_bytes": 500e9 }, "accessibility": { "min_pct": 75 } },
+                    { "code": "T2-C+", "score_range": [79, 82], "data_threshold": { "min": 100, "max": 250, "unit": "GB", "min_bytes": 100e9, "max_bytes": 250e9 }, "accessibility": { "min_pct": 70 } },
+                    { "code": "T2-C", "score_range": [75, 78], "data_threshold": { "min": 50, "max": 100, "unit": "GB", "min_bytes": 50e9, "max_bytes": 100e9 }, "accessibility": { "min_pct": 65 } }
+                ]
+            },
+            {
+                "tier": "Tier 3: Data Participants",
+                "score_range": [55, 74],
+                "grades": [
+                    { "code": "T3-D+", "score_range": [72, 74], "data_threshold": { "min": 25, "max": 50, "unit": "GB", "min_bytes": 25e9, "max_bytes": 50e9 }, "accessibility": { "min_pct": 60 } },
+                    { "code": "T3-D", "score_range": [68, 71], "data_threshold": { "min": 10, "max": 25, "unit": "GB", "min_bytes": 10e9, "max_bytes": 25e9 }, "accessibility": { "min_pct": 55 } },
+                    { "code": "T3-E+", "score_range": [64, 67], "data_threshold": { "min": 5, "max": 10, "unit": "GB", "min_bytes": 5e9, "max_bytes": 10e9 }, "accessibility": { "min_pct": 50 } },
+                    { "code": "T3-E", "score_range": [60, 63], "data_threshold": { "min": 1, "max": 5, "unit": "GB", "min_bytes": 1e9, "max_bytes": 5e9 }, "accessibility": { "min_pct": 45 } },
+                    { "code": "T3-F", "score_range": [55, 59], "data_threshold": { "max": 1, "unit": "GB", "max_bytes": 1e9 }, "accessibility": { "min_pct": 40 } }
+                ]
+            },
+            {
+                "tier": "Tier 4: Data Consumers",
+                "score_range": [35, 54],
+                "grades": [
+                    { "code": "T4-G+", "score_range": [52, 54], "description": "Minimal data, high compute contribution" },
+                    { "code": "T4-G", "score_range": [48, 51], "description": "No data, significant compute" },
+                    { "code": "T4-H+", "score_range": [44, 47], "description": "Trace data, moderate compute" },
+                    { "code": "T4-H", "score_range": [40, 43], "description": "No data, minimal compute" },
+                    { "code": "T4-I", "score_range": [35, 39], "description": "Data hoarder (consumer scale)" }
+                ]
+            },
+            {
+                "tier": "Tier 5: Data Drains",
+                "score_range": [15, 34],
+                "grades": [
+                    { "code": "T5-J+", "score_range": [32, 34], "description": "Light hoarder, some compute" },
+                    { "code": "T5-J", "score_range": [28, 31], "description": "Moderate hoarder, little compute" },
+                    { "code": "T5-K+", "score_range": [24, 27], "description": "Heavy hoarder, minimal compute" },
+                    { "code": "T5-K", "score_range": [20, 23], "description": "Extreme hoarder, no compute" },
+                    { "code": "T5-L", "score_range": [15, 19], "description": "Active data extraction" }
+                ]
+            }
+        ]
+    },
+    "enterprise_scale": {
+        "description": "Terabytes → Exabytes",
+        "tiers": [
+            {
+                "tier": "Tier E1: Data Benefactors",
+                "score_range": [90, 100],
+                "grades": [
+                    { "code": "E1-S+", "score_range": [98, 100], "data_threshold": { "min": 100, "unit": "PB", "min_bytes": 100e15 }, "description": "100PB+ open datasets, research focus" },
+                    { "code": "E1-S", "score_range": [95, 97], "data_threshold": { "min": 50, "max": 100, "unit": "PB", "min_bytes": 50e15, "max_bytes": 100e15 }, "description": "50-100PB public data" },
+                    { "code": "E1-A+", "score_range": [92, 94], "data_threshold": { "min": 10, "max": 50, "unit": "PB", "min_bytes": 10e15, "max_bytes": 50e15 }, "description": "10-50PB shared data" },
+                    { "code": "E1-A", "score_range": [90, 91], "data_threshold": { "min": 1, "max": 10, "unit": "PB", "min_bytes": 1e15, "max_bytes": 10e15 }, "description": "1-10PB contributed data" }
+                ]
+            },
+            {
+                "tier": "Tier E2: Data Partners",
+                "score_range": [75, 89],
+                "grades": [
+                    { "code": "E2-B+", "score_range": [87, 89], "data_threshold": { "min": 500, "unit": "TB", "min_bytes": 500e12, "max_bytes": 1e15 }, "description": "500TB-1PB shared" },
+                    { "code": "E2-B", "score_range": [83, 86], "data_threshold": { "min": 250, "max": 500, "unit": "TB", "min_bytes": 250e12, "max_bytes": 500e12 }, "description": "250-500TB contributed" },
+                    { "code": "E2-C+", "score_range": [79, 82], "data_threshold": { "min": 100, "max": 250, "unit": "TB", "min_bytes": 100e12, "max_bytes": 250e12 }, "description": "100-250TB partial access" },
+                    { "code": "E2-C", "score_range": [75, 78], "data_threshold": { "min": 50, "max": 100, "unit": "TB", "min_bytes": 50e12, "max_bytes": 100e12 }, "description": "50-100TB limited sharing" }
+                ]
+            },
+            {
+                "tier": "Tier E3: Data Neutrals",
+                "score_range": [55, 74],
+                "grades": [
+                    { "code": "E3-D+", "score_range": [72, 74], "data_threshold": { "min": 25, "max": 50, "unit": "TB", "min_bytes": 25e12, "max_bytes": 50e12 }, "description": "25-50TB minimal sharing" },
+                    { "code": "E3-D", "score_range": [68, 71], "data_threshold": { "min": 10, "max": 25, "unit": "TB", "min_bytes": 10e12, "max_bytes": 25e12 }, "description": "10-25TB token contribution" },
+                    { "code": "E3-E+", "score_range": [64, 67], "data_threshold": { "min": 5, "max": 10, "unit": "TB", "min_bytes": 5e12, "max_bytes": 10e12 }, "description": "5-10TB symbolic sharing" },
+                    { "code": "E3-E", "score_range": [60, 63], "data_threshold": { "min": 1, "max": 5, "unit": "TB", "min_bytes": 1e12, "max_bytes": 5e12 }, "description": "1-5TB minimal access" },
+                    { "code": "E3-F", "score_range": [55, 59], "data_threshold": { "max": 1, "unit": "TB", "max_bytes": 1e12 }, "description": "<1TB shared" }
+                ]
+            },
+            {
+                "tier": "Tier E4: Data Hoarders",
+                "score_range": [35, 54],
+                "grades": [
+                    { "code": "E4-G+", "score_range": [52, 54], "description": "Massive private datasets, minimal sharing" },
+                    { "code": "E4-G", "score_range": [48, 51], "description": "Large-scale data collection, token access" },
+                    { "code": "E4-H+", "score_range": [44, 47], "description": "Significant data assets, heavily restricted" },
+                    { "code": "E4-H", "score_range": [40, 43], "description": "Valuable datasets, no community access" },
+                    { "code": "E4-I", "score_range": [35, 39], "description": "Active data enclosure" }
+                ]
+            },
+            {
+                "tier": "Tier E5: Data Predators",
+                "score_range": [15, 34],
+                "grades": [
+                    { "code": "E5-J+", "score_range": [32, 34], "description": "Extract value, contribute nothing" },
+                    { "code": "E5-J", "score_range": [28, 31], "description": "Leverage community, hoard results" },
+                    { "code": "E5-K+", "score_range": [24, 27], "description": "Strategic data withholding" },
+                    { "code": "E5-K", "score_range": [20, 23], "description": "Anti-competitive data practices" },
+                    { "code": "E5-L", "score_range": [15, 19], "description": "Actively harmful to data commons" }
+                ]
+            }
+        ]
+    },
+    "ratio_scoring": {
+        "consumer": {
+            "data_score_formula": "Data_Score = (Data_Contributed_GB / 1000) * 100",
+            "data_score_equivalent": "Data_Score = Data_Contributed_GB * 0.1",
+            "compute_score_formula": "Compute_Score = (Hardware_Score * Availability_Score) / 100",
+            "ratio_formula": "Ratio = Data_Score / Compute_Score",
+            "notes": "Data contribution input expected in GB; Hardware_Score and Availability_Score expected as 0..100"
+        },
+        "enterprise": {
+            "data_score_formula": "Data_Score = log10(Data_Contributed_TB) * 20",
+            "compute_score_formula": "Compute_Score = Total_Compute_Capacity / 1000",
+            "ratio_formula": "Ratio = Data_Score / Compute_Score",
+            "notes": "Data input expected in TB; Total_Compute_Capacity expected in same compute units as used (e.g., TFLOPS) scaled by 1000"
+        }
+    },
+    "multipliers": {
+        "consumer_ratio": [
+            { "min": 2.0, "max": null, "label": "Data-rich", "multiplier": 1.5 },
+            { "min": 1.0, "max": 2.0, "label": "Balanced", "multiplier": 1.0 },
+            { "min": 0.5, "max": 1.0, "label": "Compute-heavy", "multiplier": 0.8 },
+            { "min": 0.1, "max": 0.5, "label": "Extreme compute bias", "multiplier": 0.5 },
+            { "min": null, "max": 0.1, "label": "Pure consumer", "multiplier": 0.3 }
+        ],
+        "enterprise_ratio": [
+            { "min": 5.0, "max": null, "label": "Data philanthropist", "multiplier": 2.0 },
+            { "min": 2.0, "max": 5.0, "label": "Strong contributor", "multiplier": 1.5 },
+            { "min": 1.0, "max": 2.0, "label": "Fair partner", "multiplier": 1.0 },
+            { "min": 0.5, "max": 1.0, "label": "Net consumer", "multiplier": 0.7 },
+            { "min": 0.1, "max": 0.5, "label": "Heavy consumer", "multiplier": 0.4 },
+            { "min": null, "max": 0.1, "label": "Predatory", "multiplier": 0.1 }
+        ],
+        "quality": [
+            { "label": "Curated, labeled training data", "multiplier": 1.5 },
+            { "label": "Raw but structured data", "multiplier": 1.2 },
+            { "label": "Unstructured but valuable", "multiplier": 1.0 },
+            { "label": "Low-quality/noisy data", "multiplier": 0.7 },
+            { "label": "Synthetic/generated data", "multiplier": 0.5 }
+        ],
+        "accessibility": [
+            { "label": "Public domain/open license", "multiplier": 1.4 },
+            { "label": "Research/educational use", "multiplier": 1.3 },
+            { "label": "Community access with attribution", "multiplier": 1.1 },
+            { "label": "Restricted/regulated access", "multiplier": 0.8 },
+            { "label": "Heavily licensed/limited", "multiplier": 0.5 },
+            { "label": "Completely proprietary", "multiplier": 0.2 }
+        ],
+        "freshness": [
+            { "label": "Real-time/streaming data", "multiplier": 1.3 },
+            { "label": "Regularly updated datasets", "multiplier": 1.2 },
+            { "label": "Static but relevant data", "multiplier": 1.0 },
+            { "label": "Outdated/archival data", "multiplier": 0.6 }
+        ]
+    },
+    "hoarding_penalties": {
+        "consumer": [
+            { "condition": "private_data_bytes >= 1 * TB", "threshold_bytes": 1e12, "penalty_points": 20, "description": "1TB+ private data, minimal sharing" },
+            { "condition": "valuable_private_data_bytes >= 500 * GB AND contributions == 0", "threshold_bytes": 500e9, "penalty_points": 30, "description": "500GB+ valuable data, no contribution" },
+            { "condition": "active_data_collection AND contributions == 0", "penalty_points": 40, "description": "Active data collection, zero sharing" }
+        ],
+        "enterprise": [
+            { "condition": "private_datasets_bytes >= 1 * PB", "threshold_bytes": 1e15, "penalty_points": 50, "description": "1PB+ private datasets" },
+            { "condition": "data_monopoly_bytes >= 10 * PB", "threshold_bytes": 10e15, "penalty_points": 70, "description": "10PB+ data monopoly" },
+            { "condition": "strategic_data_enclosure == true", "penalty_points": 80, "description": "Strategic data enclosure" },
+            { "condition": "extractive_ai_training_without_contribution == true", "penalty_points": 90, "description": "Extractive AI training without contribution" }
+        ]
+    },
+    "integrated_data_score": {
+        "expression": "Final_Data_Score = Base_Data_Tier * (Data_Quality * Data_Access * Data_Freshness) * Ratio_Multiplier - Hoarding_Penalties",
+        "components": {
+            "Base_Data_Tier": "Numeric base score from assigned grade (e.g., 93 for T1-A+)",
+            "Data_Quality": "chosen multiplier from multipliers.quality",
+            "Data_Access": "chosen multiplier from multipliers.accessibility",
+            "Data_Freshness": "chosen multiplier from multipliers.freshness",
+            "Ratio_Multiplier": "selected from multipliers.consumer_ratio or multipliers.enterprise_ratio depending on scale",
+            "Hoarding_Penalties": "sum of applicable penalties (positive values are subtracted)"
+        },
+        "notes": "All multipliers are multiplicative. Apply ratio multiplier after quality/access/accessibility/freshness product. Subtract penalties at the end."
+    },
+    "examples": [
+        {
+            "id": "open_source_researcher_consumer",
+            "scale": "consumer",
+            "inputs": {
+                "data_contributed": { "value": 2, "unit": "TB", "bytes": 2e12 },
+                "base_tier_score": 93,
+                "quality_multiplier": 1.5,
+                "access_multiplier": 1.4,
+                "freshness_multiplier": 1.2,
+                "hardware_score": null,
+                "availability_score": null,
+                "hoarding_penalties": 0
+            },
+            "computed_steps": {
+                "data_contributed_gb": 2000,
+                "data_score": 200,
+                "data_score_value": 200,
+                "compute_score": null,
+                "ratio": null,
+                "ratio_multiplier_applied": 1.5,
+                "quality_access_freshness_product": 2.52
+            },
+            "final_calculation": {
+                "base": 93,
+                "qaf_product": 2.52,
+                "post_qaf": 234.36,
+                "after_ratio_multiplier": 351.54,
+                "hoarding_penalties_subtracted": 0,
+                "final_score": 351.54,
+                "interpretation": "Elite Contributor"
+            }
+        },
+        {
+            "id": "google_style_corporation_enterprise",
+            "scale": "enterprise",
+            "inputs": {
+                "private_data": { "value": 100, "unit": "EB", "bytes": 100e18 },
+                "shared_data": { "value": 1, "unit": "PB", "bytes": 1e15 },
+                "base_tier_score": 50,
+                "quality_multiplier": 1.0,
+                "access_multiplier": 0.2,
+                "freshness_multiplier": 1.2,
+                "hoarding_penalties": 90
+            },
+            "computed_steps": {
+                "data_contributed_tb_for_formula": 1e8,
+                "data_score_log_formula": "Data_Score = log10(Data_Contributed_TB) * 20",
+                "data_score_value": null,
+                "ratio_multiplier": 0.1
+            },
+            "final_calculation": {
+                "base": 50,
+                "qaf_product": 0.24,
+                "post_qaf": 12,
+                "after_ratio_multiplier": 1.2,
+                "after_penalties": -88.8,
+                "final_score": -88.8,
+                "interpretation": "Severe Penalty"
+            }
+        },
+        {
+            "id": "gaming_pc_user_consumer",
+            "scale": "consumer",
+            "inputs": {
+                "data_contributed": { "value": 0, "unit": "GB", "bytes": 0 },
+                "base_tier_score": 50,
+                "ratio_multiplier": 0.3,
+                "hoarding_penalties": 0
+            },
+            "final_calculation": {
+                "final_score": 15,
+                "interpretation": "Data Drain"
+            }
+        },
+        {
+            "id": "university_research_lab_enterprise",
+            "scale": "enterprise",
+            "inputs": {
+                "data_contributed": { "value": 50, "unit": "PB", "bytes": 50e15 },
+                "base_tier_score": 96,
+                "quality_multiplier": 1.5,
+                "access_multiplier": 1.4,
+                "freshness_multiplier": 1.1,
+                "ratio_multiplier": 2.0,
+                "hoarding_penalties": 0
+            },
+            "final_calculation": {
+                "qaf_product": 2.31,
+                "post_qaf": 221.76,
+                "after_ratio_multiplier": 443.52,
+                "final_score": 443.52,
+                "interpretation": "Premium Benefactor"
+            }
+        }
+    ],
+    "notes": "All numeric thresholds include normalized byte values for machine processing; text fields remain for human readability. Implementations should evaluate ratio ranges inclusively as described and apply the first matching multiplier rule."
+}

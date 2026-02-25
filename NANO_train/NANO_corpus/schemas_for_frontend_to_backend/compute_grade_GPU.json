@@ -1,0 +1,434 @@
+{
+    "categories": [
+        {
+            "name": "Data Center & HPC",
+            "items": [
+                { "name": "B200", "grade": 100 },
+                { "name": "B100", "grade": 100 },
+                { "name": "GB200", "grade": 98 },
+                { "name": "H200", "grade": 95 },
+                { "name": "H100", "grade": 92 },
+                { "name": "A100", "grade": 85 },
+                { "name": "H20", "grade": 70 },
+                { "name": "A40", "grade": 65 },
+                { "name": "V100", "grade": 60 },
+                { "name": "A30", "grade": 55 },
+                { "name": "A10", "grade": 45 },
+                { "name": "T4", "grade": 35 },
+                { "name": "A16", "grade": 30 },
+                { "name": "P100", "grade": 25 },
+                { "name": "P40", "grade": 18 },
+                { "name": "K80", "grade": 12 }
+            ]
+        },
+        {
+            "name": "Professional Workstation",
+            "items": [
+                { "name": "RTX 6000 Ada", "grade": 75 },
+                { "name": "RTX 5000 Ada", "grade": 65 },
+                { "name": "RTX A6000", "grade": 62 },
+                { "name": "RTX 4500 Ada", "grade": 58 },
+                { "name": "RTX A5000", "grade": 55 },
+                { "name": "RTX 4000 Ada", "grade": 52 },
+                { "name": "RTX A4000", "grade": 48 },
+                { "name": "Quadro RTX 8000", "grade": 45 },
+                { "name": "Quadro RTX 6000", "grade": 42 },
+                { "name": "Quadro RTX 5000", "grade": 38 }
+            ]
+        },
+        {
+            "name": "GeForce RTX 50 Series",
+            "items": [
+                { "name": "RTX 5090", "grade": 82 },
+                { "name": "RTX 5080", "grade": 68 },
+                { "name": "RTX 5070 Ti", "grade": 58 },
+                { "name": "RTX 5070", "grade": 52 },
+                { "name": "RTX 5060 Ti", "grade": 46 },
+                { "name": "RTX 5060", "grade": 40 }
+            ]
+        },
+        {
+            "name": "GeForce RTX 40 Series",
+            "items": [
+                { "name": "RTX 4090", "grade": 78 },
+                { "name": "RTX 4080 SUPER", "grade": 66 },
+                { "name": "RTX 4070 Ti SUPER", "grade": 56 },
+                { "name": "RTX 4070 SUPER", "grade": 50 },
+                { "name": "RTX 4060 Ti", "grade": 44 },
+                { "name": "RTX 4060", "grade": 38 }
+            ]
+        },
+        {
+            "name": "GeForce RTX 30 Series",
+            "items": [
+                { "name": "RTX 3090 Ti", "grade": 65 },
+                { "name": "RTX 3090", "grade": 63 },
+                { "name": "RTX 3080 Ti", "grade": 58 },
+                { "name": "RTX 3080", "grade": 54 },
+                { "name": "RTX 3070 Ti", "grade": 48 },
+                { "name": "RTX 3070", "grade": 45 },
+                { "name": "RTX 3060 Ti", "grade": 42 },
+                { "name": "RTX 3060", "grade": 38 },
+                { "name": "RTX 3050", "grade": 28 }
+            ]
+        },
+        {
+            "name": "GeForce RTX 20 Series",
+            "items": [
+                { "name": "RTX 2080 Ti", "grade": 42 },
+                { "name": "RTX 2080 Super", "grade": 38 },
+                { "name": "RTX 2080", "grade": 35 },
+                { "name": "RTX 2070 Super", "grade": 32 },
+                { "name": "RTX 2070", "grade": 28 },
+                { "name": "RTX 2060 Super", "grade": 25 },
+                { "name": "RTX 2060", "grade": 22 }
+            ]
+        },
+        {
+            "name": "GeForce GTX 16/10 Series",
+            "items": [
+                { "name": "GTX 1080 Ti", "grade": 30 },
+                { "name": "GTX 1080", "grade": 26 },
+                { "name": "GTX 1070 Ti", "grade": 24 },
+                { "name": "GTX 1070", "grade": 22 },
+                { "name": "GTX 1660 Ti", "grade": 20 },
+                { "name": "GTX 1660 Super", "grade": 18 },
+                { "name": "GTX 1660", "grade": 16 },
+                { "name": "GTX 1060", "grade": 15 },
+                { "name": "GTX 1650", "grade": 12 },
+                { "name": "GTX 1050 Ti", "grade": 8 },
+                { "name": "GTX 1050", "grade": 6 }
+            ]
+        },
+        {
+            "name": "Titan Series",
+            "items": [
+                { "name": "Titan RTX", "grade": 45 },
+                { "name": "Titan V", "grade": 40 },
+                { "name": "Titan Xp", "grade": 32 },
+                { "name": "Titan X", "grade": 25 }
+            ]
+        },
+        {
+            "name": "Jetson/Embedded",
+            "items": [
+                { "name": "Jetson AGX Orin", "grade": 42 },
+                { "name": "Jetson Orin NX", "grade": 35 },
+                { "name": "Jetson AGX Xavier", "grade": 28 },
+                { "name": "Jetson Xavier NX", "grade": 22 },
+                { "name": "Jetson Nano", "grade": 8 }
+            ]
+        },
+        {
+            "name": "Mobile/Low Power",
+            "items": [
+                { "name": "Mobile RTX 40xx", "grade_min": 25, "grade_max": 55 },
+                { "name": "Mobile RTX 30xx", "grade_min": 20, "grade_max": 45 },
+                { "name": "MX570", "grade": 15 },
+                { "name": "MX550", "grade": 10 },
+                { "name": "MX450", "grade": 8 }
+            ]
+        },
+        {
+            "name": "Legacy (NVIDIA)",
+            "items": [
+                { "name": "GTX 900 series", "grade_min": 10, "grade_max": 18 },
+                { "name": "GTX 700 series", "grade_min": 8, "grade_max": 15 },
+                { "name": "Older cards", "grade_min": 0, "grade_max": 8 }
+            ]
+        },
+        {
+            "name": "AMD Instinct (Data Center)",
+            "items": [
+                { "name": "MI350X", "grade": 95 },
+                { "name": "MI350", "grade": 88 },
+                { "name": "MI325X", "grade": 85 },
+                { "name": "MI300X", "grade": 82 },
+                { "name": "MI300A", "grade": 78 },
+                { "name": "MI250X", "grade": 70 },
+                { "name": "MI250", "grade": 65 },
+                { "name": "MI210", "grade": 55 },
+                { "name": "MI100", "grade": 45 },
+                { "name": "MI60", "grade": 30 },
+                { "name": "MI50", "grade": 25 },
+                { "name": "MI25", "grade": 15 }
+            ]
+        },
+        {
+            "name": "Radeon RX 7000 Series (RDNA 3)",
+            "items": [
+                { "name": "RX 7900 XTX", "grade": 48 },
+                { "name": "RX 7900 XT", "grade": 42 },
+                { "name": "RX 7800 XT", "grade": 38 },
+                { "name": "RX 7700 XT", "grade": 32 },
+                { "name": "RX 7600 XT", "grade": 28 },
+                { "name": "RX 7600", "grade": 24 }
+            ]
+        },
+        {
+            "name": "Radeon RX 6000 Series (RDNA 2)",
+            "items": [
+                { "name": "RX 6950 XT", "grade": 40 },
+                { "name": "RX 6900 XT", "grade": 38 },
+                { "name": "RX 6800 XT", "grade": 35 },
+                { "name": "RX 6800", "grade": 32 },
+                { "name": "RX 6750 XT", "grade": 30 },
+                { "name": "RX 6700 XT", "grade": 28 },
+                { "name": "RX 6650 XT", "grade": 25 },
+                { "name": "RX 6600 XT", "grade": 22 },
+                { "name": "RX 6600", "grade": 18 },
+                { "name": "RX 6500 XT", "grade": 12 },
+                { "name": "RX 6400", "grade": 8 }
+            ]
+        },
+        {
+            "name": "Radeon RX 5000 Series (RDNA 1)",
+            "items": [
+                { "name": "RX 5700 XT", "grade": 25 },
+                { "name": "RX 5700", "grade": 22 },
+                { "name": "RX 5600 XT", "grade": 18 },
+                { "name": "RX 5500 XT", "grade": 14 }
+            ]
+        },
+        {
+            "name": "Radeon Vega Series",
+            "items": [
+                { "name": "Radeon VII", "grade": 30 },
+                { "name": "Vega 64", "grade": 25 },
+                { "name": "Vega 56", "grade": 22 },
+                { "name": "Vega Frontier Edition", "grade": 28 }
+            ]
+        },
+        {
+            "name": "Radeon RX 500/400 Series (Polaris)",
+            "items": [
+                { "name": "RX 590", "grade": 15 },
+                { "name": "RX 580", "grade": 14 },
+                { "name": "RX 570", "grade": 12 },
+                { "name": "RX 560", "grade": 8 },
+                { "name": "RX 550", "grade": 5 },
+                { "name": "RX 480", "grade": 13 },
+                { "name": "RX 470", "grade": 11 }
+            ]
+        },
+        {
+            "name": "AMD Professional/WORKSTATION",
+            "items": [
+                { "name": "Radeon Pro W7900", "grade": 45 },
+                { "name": "Radeon Pro W7800", "grade": 38 },
+                { "name": "Radeon Pro W6800", "grade": 35 },
+                { "name": "Radeon Pro W6600", "grade": 22 },
+                { "name": "Radeon Pro W5700", "grade": 20 },
+                { "name": "Radeon Pro W5500", "grade": 15 }
+            ]
+        },
+        {
+            "name": "AMD Embedded/Access",
+            "items": [
+                { "name": "Radeon RX 7900M", "grade": 35 },
+                { "name": "Radeon RX 7700S", "grade": 28 },
+                { "name": "Radeon RX 7600M XT", "grade": 25 },
+                { "name": "Radeon RX 6600M", "grade": 20 },
+                { "name": "Radeon RX 5700M", "grade": 18 }
+            ]
+        },
+        {
+            "name": "AMD Legacy",
+            "items": [
+                { "name": "RX 5000M Series", "grade_min": 12, "grade_max": 20 },
+                { "name": "RX 500 Series", "grade_min": 8, "grade_max": 15 },
+                { "name": "R9 Fury Series", "grade_min": 10, "grade_max": 18 },
+                { "name": "HD 7000 Series", "grade_min": 5, "grade_max": 12 }
+            ]
+        },
+        {
+            "name": "Intel Data Center Max Series",
+            "items": [
+                { "name": "Ponte Vecchio (Max 1550)", "grade": 75 },
+                { "name": "Max 1450", "grade": 65 },
+                { "name": "Max 1350", "grade": 55 },
+                { "name": "Max 1100", "grade": 45 }
+            ]
+        },
+        {
+            "name": "Intel Arc A-Series (Alchemist)",
+            "items": [
+                { "name": "A770 (16GB)", "grade": 32 },
+                { "name": "A770 (8GB)", "grade": 30 },
+                { "name": "A750", "grade": 28 },
+                { "name": "A580", "grade": 22 },
+                { "name": "A380", "grade": 15 },
+                { "name": "A310", "grade": 10 }
+            ]
+        },
+        {
+            "name": "Intel Arc Pro Series",
+            "items": [
+                { "name": "A60", "grade": 25 },
+                { "name": "A50", "grade": 20 },
+                { "name": "A40", "grade": 18 },
+                { "name": "A30M", "grade": 15 }
+            ]
+        },
+        {
+            "name": "Intel Integrated Graphics",
+            "items": [
+                { "name": "Arc Graphics (Core Ultra)", "grade": 12 },
+                { "name": "Iris Xe (12th-14th Gen)", "grade": 8 },
+                { "name": "UHD Graphics 700-series", "grade": 5 },
+                { "name": "UHD Graphics 600-series", "grade": 3 }
+            ]
+        },
+        {
+            "name": "Intel Legacy Discrete",
+            "items": [
+                { "name": "DG2", "grade": 18 },
+                { "name": "DG1", "grade": 8 }
+            ]
+        },
+        {
+            "name": "Intel Data Center Flex Series",
+            "items": [
+                { "name": "Flex 170", "grade": 40 },
+                { "name": "Flex 140", "grade": 30 }
+            ]
+        },
+        {
+            "name": "Intel Mobile Arc",
+            "items": [
+                { "name": "Arc A770M", "grade": 28 },
+                { "name": "Arc A730M", "grade": 24 },
+                { "name": "Arc A570M", "grade": 20 },
+                { "name": "Arc A530M", "grade": 16 },
+                { "name": "Arc A370M", "grade": 14 },
+                { "name": "Arc A350M", "grade": 12 }
+            ]
+        },
+        {
+            "name": "Intel Legacy Integrated",
+            "items": [
+                { "name": "Iris Pro (5th-10th Gen)", "grade": 4 },
+                { "name": "HD Graphics 5000-600", "grade": 2 },
+                { "name": "Older HD Graphics", "grade": 1 }
+            ]
+        },
+        {
+            "name": "Google Cloud TPU",
+            "items": [
+                { "name": "TPU v5", "grade": 90 },
+                { "name": "TPU v4", "grade": 80 },
+                { "name": "TPU v3", "grade": 65 },
+                { "name": "Edge TPU", "grade": 25 }
+            ]
+        },
+        {
+            "name": "Amazon AWS",
+            "items": [
+                { "name": "Trainium2", "grade": 85 },
+                { "name": "Trainium1", "grade": 70 },
+                { "name": "Inferentia2", "grade": 60 },
+                { "name": "Inferentia1", "grade": 45 }
+            ]
+        },
+        {
+            "name": "Graphcore",
+            "items": [
+                { "name": "Bow IPU", "grade": 65 },
+                { "name": "MK2 IPU", "grade": 50 }
+            ]
+        },
+        {
+            "name": "Groq",
+            "items": [
+                { "name": "LPU", "grade": 55 }
+            ]
+        },
+        {
+            "name": "Cerebras",
+            "items": [
+                { "name": "CS-3", "grade": 88 },
+                { "name": "CS-2", "grade": 75 },
+                { "name": "CS-1", "grade": 60 }
+            ]
+        },
+        {
+            "name": "Habana Labs",
+            "items": [
+                { "name": "Gaudi 3", "grade": 70 },
+                { "name": "Gaudi 2", "grade": 55 },
+                { "name": "Gaudi 1", "grade": 40 }
+            ]
+        },
+        {
+            "name": "SambaNova",
+            "items": [
+                { "name": "SN40L", "grade": 72 }
+            ]
+        },
+        {
+            "name": "Mythic",
+            "items": [
+                { "name": "AMP", "grade": 20 }
+            ]
+        },
+        {
+            "name": "Qualcomm",
+            "items": [
+                { "name": "Cloud AI 100", "grade": 45 },
+                { "name": "Snapdragon X Elite", "grade": 25 },
+                { "name": "Snapdragon 8 Gen 3", "grade": 15 }
+            ]
+        },
+        {
+            "name": "Apple",
+            "items": [
+                { "name": "M4 (40-core Neural)", "grade": 35 },
+                { "name": "M3 (40-core Neural)", "grade": 30 },
+                { "name": "M2 (16-core Neural)", "grade": 22 },
+                { "name": "M1 (16-core Neural)", "grade": 18 },
+                { "name": "A18 Pro", "grade": 20 },
+                { "name": "A17 Pro", "grade": 16 },
+                { "name": "A16 Bionic", "grade": 12 }
+            ]
+        },
+        {
+            "name": "Alibaba",
+            "items": [
+                { "name": "Hanguang 800", "grade": 50 }
+            ]
+        },
+        {
+            "name": "Tencent",
+            "items": [
+                { "name": "Zixiao", "grade": 45 }
+            ]
+        },
+        {
+            "name": "Baidu",
+            "items": [
+                { "name": "Kunlunxin", "grade": 40 }
+            ]
+        },
+        {
+            "name": "Cambricon",
+            "items": [
+                { "name": "MLU-370", "grade": 35 }
+            ]
+        },
+        {
+            "name": "AMD/Xilinx",
+            "items": [
+                { "name": "Versal AI Edge", "grade": 30 },
+                { "name": "Alveo", "grade": 25 }
+            ]
+        },
+        {
+            "name": "Mobile Processors",
+            "items": [
+                { "name": "MediaTek Dimensity 9300", "grade": 18 },
+                { "name": "Samsung Exynos 2400", "grade": 15 },
+                { "name": "Google Tensor G3", "grade": 16 }
+            ]
+        }
+    ]
+}

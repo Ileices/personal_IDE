@@ -1,0 +1,99 @@
+{
+  "benchmark_info": {
+    "test_date": "2025-06-11T23:32:18.131824",
+    "total_queries": 8,
+    "average_response_time_ms": 6.1477720737457275,
+    "success_rate_percent": 100.0
+  },
+  "test_results": [
+    {
+      "query": "What is the Theory of Absolute Existence?",
+      "response_time_ms": 48.03729057312012,
+      "response_length": 304,
+      "contains_ae_info": true,
+      "contains_metrics": true,
+      "rby_state": "RBY(0.368, 0.311, 0.321)"
+    },
+    {
+      "query": "How do RBY triplets work in machine learning?",
+      "response_time_ms": 0.1480579376220703,
+      "response_length": 314,
+      "contains_ae_info": true,
+      "contains_metrics": true,
+      "rby_state": "RBY(0.370, 0.310, 0.320)"
+    },
+    {
+      "query": "Explain quantum consciousness in AE Framework",
+      "response_time_ms": 0.0,
+      "response_length": 298,
+      "contains_ae_info": true,
+      "contains_metrics": true,
+      "rby_state": "RBY(0.370, 0.310, 0.320)"
+    },
+    {
+      "query": "What is AE compliance and why does it matter?",
+      "response_time_ms": 0.9968280792236328,
+      "response_length": 278,
+      "contains_ae_info": true,
+      "contains_metrics": true,
+      "rby_state": "RBY(0.368, 0.311, 0.321)"
+    },
+    {
+      "query": "How does meta-learning work with RBY states?",
+      "response_time_ms": 0.0,
+      "response_length": 314,
+      "contains_ae_info": true,
+      "contains_metrics": true,
+      "rby_state": "RBY(0.370, 0.310, 0.320)"
+    },
+    {
+      "query": "Tell me about optimization in neural networks",
+      "response_time_ms": 0.0,
+      "response_length": 298,
+      "contains_ae_info": true,
+      "contains_metrics": true,
+      "rby_state": "RBY(0.368, 0.311, 0.321)"
+    },
+    {
+      "query": "What is the mathematical foundation of AE theory?",
+      "response_time_ms": 0.0,
+      "response_length": 304,
+      "contains_ae_info": true,
+      "contains_metrics": true,
+      "rby_state": "RBY(0.368, 0.311, 0.321)"
+    },
+    {
+      "query": "How do you measure AE Framework performance?",
+      "response_time_ms": 0.0,
+      "response_length": 304,
+      "contains_ae_info": true,
+      "contains_metrics": true,
+      "rby_state": "RBY(0.368, 0.311, 0.321)"
+    }
+  ],
+  "chatbot_statistics": {
+    "total_conversations": 8,
+    "average_processing_time_ms": 0.01850724220275879,
+    "current_rby_state": "RBY(0.368, 0.311, 0.321)",
+    "ae_compliance_errors": [
+      1.1102230246251565e-16,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.1102230246251565e-16,
+      2.220446049250313e-16
+    ],
+    "conversation_entropy": [
+      3.8723360780429354,
+      4.0882695528023385,
+      3.9922099084326965,
+      3.8837524746274465,
+      4.066608606929473,
+      3.8334266411498827,
+      3.8713236815596868,
+      3.8004834718261398
+    ]
+  }
+}

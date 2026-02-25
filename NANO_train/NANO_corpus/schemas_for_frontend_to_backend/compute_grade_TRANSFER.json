@@ -1,0 +1,352 @@
+{
+    "source_file": "/./new stuff/FOAM/HPC/compute_grade_TRANSFER.txt",
+    "title": "NETWORK QUALITY & DATA TRANSFER GRADING SYSTEM",
+    "component_weights": {
+        "bandwidth_capability": { "weight_percent": 40, "max_points": 40 },
+        "data_transfer_limits": { "weight_percent": 25, "max_points": 25 },
+        "network_latency_jitter": { "weight_percent": 20, "max_points": 20 },
+        "public_ip_nat_status": { "weight_percent": 15, "max_points": 15 }
+    },
+    "components": {
+        "bandwidth_capability": {
+            "max_points": 40,
+            "tiers": [
+                {
+                    "id": 1,
+                    "name": "Ultra-High Bandwidth",
+                    "tier_points_range": { "min": 35, "max": 40 },
+                    "entries": [
+                        { "label": "40Gbps+ Enterprise", "description": null, "points_min": 38, "points_max": 40 },
+                        { "label": "25Gbps Data Center", "description": null, "points_min": 36, "points_max": 38 },
+                        { "label": "10Gbps Fiber", "description": null, "points_min": 35, "points_max": 37 }
+                    ]
+                },
+                {
+                    "id": 2,
+                    "name": "High Bandwidth",
+                    "tier_points_range": { "min": 28, "max": 34 },
+                    "entries": [
+                        { "label": "5Gbps Fiber", "description": null, "points_min": 32, "points_max": 34 },
+                        { "label": "2.5Gbps Fiber/Cable", "description": null, "points_min": 30, "points_max": 32 },
+                        { "label": "1Gbps Symmetrical", "description": null, "points_min": 28, "points_max": 30 }
+                    ]
+                },
+                {
+                    "id": 3,
+                    "name": "Medium Bandwidth",
+                    "tier_points_range": { "min": 20, "max": 27 },
+                    "entries": [
+                        { "label": "500Mbps-1Gbps", "description": null, "points_min": 25, "points_max": 27 },
+                        { "label": "300-500Mbps", "description": null, "points_min": 22, "points_max": 24 },
+                        { "label": "100-300Mbps", "description": null, "points_min": 20, "points_max": 22 }
+                    ]
+                },
+                {
+                    "id": 4,
+                    "name": "Basic Bandwidth",
+                    "tier_points_range": { "min": 12, "max": 19 },
+                    "entries": [
+                        { "label": "50-100Mbps", "description": null, "points_min": 17, "points_max": 19 },
+                        { "label": "25-50Mbps", "description": null, "points_min": 14, "points_max": 16 },
+                        { "label": "10-25Mbps", "description": null, "points_min": 12, "points_max": 14 }
+                    ]
+                },
+                {
+                    "id": 5,
+                    "name": "Limited Bandwidth",
+                    "tier_points_range": { "min": 5, "max": 11 },
+                    "entries": [
+                        { "label": "5-10Mbps", "description": null, "points_min": 9, "points_max": 11 },
+                        { "label": "1-5Mbps", "description": null, "points_min": 6, "points_max": 8 },
+                        { "label": "<1Mbps", "description": null, "points_min": 5, "points_max": 5 }
+                    ]
+                }
+            ]
+        },
+        "data_transfer_limits": {
+            "max_points": 25,
+            "tiers": [
+                {
+                    "id": 1,
+                    "name": "Unlimited",
+                    "tier_points_range": { "min": 23, "max": 25 },
+                    "entries": [
+                        { "label": "True Unlimited", "description": null, "points_min": 25, "points_max": 25 },
+                        { "label": "Business Unlimited", "description": null, "points_min": 24, "points_max": 24 },
+                        { "label": "Residential Unlimited", "description": null, "points_min": 23, "points_max": 23 }
+                    ]
+                },
+                {
+                    "id": 2,
+                    "name": "High Caps",
+                    "tier_points_range": { "min": 19, "max": 22 },
+                    "entries": [
+                        { "label": "10TB+ Monthly", "description": null, "points_min": 22, "points_max": 22 },
+                        { "label": "5-10TB Monthly", "description": null, "points_min": 20, "points_max": 20 },
+                        { "label": "2-5TB Monthly", "description": null, "points_min": 19, "points_max": 19 }
+                    ]
+                },
+                {
+                    "id": 3,
+                    "name": "Medium Caps",
+                    "tier_points_range": { "min": 14, "max": 18 },
+                    "entries": [
+                        { "label": "1-2TB Monthly", "description": null, "points_min": 17, "points_max": 18 },
+                        { "label": "500GB-1TB Monthly", "description": null, "points_min": 15, "points_max": 16 },
+                        { "label": "250-500GB Monthly", "description": null, "points_min": 14, "points_max": 14 }
+                    ]
+                },
+                {
+                    "id": 4,
+                    "name": "Low Caps",
+                    "tier_points_range": { "min": 9, "max": 13 },
+                    "entries": [
+                        { "label": "100-250GB Monthly", "description": null, "points_min": 12, "points_max": 13 },
+                        { "label": "50-100GB Monthly", "description": null, "points_min": 10, "points_max": 11 },
+                        { "label": "<50GB Monthly", "description": null, "points_min": 9, "points_max": 9 }
+                    ]
+                },
+                {
+                    "id": 5,
+                    "name": "Severely Limited",
+                    "tier_points_range": { "min": 5, "max": 8 },
+                    "entries": [
+                        { "label": "Strict Throttling", "description": null, "points_min": 7, "points_max": 8 },
+                        { "label": "Pay-per-GB", "description": null, "points_min": 5, "points_max": 6 }
+                    ]
+                }
+            ]
+        },
+        "network_latency_and_jitter": {
+            "max_points": 20,
+            "tiers": [
+                {
+                    "id": 1,
+                    "name": "Premium Low-Latency",
+                    "tier_points_range": { "min": 18, "max": 20 },
+                    "entries": [
+                        { "label": "<10ms to major hubs", "description": null, "points_min": 20, "points_max": 20 },
+                        { "label": "10-20ms, <2ms jitter", "description": null, "points_min": 18, "points_max": 19 }
+                    ]
+                },
+                {
+                    "id": 2,
+                    "name": "Excellent",
+                    "tier_points_range": { "min": 15, "max": 17 },
+                    "entries": [
+                        { "label": "20-30ms, <5ms jitter", "description": null, "points_min": 17, "points_max": 17 },
+                        { "label": "30-40ms, <8ms jitter", "description": null, "points_min": 15, "points_max": 16 }
+                    ]
+                },
+                {
+                    "id": 3,
+                    "name": "Good",
+                    "tier_points_range": { "min": 11, "max": 14 },
+                    "entries": [
+                        { "label": "40-60ms, <12ms jitter", "description": null, "points_min": 13, "points_max": 14 },
+                        { "label": "60-80ms, <15ms jitter", "description": null, "points_min": 11, "points_max": 12 }
+                    ]
+                },
+                {
+                    "id": 4,
+                    "name": "Average",
+                    "tier_points_range": { "min": 7, "max": 10 },
+                    "entries": [
+                        { "label": "80-120ms, <20ms jitter", "description": null, "points_min": 9, "points_max": 10 },
+                        { "label": "120-150ms, <25ms jitter", "description": null, "points_min": 7, "points_max": 8 }
+                    ]
+                },
+                {
+                    "id": 5,
+                    "name": "Poor",
+                    "tier_points_range": { "min": 3, "max": 6 },
+                    "entries": [
+                        { "label": "150-200ms, <30ms jitter", "description": null, "points_min": 5, "points_max": 6 },
+                        { "label": "200ms+, >30ms jitter", "description": null, "points_min": 3, "points_max": 4 }
+                    ]
+                }
+            ]
+        },
+        "public_ip_nat_status": {
+            "max_points": 15,
+            "tiers": [
+                {
+                    "id": 1,
+                    "name": "Fully Accessible",
+                    "tier_points_range": { "min": 13, "max": 15 },
+                    "entries": [
+                        { "label": "Dedicated Public IP", "description": null, "points_min": 15, "points_max": 15 },
+                        { "label": "Static Public IP", "description": null, "points_min": 14, "points_max": 14 },
+                        { "label": "Dynamic Public IP", "description": null, "points_min": 13, "points_max": 13 }
+                    ]
+                },
+                {
+                    "id": 2,
+                    "name": "Moderate Accessibility",
+                    "tier_points_range": { "min": 10, "max": 12 },
+                    "entries": [
+                        { "label": "NAT with UPnP/Port Forwarding", "description": null, "points_min": 12, "points_max": 12 },
+                        { "label": "CG-NAT with workarounds", "description": null, "points_min": 10, "points_max": 11 }
+                    ]
+                },
+                {
+                    "id": 3,
+                    "name": "Limited Accessibility",
+                    "tier_points_range": { "min": 7, "max": 9 },
+                    "entries": [
+                        { "label": "Strict NAT with some open ports", "description": null, "points_min": 8, "points_max": 9 },
+                        { "label": "Moderate NAT", "description": null, "points_min": 7, "points_max": 7 }
+                    ]
+                },
+                {
+                    "id": 4,
+                    "name": "Restricted",
+                    "tier_points_range": { "min": 4, "max": 6 },
+                    "entries": [
+                        { "label": "Strict NAT, no port control", "description": null, "points_min": 5, "points_max": 6 },
+                        { "label": "Double NAT", "description": null, "points_min": 4, "points_max": 4 }
+                    ]
+                },
+                {
+                    "id": 5,
+                    "name": "Severely Restricted",
+                    "tier_points_range": { "min": 1, "max": 3 },
+                    "entries": [
+                        { "label": "Carrier-grade NAT only", "description": null, "points_min": 2, "points_max": 3 },
+                        { "label": "VPN/Tunnel required", "description": null, "points_min": 1, "points_max": 1 }
+                    ]
+                }
+            ]
+        }
+    },
+    "bonuses": {
+        "uptime": [
+            { "label": "99.9%+ uptime", "points": 8 },
+            { "label": "99%+ uptime", "points": 5 },
+            { "label": "95%+ uptime", "points": 2 }
+        ],
+        "consistency": [
+            { "label": "Consistent speeds (>90% of advertised)", "points": 4 },
+            { "label": "Stable latency (<10% variation)", "points": 3 },
+            { "label": "Predictable performance", "points": 2 }
+        ],
+        "geographic": [
+            { "label": "Multiple major internet exchanges", "points": 5 },
+            { "label": "Underserved region coverage", "points": 4 },
+            { "label": "Edge location strategic value", "points": 3 }
+        ]
+    },
+    "penalties": {
+        "performance": [
+            { "label": "Frequent disconnects (>5/day)", "points": -6 },
+            { "label": "Severe throttling", "points": -8 },
+            { "label": "Unreliable speeds (<50% advertised)", "points": -10 }
+        ],
+        "access": [
+            { "label": "Firewall restrictions", "points": -4 },
+            { "label": "Geographic blocking", "points": -7 },
+            { "label": "Bandwidth shaping", "points": -5 }
+        ]
+    },
+    "formulas": {
+        "base_network_score": {
+            "expression": "(Bandwidth × 0.4) + (Data_Limit × 0.25) + (Latency × 0.2) + (IP_Status × 0.15)",
+            "components": {
+                "bandwidth_weight": 0.4,
+                "data_limit_weight": 0.25,
+                "latency_weight": 0.2,
+                "ip_status_weight": 0.15
+            },
+            "note": "All component scores are on their respective max-points scales (e.g., bandwidth out of 40)."
+        },
+        "final_network_score": {
+            "expression": "Base_Score + sum(Bonuses) + sum(Geographic/Consistency Bonuses) - sum(Penalties)",
+            "note": "Final score can exceed component maxima due to positive bonuses; penalties subtract after base score is computed."
+        }
+    },
+    "examples": [
+        {
+            "name": "Data Center Connection",
+            "values": {
+                "bandwidth": { "label": "100Gbps", "points": 40 },
+                "data_limit": { "label": "Unlimited", "points": 25 },
+                "latency": { "label": "5ms to hubs", "points": 20 },
+                "ip_status": { "label": "Dedicated Public IP", "points": 15 }
+            },
+            "base_score_calculation": {
+                "formula": "(40*0.4) + (25*0.25) + (20*0.2) + (15*0.15)",
+                "result": 28.5
+            },
+            "bonuses": [
+                { "label": "99.9% uptime", "points": 8 },
+                { "label": "Consistent speeds", "points": 4 }
+            ],
+            "final_score": 40.5,
+            "classification": "Premium"
+        },
+        {
+            "name": "Business Fiber",
+            "values": {
+                "bandwidth": { "label": "1Gbps symmetrical", "points": 29 },
+                "data_limit": { "label": "Business Unlimited", "points": 24 },
+                "latency": { "label": "15ms", "points": 18 },
+                "ip_status": { "label": "Static Public IP", "points": 14 }
+            },
+            "base_score_calculation": {
+                "formula": "(29*0.4) + (24*0.25) + (18*0.2) + (14*0.15)",
+                "result": 24.5
+            },
+            "bonuses": [
+                { "label": "99% uptime", "points": 5 }
+            ],
+            "final_score": 29.5,
+            "classification": "Excellent"
+        },
+        {
+            "name": "Residential Cable",
+            "values": {
+                "bandwidth": { "label": "500Mbps", "points": 26 },
+                "data_limit": { "label": "1TB cap", "points": 17 },
+                "latency": { "label": "35ms", "points": 16 },
+                "ip_status": { "label": "Dynamic Public IP", "points": 13 }
+            },
+            "base_score_calculation": {
+                "formula": "(26*0.4) + (17*0.25) + (16*0.2) + (13*0.15)",
+                "result": 21.4
+            },
+            "penalties": [
+                { "label": "Evening throttling", "points": -5 }
+            ],
+            "final_score": 16.4,
+            "classification": "Average"
+        },
+        {
+            "name": "Mobile Hotspot",
+            "values": {
+                "bandwidth": { "label": "50Mbps", "points": 18 },
+                "data_limit": { "label": "100GB cap", "points": 12 },
+                "latency": { "label": "80ms", "points": 12 },
+                "ip_status": { "label": "Carrier-grade NAT", "points": 3 }
+            },
+            "base_score_calculation": {
+                "formula": "(18*0.4) + (12*0.25) + (12*0.2) + (3*0.15)",
+                "result": 13.65
+            },
+            "penalties": [
+                { "label": "Unreliable speeds", "points": -10 }
+            ],
+            "final_score": 3.65,
+            "classification": "Poor"
+        }
+    ],
+    "network_tier_classification": [
+        { "name": "Premium", "range_points": { "min": 35, "max": 45 }, "description": "Ideal for distributed computing" },
+        { "name": "Excellent", "range_points": { "min": 25, "max": 34 }, "description": "Strong contributor" },
+        { "name": "Good", "range_points": { "min": 18, "max": 24 }, "description": "Reliable participant" },
+        { "name": "Average", "range_points": { "min": 12, "max": 17 }, "description": "Limited but usable" },
+        { "name": "Poor", "range_points": { "min": 6, "max": 11 }, "description": "Significant limitations" },
+        { "name": "Minimal", "range_points": { "min": 1, "max": 5 }, "description": "Barely functional" },
+        { "name": "Unusable", "range_points": { "min": 0, "max": 0 }, "description": "Cannot participate effectively" }
+    ],
+    "notes": "System evaluates both raw capability and real-world usability for distributed HPC workloads. Scores for components use their native max point scales; weights are applied in the base score formula. Bonuses and penalties are additive/subtractive after base score computation."
+}

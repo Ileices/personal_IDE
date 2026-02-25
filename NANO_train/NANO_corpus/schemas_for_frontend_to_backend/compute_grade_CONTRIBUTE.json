@@ -1,0 +1,421 @@
+{
+    "title": "SOFTWARE & SERVICE CONTRIBUTION GRADING SYSTEM",
+    "component_weights": {
+        "service_complexity_value": 0.40,
+        "availability_reliability": 0.25,
+        "resource_requirements": 0.20,
+        "ecosystem_impact": 0.15
+    },
+    "sections": {
+        "container_vm_hosting_services": {
+            "max_points": 40,
+            "tiers": [
+                {
+                    "tier": "Tier 1: Enterprise Container Platforms",
+                    "range": { "min": 35, "max": 40 },
+                    "items": [
+                        { "name": "Kubernetes Cluster Management", "points": { "min": 38, "max": 40 } },
+                        { "name": "Docker Swarm Orchestration", "points": { "min": 36, "max": 38 } },
+                        { "name": "Multi-tenant Container Hosting", "points": { "min": 35, "max": 37 } },
+                        { "name": "GPU-accelerated Container Runtime", "points": { "min": 39, "max": 40 } }
+                    ]
+                },
+                {
+                    "tier": "Tier 2: Advanced Virtualization",
+                    "range": { "min": 30, "max": 34 },
+                    "items": [
+                        { "name": "VMware/Hyper-V Host", "points": { "min": 33, "max": 34 } },
+                        { "name": "KVM with Live Migration", "points": { "min": 32, "max": 33 } },
+                        { "name": "Proxmox Virtual Environment", "points": { "min": 31, "max": 32 } },
+                        { "name": "Nested Virtualization Support", "points": { "min": 30, "max": 31 } }
+                    ]
+                },
+                {
+                    "tier": "Tier 3: Standard Container Services",
+                    "range": { "min": 25, "max": 29 },
+                    "items": [
+                        { "name": "Docker Engine with Compose", "points": { "min": 28, "max": 29 } },
+                        { "name": "Podman Rootless Containers", "points": { "min": 27, "max": 28 } },
+                        { "name": "LXC/LXD System Containers", "points": { "min": 26, "max": 27 } },
+                        { "name": "AppArmor/SELinux Security", "points": { "min": 25, "max": 26 } }
+                    ]
+                },
+                {
+                    "tier": "Tier 4: Basic Container Support",
+                    "range": { "min": 20, "max": 24 },
+                    "items": [
+                        { "name": "Single Docker Instance", "points": { "min": 23, "max": 24 } },
+                        { "name": "Lightweight VMs", "points": { "min": 22, "max": 23 } },
+                        { "name": "Chroot/Jail Environments", "points": { "min": 21, "max": 22 } },
+                        { "name": "Basic Sandboxing", "points": { "min": 20, "max": 21 } }
+                    ]
+                }
+            ],
+            "feature_bonuses": [
+                { "name": "Automated scaling", "points": 4 },
+                { "name": "Persistent storage volumes", "points": 3 },
+                { "name": "Network isolation", "points": 2 },
+                { "name": "GPU passthrough", "points": 5 },
+                { "name": "Multi-architecture support", "points": 3 }
+            ]
+        },
+        "api_endpoints_services": {
+            "max_points": 40,
+            "tiers": [
+                {
+                    "tier": "Tier 1: High-Value AI/ML APIs",
+                    "range": { "min": 35, "max": 40 },
+                    "items": [
+                        { "name": "Model Inference API (LLM/Vision)", "points": { "min": 38, "max": 40 } },
+                        { "name": "Training Pipeline API", "points": { "min": 37, "max": 39 } },
+                        { "name": "Vector Database API", "points": { "min": 36, "max": 38 } },
+                        { "name": "Federated Learning Coordinator", "points": { "min": 35, "max": 37 } }
+                    ]
+                },
+                {
+                    "tier": "Tier 2: Data & Compute Services",
+                    "range": { "min": 30, "max": 34 },
+                    "items": [
+                        { "name": "Database as a Service", "points": { "min": 33, "max": 34 } },
+                        { "name": "Stream Processing API", "points": { "min": 32, "max": 33 } },
+                        { "name": "File Conversion/Processing", "points": { "min": 31, "max": 32 } },
+                        { "name": "Batch Job Scheduler", "points": { "min": 30, "max": 31 } }
+                    ]
+                },
+                {
+                    "tier": "Tier 3: Infrastructure APIs",
+                    "range": { "min": 25, "max": 29 },
+                    "items": [
+                        { "name": "Authentication/Authorization", "points": { "min": 28, "max": 29 } },
+                        { "name": "Monitoring/Metrics API", "points": { "min": 27, "max": 28 } },
+                        { "name": "Storage Proxy API", "points": { "min": 26, "max": 27 } },
+                        { "name": "Network Management API", "points": { "min": 25, "max": 26 } }
+                    ]
+                },
+                {
+                    "tier": "Tier 4: Utility Services",
+                    "range": { "min": 20, "max": 24 },
+                    "items": [
+                        { "name": "Cache Service (Redis/Memcached)", "points": { "min": 23, "max": 24 } },
+                        { "name": "Message Queue API", "points": { "min": 22, "max": 23 } },
+                        { "name": "Basic REST Services", "points": { "min": 21, "max": 22 } },
+                        { "name": "Static File Serving", "points": { "min": 20, "max": 21 } }
+                    ]
+                }
+            ],
+            "api_quality_bonuses": [
+                { "name": "OpenAPI/Swagger documentation", "points": 3 },
+                { "name": "Rate limiting & quotas", "points": 2 },
+                { "name": "High availability (load balanced)", "points": 4 },
+                { "name": "Authentication/security", "points": 3 },
+                { "name": "Usage analytics", "points": 2 }
+            ]
+        },
+        "relay_proxy_services": {
+            "max_points": 40,
+            "tiers": [
+                {
+                    "tier": "Tier 1: Advanced Networking",
+                    "range": { "min": 35, "max": 40 },
+                    "items": [
+                        { "name": "NAT Traversal Relays", "points": { "min": 38, "max": 40 } },
+                        { "name": "VPN Gateway Services", "points": { "min": 37, "max": 39 } },
+                        { "name": "Load Balancer Proxies", "points": { "min": 36, "max": 38 } },
+                        { "name": "Global Accelerator Nodes", "points": { "min": 35, "max": 37 } }
+                    ]
+                },
+                {
+                    "tier": "Tier 2: Middleware Proxies",
+                    "range": { "min": 30, "max": 34 },
+                    "items": [
+                        { "name": "Reverse Proxy (nginx/traefik)", "points": { "min": 33, "max": 34 } },
+                        { "name": "API Gateway Services", "points": { "min": 32, "max": 33 } },
+                        { "name": "WebSocket Relay Servers", "points": { "min": 31, "max": 32 } },
+                        { "name": "SOCKS/HTTP Proxies", "points": { "min": 30, "max": 31 } }
+                    ]
+                },
+                {
+                    "tier": "Tier 3: Basic Relay Services",
+                    "range": { "min": 25, "max": 29 },
+                    "items": [
+                        { "name": "Port Forwarding Services", "points": { "min": 28, "max": 29 } },
+                        { "name": "Simple TCP/UDP Relays", "points": { "min": 27, "max": 28 } },
+                        { "name": "DNS Forwarding Services", "points": { "min": 26, "max": 27 } },
+                        { "name": "Basic Tunnel Endpoints", "points": { "min": 25, "max": 26 } }
+                    ]
+                },
+                {
+                    "tier": "Tier 4: Limited Relay Support",
+                    "range": { "min": 20, "max": 24 },
+                    "items": [
+                        { "name": "UPnP Port Mapping", "points": { "min": 23, "max": 24 } },
+                        { "name": "Simple HTTP Redirects", "points": { "min": 22, "max": 23 } },
+                        { "name": "Basic Network Sharing", "points": { "min": 21, "max": 22 } },
+                        { "name": "Minimal Relay Capacity", "points": { "min": 20, "max": 21 } }
+                    ]
+                }
+            ],
+            "relay_service_bonuses": [
+                { "name": "High concurrent connections", "points": 4 },
+                { "name": "Low latency routing", "points": 3 },
+                { "name": "Geographic diversity", "points": 3 },
+                { "name": "Protocol translation", "points": 2 },
+                { "name": "Bypass capabilities", "points": 4 }
+            ]
+        },
+        "service_availability_reliability": {
+            "max_points": 25,
+            "tiers": [
+                {
+                    "tier": "Tier 1: Maximum Uptime",
+                    "range": { "min": 23, "max": 25 },
+                    "items": [
+                        { "name": "99.99%+ Service Uptime", "points": 25 },
+                        { "name": "99.9%+ with Monitoring", "points": 24 },
+                        { "name": "99.5%+ Automated Recovery", "points": 23 }
+                    ]
+                },
+                {
+                    "tier": "Tier 2: High Reliability",
+                    "range": { "min": 19, "max": 22 },
+                    "items": [
+                        { "name": "99%+ Uptime", "points": 22 },
+                        { "name": "98%+ with Backups", "points": 21 },
+                        { "name": "97%+ Reliable", "points": 20 },
+                        { "name": "95%+ Consistent", "points": 19 }
+                    ]
+                },
+                {
+                    "tier": "Tier 3: Standard Availability",
+                    "range": { "min": 15, "max": 18 },
+                    "items": [
+                        { "name": "90%+ Uptime", "points": 18 },
+                        { "name": "85%+ Predictable", "points": 17 },
+                        { "name": "80%+ Scheduled", "points": 16 },
+                        { "name": "75%+ Intermittent", "points": 15 }
+                    ]
+                },
+                {
+                    "tier": "Tier 4: Limited Availability",
+                    "range": { "min": 10, "max": 14 },
+                    "items": [
+                        { "name": "50-75% Uptime", "points": { "min": 12, "max": 14 } },
+                        { "name": "25-50% Uptime", "points": 11 },
+                        { "name": "<25% Uptime", "points": 10 }
+                    ]
+                }
+            ],
+            "reliability_bonuses": [
+                { "name": "Automated failover", "points": 4 },
+                { "name": "Health monitoring", "points": 3 },
+                { "name": "Graceful degradation", "points": 2 },
+                { "name": "Service discovery", "points": 2 }
+            ]
+        },
+        "resource_efficiency": {
+            "max_points": 20,
+            "tiers": [
+                {
+                    "tier": "Tier 1: Highly Optimized",
+                    "range": { "min": 18, "max": 20 },
+                    "items": [
+                        { "name": "Minimal footprint, high value", "points": 20 },
+                        { "name": "Efficient resource usage", "points": 19 },
+                        { "name": "Low overhead services", "points": 18 }
+                    ]
+                },
+                {
+                    "tier": "Tier 2: Well-Tuned",
+                    "range": { "min": 15, "max": 17 },
+                    "items": [
+                        { "name": "Good performance/resource ratio", "points": 17 },
+                        { "name": "Reasonable resource claims", "points": 16 },
+                        { "name": "Balanced service profile", "points": 15 }
+                    ]
+                },
+                {
+                    "tier": "Tier 3: Standard Efficiency",
+                    "range": { "min": 12, "max": 14 },
+                    "items": [
+                        { "name": "Average resource usage", "points": 14 },
+                        { "name": "Moderate overhead", "points": 13 },
+                        { "name": "Acceptable efficiency", "points": 12 }
+                    ]
+                },
+                {
+                    "tier": "Tier 4: Resource Intensive",
+                    "range": { "min": 9, "max": 11 },
+                    "items": [
+                        { "name": "High resource consumption", "points": 11 },
+                        { "name": "Inefficient implementation", "points": 10 },
+                        { "name": "Heavy services", "points": 9 }
+                    ]
+                }
+            ],
+            "efficiency_bonuses": [
+                { "name": "Microservices architecture", "points": 3 },
+                { "name": "Lightweight containers", "points": 2 },
+                { "name": "Efficient scaling", "points": 2 },
+                { "name": "Low memory footprint", "points": 2 }
+            ]
+        },
+        "ecosystem_impact": {
+            "max_points": 15,
+            "tiers": [
+                {
+                    "tier": "Tier 1: Critical Infrastructure",
+                    "range": { "min": 13, "max": 15 },
+                    "items": [
+                        { "name": "Enables other services", "points": 15 },
+                        { "name": "Network multiplier effect", "points": 14 },
+                        { "name": "Foundation services", "points": 13 }
+                    ]
+                },
+                {
+                    "tier": "Tier 2: High Value",
+                    "range": { "min": 10, "max": 12 },
+                    "items": [
+                        { "name": "Significant utility", "points": 12 },
+                        { "name": "Community enablers", "points": 11 },
+                        { "name": "Platform services", "points": 10 }
+                    ]
+                },
+                {
+                    "tier": "Tier 3: Moderate Impact",
+                    "range": { "min": 7, "max": 9 },
+                    "items": [
+                        { "name": "Useful utilities", "points": 9 },
+                        { "name": "Niche services", "points": 8 },
+                        { "name": "Limited scope", "points": 7 }
+                    ]
+                },
+                {
+                    "tier": "Tier 4: Minimal Impact",
+                    "range": { "min": 4, "max": 6 },
+                    "items": [
+                        { "name": "Basic services", "points": 6 },
+                        { "name": "Redundant offerings", "points": 5 },
+                        { "name": "Low utility", "points": 4 }
+                    ]
+                }
+            ],
+            "ecosystem_bonuses": [
+                { "name": "Open source contribution", "points": 4 },
+                { "name": "Standards compliance", "points": 3 },
+                { "name": "Interoperability", "points": 2 },
+                { "name": "Documentation quality", "points": 2 }
+            ]
+        }
+    },
+    "service_multipliers_and_bonuses": {
+        "service_stack_multipliers": [
+            { "name": "Full application stack", "multiplier": 1.4 },
+            { "name": "Multiple integrated services", "multiplier": 1.3 },
+            { "name": "Specialized high-demand services", "multiplier": 1.5 },
+            { "name": "Basic single service", "multiplier": 1.0 }
+        ],
+        "deployment_quality_bonuses": [
+            { "name": "Infrastructure as Code", "points": 3 },
+            { "name": "CI/CD pipelines", "points": 3 },
+            { "name": "Configuration management", "points": 2 },
+            { "name": "Backup/restore capabilities", "points": 2 }
+        ],
+        "security_and_compliance_bonuses": [
+            { "name": "Security auditing", "points": 4 },
+            { "name": "Compliance certifications", "points": 3 },
+            { "name": "Encryption at rest/transit", "points": 2 },
+            { "name": "Access controls", "points": 2 }
+        ]
+    },
+    "integrated_service_score_formula": {
+        "base_service_score": {
+            "formula_string": "(Service_Complexity × 0.4) + (Availability × 0.25) + (Resource_Efficiency × 0.2) + (Ecosystem_Impact × 0.15)",
+            "weights": {
+                "service_complexity": 0.4,
+                "availability": 0.25,
+                "resource_efficiency": 0.2,
+                "ecosystem_impact": 0.15,
+                "max_component_score": 40
+            }
+        },
+        "service_multiplier": {
+            "formula_string": "(Base_Service_Score / 40) × Service_Stack_Multiplier",
+            "notes": "Service_Stack_Multiplier selected from service_stack_multipliers above"
+        },
+        "final_service_value": {
+            "formula_string": "Hardware_Score × Service_Multiplier + Total_Bonuses",
+            "components": [
+                "Hardware_Score (external hardware valuation)",
+                "Service_Multiplier (from above)",
+                "Total_Bonuses (sum of applicable bonuses)"
+            ]
+        }
+    },
+    "examples": [
+        {
+            "title": "Kubernetes Cluster with ML APIs",
+            "components": {
+                "service_complexity": 39,
+                "availability": 24,
+                "resource_efficiency": 18,
+                "ecosystem_impact": 14
+            },
+            "base_score": 30.9,
+            "multiplier": 1.16,
+            "bonuses": [
+                { "name": "Auto-scaling", "points": 4 },
+                { "name": "GPU passthrough", "points": 5 },
+                { "name": "Security auditing", "points": 4 }
+            ],
+            "total_bonuses": 13,
+            "service_value_notes": "Final value requires Hardware_Score; displayed values: BaseScore=30.9, Multiplier=1.16, Bonuses=13"
+        },
+        {
+            "title": "Docker Host with Database API",
+            "components": {
+                "service_complexity": 32,
+                "availability": 21,
+                "resource_efficiency": 16,
+                "ecosystem_impact": 11
+            },
+            "base_score": 24.4,
+            "multiplier": 0.79,
+            "bonuses": [
+                { "name": "Persistent volumes", "points": 3 },
+                { "name": "Monitoring", "points": 3 }
+            ],
+            "total_bonuses": 6,
+            "service_value_notes": "Final value requires Hardware_Score; displayed values: BaseScore=24.4, Multiplier=0.79, Bonuses=6"
+        },
+        {
+            "title": "Basic Relay Service",
+            "components": {
+                "service_complexity": 38,
+                "availability": 19,
+                "resource_efficiency": 19,
+                "ecosystem_impact": 14
+            },
+            "base_score": 28.25,
+            "multiplier": 0.71,
+            "bonuses": [
+                { "name": "High connections", "points": 4 },
+                { "name": "Low latency", "points": 3 }
+            ],
+            "total_bonuses": 7,
+            "service_value_notes": "Final value requires Hardware_Score; displayed values: BaseScore=28.25, Multiplier=0.71, Bonuses=7"
+        }
+    ],
+    "service_tier_classification": [
+        { "label": "Elite Services", "multiplier_range": { "min": 1.2, "max": null }, "description": "Critical infrastructure services" },
+        { "label": "Premium Services", "multiplier_range": { "min": 1.0, "max": 1.19 }, "description": "High-value specialized services" },
+        { "label": "Advanced Services", "multiplier_range": { "min": 0.8, "max": 0.99 }, "description": "Capable service offerings" },
+        { "label": "Standard Services", "multiplier_range": { "min": 0.6, "max": 0.79 }, "description": "Basic but useful services" },
+        { "label": "Limited Services", "multiplier_range": { "min": 0.4, "max": 0.59 }, "description": "Minimal service contribution" },
+        { "label": "Token Services", "multiplier_range": { "min": 0.2, "max": 0.39 }, "description": "Nominal service presence" },
+        { "label": "No Services", "multiplier_range": { "min": null, "max": 0.19 }, "description": "Hardware-only contribution" }
+    ],
+    "notes": {
+        "numeric_ranges": "Points are represented as integers where possible; where ranges were provided they are modeled with {min,max}.",
+        "how_to_compute_final_value": "To compute Final Service Value provide a Hardware_Score, compute Base_Service_Score using component scores and weights, compute Service_Multiplier = (Base/40)*Service_Stack_Multiplier, then Final = Hardware_Score * Service_Multiplier + sum(all bonuses)."
+    }
+}

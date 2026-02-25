@@ -1,0 +1,19 @@
+{
+  "auth_type": "authenticated",
+  "num_repositories": 1,
+  "num_users": 1,
+  "agentic_loop_settings": {
+    "max_iterations": 100,
+    "max_retries_on_rate_limit": 5,
+    "exponential_backoff_base": 2.0,
+    "max_backoff_seconds": 300.0,
+    "safety_margin_percent": 10,
+    "enable_conditional_requests": true,
+    "batch_operations": true,
+    "batch_size": 10,
+    "pause_between_batches_seconds": 60.0,
+    "monitor_rate_limits": true,
+    "log_rate_limit_status": true,
+    "fail_fast_on_exhaustion": false
+  }
+}

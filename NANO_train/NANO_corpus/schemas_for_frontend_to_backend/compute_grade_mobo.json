@@ -1,0 +1,970 @@
+{
+    "lists": [
+        {
+            "title": "Motherboard Tier List (ML/AI Workstation Focus)",
+            "categories": [
+                {
+                    "name": "HEDT/Workstation",
+                    "items": [
+                        {
+                            "raw": "ASUS Pro WS W790E-SAGE SE — Grade: 95",
+                            "vendor": "ASUS",
+                            "model": "Pro WS W790E-SAGE SE",
+                            "grade": 95
+                        },
+                        {
+                            "raw": "ASUS Pro WS TRX50-SAGE — Grade: 90",
+                            "vendor": "ASUS",
+                            "model": "Pro WS TRX50-SAGE",
+                            "grade": 90
+                        },
+                        {
+                            "raw": "Gigabyte WRX80 SU8 — Grade: 92",
+                            "vendor": "Gigabyte",
+                            "model": "WRX80 SU8",
+                            "grade": 92
+                        },
+                        {
+                            "raw": "ASRock WRX80 Creator — Grade: 88",
+                            "vendor": "ASRock",
+                            "model": "WRX80 Creator",
+                            "grade": 88
+                        },
+                        {
+                            "raw": "Supermicro X13SAE — Grade: 85",
+                            "vendor": "Supermicro",
+                            "model": "X13SAE",
+                            "grade": 85
+                        }
+                    ]
+                },
+                {
+                    "name": "Intel Z790 (High End)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Maximus Z790 Apex — Grade: 82",
+                            "vendor": "ASUS",
+                            "model": "ROG Maximus Z790 Apex",
+                            "grade": 82
+                        },
+                        {
+                            "raw": "MSI MEG Z790 Godlike — Grade: 85",
+                            "vendor": "MSI",
+                            "model": "MEG Z790 Godlike",
+                            "grade": 85
+                        },
+                        {
+                            "raw": "Gigabyte Z790 AORUS XTREME — Grade: 83",
+                            "vendor": "Gigabyte",
+                            "model": "Z790 AORUS XTREME",
+                            "grade": 83
+                        },
+                        {
+                            "raw": "ASRock Z790 Taichi — Grade: 78",
+                            "vendor": "ASRock",
+                            "model": "Z790 Taichi",
+                            "grade": 78
+                        }
+                    ]
+                },
+                {
+                    "name": "Intel Z790 (Mid Range)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Strix Z790-E — Grade: 75",
+                            "vendor": "ASUS",
+                            "model": "ROG Strix Z790-E",
+                            "grade": 75
+                        },
+                        {
+                            "raw": "MSI MPG Z790 Carbon — Grade: 72",
+                            "vendor": "MSI",
+                            "model": "MPG Z790 Carbon",
+                            "grade": 72
+                        },
+                        {
+                            "raw": "Gigabyte Z790 AORUS ELITE — Grade: 70",
+                            "vendor": "Gigabyte",
+                            "model": "Z790 AORUS ELITE",
+                            "grade": 70
+                        },
+                        {
+                            "raw": "ASRock Z790 Steel Legend — Grade: 68",
+                            "vendor": "ASRock",
+                            "model": "Z790 Steel Legend",
+                            "grade": 68
+                        }
+                    ]
+                },
+                {
+                    "name": "Intel B760 (Budget)",
+                    "items": [
+                        {
+                            "raw": "ASUS TUF Gaming B760-PLUS — Grade: 60",
+                            "vendor": "ASUS",
+                            "model": "TUF Gaming B760-PLUS",
+                            "grade": 60
+                        },
+                        {
+                            "raw": "MSI B760 Tomahawk — Grade: 62",
+                            "vendor": "MSI",
+                            "model": "B760 Tomahawk",
+                            "grade": 62
+                        },
+                        {
+                            "raw": "Gigabyte B760 AORUS ELITE — Grade: 58",
+                            "vendor": "Gigabyte",
+                            "model": "B760 AORUS ELITE",
+                            "grade": 58
+                        },
+                        {
+                            "raw": "ASRock B760 Steel Legend — Grade: 55",
+                            "vendor": "ASRock",
+                            "model": "B760 Steel Legend",
+                            "grade": 55
+                        }
+                    ]
+                },
+                {
+                    "name": "AMD X670E (High End)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Crosshair X670E Hero — Grade: 80",
+                            "vendor": "ASUS",
+                            "model": "ROG Crosshair X670E Hero",
+                            "grade": 80
+                        },
+                        {
+                            "raw": "MSI MEG X670E Godlike — Grade: 84",
+                            "vendor": "MSI",
+                            "model": "MEG X670E Godlike",
+                            "grade": 84
+                        },
+                        {
+                            "raw": "Gigabyte X670E AORUS XTREME — Grade: 82",
+                            "vendor": "Gigabyte",
+                            "model": "X670E AORUS XTREME",
+                            "grade": 82
+                        },
+                        {
+                            "raw": "ASRock X670E Taichi — Grade: 78",
+                            "vendor": "ASRock",
+                            "model": "X670E Taichi",
+                            "grade": 78
+                        }
+                    ]
+                },
+                {
+                    "name": "AMD X670 (Mid Range)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Strix X670E-F — Grade: 72",
+                            "vendor": "ASUS",
+                            "model": "ROG Strix X670E-F",
+                            "grade": 72
+                        },
+                        {
+                            "raw": "MSI MPG X670E Carbon — Grade: 74",
+                            "vendor": "MSI",
+                            "model": "MPG X670E Carbon",
+                            "grade": 74
+                        },
+                        {
+                            "raw": "Gigabyte X670 AORUS ELITE — Grade: 68",
+                            "vendor": "Gigabyte",
+                            "model": "X670 AORUS ELITE",
+                            "grade": 68
+                        },
+                        {
+                            "raw": "ASRock X670E Steel Legend — Grade: 65",
+                            "vendor": "ASRock",
+                            "model": "X670E Steel Legend",
+                            "grade": 65
+                        }
+                    ]
+                },
+                {
+                    "name": "AMD B650 (Budget)",
+                    "items": [
+                        {
+                            "raw": "ASUS TUF Gaming B650-PLUS — Grade: 58",
+                            "vendor": "ASUS",
+                            "model": "TUF Gaming B650-PLUS",
+                            "grade": 58
+                        },
+                        {
+                            "raw": "MSI B650 Tomahawk — Grade: 60",
+                            "vendor": "MSI",
+                            "model": "B650 Tomahawk",
+                            "grade": 60
+                        },
+                        {
+                            "raw": "Gigabyte B650 AORUS ELITE — Grade: 56",
+                            "vendor": "Gigabyte",
+                            "model": "B650 AORUS ELITE",
+                            "grade": 56
+                        },
+                        {
+                            "raw": "ASRock B650 LiveMixer — Grade: 52",
+                            "vendor": "ASRock",
+                            "model": "B650 LiveMixer",
+                            "grade": 52
+                        }
+                    ]
+                },
+                {
+                    "name": "Server Platforms",
+                    "items": [
+                        {
+                            "raw": "Supermicro X13DEG — Grade: 96",
+                            "vendor": "Supermicro",
+                            "model": "X13DEG",
+                            "grade": 96
+                        },
+                        {
+                            "raw": "ASUS RS720-E12 — Grade: 92",
+                            "vendor": "ASUS",
+                            "model": "RS720-E12",
+                            "grade": 92
+                        },
+                        {
+                            "raw": "Gigabyte MU72-SU0 — Grade: 90",
+                            "vendor": "Gigabyte",
+                            "model": "MU72-SU0",
+                            "grade": 90
+                        },
+                        {
+                            "raw": "ASRock RACK ROMED8 — Grade: 88",
+                            "vendor": "ASRock",
+                            "model": "RACK ROMED8",
+                            "grade": 88
+                        }
+                    ]
+                },
+                {
+                    "name": "Threadripper TRX50",
+                    "items": [
+                        {
+                            "raw": "ASUS Pro WS TRX50-SAGE — Grade: 94",
+                            "vendor": "ASUS",
+                            "model": "Pro WS TRX50-SAGE",
+                            "grade": 94
+                        },
+                        {
+                            "raw": "Gigabyte TRX50 AORUS — Grade: 90",
+                            "vendor": "Gigabyte",
+                            "model": "TRX50 AORUS",
+                            "grade": 90
+                        },
+                        {
+                            "raw": "MSI TRX50 — Grade: 88",
+                            "vendor": "MSI",
+                            "model": "TRX50",
+                            "grade": 88
+                        }
+                    ]
+                },
+                {
+                    "name": "Legacy Platforms",
+                    "items": [
+                        {
+                            "raw": "ASUS X299 — Grade: 45",
+                            "vendor": "ASUS",
+                            "model": "X299",
+                            "grade": 45
+                        },
+                        {
+                            "raw": "Gigabyte X399 — Grade: 40",
+                            "vendor": "Gigabyte",
+                            "model": "X399",
+                            "grade": 40
+                        },
+                        {
+                            "raw": "ASRock X99 — Grade: 38",
+                            "vendor": "ASRock",
+                            "model": "X99",
+                            "grade": 38
+                        },
+                        {
+                            "raw": "MSI Z690 — Grade: 55",
+                            "vendor": "MSI",
+                            "model": "Z690",
+                            "grade": 55
+                        },
+                        {
+                            "raw": "ASUS X570 — Grade: 50",
+                            "vendor": "ASUS",
+                            "model": "X570",
+                            "grade": 50
+                        }
+                    ]
+                },
+                {
+                    "name": "Budget/Entry Level",
+                    "items": [
+                        {
+                            "raw": "ASUS Prime B760 — Grade: 48",
+                            "vendor": "ASUS",
+                            "model": "Prime B760",
+                            "grade": 48
+                        },
+                        {
+                            "raw": "MSI Pro B650 — Grade: 46",
+                            "vendor": "MSI",
+                            "model": "Pro B650",
+                            "grade": 46
+                        },
+                        {
+                            "raw": "Gigabyte B550 — Grade: 42",
+                            "vendor": "Gigabyte",
+                            "model": "B550",
+                            "grade": 42
+                        },
+                        {
+                            "raw": "ASRock B450 — Grade: 35",
+                            "vendor": "ASRock",
+                            "model": "B450",
+                            "grade": 35
+                        }
+                    ]
+                },
+                {
+                    "name": "Mini-ITX (SFF)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Strix X670E-I — Grade: 65",
+                            "vendor": "ASUS",
+                            "model": "ROG Strix X670E-I",
+                            "grade": 65
+                        },
+                        {
+                            "raw": "MSI MPG B760I — Grade: 58",
+                            "vendor": "MSI",
+                            "model": "MPG B760I",
+                            "grade": 58
+                        },
+                        {
+                            "raw": "Gigabyte B650I — Grade: 56",
+                            "vendor": "Gigabyte",
+                            "model": "B650I",
+                            "grade": 56
+                        },
+                        {
+                            "raw": "ASRock Z790 PG — Grade: 60",
+                            "vendor": "ASRock",
+                            "model": "Z790 PG",
+                            "grade": 60
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "title": "Extended Motherboard Tier List (ML/AI Workstation Focus)",
+            "categories": [
+                {
+                    "name": "HEDT/Workstation (Intel W790)",
+                    "items": [
+                        {
+                            "raw": "ASUS Pro WS W790E-SAGE SE — Grade: 98",
+                            "vendor": "ASUS",
+                            "model": "Pro WS W790E-SAGE SE",
+                            "grade": 98
+                        },
+                        {
+                            "raw": "ASUS Pro WS W790-ACE — Grade: 92",
+                            "vendor": "ASUS",
+                            "model": "Pro WS W790-ACE",
+                            "grade": 92
+                        },
+                        {
+                            "raw": "Gigabyte MW34-SP0 — Grade: 90",
+                            "vendor": "Gigabyte",
+                            "model": "MW34-SP0",
+                            "grade": 90
+                        },
+                        {
+                            "raw": "Supermicro X13SEI — Grade: 95",
+                            "vendor": "Supermicro",
+                            "model": "X13SEI",
+                            "grade": 95
+                        },
+                        {
+                            "raw": "ASRock W790 WS — Grade: 88",
+                            "vendor": "ASRock",
+                            "model": "W790 WS",
+                            "grade": 88
+                        },
+                        {
+                            "raw": "ASUS ROG Maximus Z790 Apex — Grade: 85",
+                            "vendor": "ASUS",
+                            "model": "ROG Maximus Z790 Apex",
+                            "grade": 85
+                        },
+                        {
+                            "raw": "MSI MEG Z790 Godlike — Grade: 87",
+                            "vendor": "MSI",
+                            "model": "MEG Z790 Godlike",
+                            "grade": 87
+                        },
+                        {
+                            "raw": "Gigabyte Z790 AORUS XTREME — Grade: 86",
+                            "vendor": "Gigabyte",
+                            "model": "Z790 AORUS XTREME",
+                            "grade": 86
+                        }
+                    ]
+                },
+                {
+                    "name": "HEDT/Workstation (AMD TRX50/WRX80)",
+                    "items": [
+                        {
+                            "raw": "ASUS Pro WS TRX50-SAGE — Grade: 96",
+                            "vendor": "ASUS",
+                            "model": "Pro WS TRX50-SAGE",
+                            "grade": 96
+                        },
+                        {
+                            "raw": "Gigabyte TRX50 AORUS — Grade: 90",
+                            "vendor": "Gigabyte",
+                            "model": "TRX50 AORUS",
+                            "grade": 90
+                        },
+                        {
+                            "raw": "ASRock TRX50 WS — Grade: 88",
+                            "vendor": "ASRock",
+                            "model": "TRX50 WS",
+                            "grade": 88
+                        },
+                        {
+                            "raw": "Gigabyte WRX80 SU8 — Grade: 94",
+                            "vendor": "Gigabyte",
+                            "model": "WRX80 SU8",
+                            "grade": 94
+                        },
+                        {
+                            "raw": "ASUS Pro WS WRX80E-SAGE SE — Grade: 97",
+                            "vendor": "ASUS",
+                            "model": "Pro WS WRX80E-SAGE SE",
+                            "grade": 97
+                        },
+                        {
+                            "raw": "ASRock WRX80 Creator — Grade: 89",
+                            "vendor": "ASRock",
+                            "model": "WRX80 Creator",
+                            "grade": 89
+                        }
+                    ]
+                },
+                {
+                    "name": "Server Platforms (Dual Socket)",
+                    "items": [
+                        {
+                            "raw": "Supermicro X13DEG — Grade: 99",
+                            "vendor": "Supermicro",
+                            "model": "X13DEG",
+                            "grade": 99
+                        },
+                        {
+                            "raw": "ASUS RS720-E12 — Grade: 95",
+                            "vendor": "ASUS",
+                            "model": "RS720-E12",
+                            "grade": 95
+                        },
+                        {
+                            "raw": "Gigabyte MU72-SU0 — Grade: 93",
+                            "vendor": "Gigabyte",
+                            "model": "MU72-SU0",
+                            "grade": 93
+                        },
+                        {
+                            "raw": "ASRock RACK ROMED8 — Grade: 91",
+                            "vendor": "ASRock",
+                            "model": "RACK ROMED8",
+                            "grade": 91
+                        },
+                        {
+                            "raw": "Tyan S7130 — Grade: 88",
+                            "vendor": "Tyan",
+                            "model": "S7130",
+                            "grade": 88
+                        },
+                        {
+                            "raw": "Intel S2600WF — Grade: 85",
+                            "vendor": "Intel",
+                            "model": "S2600WF",
+                            "grade": 85
+                        }
+                    ]
+                },
+                {
+                    "name": "Intel Z790 (High End)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Maximus Z790 Dark Hero — Grade: 84",
+                            "vendor": "ASUS",
+                            "model": "ROG Maximus Z790 Dark Hero",
+                            "grade": 84
+                        },
+                        {
+                            "raw": "MSI MEG Z790 Ace — Grade: 83",
+                            "vendor": "MSI",
+                            "model": "MEG Z790 Ace",
+                            "grade": 83
+                        },
+                        {
+                            "raw": "Gigabyte Z790 AORUS MASTER — Grade: 82",
+                            "vendor": "Gigabyte",
+                            "model": "Z790 AORUS MASTER",
+                            "grade": 82
+                        },
+                        {
+                            "raw": "ASRock Z790 Nova — Grade: 80",
+                            "vendor": "ASRock",
+                            "model": "Z790 Nova",
+                            "grade": 80
+                        },
+                        {
+                            "raw": "ASUS ROG Strix Z790-E — Grade: 78",
+                            "vendor": "ASUS",
+                            "model": "ROG Strix Z790-E",
+                            "grade": 78
+                        },
+                        {
+                            "raw": "MSI MPG Z790 Carbon — Grade: 76",
+                            "vendor": "MSI",
+                            "model": "MPG Z790 Carbon",
+                            "grade": 76
+                        }
+                    ]
+                },
+                {
+                    "name": "Intel Z790 (Mid Range)",
+                    "items": [
+                        {
+                            "raw": "ASUS TUF Gaming Z790-PRO — Grade: 72",
+                            "vendor": "ASUS",
+                            "model": "TUF Gaming Z790-PRO",
+                            "grade": 72
+                        },
+                        {
+                            "raw": "Gigabyte Z790 AORUS ELITE AX — Grade: 70",
+                            "vendor": "Gigabyte",
+                            "model": "Z790 AORUS ELITE AX",
+                            "grade": 70
+                        },
+                        {
+                            "raw": "MSI MAG Z790 Tomahawk — Grade: 68",
+                            "vendor": "MSI",
+                            "model": "MAG Z790 Tomahawk",
+                            "grade": 68
+                        },
+                        {
+                            "raw": "ASRock Z790 Steel Legend — Grade: 66",
+                            "vendor": "ASRock",
+                            "model": "Z790 Steel Legend",
+                            "grade": 66
+                        },
+                        {
+                            "raw": "ASUS Prime Z790-A — Grade: 65",
+                            "vendor": "ASUS",
+                            "model": "Prime Z790-A",
+                            "grade": 65
+                        },
+                        {
+                            "raw": "Gigabyte Z790 UD AC — Grade: 60",
+                            "vendor": "Gigabyte",
+                            "model": "Z790 UD AC",
+                            "grade": 60
+                        }
+                    ]
+                },
+                {
+                    "name": "Intel B760/H770",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Strix B760-F — Grade: 62",
+                            "vendor": "ASUS",
+                            "model": "ROG Strix B760-F",
+                            "grade": 62
+                        },
+                        {
+                            "raw": "MSI MAG B760 Tomahawk — Grade: 60",
+                            "vendor": "MSI",
+                            "model": "MAG B760 Tomahawk",
+                            "grade": 60
+                        },
+                        {
+                            "raw": "Gigabyte B760 AORUS ELITE AX — Grade: 58",
+                            "vendor": "Gigabyte",
+                            "model": "B760 AORUS ELITE AX",
+                            "grade": 58
+                        },
+                        {
+                            "raw": "ASRock B760 Steel Legend — Grade: 56",
+                            "vendor": "ASRock",
+                            "model": "B760 Steel Legend",
+                            "grade": 56
+                        },
+                        {
+                            "raw": "ASUS TUF Gaming H770-PRO — Grade: 59",
+                            "vendor": "ASUS",
+                            "model": "TUF Gaming H770-PRO",
+                            "grade": 59
+                        },
+                        {
+                            "raw": "MSI MAG B760M Mortar — Grade: 55",
+                            "vendor": "MSI",
+                            "model": "MAG B760M Mortar",
+                            "grade": 55
+                        }
+                    ]
+                },
+                {
+                    "name": "AMD X670E (High End)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Crosshair X670E Extreme — Grade: 89",
+                            "vendor": "ASUS",
+                            "model": "ROG Crosshair X670E Extreme",
+                            "grade": 89
+                        },
+                        {
+                            "raw": "MSI MEG X670E Godlike — Grade: 88",
+                            "vendor": "MSI",
+                            "model": "MEG X670E Godlike",
+                            "grade": 88
+                        },
+                        {
+                            "raw": "Gigabyte X670E AORUS XTREME — Grade: 87",
+                            "vendor": "Gigabyte",
+                            "model": "X670E AORUS XTREME",
+                            "grade": 87
+                        },
+                        {
+                            "raw": "ASRock X670E Taichi — Grade: 84",
+                            "vendor": "ASRock",
+                            "model": "X670E Taichi",
+                            "grade": 84
+                        },
+                        {
+                            "raw": "ASUS ROG Crosshair X670E Hero — Grade: 82",
+                            "vendor": "ASUS",
+                            "model": "ROG Crosshair X670E Hero",
+                            "grade": 82
+                        },
+                        {
+                            "raw": "MSI MEG X670E Ace — Grade: 80",
+                            "vendor": "MSI",
+                            "model": "MEG X670E Ace",
+                            "grade": 80
+                        }
+                    ]
+                },
+                {
+                    "name": "AMD X670 (Mid Range)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Strix X670E-F — Grade: 75",
+                            "vendor": "ASUS",
+                            "model": "ROG Strix X670E-F",
+                            "grade": 75
+                        },
+                        {
+                            "raw": "Gigabyte X670 AORUS ELITE AX — Grade: 72",
+                            "vendor": "Gigabyte",
+                            "model": "X670 AORUS ELITE AX",
+                            "grade": 72
+                        },
+                        {
+                            "raw": "MSI MPG X670E Carbon — Grade: 74",
+                            "vendor": "MSI",
+                            "model": "MPG X670E Carbon",
+                            "grade": 74
+                        },
+                        {
+                            "raw": "ASRock X670E Steel Legend — Grade: 70",
+                            "vendor": "ASRock",
+                            "model": "X670E Steel Legend",
+                            "grade": 70
+                        },
+                        {
+                            "raw": "ASUS TUF Gaming X670E-PLUS — Grade: 68",
+                            "vendor": "ASUS",
+                            "model": "TUF Gaming X670E-PLUS",
+                            "grade": 68
+                        },
+                        {
+                            "raw": "ASRock X670E Pro RS — Grade: 65",
+                            "vendor": "ASRock",
+                            "model": "X670E Pro RS",
+                            "grade": 65
+                        }
+                    ]
+                },
+                {
+                    "name": "AMD B650/B650E",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Strix B650E-F — Grade: 64",
+                            "vendor": "ASUS",
+                            "model": "ROG Strix B650E-F",
+                            "grade": 64
+                        },
+                        {
+                            "raw": "MSI MPG B650 Edge — Grade: 62",
+                            "vendor": "MSI",
+                            "model": "MPG B650 Edge",
+                            "grade": 62
+                        },
+                        {
+                            "raw": "Gigabyte B650 AORUS ELITE AX — Grade: 60",
+                            "vendor": "Gigabyte",
+                            "model": "B650 AORUS ELITE AX",
+                            "grade": 60
+                        },
+                        {
+                            "raw": "ASRock B650E Steel Legend — Grade: 58",
+                            "vendor": "ASRock",
+                            "model": "B650E Steel Legend",
+                            "grade": 58
+                        },
+                        {
+                            "raw": "ASUS TUF Gaming B650-PLUS — Grade: 56",
+                            "vendor": "ASUS",
+                            "model": "TUF Gaming B650-PLUS",
+                            "grade": 56
+                        },
+                        {
+                            "raw": "MSI MAG B650 Tomahawk — Grade: 55",
+                            "vendor": "MSI",
+                            "model": "MAG B650 Tomahawk",
+                            "grade": 55
+                        }
+                    ]
+                },
+                {
+                    "name": "AMD TRX40 (Previous Gen HEDT)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Zenith II Extreme — Grade: 75",
+                            "vendor": "ASUS",
+                            "model": "ROG Zenith II Extreme",
+                            "grade": 75
+                        },
+                        {
+                            "raw": "Gigabyte TRX40 AORUS XTREME — Grade: 74",
+                            "vendor": "Gigabyte",
+                            "model": "TRX40 AORUS XTREME",
+                            "grade": 74
+                        },
+                        {
+                            "raw": "MSI TRX40 Creator — Grade: 72",
+                            "vendor": "MSI",
+                            "model": "TRX40 Creator",
+                            "grade": 72
+                        },
+                        {
+                            "raw": "ASRock TRX40 Taichi — Grade: 70",
+                            "vendor": "ASRock",
+                            "model": "TRX40 Taichi",
+                            "grade": 70
+                        }
+                    ]
+                },
+                {
+                    "name": "Intel Z690 (Previous Gen)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Maximus Z690 Extreme — Grade: 70",
+                            "vendor": "ASUS",
+                            "model": "ROG Maximus Z690 Extreme",
+                            "grade": 70
+                        },
+                        {
+                            "raw": "MSI MEG Z690 Ace — Grade: 68",
+                            "vendor": "MSI",
+                            "model": "MEG Z690 Ace",
+                            "grade": 68
+                        },
+                        {
+                            "raw": "Gigabyte Z690 AORUS MASTER — Grade: 66",
+                            "vendor": "Gigabyte",
+                            "model": "Z690 AORUS MASTER",
+                            "grade": 66
+                        },
+                        {
+                            "raw": "ASRock Z690 Taichi — Grade: 64",
+                            "vendor": "ASRock",
+                            "model": "Z690 Taichi",
+                            "grade": 64
+                        }
+                    ]
+                },
+                {
+                    "name": "AMD X570 (Previous Gen)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Crosshair VIII Dark Hero — Grade: 60",
+                            "vendor": "ASUS",
+                            "model": "ROG Crosshair VIII Dark Hero",
+                            "grade": 60
+                        },
+                        {
+                            "raw": "Gigabyte X570 AORUS XTREME — Grade: 62",
+                            "vendor": "Gigabyte",
+                            "model": "X570 AORUS XTREME",
+                            "grade": 62
+                        },
+                        {
+                            "raw": "MSI MEG X570 Godlike — Grade: 64",
+                            "vendor": "MSI",
+                            "model": "MEG X570 Godlike",
+                            "grade": 64
+                        },
+                        {
+                            "raw": "ASRock X570 Taichi — Grade: 58",
+                            "vendor": "ASRock",
+                            "model": "X570 Taichi",
+                            "grade": 58
+                        }
+                    ]
+                },
+                {
+                    "name": "Mini-ITX (SFF Builds)",
+                    "items": [
+                        {
+                            "raw": "ASUS ROG Strix X670E-I — Grade: 70",
+                            "vendor": "ASUS",
+                            "model": "ROG Strix X670E-I",
+                            "grade": 70
+                        },
+                        {
+                            "raw": "MSI MPG Z790I Edge — Grade: 68",
+                            "vendor": "MSI",
+                            "model": "MPG Z790I Edge",
+                            "grade": 68
+                        },
+                        {
+                            "raw": "Gigabyte B650I AORUS Ultra — Grade: 62",
+                            "vendor": "Gigabyte",
+                            "model": "B650I AORUS Ultra",
+                            "grade": 62
+                        },
+                        {
+                            "raw": "ASRock Z790 PG — Grade: 65",
+                            "vendor": "ASRock",
+                            "model": "Z790 PG",
+                            "grade": 65
+                        },
+                        {
+                            "raw": "ASUS ROG Strix B760-I — Grade: 58",
+                            "vendor": "ASUS",
+                            "model": "ROG Strix B760-I",
+                            "grade": 58
+                        }
+                    ]
+                },
+                {
+                    "name": "Budget/Entry Level",
+                    "items": [
+                        {
+                            "raw": "ASUS Prime B760M-A — Grade: 48",
+                            "vendor": "ASUS",
+                            "model": "Prime B760M-A",
+                            "grade": 48
+                        },
+                        {
+                            "raw": "MSI Pro B650-P — Grade: 46",
+                            "vendor": "MSI",
+                            "model": "Pro B650-P",
+                            "grade": 46
+                        },
+                        {
+                            "raw": "Gigabyte B550 AORUS ELITE — Grade: 44",
+                            "vendor": "Gigabyte",
+                            "model": "B550 AORUS ELITE",
+                            "grade": 44
+                        },
+                        {
+                            "raw": "ASRock B450 Steel Legend — Grade: 38",
+                            "vendor": "ASRock",
+                            "model": "B450 Steel Legend",
+                            "grade": 38
+                        },
+                        {
+                            "raw": "ASUS Prime H610M-A — Grade: 35",
+                            "vendor": "ASUS",
+                            "model": "Prime H610M-A",
+                            "grade": 35
+                        }
+                    ]
+                },
+                {
+                    "name": "Legacy Platforms",
+                    "items": [
+                        {
+                            "raw": "ASUS X299 — Grade: 42",
+                            "vendor": "ASUS",
+                            "model": "X299",
+                            "grade": 42
+                        },
+                        {
+                            "raw": "Gigabyte X399 — Grade: 40",
+                            "vendor": "Gigabyte",
+                            "model": "X399",
+                            "grade": 40
+                        },
+                        {
+                            "raw": "ASRock X99 — Grade: 38",
+                            "vendor": "ASRock",
+                            "model": "X99",
+                            "grade": 38
+                        },
+                        {
+                            "raw": "MSI Z590 — Grade: 45",
+                            "vendor": "MSI",
+                            "model": "Z590",
+                            "grade": 45
+                        },
+                        {
+                            "raw": "ASUS X470 — Grade: 40",
+                            "vendor": "ASUS",
+                            "model": "X470",
+                            "grade": 40
+                        }
+                    ]
+                },
+                {
+                    "name": "Specialized/Industrial",
+                    "items": [
+                        {
+                            "raw": "ASUS ProArt Z790 — Grade: 78",
+                            "vendor": "ASUS",
+                            "model": "ProArt Z790",
+                            "grade": 78
+                        },
+                        {
+                            "raw": "ASRock Industrial IMB-X1312 — Grade: 72",
+                            "vendor": "ASRock",
+                            "model": "Industrial IMB-X1312",
+                            "grade": 72
+                        },
+                        {
+                            "raw": "Gigabyte MC12-LE0 — Grade: 75",
+                            "vendor": "Gigabyte",
+                            "model": "MC12-LE0",
+                            "grade": 75
+                        },
+                        {
+                            "raw": "Supermicro C9Z790 — Grade: 80",
+                            "vendor": "Supermicro",
+                            "model": "C9Z790",
+                            "grade": 80
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
