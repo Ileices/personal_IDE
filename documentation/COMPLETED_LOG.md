@@ -268,3 +268,78 @@ Created 9-document documentation suite in `documentation/` directory.
 | `apps/web/src/components/ChatPanel.tsx` | Textarea: id/name |
 | `apps/web/src/components/OllamaSetup.tsx` | URL input: id/name |
 | `apps/web/src/components/ProjectPanel.tsx` | 3 inputs: id/name |
+---
+
+## Session: Agent Loop Death Spiral Fix (commit bbf1648)
+
+**Context**: User left the agent running for 8 hours in non-fleet mode. It burned 539 iterations, consumed the entire LLM budget, and produced **zero file changes**. Event log showed a repeating death spiral caused by 5 compounding bugs.
+
+### Fix 24: Structured Output .slice() Crash Guard
+**Problem**: `structured.summary.slice(0, 100)` crashes with `Cannot read properties of undefined (reading 'slice')` when the LLM returns JSON without all required fields. The crash was caught but silently swallowed, leaving the loop in a broken state.
+
+**Fix** (enhancedLoop.ts):
+- Changed `const structured` to `let structured` to allow field patching
+- Added guard block after `parseStructuredOutput()`: ensures `summary`, `filesChanged`, `nextSteps`, `questionsForUser`, `done`, `confidence` all have fallback values
+- `structured.summary = structured.summary || 'Step N completed'` prevents all downstream `.slice()` crashes
+
+### Fix 25: Schema-Enforcing Fallback Prompt
+**Problem**: When structured output parsing returned null, `currentTask` was set to `"Continue with the implementation. Remember to include the structured JSON output block."` — this context-free prompt caused the LLM to hallucinate random unrelated projects, creating an inescapable loop.
+
+**Fix** (enhancedLoop.ts):
+- Replaced useless fallback with comprehensive schema enforcement block
+- Tracks `consecutiveErrors` for schema misses separately
+- If file changes were parsed without structured output, counts as partial progress (resets error counter)
+- Rebuilds `currentTask` with: explicit schema violation notice, full example of the required `\`\`\`json:structured_output` format, and the ORIGINAL `initialTask` content (not accumulated junk)
+- After 8 consecutive schema misses → halts with clear error message suggesting a different/larger model
+
+### Fix 26: Loop Detection With Teeth
+**Problem**: Loop detection fired but only prepended a warning message to the prompt that the LLM ignored. It never reset its detection history, so breakout prompts accumulated junk. It used the corrupted `currentTask` instead of the original task.
+
+**Fix** (enhancedLoop.ts):
+- Added `loopBreakoutAttempts` counter, incremented each time loop is detected
+- After 5 breakout attempts with zero `totalFilesChanged` → halts with clear error
+- Calls `this.loopDetector.reset()` after each detection — gives breakout prompt a fresh start
+- Uses `initialTask` (not accumulated `currentTask`) for the breakout prompt context
+- Appends ABSOLUTE REQUIREMENT block with explicit file change format example AND structured JSON example
+
+### Fix 27: consecutiveErrors Reset Placement
+**Problem**: `this.consecutiveErrors = 0` was placed at the START of the "Process Response" section — BEFORE the structured output processing that could crash. This meant `maxConsecutiveErrors` (default 5) was never reached, because the counter reset to 0 every iteration before it could increment.
+
+**Fix** (enhancedLoop.ts):
+- Removed `this.consecutiveErrors = 0` from the "Process Response" section
+- Moved it to INSIDE the `if (structured)` block, AFTER successful structured output processing
+- Schema misses in the `else` block now properly increment `consecutiveErrors`
+- `consecutiveErrors` is also reset when file changes are detected without structured output (partial progress path)
+
+### Fix 28: No-Progress Detection
+**Problem**: No mechanism to detect "N iterations with zero file changes." The agent could run indefinitely making zero progress as long as it didn't trigger the loop detector's hash-based detection (which requires identical responses, not just unproductive ones).
+
+**Fix** (enhancedLoop.ts):
+- Added `iterationsWithoutFileChanges` counter and `maxIterationsWithoutProgress = 15`
+- After file changes applied: if changes > 0, reset both `iterationsWithoutFileChanges` and `loopBreakoutAttempts`
+- If changes = 0, increment counter
+- At 15 consecutive no-change iterations → halts with clear error message
+
+### Fix 29: parseStructuredOutput Robustness
+**Problem**: `parseStructuredOutput()` only looked for content between `\`\`\`json:structured_output` markers, with fallbacks for `<!-- STRUCTURED_OUTPUT_START -->` and generic `\`\`\`json` blocks. If the LLM returned valid JSON without any of these markers, parsing returned null even though usable output existed.
+
+**Fix** (prompts.ts):
+- Added last-resort regex fallback: finds ANY JSON object containing a `"summary"` key anywhere in the LLM response content
+- Catches cases where the LLM outputs valid JSON but without proper markers
+- Extraction chain is now: primary markers → fallback markers → any json block → regex for JSON with "summary" key → null
+
+---
+
+## Files Modified (Death Spiral Fix Session)
+
+| File | Changes |
+|------|---------|
+| `apps/server/src/services/agent/enhancedLoop.ts` | 5 fixes: field guards, schema-enforcing fallback, loop detection with reset/escalation/halt, consecutiveErrors placement, no-progress tracking |
+| `apps/server/src/services/modes/prompts.ts` | Last-resort regex JSON extraction in parseStructuredOutput |
+
+### New Constants & Thresholds
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `maxIterationsWithoutProgress` | 15 | Halt after N iterations with zero file changes |
+| Schema miss halt threshold | 8 | Halt after N consecutive structured output parse failures |
+| Loop breakout halt threshold | 5 | Halt after N breakout attempts with zero total file changes |
