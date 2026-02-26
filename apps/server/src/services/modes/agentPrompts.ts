@@ -34,6 +34,43 @@ RULES:
 - editLog: track EVERY file change with the symbols affected and reason for the change
 `;
 
+// ── Critical Format Header (survives truncation — placed at top of system prompt) ──
+
+const CRITICAL_FORMAT_HEADER = `## ⚡ MANDATORY RESPONSE FORMAT — READ FIRST ⚡
+
+You are a CODING AGENT. You write code files and output structured JSON. That is ALL you do.
+
+ABSOLUTE RULES:
+- NEVER say "I'm sorry", "I apologize", "As an AI", or "I cannot"
+- NEVER ask questions — make ALL technical decisions yourself
+- ALWAYS create or modify at least ONE file per response
+- ALWAYS end your response with the structured JSON output block
+
+EVERY response follows this exact pattern:
+1. Brief plan (2-3 sentences max)
+2. Code changes using file markers:
+--- FILE: src/path/file.ext ---
+\`\`\`language
+// complete file content here
+\`\`\`
+--- END FILE ---
+3. Structured output block:
+${OUTPUT_MARKERS.start}
+{"summary":"...", "filesChanged":[...], "nextSteps":[...], "questionsForUser":[], "done":false, "confidence":N}
+${OUTPUT_MARKERS.end}
+
+If you cannot complete the full task, create at LEAST one file with meaningful code and iterate.
+`;
+
+// ── Schema Reminder Footer (survives truncation — placed at bottom of system prompt) ──
+
+const SCHEMA_REMINDER_FOOTER = `
+## ⚡ OUTPUT FORMAT REMINDER ⚡
+Your response MUST end with: ${OUTPUT_MARKERS.start} { JSON with summary, filesChanged, nextSteps, questionsForUser, done, confidence } ${OUTPUT_MARKERS.end}
+Your response MUST include at least one: --- FILE: path --- ... --- END FILE ---
+Do NOT apologize. Do NOT ask questions. Just write code and output JSON.
+`;
+
 // ── File Change Format ──
 
 const FILE_CHANGE_FORMAT = `
@@ -327,7 +364,8 @@ export function buildAgentSystemPrompt(params: {
   const isCorpusScale = params.codebaseOverview?.includes('lines') &&
     parseInt(params.codebaseOverview.match(/(\d[\d,]+)\s*lines/)?.[1]?.replace(/,/g, '') || '0') > 10000;
 
-  return `# AUTONOMOUS SOFTWARE ENGINEERING AGENT v2
+  return `${CRITICAL_FORMAT_HEADER}
+# AUTONOMOUS SOFTWARE ENGINEERING AGENT v2
 
 You are an elite fully-autonomous software engineering agent operating at NASA/AAA-game-studio quality standards.
 You build production-grade software: scalable, maintainable, tested, and documented.
@@ -479,6 +517,7 @@ ${params.errorContext ? `### Current Errors\n${params.errorContext}\n` : ''}
 ${params.testContext ? `### Test Results\n${params.testContext}\n` : ''}
 
 ${params.memoryContext ? `### Project Memory\n${params.memoryContext}\n` : ''}
+${SCHEMA_REMINDER_FOOTER}
 `;
 }
 

@@ -97,6 +97,7 @@ export class LoopDetector {
     codebaseOverview?: string
   ): string {
     const prompts = [
+      this.startMinimalPrompt(originalTask, loopPattern),  // Try simplest approach first
       this.expansionPrompt(originalTask, loopPattern, codebaseOverview),
       this.deepDivePrompt(originalTask, loopPattern),
       this.architecturePrompt(originalTask, loopPattern, codebaseOverview),
@@ -104,7 +105,10 @@ export class LoopDetector {
 
     // Rotate through breakout strategies based on how many times we've broken out
     const breakoutCount = this.history.filter(h => h.summary.includes('BREAKOUT')).length;
-    return prompts[breakoutCount % prompts.length];
+    const idx = breakoutCount % prompts.length;
+    const prompt = prompts[idx];
+    // startMinimal (idx 0) already includes format suffix; append to others
+    return idx === 0 ? prompt : prompt + '\n' + this.formatSuffix();
   }
 
   private expansionPrompt(task: string, pattern: string, overview?: string): string {
@@ -131,6 +135,7 @@ export class LoopDetector {
       'Original task for context: ' + task.slice(0, 500),
       '',
       'DO NOT repeat your previous actions. Take a completely NEW approach.',
+      'DO NOT apologize or explain — just write code and output the structured JSON block.',
     ].join('\n');
   }
 
@@ -156,6 +161,7 @@ export class LoopDetector {
       'Original task: ' + task.slice(0, 500),
       '',
       'DO NOT attempt the same approach you just tried. Review and improve quality instead.',
+      'DO NOT apologize or explain — just write code and output the structured JSON block.',
     ].join('\n');
   }
 
@@ -180,6 +186,40 @@ export class LoopDetector {
       overview ? 'Codebase:\n' + overview.slice(0, 1500) : '',
       '',
       'Original task: ' + task.slice(0, 500),
+      '',
+      'DO NOT apologize or explain — just write code and output the structured JSON block.',
+    ].join('\n');
+  }
+
+  /** Simple "just create one file" breakout for when the LLM can't follow complex instructions */
+  private startMinimalPrompt(task: string, pattern: string): string {
+    return [
+      'STOP. You are stuck in a loop (' + pattern + ').',
+      '',
+      'Take the SIMPLEST possible action: create exactly ONE file with code.',
+      '',
+      'Task: ' + task.slice(0, 500),
+      '',
+      'Create ONE file with a basic implementation. Do NOT try to do everything at once.',
+      'Do NOT apologize. Do NOT explain. Just output code and JSON.',
+      this.formatSuffix(),
+    ].join('\n');
+  }
+
+  /** Schema format examples appended to breakout prompts */
+  private formatSuffix(): string {
+    return [
+      '',
+      'YOUR RESPONSE MUST FOLLOW THIS EXACT PATTERN:',
+      '--- FILE: src/main.ts ---',
+      '```typescript',
+      '// your code here',
+      '```',
+      '--- END FILE ---',
+      '',
+      '```json:structured_output',
+      '{"summary":"Created initial implementation","filesChanged":[{"path":"src/main.ts","action":"created","summary":"Basic implementation"}],"nextSteps":[{"stepNumber":1,"action":"Expand","target":"src/main.ts","detail":"Add features","priority":"high"}],"questionsForUser":[],"done":false,"confidence":70}',
+      '```',
     ].join('\n');
   }
 

@@ -461,17 +461,51 @@ export class EnhancedAgentLoop {
           messages.push({ role: 'system', content: 'PROJECT FILES:\n' + fileList });
         }
 
-        // Conversation history (limited by token budget)
+        // Conversation history (limited by token budget + filtered for quality)
         // For small-context models (e.g. Ollama 4k), history gets minimal space
         const historyBudget = Math.floor(this.contextWindow * 0.15);
         const history = this.memory.getMessages(this.conversationId);
         let historyTokens = 0;
         const recentHistory: any[] = [];
         for (let i = history.length - 1; i >= 0 && historyTokens < historyBudget; i--) {
-          const msgTokens = estimateTokens(history[i].content);
+          const msg = history[i];
+          let content = msg.content;
+
+          // Skip poisoned messages that cause LLMs to repeat failure patterns
+          if (msg.role === 'assistant') {
+            const lower = content.toLowerCase().slice(0, 300);
+            if (lower.includes("i'm sorry") || lower.includes("i apologize") ||
+                lower.includes("as an ai model") || lower.includes("as an ai language")) {
+              continue; // Apology/refusal responses poison future context
+            }
+            if (!content.includes('--- FILE:') && !content.includes('structured_output') && !content.includes('"summary"')) {
+              continue; // Responses with no code and no structured output are noise
+            }
+          }
+          if (msg.role === 'user' && (content.startsWith('CRITICAL:') || content.includes('LOOP DETECTED:') ||
+              content.includes('previous output was missing'))) {
+            continue; // Schema-miss retries and breakout prompts are noise in history
+          }
+
+          // Condense history messages to save context budget
+          if (msg.role === 'assistant' && content.length > 800) {
+            const summaryMatch = content.match(/"summary"\s*:\s*"([^"]+)"/);
+            const filesMatch = content.match(/--- FILE: (.+?) ---/g);
+            if (summaryMatch) {
+              content = 'Previous step: ' + summaryMatch[1] +
+                (filesMatch ? '\nFiles: ' + filesMatch.map((f: string) => f.replace('--- FILE: ', '').replace(' ---', '')).join(', ') : '');
+            } else {
+              content = content.slice(0, 600) + '...[condensed]';
+            }
+          }
+          if (msg.role === 'user' && content.length > 500) {
+            content = content.slice(0, 400) + '...[condensed]';
+          }
+
+          const msgTokens = estimateTokens(content);
           if (historyTokens + msgTokens > historyBudget) break;
           historyTokens += msgTokens;
-          recentHistory.unshift({ role: history[i].role, content: history[i].content });
+          recentHistory.unshift({ role: msg.role, content });
         }
         messages.push(...recentHistory);
 
@@ -551,6 +585,10 @@ export class EnhancedAgentLoop {
           } catch { /* web search is non-critical */ }
         }
 
+        // Append compact schema reminder to every user message (last thing LLM sees before responding)
+        if (!currentTask.includes('json:structured_output')) {
+          currentTask += '\n\n---\nREMINDER: End your response with ```json:structured_output { ... } ``` block. Include file changes with --- FILE: path --- markers.';
+        }
         messages.push({ role: 'user', content: currentTask });
 
         let response: any = null;
@@ -683,7 +721,10 @@ export class EnhancedAgentLoop {
           }
         }
 
-        this.memory.addMessage(this.conversationId, 'user', currentTask, this.config.model, 'agent');
+        // Only store original tasks in conversation memory, not schema-miss retries (they pollute history)
+        if (!currentTask.includes('previous output was missing') && !currentTask.includes('LOOP DETECTED')) {
+          this.memory.addMessage(this.conversationId, 'user', currentTask, this.config.model, 'agent');
+        }
 
         // Execute LLM Call (skip if we already got a response from proactive chunking)
         if (!response) {
@@ -890,7 +931,14 @@ export class EnhancedAgentLoop {
         const content = response.content || '';
         this.totalTokens += response.usage?.total_tokens || 0;
 
-        this.memory.addMessage(this.conversationId, 'assistant', content, this.config.model, 'agent');
+        // Only store productive responses in conversation memory
+        // (apology/refusal responses poison history and cause LLMs to repeat the pattern)
+        const contentLower = content.toLowerCase().slice(0, 300);
+        const isFailedResponse = (contentLower.includes("i'm sorry") || contentLower.includes("i apologize") ||
+          contentLower.includes("as an ai")) && !content.includes('--- FILE:');
+        if (!isFailedResponse) {
+          this.memory.addMessage(this.conversationId, 'assistant', content, this.config.model, 'agent');
+        }
         this.emit({ type: 'step_content', delta: content });
 
         // Record in loop detector for stuck-detection
@@ -1050,9 +1098,12 @@ export class EnhancedAgentLoop {
             this.emit({ type: 'question_logged', question: q });
           }
 
+          let autoAnsweredContext = '';
           if (this.config.autoAnswerQuestions && questions.length > 0) {
             for (const q of questions) {
-              this.emit({ type: 'auto_answer', question: q, answer: 'Proceeding with best practices.' });
+              const answer = this.buildAutoAnswer(q, codebaseOverview, initialTask);
+              this.emit({ type: 'auto_answer', question: q, answer });
+              autoAnsweredContext += '\nQ: ' + q + '\nA: ' + answer;
             }
           }
 
@@ -1167,6 +1218,11 @@ export class EnhancedAgentLoop {
             nextTask += 'Continue with the implementation. Review what has been done and identify what remains.';
           }
 
+          // Inject auto-answers so the LLM sees them next iteration (prevents re-asking)
+          if (autoAnsweredContext) {
+            nextTask += '\n\nAUTO-ANSWERED (do NOT re-ask these):' + autoAnsweredContext + '\nAll questions answered. Continue coding.\n';
+          }
+
           currentTask = nextTask;
           // Reset consecutive errors — we successfully parsed structured output
           this.consecutiveErrors = 0;
@@ -1175,30 +1231,22 @@ export class EnhancedAgentLoop {
           this.consecutiveErrors++;
           this.emit({ type: 'info', message: 'Schema miss #' + this.consecutiveErrors + ': LLM did not return structured JSON output block. ' + (fileChanges.length > 0 ? fileChanges.length + ' file changes parsed from markdown.' : 'No file changes either.') });
 
-          // If we got file changes even without structured output, still count as partial progress
+          // File changes without structured output = partial progress (reduce but don't fully reset)
           if (fileChanges.length > 0) {
-            this.consecutiveErrors = 0;
+            this.consecutiveErrors = Math.max(0, this.consecutiveErrors - 2);
           }
 
-          // Rebuild task with ORIGINAL context + forceful schema reminder
+          // Rebuild task: lead with ORIGINAL task, then compact format reminder
+          // Avoid adversarial/scolding language that triggers LLM apology patterns
           currentTask = [
-            'CRITICAL: Your previous response did NOT include the required structured JSON output block.',
-            'You MUST end your response with the structured output between the markers.',
+            initialTask.slice(0, 2000),
             '',
-            'Example of REQUIRED format at the end of your response:',
+            '---',
+            'Your previous output was missing the required JSON block. Include it this time.',
+            'Create or modify at least ONE file, then end with:',
             '```json:structured_output',
-            '{',
-            '  "summary": "What you did this step",',
-            '  "filesChanged": [{"path": "src/example.ts", "action": "created", "summary": "Created example file"}],',
-            '  "nextSteps": [{"stepNumber": 1, "action": "Create X", "target": "src/x.ts", "detail": "Implementation details", "priority": "high"}],',
-            '  "questionsForUser": [],',
-            '  "done": false,',
-            '  "confidence": 80',
-            '}',
+            '{"summary":"What you did","filesChanged":[{"path":"src/file.ts","action":"created","summary":"Created file"}],"nextSteps":[{"stepNumber":1,"action":"Next action","target":"src/file.ts","detail":"Details","priority":"high"}],"questionsForUser":[],"done":false,"confidence":80}',
             '```',
-            '',
-            'ORIGINAL TASK (continue working on this):',
-            initialTask.slice(0, 3000),
           ].join('\n');
 
           if (this.lastErrorContext) {
@@ -1327,6 +1375,31 @@ export class EnhancedAgentLoop {
     if (!checkpoint) throw new Error('Checkpoint not found');
     this.checkpoint.rollback(this.config.projectRoot, checkpointId);
     this.emit({ type: 'rollback', checkpointId, description: checkpoint.label });
+  }
+
+  /** Build a context-aware auto-answer for LLM-generated questions */
+  private buildAutoAnswer(question: string, codebaseOverview: string, task: string): string {
+    const qLower = question.toLowerCase();
+    if (qLower.includes('language') || qLower.includes('framework') || qLower.includes('technology')) {
+      const langs = this.projectLanguages.length ? this.projectLanguages.join(', ') : 'TypeScript';
+      return 'Use ' + langs + '. ' + (this.tierContext ? this.tierContext.slice(0, 200) : 'Choose based on project type.');
+    }
+    if (qLower.includes('structure') || qLower.includes('architecture') || qLower.includes('organize') || qLower.includes('directory')) {
+      return 'Follow standard project structure. ' + (codebaseOverview ? codebaseOverview.slice(0, 300) : 'Use src/ for source, tests/ for tests.');
+    }
+    if (qLower.includes('component') || qLower.includes('section') || qLower.includes('main') || qLower.includes('files')) {
+      return 'Analyze the codebase yourself and proceed. ' + (codebaseOverview ? 'Overview: ' + codebaseOverview.slice(0, 300) : '');
+    }
+    if (qLower.includes('test')) {
+      return 'Yes, write tests using the project test framework.';
+    }
+    if (qLower.includes('implement') || qLower.includes('functionality') || qLower.includes('specific')) {
+      return 'Implement everything described in the task: ' + task.slice(0, 300);
+    }
+    if (qLower.includes('purpose') || qLower.includes('goal') || qLower.includes('expected') || qLower.includes('outcome') || qLower.includes('change')) {
+      return 'The goal is to complete the task: ' + task.slice(0, 300);
+    }
+    return 'Make your best technical decision. Languages: ' + (this.projectLanguages.join(', ') || 'auto-detect') + '. Task: ' + task.slice(0, 200);
   }
 
   private delay(ms: number): Promise<void> {

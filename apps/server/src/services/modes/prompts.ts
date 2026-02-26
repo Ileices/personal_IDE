@@ -134,20 +134,32 @@ export function parseStructuredOutput(content: string): any | null {
     }
   }
 
-  // ── Last resort: find ANY JSON object with "summary" key in the content ──
+  // ── Last resort: find ANY JSON object with "summary" key via brace matching ──
   // This catches cases where the LLM outputs valid JSON but without proper markers
   try {
-    // Find the last occurrence of a JSON-like object with "summary"
-    const jsonRegex = /\{[^{}]*"summary"\s*:\s*"[^"]*"[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-    let lastMatch: string | null = null;
-    let m;
-    while ((m = jsonRegex.exec(content)) !== null) {
-      lastMatch = m[0];
-    }
-    if (lastMatch) {
-      const parsed = JSON.parse(lastMatch);
-      if (parsed && typeof parsed.summary === 'string') {
-        return parsed;
+    const summaryIdx = content.lastIndexOf('"summary"');
+    if (summaryIdx !== -1) {
+      // Walk backwards to find the opening {
+      let openBrace = -1;
+      for (let i = summaryIdx; i >= 0; i--) {
+        if (content[i] === '{') { openBrace = i; break; }
+      }
+      if (openBrace >= 0) {
+        // Walk forwards counting braces to find matching }
+        let depth = 0;
+        for (let i = openBrace; i < content.length; i++) {
+          if (content[i] === '{') depth++;
+          if (content[i] === '}') depth--;
+          if (depth === 0) {
+            try {
+              const parsed = JSON.parse(content.substring(openBrace, i + 1));
+              if (parsed && typeof parsed.summary === 'string') {
+                return parsed;
+              }
+            } catch { /* fall through */ }
+            break;
+          }
+        }
       }
     }
   } catch { /* fall through */ }
