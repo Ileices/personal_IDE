@@ -343,3 +343,93 @@ Created 9-document documentation suite in `documentation/` directory.
 | `maxIterationsWithoutProgress` | 15 | Halt after N iterations with zero file changes |
 | Schema miss halt threshold | 8 | Halt after N consecutive structured output parse failures |
 | Loop breakout halt threshold | 5 | Halt after N breakout attempts with zero total file changes |
+
+---
+
+## Session: Robust Agent Automation (commit 09130a2)
+
+**Context**: After the death spiral halt fixes (Fixes 24-29), testing revealed the agent still burned 35 iterations before halting. The halts worked, but the underlying automation needed fundamental improvements to make the agent *actually produce code* instead of looping.
+
+### Fix 30: Truncation-Resilient System Prompt
+**Problem**: The system prompt from `buildAgentSystemPrompt` is ~8000+ tokens. For Ollama 4k context, `truncateToFit` preserves 60% head and 35% tail — but the critical output format instructions were in the middle and got cut. The LLM never saw the required format.
+
+**Fix** (agentPrompts.ts):
+- Added `CRITICAL_FORMAT_HEADER` constant (~300 tokens): placed at the VERY START of the system prompt. Contains: role definition, anti-refusal rules, compact file change format example, compact structured output example. Survives in the 60% head of any truncation.
+- Added `SCHEMA_REMINDER_FOOTER` constant (~100 tokens): placed at the VERY END of the system prompt. Survives in the 35% tail of any truncation.
+- Even a 4k model with 1200-token system budget now sees the format at both start and end.
+
+### Fix 31: Anti-Refusal Instructions
+**Problem**: Small LLMs responded with "I'm sorry for any confusion, but as an AI model developer" — breaking character and refusing to code. The "CRITICAL:" prefix in schema miss retries further triggered apology patterns.
+
+**Fix** (agentPrompts.ts + enhancedLoop.ts):
+- `CRITICAL_FORMAT_HEADER` includes explicit rules: NEVER say "I'm sorry", "I apologize", "As an AI", or "I cannot"
+- All loop detector breakout prompts now end with "DO NOT apologize or explain — just write code"
+- Schema miss handler reworded from "CRITICAL: Your previous response did NOT include..." to task-first framing with neutral language
+
+### Fix 32: Conversation History Anti-Poisoning
+**Problem**: Failed exchanges ("I'm sorry" responses + CRITICAL retry prompts) were stored in conversation memory and fed back as history context. The LLM saw its own apology patterns and repeated them.
+
+**Fix** (enhancedLoop.ts):
+- **History filtering**: Before building the message array, filters out:
+  - Assistant messages containing "I'm sorry", "I apologize", "As an AI model"
+  - Assistant messages with no file changes AND no structured output
+  - User messages starting with "CRITICAL:" or containing "LOOP DETECTED:" or "previous output was missing"
+- **Conditional memory storage**: Failed assistant responses (apologies without code) are NOT stored in `messages` table. Schema-miss retry prompts are NOT stored as user messages.
+- **History condensation**: Long assistant messages (>800 chars) are condensed to just their summary + file list. Long user messages (>500 chars) are truncated. Dramatically reduces history token usage.
+
+### Fix 33: Context-Aware Auto-Answers
+**Problem**: When the LLM generated `questionsForUser`, the auto-answer was just "Proceeding with best practices" — which told the LLM nothing and was never injected back into the prompt. The LLM saw no answer and asked again, creating a question loop.
+
+**Fix** (enhancedLoop.ts):
+- New `buildAutoAnswer(question, codebaseOverview, task)` method with intelligent pattern matching:
+  - Language/framework questions → answers with actual `projectLanguages` and `tierContext`
+  - Structure/architecture questions → answers with `codebaseOverview`
+  - Component/section questions → "Analyze the codebase yourself" + overview
+  - Implementation questions → "Implement everything in the task: [task context]"
+  - Generic fallback → project languages + task excerpt
+- Auto-answers are now **injected into the next task**: `"AUTO-ANSWERED (do NOT re-ask): Q: ... A: ... All questions answered. Continue coding."`
+- The LLM actually sees the answers next iteration instead of silence
+
+### Fix 34: Non-Adversarial Schema Miss Handler
+**Problem**: The schema miss prompt started with "CRITICAL: Your previous response did NOT include..." — adversarial language that triggers small LLMs to apologize instead of code. The original task was buried after 15 lines of format instructions.
+
+**Fix** (enhancedLoop.ts):
+- Task-first framing: `initialTask.slice(0, 2000)` comes FIRST, format reminder after
+- No "CRITICAL:" prefix, no scolding — just neutral "Your previous output was missing the required JSON block. Include it this time."
+- Compact one-line JSON example instead of multi-line (saves tokens for small models)
+- Partial progress now reduces `consecutiveErrors` by 2 instead of resetting to 0 (file changes without JSON slow escalation but don't fully reset)
+
+### Fix 35: Schema Reminder on Every User Message
+**Problem**: The structured output format was only in the system prompt (which may be truncated) and in schema miss retries (which are adversarial). Normal task messages had no format reminder.
+
+**Fix** (enhancedLoop.ts):
+- Every user message that doesn't already contain `json:structured_output` gets a compact suffix: `"REMINDER: End your response with ```json:structured_output { ... } ``` block. Include file changes with --- FILE: path --- markers."`
+- This is the LAST thing the LLM sees before generating its response — maximum impact
+
+### Fix 36: Loop Detector Breakout Strategy Improvements
+**Problem**: Breakout prompts told the LLM to "review the entire codebase" and "identify the weakest feature area" — abstract meta-instructions that small LLMs couldn't follow. They had no format examples. The LLM responded with explanations instead of code.
+
+**Fix** (loopDetector.ts):
+- New `startMinimalPrompt` strategy: "Create exactly ONE file with code" — the simplest possible instruction. Includes the complete format example (file markers + JSON).
+- New `formatSuffix` method: provides complete file change + structured output example, appended to ALL breakout strategies
+- 4-strategy rotation: startMinimal → expansion → deepDive → architecture (simplest first)
+- Anti-apology language added to all existing breakout prompts
+
+### Fix 37: parseStructuredOutput Brace-Matching
+**Problem**: The last-resort regex fallback for finding JSON with a "summary" key used `[^{}]*` patterns that couldn't handle nested objects (like `filesChanged` arrays containing objects).
+
+**Fix** (prompts.ts):
+- Replaced fragile regex with brace-matching algorithm: finds last `"summary"` in content, walks backward to find `{`, then walks forward counting `{`/`}` to find the matching close
+- Correctly handles deeply nested JSON structures
+- Extraction chain: primary markers → fallback markers → any JSON block → brace-matching for "summary" → null
+
+---
+
+## Files Modified (Agent Automation Session)
+
+| File | Changes |
+|------|---------|
+| `apps/server/src/services/modes/agentPrompts.ts` | CRITICAL_FORMAT_HEADER + SCHEMA_REMINDER_FOOTER constants, wired into buildAgentSystemPrompt |
+| `apps/server/src/services/agent/enhancedLoop.ts` | History filtering/condensation, conditional memory storage, schema reminder suffix, context-aware auto-answers with task injection, non-adversarial schema miss handler, buildAutoAnswer method |
+| `apps/server/src/services/agent/loopDetector.ts` | startMinimalPrompt + formatSuffix methods, 4-strategy rotation, anti-apology language |
+| `apps/server/src/services/modes/prompts.ts` | Brace-matching JSON extraction replaces regex fallback |
