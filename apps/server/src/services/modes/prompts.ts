@@ -122,7 +122,7 @@ export function parseStructuredOutput(content: string): any | null {
     }
   }
 
-  // Try to find any JSON block at the end
+  // Try to find any JSON block at the end (```json ... ```)
   const lastJsonStart = content.lastIndexOf('```json');
   if (lastJsonStart !== -1) {
     const jsonStart = content.indexOf('\n', lastJsonStart) + 1;
@@ -133,6 +133,24 @@ export function parseStructuredOutput(content: string): any | null {
       } catch { /* fall through */ }
     }
   }
+
+  // ── Last resort: find ANY JSON object with "summary" key in the content ──
+  // This catches cases where the LLM outputs valid JSON but without proper markers
+  try {
+    // Find the last occurrence of a JSON-like object with "summary"
+    const jsonRegex = /\{[^{}]*"summary"\s*:\s*"[^"]*"[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
+    let lastMatch: string | null = null;
+    let m;
+    while ((m = jsonRegex.exec(content)) !== null) {
+      lastMatch = m[0];
+    }
+    if (lastMatch) {
+      const parsed = JSON.parse(lastMatch);
+      if (parsed && typeof parsed.summary === 'string') {
+        return parsed;
+      }
+    }
+  } catch { /* fall through */ }
 
   return null;
 }

@@ -98,6 +98,9 @@ export class EnhancedAgentLoop {
   private discoveredContextLimits: Map<string, number> = new Map();
   private platformContext = '';
   private platformInfo: PlatformInfo | null = null;
+  private loopBreakoutAttempts = 0;
+  private iterationsWithoutFileChanges = 0;
+  private maxIterationsWithoutProgress = 15;
 
   constructor(
     private db: Database.Database,
@@ -490,20 +493,55 @@ export class EnhancedAgentLoop {
         // ── Loop Detection ──
         const loopCheck = this.loopDetector.isStuck();
         if (loopCheck.stuck) {
+          this.loopBreakoutAttempts++;
           this.emit({ type: 'loop_detected', pattern: loopCheck.pattern, count: loopCheck.count });
-          this.emit({ type: 'info', message: '🔄 LOOP DETECTED: ' + loopCheck.pattern });
+          this.emit({ type: 'info', message: '🔄 LOOP DETECTED (breakout attempt #' + this.loopBreakoutAttempts + '): ' + loopCheck.pattern });
+
+          // After 5 breakout attempts with no progress, halt — the model can't follow instructions
+          if (this.loopBreakoutAttempts >= 5 && this.totalFilesChanged === 0) {
+            this.setState('error');
+            this.emit({ type: 'error', error: 'Agent halted: ' + this.loopBreakoutAttempts + ' loop breakout attempts with zero file changes. The model is not producing actionable output. Try a larger/different model, or simplify the task.' });
+            this.db.prepare(
+              "UPDATE agent_runs SET final_state = ?, summary = ?, completed_at = datetime('now'), iterations = ?, total_tokens = ? WHERE id = ?"
+            ).run('error', 'Loop breakout failure: ' + this.loopBreakoutAttempts + ' attempts, 0 files changed', this.currentIteration, this.totalTokens, this.runId);
+            break;
+          }
+
+          // Reset detector history so the breakout prompt gets a fresh start
+          this.loopDetector.reset();
+
+          // Use the ORIGINAL task on escalation, not the accumulated junk
           currentTask = this.loopDetector.generateBreakoutPrompt(
             this.config.projectRoot,
-            currentTask,
+            initialTask,
             loopCheck.pattern || 'Repeated pattern',
             codebaseOverview
           );
+
+          // Forcefully re-inject the schema requirement
+          currentTask += [
+            '',
+            '',
+            'ABSOLUTE REQUIREMENT: You MUST output file changes using --- FILE: path --- markers AND end with the structured JSON block.',
+            'If you cannot complete the full task in one step, create at least ONE file with meaningful content.',
+            'Example:',
+            '',
+            '--- FILE: src/main.ts ---',
+            '```typescript',
+            '// your code here',
+            '```',
+            '--- END FILE ---',
+            '',
+            '```json:structured_output',
+            '{"summary": "Created main.ts", "filesChanged": [{"path": "src/main.ts", "action": "created", "summary": "Initial implementation"}], "nextSteps": [{"stepNumber": 1, "action": "Expand implementation", "target": "src/main.ts", "detail": "Add core logic", "priority": "high"}], "questionsForUser": [], "done": false, "confidence": 75}',
+            '```',
+          ].join('\n');
 
           // Try web search to find new approaches when stuck
           try {
             const errorQuery = this.lastErrorContext
               ? this.lastErrorContext.slice(0, 100)
-              : currentTask.slice(0, 80);
+              : initialTask.slice(0, 80);
             const searchResult = await webSearch(errorQuery + ' solution fix', 3);
             if (searchResult.results.length > 0) {
               const searchContext = formatSearchForLLM(searchResult);
@@ -849,7 +887,6 @@ export class EnhancedAgentLoop {
         }
 
         // ── Process Response ──
-        this.consecutiveErrors = 0;
         const content = response.content || '';
         this.totalTokens += response.usage?.total_tokens || 0;
 
@@ -912,8 +949,18 @@ export class EnhancedAgentLoop {
 
         // ── Parse & Apply File Changes ──
         this.setState('evaluating');
-        const structured = parseStructuredOutput(content) as StructuredAgentOutput | null;
+        let structured = parseStructuredOutput(content) as StructuredAgentOutput | null;
         const fileChanges = parseFileChanges(content);
+
+        // Guard: ensure structured output has required fields (prevents .slice() crash on undefined)
+        if (structured) {
+          structured.summary = structured.summary || 'Step ' + this.currentIteration + ' completed';
+          structured.filesChanged = structured.filesChanged || [];
+          structured.nextSteps = structured.nextSteps || [];
+          structured.questionsForUser = structured.questionsForUser || [];
+          if (typeof structured.done !== 'boolean') structured.done = false;
+          if (typeof structured.confidence !== 'number') structured.confidence = 50;
+        }
 
         for (const change of fileChanges) {
           try {
@@ -929,6 +976,22 @@ export class EnhancedAgentLoop {
             } catch { /* edit logging is non-critical */ }
           } catch (err: any) {
             this.emit({ type: 'error', error: 'Failed to write ' + change.path + ': ' + err.message });
+          }
+        }
+
+        // ── No-Progress Detection ──
+        if (fileChanges.length > 0) {
+          this.iterationsWithoutFileChanges = 0;
+          this.loopBreakoutAttempts = 0; // Reset breakout counter on real progress
+        } else {
+          this.iterationsWithoutFileChanges++;
+          if (this.iterationsWithoutFileChanges >= this.maxIterationsWithoutProgress) {
+            this.setState('error');
+            this.emit({ type: 'error', error: 'Agent halted: ' + this.maxIterationsWithoutProgress + ' consecutive iterations with zero file changes. Total iterations: ' + this.currentIteration + ', total tokens used: ' + this.totalTokens + '. The model is not producing actionable code. Try a different model or a more specific task.' });
+            this.db.prepare(
+              "UPDATE agent_runs SET final_state = ?, summary = ?, completed_at = datetime('now'), iterations = ?, total_tokens = ? WHERE id = ?"
+            ).run('error', 'No progress: ' + this.iterationsWithoutFileChanges + ' iterations without file changes', this.currentIteration, this.totalTokens, this.runId);
+            break;
           }
         }
 
@@ -1105,10 +1168,51 @@ export class EnhancedAgentLoop {
           }
 
           currentTask = nextTask;
+          // Reset consecutive errors — we successfully parsed structured output
+          this.consecutiveErrors = 0;
         } else {
-          currentTask = 'Continue with the implementation. Remember to include the structured JSON output block.';
+          // ── Structured output NOT parsed — LLM did not follow the schema ──
+          this.consecutiveErrors++;
+          this.emit({ type: 'info', message: 'Schema miss #' + this.consecutiveErrors + ': LLM did not return structured JSON output block. ' + (fileChanges.length > 0 ? fileChanges.length + ' file changes parsed from markdown.' : 'No file changes either.') });
+
+          // If we got file changes even without structured output, still count as partial progress
+          if (fileChanges.length > 0) {
+            this.consecutiveErrors = 0;
+          }
+
+          // Rebuild task with ORIGINAL context + forceful schema reminder
+          currentTask = [
+            'CRITICAL: Your previous response did NOT include the required structured JSON output block.',
+            'You MUST end your response with the structured output between the markers.',
+            '',
+            'Example of REQUIRED format at the end of your response:',
+            '```json:structured_output',
+            '{',
+            '  "summary": "What you did this step",',
+            '  "filesChanged": [{"path": "src/example.ts", "action": "created", "summary": "Created example file"}],',
+            '  "nextSteps": [{"stepNumber": 1, "action": "Create X", "target": "src/x.ts", "detail": "Implementation details", "priority": "high"}],',
+            '  "questionsForUser": [],',
+            '  "done": false,',
+            '  "confidence": 80',
+            '}',
+            '```',
+            '',
+            'ORIGINAL TASK (continue working on this):',
+            initialTask.slice(0, 3000),
+          ].join('\n');
+
           if (this.lastErrorContext) {
-            currentTask = 'PRIORITY: Fix these errors:\n' + this.lastErrorContext + '\n\nThen continue implementation.';
+            currentTask += '\n\nPRIORITY ERRORS TO FIX:\n' + this.lastErrorContext;
+          }
+
+          // After too many schema misses without progress, bail
+          if (this.consecutiveErrors >= 8) {
+            this.setState('error');
+            this.emit({ type: 'error', error: 'Agent stopped: ' + this.consecutiveErrors + ' consecutive iterations without valid structured output. The LLM model may be unable to follow the required schema. Try a different/larger model.' });
+            this.db.prepare(
+              "UPDATE agent_runs SET final_state = ?, summary = ?, completed_at = datetime('now'), iterations = ?, total_tokens = ? WHERE id = ?"
+            ).run('error', 'Schema compliance failure after ' + this.consecutiveErrors + ' attempts', this.currentIteration, this.totalTokens, this.runId);
+            break;
           }
         }
 
