@@ -1,5 +1,6 @@
 // ============================================
 // SQLite Database - Schema & Connection
+// Migration-based schema management
 // ============================================
 import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
@@ -25,13 +26,65 @@ export function initDatabase(dbPath: string): Database.Database {
   db.pragma('foreign_keys = ON');
 
   // Run migrations
-  createTables(db);
+  runMigrations(db);
 
   return db;
 }
 
-function createTables(db: Database.Database): void {
+// ─────────────────────────────────────────────
+// Migration System
+// ─────────────────────────────────────────────
+
+interface Migration {
+  version: number;
+  name: string;
+  up: (db: Database.Database) => void;
+}
+
+function ensureSchemaVersionTable(db: Database.Database): void {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_version (
+      version INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+}
+
+function getCurrentVersion(db: Database.Database): number {
+  const row = db.prepare('SELECT MAX(version) as v FROM schema_version').get() as any;
+  return row?.v ?? 0;
+}
+
+function runMigrations(db: Database.Database): void {
+  ensureSchemaVersionTable(db);
+  const current = getCurrentVersion(db);
+
+  const pending = MIGRATIONS.filter(m => m.version > current);
+  if (pending.length === 0) return;
+
+  console.log(`📦 Running ${pending.length} database migration(s)…`);
+
+  for (const m of pending) {
+    const tx = db.transaction(() => {
+      m.up(db);
+      db.prepare('INSERT INTO schema_version (version, name) VALUES (?, ?)').run(m.version, m.name);
+    });
+    tx();
+    console.log(`  ✅ Migration ${String(m.version).padStart(3, '0')}: ${m.name}`);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Migrations — add new entries at the end
+// ─────────────────────────────────────────────
+
+const MIGRATIONS: Migration[] = [
+  {
+    version: 1,
+    name: 'initial_schema',
+    up(db) {
+      db.exec(`
     -- Projects
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
@@ -283,7 +336,27 @@ function createTables(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_conversation_index_project ON conversation_index(project_id);
     CREATE INDEX IF NOT EXISTS idx_conversation_index_conv ON conversation_index(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_project_tier_config ON project_tier_config(project_id);
-  `);
-}
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Future migrations go here, e.g.:
+  //
+  // {
+  //   version: 2,
+  //   name: 'add_user_preferences',
+  //   up(db) {
+  //     db.exec(`
+  //       CREATE TABLE IF NOT EXISTS user_preferences (
+  //         user_id TEXT PRIMARY KEY,
+  //         theme TEXT DEFAULT 'dark',
+  //         ...
+  //       );
+  //     `);
+  //   },
+  // },
+  // ──────────────────────────────────────────
+];
 
 export type { Database };

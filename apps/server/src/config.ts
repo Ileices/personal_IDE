@@ -4,11 +4,14 @@
 import { config as loadEnv } from 'dotenv';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { randomBytes } from 'crypto';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const ENV_PATH = resolve(__dirname, '../../../.env');
 
 // Load .env from monorepo root
-loadEnv({ path: resolve(__dirname, '../../../.env') });
+loadEnv({ path: ENV_PATH });
 
 export interface AppConfig {
   server: {
@@ -77,6 +80,47 @@ function envBool(key: string, fallback: boolean): boolean {
   return val === 'true' || val === '1';
 }
 
+/**
+ * Resolve ENCRYPT_KEY — auto-generate and persist to .env if missing or insecure.
+ * Ensures the key is never the insecure hardcoded default in production.
+ */
+function resolveEncryptKey(): string {
+  const INSECURE_DEFAULT = 'personal-ide-default-key-change-in-production';
+  const existing = process.env['ENCRYPT_KEY'];
+
+  // If set and not the insecure default, use it
+  if (existing && existing !== INSECURE_DEFAULT && existing !== 'change-me-to-a-random-string') {
+    return existing;
+  }
+
+  // Auto-generate a secure 256-bit key
+  const generated = randomBytes(32).toString('hex');
+
+  // Persist to .env so subsequent restarts use the same key
+  try {
+    if (existsSync(ENV_PATH)) {
+      let content = readFileSync(ENV_PATH, 'utf-8');
+      if (content.includes('ENCRYPT_KEY=')) {
+        // Replace existing line
+        content = content.replace(/^ENCRYPT_KEY=.*$/m, `ENCRYPT_KEY=${generated}`);
+      } else {
+        // Append
+        content += `\n# Auto-generated encryption key — DO NOT commit to git\nENCRYPT_KEY=${generated}\n`;
+      }
+      writeFileSync(ENV_PATH, content, 'utf-8');
+    } else {
+      writeFileSync(ENV_PATH, `# Auto-generated encryption key — DO NOT commit to git\nENCRYPT_KEY=${generated}\n`, 'utf-8');
+    }
+    console.warn('⚠️  ENCRYPT_KEY was missing or insecure — auto-generated and saved to .env');
+  } catch (err) {
+    console.warn('⚠️  Could not persist ENCRYPT_KEY to .env:', err);
+  }
+
+  // Update process.env for this run
+  process.env['ENCRYPT_KEY'] = generated;
+  return generated;
+}
+
 export function loadConfig(): AppConfig {
   return {
     server: {
@@ -112,7 +156,7 @@ export function loadConfig(): AppConfig {
       enablePaidUsage: envBool('ENABLE_PAID_USAGE', false),
     },
     security: {
-      encryptKey: env('ENCRYPT_KEY', 'personal-ide-default-key-change-in-production'),
+      encryptKey: resolveEncryptKey(),
     },
     services: {
       ollamaUrl: env('OLLAMA_URL', 'http://localhost:11434'),

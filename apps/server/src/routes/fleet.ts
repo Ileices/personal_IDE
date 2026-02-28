@@ -207,4 +207,41 @@ export async function fleetRoutes(app: FastifyInstance) {
       unsubscribe();
     });
   });
+
+  // --- GET /api/fleet/ws — WebSocket stream of all fleet events ---
+  app.get('/ws', { websocket: true }, (socket: any, _req: FastifyRequest) => {
+    const status = activeFleet ? { type: 'status', ...activeFleet.getStatus() } : { type: 'status', state: 'idle' };
+    socket.send(JSON.stringify(status));
+
+    const heartbeat = setInterval(() => {
+      try { socket.send(JSON.stringify({ type: 'heartbeat', ts: Date.now() })); }
+      catch { clearInterval(heartbeat); }
+    }, 15_000);
+
+    let unsubscribe: (() => void) | null = null;
+
+    if (activeFleet) {
+      unsubscribe = activeFleet.onEvent((event: any) => {
+        try { socket.send(JSON.stringify(event)); }
+        catch { unsubscribe?.(); }
+      });
+    }
+
+    socket.on('message', (raw: Buffer | string) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === 'subscribe' && activeFleet && !unsubscribe) {
+          unsubscribe = activeFleet.onEvent((event: any) => {
+            try { socket.send(JSON.stringify(event)); }
+            catch { unsubscribe?.(); }
+          });
+        }
+      } catch { /* ignore bad messages */ }
+    });
+
+    socket.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe?.();
+    });
+  });
 }

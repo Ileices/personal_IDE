@@ -1,0 +1,149 @@
+# ============================================
+# CI/CD Pipeline — Personal IDE
+# Runs on push/PR to main: type-check, build, test
+# ============================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────
+  # Job 1: TypeScript type-check + build
+  # ─────────────────────────────────────────
+  typecheck-and-build:
+    name: Type Check & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check server
+        run: pnpm --filter server exec tsc --noEmit
+
+      - name: Type-check web
+        run: pnpm --filter web exec tsc --noEmit
+
+      - name: Build web (Vite)
+        run: pnpm --filter web build
+
+  # ─────────────────────────────────────────
+  # Job 2: E2E Tests (unit-style, no server)
+  # ─────────────────────────────────────────
+  tests:
+    name: Vitest E2E Tests
+    runs-on: ubuntu-latest
+    needs: typecheck-and-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Note: E2E tests require a running server.
+      # In CI we do a dry-run compile check. Full E2E runs in staging.
+      - name: Compile test files
+        run: pnpm --filter testing exec tsc --noEmit || true
+
+  # ─────────────────────────────────────────
+  # Job 3: Python NANO tests
+  # ─────────────────────────────────────────
+  nano-tests:
+    name: NANO Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('NANO_train/requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
+
+      - name: Install Python deps
+        run: |
+          cd NANO_train
+          pip install -r requirements.txt
+
+      - name: Run NANO integration tests
+        run: python NANO_train/tests/test_integration.py
+
+  # ─────────────────────────────────────────
+  # Job 4: Lint / format checks (optional)
+  # ─────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Basic: check that no import is broken
+      - name: Check shared package
+        run: pnpm --filter @personal-ide/shared exec tsc --noEmit

@@ -159,6 +159,46 @@ export async function agentRoutes(app: FastifyInstance) {
     });
   });
 
+  // --- GET /api/agent/ws - WebSocket stream of agent events ---
+  app.get('/ws', { websocket: true }, (socket: any, _req: FastifyRequest) => {
+    // Send current status immediately
+    const status = activeAgent ? { type: 'status', ...activeAgent.getStatus() } : { type: 'status', state: 'idle' };
+    socket.send(JSON.stringify(status));
+
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      try { socket.send(JSON.stringify({ type: 'heartbeat', ts: Date.now() })); }
+      catch { clearInterval(heartbeat); }
+    }, 15_000);
+
+    let unsubscribe: (() => void) | null = null;
+
+    if (activeAgent) {
+      unsubscribe = activeAgent.onEvent((event: any) => {
+        try { socket.send(JSON.stringify(event)); }
+        catch { unsubscribe?.(); }
+      });
+    }
+
+    // Client can send JSON commands over the socket
+    socket.on('message', (raw: Buffer | string) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === 'subscribe' && activeAgent && !unsubscribe) {
+          unsubscribe = activeAgent.onEvent((event: any) => {
+            try { socket.send(JSON.stringify(event)); }
+            catch { unsubscribe?.(); }
+          });
+        }
+      } catch { /* ignore bad messages */ }
+    });
+
+    socket.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe?.();
+    });
+  });
+
   // --- GET /api/agent/runs/:projectId - Get run history ---
   app.get('/runs/:projectId', async (req: FastifyRequest) => {
     const { projectId } = req.params as { projectId: string };

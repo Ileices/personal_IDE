@@ -18,6 +18,7 @@ import { CheckpointViewer } from './components/CheckpointViewer';
 import { MemoryPanel } from './components/MemoryPanel';
 import { TerminalPanel } from './components/TerminalPanel';
 import { OpenClawPanel } from './components/OpenClawPanel';
+import { PanelErrorBoundary } from './components/PanelErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
 export default function App() {
@@ -114,8 +115,14 @@ export default function App() {
         <div id="main-area" className="flex flex-1 overflow-hidden">
           {/* Chat + Agent */}
           <div className="flex flex-col overflow-hidden min-w-0" style={{ width: `${rightSplit}%` }}>
-            <ChatPanel />
-            {showAgent && <AgentControls />}
+            <PanelErrorBoundary name="Chat">
+              <ChatPanel />
+            </PanelErrorBoundary>
+            {showAgent && (
+              <PanelErrorBoundary name="Agent">
+                <AgentControls />
+              </PanelErrorBoundary>
+            )}
           </div>
 
           {/* Center resize handle */}
@@ -127,9 +134,13 @@ export default function App() {
           {/* Code Viewer */}
           <div className="flex-1 overflow-hidden flex flex-col">
             <div className="flex-1 overflow-hidden">
-              <CodeViewer />
+              <PanelErrorBoundary name="Code Viewer">
+                <CodeViewer />
+              </PanelErrorBoundary>
             </div>
-            <ErrorPanel projectRoot={activeProject?.rootPath || ''} />
+            <PanelErrorBoundary name="Error Panel">
+              <ErrorPanel projectRoot={activeProject?.rootPath || ''} />
+            </PanelErrorBoundary>
           </div>
         </div>
 

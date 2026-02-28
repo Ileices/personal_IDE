@@ -8,6 +8,7 @@ import { getClientFromDb as getGitHubClient } from '../services/llm/client.js';
 import { getClientFromDb as getProviderClient } from '../services/llm/providers.js';
 import { streamChatResponse } from '../services/llm/streaming.js';
 import { rateLimiter } from '../services/llm/rateLimiter.js';
+import { userRateLimiter } from '../services/llm/userRateLimiter.js';
 import { MemoryService } from '../services/memory/index.js';
 import { SYSTEM_PROMPTS, parseStructuredOutput } from '../services/modes/prompts.js';
 import { listAllFiles, readFile } from '../services/filesystem/index.js';
@@ -44,7 +45,21 @@ export async function chatRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: provider === 'github' ? 'Not authenticated. Please log in with your GitHub PAT.' : `Provider '${provider}' is not configured. Set it up in Settings.` });
     }
 
-    // Check rate limits
+    // ── Per-user rate limit (IP + optional user ID) ──
+    const clientIp = req.ip || '127.0.0.1';
+    const activeUser = db.prepare(
+      'SELECT github_login FROM auth_tokens WHERE is_active = 1 LIMIT 1'
+    ).get() as any;
+    const userKey = activeUser?.github_login || undefined;
+    const userCheck = userRateLimiter.acquire(clientIp, userKey);
+    if (!userCheck.allowed) {
+      return reply.status(429).send({
+        error: userCheck.reason,
+        retryAfterMs: userCheck.retryAfterMs,
+      });
+    }
+
+    // Check model-level rate limits
     const canProceed = rateLimiter.canRequest(body.model);
     if (!canProceed.allowed) {
       return reply.status(429).send({
@@ -118,6 +133,11 @@ export async function chatRoutes(app: FastifyInstance) {
       temperature: body.mode === 'agent' ? 0.3 : 0.7,
       onDone: (fullContent, usage) => {
         rateLimiter.recordEnd(body.model);
+
+        // Track upstream 429s for abuse detection
+        if (usage && (usage as any).statusCode === 429) {
+          userRateLimiter.recordUpstream429(clientIp, userKey);
+        }
 
         // Save assistant message
         const structured = parseStructuredOutput(fullContent);

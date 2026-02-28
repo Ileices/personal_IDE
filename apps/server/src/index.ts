@@ -3,6 +3,7 @@
 // ============================================
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import websocket from '@fastify/websocket';
 import { appConfig } from './config.js';
 import { initDatabase } from './db/index.js';
 import { authRoutes } from './routes/auth.js';
@@ -75,6 +76,9 @@ async function main() {
   // Decorate with shared dependencies
   app.decorate('db', db);
   app.decorate('config', appConfig);
+
+  // WebSocket support for real-time agent/fleet events
+  await app.register(websocket);
 
   // Zod request body validation for all routes
   await app.register(validationPlugin);

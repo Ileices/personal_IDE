@@ -28,6 +28,8 @@ interface AgentStore {
   autoApprove: boolean;
   autoAnswer: boolean;
   eventSource: EventSource | null;
+  /** WebSocket connection (preferred over SSE when available) */
+  ws: WebSocket | null;
 
   // New: 24/7 mode, rate limits, chunking
   continuousMode: boolean;
@@ -74,6 +76,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   autoApprove: true,
   autoAnswer: true,
   eventSource: null,
+  ws: null,
 
   // New defaults
   continuousMode: false,
@@ -170,73 +173,111 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   connectEvents: () => {
     get().disconnectEvents();
 
-    const es = apiStreamGet(
-      '/agent/stream',
-      (event) => {
-        const agentEvent: AgentEvent = {
-          type: event.type,
-          timestamp: new Date().toISOString(),
-          data: event,
-        };
+    // ── Shared event handler for both WebSocket and SSE ──
+    const handleEvent = (event: any) => {
+      const agentEvent: AgentEvent = {
+        type: event.type,
+        timestamp: new Date().toISOString(),
+        data: event,
+      };
 
-        set(s => ({ events: [...s.events, agentEvent] }));
+      set(s => ({ events: [...s.events, agentEvent] }));
 
-        switch (event.type) {
-          case 'state_change':
-            set({ state: event.state });
-            if (event.state === 'complete' || event.state === 'error') {
-              // In continuous mode, don't set isRunning to false on 'complete'
-              // since the loop will continue
-              if (event.state === 'error' && !get().continuousMode) {
-                set({ isRunning: false });
-              }
-              if (event.state === 'complete') {
-                set({ isRunning: false });
-              }
+      switch (event.type) {
+        case 'state_change':
+          set({ state: event.state });
+          if (event.state === 'complete' || event.state === 'error') {
+            if (event.state === 'error' && !get().continuousMode) {
+              set({ isRunning: false });
             }
-            break;
-          case 'step_start':
-            set({ currentStep: event.step, currentIteration: event.iteration });
-            break;
-          case 'question_logged':
-            set(s => ({ questions: [...s.questions, event.question] }));
-            break;
-          case 'run_complete':
-            // In continuous mode, the loop continues after "completion"
-            if (!get().continuousMode) {
-              set({ isRunning: false, state: 'complete' });
+            if (event.state === 'complete') {
+              set({ isRunning: false });
             }
-            break;
-          case 'error':
-            if (!get().continuousMode) {
-              set({ isRunning: false, state: 'error' });
-            }
-            break;
-          case 'chunking_start':
-            set({ chunkingActive: true, chunkingProgress: { current: 0, total: event.totalChunks || 0 } });
-            break;
-          case 'chunking_progress':
-            set({ chunkingProgress: { current: event.chunkIndex + 1, total: event.totalChunks || 0 } });
-            break;
-          case 'chunking_complete':
-          case 'chunking_error':
-            set({ chunkingActive: false, chunkingProgress: null });
-            break;
-          case 'message_queued':
-            set({ queuedMessageCount: event.queueSize || 0 });
-            break;
-        }
-      },
-      () => {
-        set({ isRunning: false });
+          }
+          break;
+        case 'step_start':
+          set({ currentStep: event.step, currentIteration: event.iteration });
+          break;
+        case 'question_logged':
+          set(s => ({ questions: [...s.questions, event.question] }));
+          break;
+        case 'run_complete':
+          if (!get().continuousMode) {
+            set({ isRunning: false, state: 'complete' });
+          }
+          break;
+        case 'error':
+          if (!get().continuousMode) {
+            set({ isRunning: false, state: 'error' });
+          }
+          break;
+        case 'chunking_start':
+          set({ chunkingActive: true, chunkingProgress: { current: 0, total: event.totalChunks || 0 } });
+          break;
+        case 'chunking_progress':
+          set({ chunkingProgress: { current: event.chunkIndex + 1, total: event.totalChunks || 0 } });
+          break;
+        case 'chunking_complete':
+        case 'chunking_error':
+          set({ chunkingActive: false, chunkingProgress: null });
+          break;
+        case 'message_queued':
+          set({ queuedMessageCount: event.queueSize || 0 });
+          break;
+        // Ignore heartbeat / status (initial handshake)
       }
-    );
+    };
 
-    set({ eventSource: es });
+    // ── Try WebSocket first, fall back to SSE ──
+    try {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.hostname}:3001/api/agent/ws`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (msg) => {
+        try {
+          const event = JSON.parse(msg.data);
+          if (event.type === 'heartbeat') return; // silent
+          handleEvent(event);
+        } catch { /* bad JSON */ }
+      };
+
+      ws.onclose = () => {
+        // If WS closes unexpectedly while running, fall back to SSE
+        if (get().isRunning && !get().eventSource) {
+          console.warn('[agentStore] WebSocket closed, falling back to SSE');
+          connectViaSSE(handleEvent);
+        }
+      };
+
+      ws.onerror = () => {
+        // WebSocket not available — fall back to SSE immediately
+        ws.close();
+        connectViaSSE(handleEvent);
+      };
+
+      set({ ws });
+    } catch {
+      // WebSocket constructor failed — use SSE
+      connectViaSSE(handleEvent);
+    }
+
+    function connectViaSSE(handler: (event: any) => void) {
+      const es = apiStreamGet(
+        '/agent/stream',
+        handler,
+        () => { set({ isRunning: false }); },
+      );
+      set({ eventSource: es });
+    }
   },
 
   disconnectEvents: () => {
-    const { eventSource } = get();
+    const { eventSource, ws } = get();
+    if (ws) {
+      ws.close();
+      set({ ws: null });
+    }
     if (eventSource) {
       eventSource.close();
       set({ eventSource: null });
