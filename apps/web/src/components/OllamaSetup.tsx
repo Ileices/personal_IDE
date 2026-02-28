@@ -8,8 +8,7 @@ import {
   CheckCircle2, XCircle, Loader2, ChevronRight, Monitor,
   AlertTriangle, RefreshCw, ExternalLink
 } from 'lucide-react';
-
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '../config.js';
 
 interface HardwareInfo {
   platform: string;

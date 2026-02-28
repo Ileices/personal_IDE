@@ -7,8 +7,7 @@ import {
   Loader2, ChevronDown, ChevronRight, Check, AlertTriangle
 } from 'lucide-react';
 import { useProjectStore } from '../stores/projectStore';
-
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '../config.js';
 
 interface Checkpoint {
   id: string;

@@ -8,8 +8,7 @@ import {
   Play, RefreshCw, ChevronDown, ChevronRight,
   FileCode, TestTube2, Loader2, X
 } from 'lucide-react';
-
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '../config.js';
 
 interface CodeError {
   file: string;

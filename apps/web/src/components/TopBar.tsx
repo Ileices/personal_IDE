@@ -13,8 +13,7 @@ import {
 import { ProviderSettings } from './ProviderSettings';
 import { NanoSeaControls } from './NanoSeaControls';
 import { MidwifePanel } from './MidwifePanel';
-
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '../config.js';
 
 const MODE_CONFIG = [
   { id: 'ask' as const, label: 'Ask', icon: MessageSquare, desc: 'Ask questions about code', color: 'text-blue-400' },

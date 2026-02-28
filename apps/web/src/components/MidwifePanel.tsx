@@ -11,8 +11,7 @@ import {
   Zap, Clock, ToggleLeft, ToggleRight, History,
   Bird, Cpu, AlertCircle, Check, Settings2
 } from 'lucide-react';
-
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '../config.js';
 
 interface DynamicModel {
   id: string;

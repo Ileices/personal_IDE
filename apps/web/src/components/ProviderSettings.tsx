@@ -9,8 +9,7 @@ import {
   Loader2, Shield, Wifi, WifiOff, Key, Monitor, Zap, Globe
 } from 'lucide-react';
 import { OllamaSetup } from './OllamaSetup';
-
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '../config.js';
 
 interface ProviderInfo {
   id: string;

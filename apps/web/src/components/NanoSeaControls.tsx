@@ -18,8 +18,9 @@ import {
   Settings, Waves, Link, Unlink, Ban, Check, AlertTriangle,
   Terminal, RefreshCw,
 } from 'lucide-react';
+import { API_BASE } from '../config.js';
 
-const API = 'http://localhost:3001/api/nano';
+const API = `${API_BASE}/api/nano`;
 
 interface NanoStatus {
   running: boolean;

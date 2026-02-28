@@ -7,8 +7,7 @@ import {
   Brain, Plus, Search, X, ChevronDown, ChevronRight,
   Trash2, Edit3, Save, Tag, FileText, Loader2, StickyNote
 } from 'lucide-react';
-
-const API_BASE = 'http://localhost:3001';
+import { API_BASE } from '../config.js';
 
 interface MemoryNote {
   id: string;
