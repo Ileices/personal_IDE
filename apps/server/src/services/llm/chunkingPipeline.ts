@@ -4,10 +4,16 @@
 // content into model-sized chunks, and uses
 // LLM-generated summaries as bridge context
 // between chunks for continuity.
+//
+// Sub-modules:
+//   bridgeSummarizer.ts — running LLM summaries
+//   chunkMerger.ts      — merge chunk responses
 // ============================================
 import type OpenAI from 'openai';
 import { estimateTokens, chunkContent, isTokenLimitError } from './providers.js';
 import { completeChatResponse } from './streaming.js';
+import { generateBridgeSummary } from './bridgeSummarizer.js';
+import { mergeChunkResponses } from './chunkMerger.js';
 
 /** Result from processing a single chunk */
 export interface ChunkProcessResult {
@@ -415,9 +421,7 @@ export class ChunkingPipeline {
   }
 
   /**
-   * Generate an LLM bridge summary that covers all previously processed data.
-   * This replaces raw overlap — instead of repeating the tail of the previous chunk,
-   * we ask the LLM to create a concise overview of everything covered so far.
+   * Generate an LLM bridge summary — delegates to bridgeSummarizer module.
    */
   private async generateBridgeSummary(
     client: OpenAI,
@@ -429,77 +433,17 @@ export class ChunkingPipeline {
     totalChunks: number,
     maxBridgeTokens: number
   ): Promise<string> {
-    const targetChars = Math.floor(maxBridgeTokens * 3.5);
-
-    const summaryPrompt = previousBridgeSummary
-      ? [
-          `You are maintaining a running summary of a large dataset being processed in ${totalChunks} parts.`,
-          `${chunksProcessed} parts have been processed so far.`,
-          '',
-          `PREVIOUS RUNNING SUMMARY:`,
-          previousBridgeSummary,
-          '',
-          `LATEST CHUNK ANALYSIS:`,
-          latestChunkResponse.slice(0, targetChars), // limit input size
-          '',
-          `UPDATE the running summary to incorporate the latest analysis.`,
-          `The summary MUST be concise (under ${maxBridgeTokens} tokens / ~${targetChars} characters).`,
-          `Include: key findings, important file paths, function names, patterns discovered, decisions made.`,
-          `Drop: verbose explanations, code blocks, duplicate information.`,
-          `This summary will be used as context for processing the remaining ${totalChunks - chunksProcessed} parts.`,
-        ].join('\n')
-      : [
-          `You are processing a large dataset in ${totalChunks} parts. Part 1 has been processed.`,
-          '',
-          `PART 1 ANALYSIS:`,
-          latestChunkResponse.slice(0, targetChars),
-          '',
-          `Create a concise summary (under ${maxBridgeTokens} tokens / ~${targetChars} characters) of the key findings.`,
-          `Include: key findings, important file paths, function names, patterns discovered, decisions made.`,
-          `Drop: verbose explanations, code blocks.`,
-          `This summary will be used as context for processing the remaining ${totalChunks - 1} parts.`,
-        ].join('\n');
-
-    try {
-      const response = await completeChatResponse(client, model, [
-        { role: 'system', content: 'You are a precise technical summarizer. Output ONLY the summary, no preamble.' },
-        { role: 'user', content: summaryPrompt },
-      ], {
-        temperature: Math.max(0.1, temperature - 0.1), // slightly lower temp for summaries
-        maxTokens: Math.min(maxBridgeTokens, 2048),
-      });
-
-      return response.content.slice(0, targetChars); // hard cap
-    } catch {
-      // If bridge generation fails, use a simple truncation of the latest response
-      return `[Summary of parts 1-${chunksProcessed}]: ${latestChunkResponse.slice(0, Math.floor(targetChars * 0.5))}`;
-    }
+    return generateBridgeSummary(
+      client, model, temperature, previousBridgeSummary,
+      latestChunkResponse, chunksProcessed, totalChunks, maxBridgeTokens,
+    );
   }
 
   /**
-   * Merge all chunk responses into a single coherent result.
-   * The last chunk's response gets priority since it has the most context.
+   * Merge all chunk responses — delegates to chunkMerger module.
    */
   private mergeResponses(results: ChunkProcessResult[]): string {
-    if (results.length === 0) return '';
-    if (results.length === 1) return results[0].response;
-
-    // For the final merged output, the last chunk should have the most comprehensive view
-    // since it received the full bridge summary. Prepend earlier unique insights.
-    const parts: string[] = [];
-
-    for (let i = 0; i < results.length; i++) {
-      const isLast = i === results.length - 1;
-      if (isLast) {
-        // Last chunk gets full inclusion — it has the complete context
-        parts.push(results[i].response);
-      } else {
-        // Earlier chunks: include a header so the user can see per-chunk analysis
-        parts.push(`[Analysis of data part ${i + 1}/${results.length}]\n${results[i].response}`);
-      }
-    }
-
-    return parts.join('\n\n---\n\n');
+    return mergeChunkResponses(results);
   }
 
   /**

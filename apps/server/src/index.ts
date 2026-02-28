@@ -25,8 +25,10 @@ import { previewRoutes } from './routes/preview.js';
 import { fleetRoutes } from './routes/fleet.js';
 import { openclawRoutes } from './routes/openclaw.js';
 import { terminalRoutes } from './routes/terminal.js';
+import { healthRoutes } from './routes/health.js';
 import csrfPlugin from './plugins/csrf.js';
 import { validationPlugin } from './plugins/validation.js';
+import { registerGracefulShutdown } from './plugins/gracefulShutdown.js';
 
 async function main() {
   // Initialize the database
@@ -103,12 +105,9 @@ async function main() {
   await app.register(fleetRoutes, { prefix: '/api/fleet' });
   await app.register(openclawRoutes, { prefix: '/api/openclaw' });
   await app.register(terminalRoutes, { prefix: '/api/terminal' });
-  // Health check
-  app.get('/api/health', async () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    version: '0.1.0',
-  }));
+
+  // Health — rich diagnostic endpoint (replaces inline handler)
+  await app.register(healthRoutes);
 
   // Start server
   try {
@@ -116,6 +115,10 @@ async function main() {
       port: appConfig.server.port,
       host: appConfig.server.host,
     });
+
+    // Register graceful shutdown handlers after server starts
+    registerGracefulShutdown(app);
+
     console.log(`\n🚀 Personal IDE Server running at http://localhost:${appConfig.server.port}`);
     console.log(`📂 API docs: http://localhost:${appConfig.server.port}/api/health`);
     console.log(`🌐 Frontend: ${appConfig.frontend.url}\n`);

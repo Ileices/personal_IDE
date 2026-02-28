@@ -359,4 +359,31 @@ const MIGRATIONS: Migration[] = [
   // ──────────────────────────────────────────
 ];
 
+// ─────────────────────────────────────────────
+// Migration Status Query (used by /api/health)
+// ─────────────────────────────────────────────
+export interface MigrationStatus {
+  currentVersion: number;
+  totalMigrations: number;
+  pendingMigrations: number;
+  appliedMigrations: { version: number; name: string; applied_at: string }[];
+}
+
+export function getMigrationStatus(db: Database.Database): MigrationStatus {
+  ensureSchemaVersionTable(db);
+  const current = getCurrentVersion(db);
+  const pending = MIGRATIONS.filter(m => m.version > current);
+
+  const rows = db
+    .prepare('SELECT version, name, applied_at FROM schema_version ORDER BY version')
+    .all() as { version: number; name: string; applied_at: string }[];
+
+  return {
+    currentVersion: current,
+    totalMigrations: MIGRATIONS.length,
+    pendingMigrations: pending.length,
+    appliedMigrations: rows,
+  };
+}
+
 export type { Database };

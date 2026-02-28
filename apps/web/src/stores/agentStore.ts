@@ -173,6 +173,16 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   connectEvents: () => {
     get().disconnectEvents();
 
+    // ── Reconnect state ──
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 8;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /** Exponential backoff: 1s → 2s → 4s → … → 128s cap */
+    function getBackoffMs() {
+      return Math.min(1000 * Math.pow(2, reconnectAttempts), 128_000);
+    }
+
     // ── Shared event handler for both WebSocket and SSE ──
     const handleEvent = (event: any) => {
       const agentEvent: AgentEvent = {
@@ -228,39 +238,65 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       }
     };
 
-    // ── Try WebSocket first, fall back to SSE ──
-    try {
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${window.location.hostname}:3001/api/agent/ws`;
-      const ws = new WebSocket(wsUrl);
-
-      ws.onmessage = (msg) => {
-        try {
-          const event = JSON.parse(msg.data);
-          if (event.type === 'heartbeat') return; // silent
-          handleEvent(event);
-        } catch { /* bad JSON */ }
-      };
-
-      ws.onclose = () => {
-        // If WS closes unexpectedly while running, fall back to SSE
-        if (get().isRunning && !get().eventSource) {
-          console.warn('[agentStore] WebSocket closed, falling back to SSE');
-          connectViaSSE(handleEvent);
-        }
-      };
-
-      ws.onerror = () => {
-        // WebSocket not available — fall back to SSE immediately
-        ws.close();
+    function attemptReconnect() {
+      if (!get().isRunning) return; // Don't reconnect if agent stopped
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.warn(`[agentStore] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached, falling back to SSE`);
         connectViaSSE(handleEvent);
-      };
-
-      set({ ws });
-    } catch {
-      // WebSocket constructor failed — use SSE
-      connectViaSSE(handleEvent);
+        return;
+      }
+      const delay = getBackoffMs();
+      console.info(`[agentStore] Reconnecting WS in ${delay}ms (attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+      reconnectTimer = setTimeout(() => {
+        reconnectAttempts++;
+        connectViaWS();
+      }, delay);
     }
+
+    function connectViaWS() {
+      try {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.hostname}:3001/api/agent/ws`;
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          // Reset backoff on successful connection
+          reconnectAttempts = 0;
+        };
+
+        ws.onmessage = (msg) => {
+          try {
+            const event = JSON.parse(msg.data);
+            if (event.type === 'heartbeat') return; // silent
+            handleEvent(event);
+          } catch { /* bad JSON */ }
+        };
+
+        ws.onclose = () => {
+          // If WS closes unexpectedly while running, try reconnecting with backoff
+          if (get().isRunning && !get().eventSource) {
+            attemptReconnect();
+          }
+        };
+
+        ws.onerror = () => {
+          // WebSocket not available — try reconnect or fall back to SSE
+          ws.close();
+          if (reconnectAttempts === 0) {
+            // First failure — go straight to SSE
+            connectViaSSE(handleEvent);
+          }
+        };
+
+        set({ ws });
+      } catch {
+        // WebSocket constructor failed — use SSE
+        connectViaSSE(handleEvent);
+      }
+    }
+
+    // ── Try WebSocket first, fall back to SSE ──
+    connectViaWS();
 
     function connectViaSSE(handler: (event: any) => void) {
       const es = apiStreamGet(
@@ -270,9 +306,17 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       );
       set({ eventSource: es });
     }
+
+    // Expose cleanup for disconnectEvents
+    (get() as any)._reconnectCleanup = () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
   },
 
   disconnectEvents: () => {
+    const state = get() as any;
+    // Clear reconnect timer if present
+    if (state._reconnectCleanup) state._reconnectCleanup();
     const { eventSource, ws } = get();
     if (ws) {
       ws.close();
