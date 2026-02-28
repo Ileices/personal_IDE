@@ -305,7 +305,7 @@ export function NanoSeaControls({ onClose }: { onClose: () => void }) {
               <AlertTriangle className="w-6 h-6 text-red-400 mx-auto mb-2" />
               <p className="text-sm text-red-300 font-medium">Cannot reach IDE server</p>
               <p className="text-xs text-ide-text-dim mt-1">
-                Make sure the server is running at <code className="text-ide-accent">localhost:3001</code>
+                Make sure the server is running at the configured API endpoint
               </p>
               <button onClick={refresh} className="mt-3 px-3 py-1 text-xs bg-ide-accent/20 text-ide-accent rounded hover:bg-ide-accent/30 transition-colors">
                 <RefreshCw className="w-3 h-3 inline mr-1" /> Retry

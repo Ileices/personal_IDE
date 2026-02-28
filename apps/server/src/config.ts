@@ -112,7 +112,7 @@ export function loadConfig(): AppConfig {
       enablePaidUsage: envBool('ENABLE_PAID_USAGE', false),
     },
     security: {
-      encryptKey: env('ENCRYPT_KEY', 'change-me-before-production-' + Date.now()),
+      encryptKey: env('ENCRYPT_KEY', 'personal-ide-default-key-change-in-production'),
     },
     services: {
       ollamaUrl: env('OLLAMA_URL', 'http://localhost:11434'),

@@ -40,6 +40,9 @@ import { detectPlatform, formatPlatformForLLM, type PlatformInfo } from './platf
 import { initializeRun, resolveModelContextWindow } from './loop/runSetup.js';
 import { enforceTokenBudget, tryProactiveChunking, recoverFromTokenLimitError } from './loop/tokenRecovery.js';
 import { buildAutoAnswer } from './loop/autoAnswers.js';
+import { assembleContext, appendHistory, appendSchemaReminder } from './loop/contextAssembly.js';
+import { processResponse, buildNextTask, buildSchemaMissTask } from './loop/responseProcessing.js';
+import { handleQuestions, storeStepNote, updateTaskTracker, handleCompletion } from './loop/continuousMode.js';
 import { appConfig } from '../../config.js';
 
 type EventCallback = (event: any) => void;
@@ -365,126 +368,36 @@ export class EnhancedAgentLoop {
           }
         }
 
-        // Build Context
-        const memoryContext = this.memory.buildMemoryContext(projectId, currentTask);
-
-        let taskTrackerContext = '';
-        if (this.config.taskId) {
-          try {
-            const tracker = this.analyzer.getTaskTracker(this.config.taskId) as any;
-            if (tracker) {
-              const subtasks = typeof tracker.subtasks === 'string' ? JSON.parse(tracker.subtasks) : (tracker.subtasks || []);
-              const completed = subtasks.filter((s: any) => s.status === 'completed').length;
-              const total = subtasks.length;
-              taskTrackerContext = 'Task: ' + tracker.title + ' (' + completed + '/' + total + ' subtasks complete)\n';
-              taskTrackerContext += subtasks.map((s: any) => {
-                const icon = s.status === 'completed' ? '[done]' : s.status === 'in_progress' ? '[wip]' : '[ ]';
-                return '  ' + icon + ' ' + s.title;
-              }).join('\n');
-            }
-          } catch { /* ignore */ }
-        }
-
-        let checkpointInfo = '';
-        try {
-          const checkpoints = this.checkpoint.listCheckpoints(projectId);
-          if (checkpoints.length > 0) {
-            checkpointInfo = 'Last checkpoint: ' + checkpoints[0].description + ' (' + checkpoints[0].createdAt + ')';
-            checkpointInfo += '\nTotal checkpoints: ' + checkpoints.length;
-          }
-        } catch { /* ignore */ }
-
-        // Build code index context (token-aware outline)
-        let codeIndexContext = '';
-        try {
-          const indexBudget = Math.floor(this.contextWindow * 0.05);
-          codeIndexContext = this.codeIndexer.formatForLLM(indexBudget);
-        } catch { /* ignore */ }
-
-        // Build System Prompt with v2 context
-        const systemPrompt = buildAgentSystemPrompt({
-          memoryContext,
-          codebaseOverview,
-          errorContext: this.lastErrorContext,
-          testContext: this.lastTestContext,
-          taskTrackerContext,
-          checkpointInfo,
-          iteration: this.currentIteration,
+        // Build Context (extracted to loop/contextAssembly.ts)
+        const assembled = assembleContext({
+          projectRoot: this.config.projectRoot,
+          projectId: projectId,
+          conversationId: this.conversationId,
+          currentTask,
+          currentIteration: this.currentIteration,
           maxIterations: this.config.maxIterations,
+          contextWindow: this.contextWindow,
           projectLanguages: this.projectLanguages,
+          taskId: this.config.taskId,
           relationshipContext: this.relationshipContext,
           tierContext: this.tierContext,
           logHealthContext: this.logHealthContext,
           conversationIndexContext: this.conversationIndexContext,
           platformContext: this.platformContext,
-          codeIndexContext,
+          lastErrorContext: this.lastErrorContext,
+          lastTestContext: this.lastTestContext,
+          codebaseOverview,
+        }, {
+          memory: this.memory,
+          checkpoint: this.checkpoint,
+          analyzer: this.analyzer,
+          codeIndexer: this.codeIndexer,
         });
 
-        // Build Messages
-        const messages: any[] = [
-          { role: 'system', content: systemPrompt },
-        ];
+        const messages = assembled.messages;
 
-        let fileList = '';
-        try {
-          const allFiles = listAllFiles(this.config.projectRoot);
-          fileList = allFiles.slice(0, 200).join('\n');
-          if (allFiles.length > 200) {
-            fileList += '\n... and ' + (allFiles.length - 200) + ' more files';
-          }
-        } catch { /* ignore */ }
-
-        if (fileList) {
-          messages.push({ role: 'system', content: 'PROJECT FILES:\n' + fileList });
-        }
-
-        // Conversation history (limited by token budget + filtered for quality)
-        // For small-context models (e.g. Ollama 4k), history gets minimal space
-        const historyBudget = Math.floor(this.contextWindow * 0.15);
-        const history = this.memory.getMessages(this.conversationId);
-        let historyTokens = 0;
-        const recentHistory: any[] = [];
-        for (let i = history.length - 1; i >= 0 && historyTokens < historyBudget; i--) {
-          const msg = history[i];
-          let content = msg.content;
-
-          // Skip poisoned messages that cause LLMs to repeat failure patterns
-          if (msg.role === 'assistant') {
-            const lower = content.toLowerCase().slice(0, 300);
-            if (lower.includes("i'm sorry") || lower.includes("i apologize") ||
-                lower.includes("as an ai model") || lower.includes("as an ai language")) {
-              continue; // Apology/refusal responses poison future context
-            }
-            if (!content.includes('--- FILE:') && !content.includes('structured_output') && !content.includes('"summary"')) {
-              continue; // Responses with no code and no structured output are noise
-            }
-          }
-          if (msg.role === 'user' && (content.startsWith('CRITICAL:') || content.includes('LOOP DETECTED:') ||
-              content.includes('previous output was missing'))) {
-            continue; // Schema-miss retries and breakout prompts are noise in history
-          }
-
-          // Condense history messages to save context budget
-          if (msg.role === 'assistant' && content.length > 800) {
-            const summaryMatch = content.match(/"summary"\s*:\s*"([^"]+)"/);
-            const filesMatch = content.match(/--- FILE: (.+?) ---/g);
-            if (summaryMatch) {
-              content = 'Previous step: ' + summaryMatch[1] +
-                (filesMatch ? '\nFiles: ' + filesMatch.map((f: string) => f.replace('--- FILE: ', '').replace(' ---', '')).join(', ') : '');
-            } else {
-              content = content.slice(0, 600) + '...[condensed]';
-            }
-          }
-          if (msg.role === 'user' && content.length > 500) {
-            content = content.slice(0, 400) + '...[condensed]';
-          }
-
-          const msgTokens = estimateTokens(content);
-          if (historyTokens + msgTokens > historyBudget) break;
-          historyTokens += msgTokens;
-          recentHistory.unshift({ role: msg.role, content });
-        }
-        messages.push(...recentHistory);
+        // Append conversation history (extracted to loop/contextAssembly.ts)
+        appendHistory(messages, this.conversationId, this.contextWindow, this.memory);
 
         // ── Drain queued user messages ──
         const queuedMsgs = this.drainMessageQueue();
@@ -562,10 +475,8 @@ export class EnhancedAgentLoop {
           } catch { /* web search is non-critical */ }
         }
 
-        // Append compact schema reminder to every user message (last thing LLM sees before responding)
-        if (!currentTask.includes('json:structured_output')) {
-          currentTask += '\n\n---\nREMINDER: End your response with ```json:structured_output { ... } ``` block. Include file changes with --- FILE: path --- markers.';
-        }
+        // Append compact schema reminder (extracted to loop/contextAssembly.ts)
+        currentTask = appendSchemaReminder(currentTask);
         messages.push({ role: 'user', content: currentTask });
 
         let response: any = null;
@@ -705,11 +616,11 @@ export class EnhancedAgentLoop {
           }
         }
 
-        // ── Process Response ──
+        // ── Process Response (extracted to loop/responseProcessing.ts) ──
         const content = response.content || '';
         this.totalTokens += response.usage?.total_tokens || 0;
 
-        // Only store productive responses in memory (apologies/refusals poison future context)
+        // Only store productive responses in memory
         const contentLower = content.toLowerCase().slice(0, 300);
         const isFailedResponse = (contentLower.includes("i'm sorry") || contentLower.includes("i apologize") ||
           contentLower.includes("as an ai")) && !content.includes('--- FILE:');
@@ -718,95 +629,53 @@ export class EnhancedAgentLoop {
         }
         this.emit({ type: 'step_content', delta: content });
 
-        // Record in loop detector for stuck-detection
-        try {
-          this.loopDetector.record(
-            this.currentIteration,
-            currentTask,
-            content,
-            content.slice(0, 300)
-          );
-        } catch { /* loop recording is non-critical */ }
-
-        // Log the LLM call to persistent file
-        try {
-          this.logWriter?.logLLMCall({
-            model: this.config.model,
-            provider: this.config.provider,
-            iteration: this.currentIteration,
-            promptTokens: response.usage?.prompt_tokens || estimateTokens(currentTask),
-            completionTokens: response.usage?.completion_tokens || estimateTokens(content),
-            totalTokens: response.usage?.total_tokens || 0,
-            taskSnippet: currentTask.slice(0, 500),
-            responseSnippet: content.slice(0, 500),
-          });
-        } catch { /* LLM logging is non-critical */ }
-
         // Store discovered context limit for this model
-        if (response.usage?.total_tokens && !this.discoveredContextLimits.has(this.config.model)) {          this.discoveredContextLimits.set(this.config.model, this.contextWindow);
+        if (response.usage?.total_tokens && !this.discoveredContextLimits.has(this.config.model)) {
+          this.discoveredContextLimits.set(this.config.model, this.contextWindow);
         }
 
-        // ── Bird-feed observation to Nano trainer (fire-and-forget) ──
-        try {
-          const nanoRow = this.db.prepare(
-            "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
-          ).get() as any;
-          const nanoBaseUrl = (nanoRow?.base_url || appConfig.services.nanoSeaUrl).replace(/\/v1\/?$/, '');
-          fetch(nanoBaseUrl + '/v1/training/observe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: currentTask.slice(0, 4000),
-              response: content.slice(0, 8000),
-              source: 'agent',
-              quality: 0.8,
-            }),
-          }).catch(() => {}); // nano may not be running
-        } catch { /* non-critical */ }
+        const responseResult = processResponse(
+          content, currentTask, response,
+          {
+            db: this.db,
+            config: {
+              model: this.config.model,
+              provider: this.config.provider,
+              projectRoot: this.config.projectRoot,
+              autoFixErrors: this.config.autoFixErrors,
+              autoRunTests: this.config.autoRunTests,
+              checkpointEvery: this.config.checkpointEvery,
+              taskId: this.config.taskId,
+              maxTokensPerStep: this.config.maxTokensPerStep,
+            },
+            projectId,
+            conversationId: this.conversationId,
+            runId: this.runId,
+            currentIteration: this.currentIteration,
+            contextWindow: this.contextWindow,
+          },
+          {
+            memory: this.memory,
+            checkpoint: this.checkpoint,
+            analyzer: this.analyzer,
+            conversationIndexer: this.conversationIndexer,
+            loopDetector: this.loopDetector,
+            logWriter: this.logWriter,
+          },
+          (e) => this.emit(e),
+        );
 
-        // Index conversation messages
-        try {
-          this.conversationIndexer.indexMessage(projectId, this.conversationId, 'user-' + this.currentIteration, currentTask, 'user');
-          this.conversationIndexer.indexMessage(projectId, this.conversationId, 'assistant-' + this.currentIteration, content, 'assistant');
-          this.conversationIndexContext = this.conversationIndexer.buildIndexedContext(projectId, currentTask, Math.floor(this.contextWindow * 0.05));
-        } catch { /* conversation indexing is non-critical */ }
-
-        // ── Parse & Apply File Changes ──
-        this.setState('evaluating');
-        let structured = parseStructuredOutput(content) as StructuredAgentOutput | null;
-        const fileChanges = parseFileChanges(content);
-
-        // Guard: ensure structured output has required fields (prevents .slice() crash on undefined)
-        if (structured) {
-          structured.summary = structured.summary || 'Step ' + this.currentIteration + ' completed';
-          structured.filesChanged = structured.filesChanged || [];
-          structured.nextSteps = structured.nextSteps || [];
-          structured.questionsForUser = structured.questionsForUser || [];
-          if (typeof structured.done !== 'boolean') structured.done = false;
-          if (typeof structured.confidence !== 'number') structured.confidence = 50;
-        }
-
-        for (const change of fileChanges) {
-          try {
-            writeFile(this.config.projectRoot, change.path, change.content, true);
-            this.totalFilesChanged++;
-            this.emit({ type: 'file_changed', change: { path: change.path, action: 'modified', summary: 'Updated by agent' } });
-
-            // Log edit to code_edit_log
-            try {
-              this.db.prepare(
-                "INSERT INTO code_edit_log (id, project_id, file_path, edit_type, symbols_affected, change_reason, agent_run_id, created_at) VALUES (?, ?, ?, 'modify', '[]', ?, ?, datetime('now'))"
-              ).run(uuid(), projectId, change.path, 'Agent step ' + this.currentIteration, this.runId);
-            } catch { /* edit logging is non-critical */ }
-          } catch (err: any) {
-            this.emit({ type: 'error', error: 'Failed to write ' + change.path + ': ' + err.message });
-          }
-        }
+        this.totalFilesChanged += responseResult.fileChangesCount;
+        this.lastErrorContext = responseResult.lastErrorContext;
+        this.lastTestContext = responseResult.lastTestContext;
+        this.conversationIndexContext = responseResult.conversationIndexContext;
+        const structured = responseResult.structured;
+        const fileChangesCount = responseResult.fileChangesCount;
 
         // ── No-Progress Detection ──
-        if (fileChanges.length > 0) {
+        if (fileChangesCount > 0) {
           this.iterationsWithoutFileChanges = 0;
-          this.loopBreakoutAttempts = 0; // Reset breakout counter on real progress
+          this.loopBreakoutAttempts = 0;
         } else {
           this.iterationsWithoutFileChanges++;
           if (this.iterationsWithoutFileChanges >= this.maxIterationsWithoutProgress) {
@@ -819,122 +688,62 @@ export class EnhancedAgentLoop {
           }
         }
 
-        // Auto Error Detection
-        if (this.config.autoFixErrors && fileChanges.length > 0) {
-          try {
-            const errors = runAllLintChecks(this.config.projectRoot);
-            if (errors.length > 0) {
-              this.lastErrorContext = formatErrorsForLLM(errors);
-              this.emit({ type: 'errors_detected', count: errors.length, errors: errors.slice(0, 10) });
-            } else {
-              this.lastErrorContext = '';
-              this.emit({ type: 'info', message: 'No lint errors detected' });
-            }
-          } catch (err: any) {
-            this.emit({ type: 'info', message: 'Lint check failed: ' + err.message });
-          }
-        }
+        this.setState('evaluating');
 
-        // Auto Test Running
-        if (this.config.autoRunTests && fileChanges.length > 0) {
-          try {
-            const testResult = runTests(this.config.projectRoot);
-            if (testResult.total > 0) {
-              this.lastTestContext = formatTestsForLLM(testResult);
-              if (testResult.failed > 0) {
-                this.emit({ type: 'tests_failed', count: testResult.failed, result: testResult });
-              } else {
-                this.emit({ type: 'info', message: 'All tests passed (' + testResult.total + ' tests)' });
-              }
-            }
-          } catch (err: any) {
-            this.emit({ type: 'info', message: 'Test run failed: ' + err.message });
-          }
-        }
-
-        // Auto Checkpointing
-        if (this.config.checkpointEvery > 0 && this.currentIteration % this.config.checkpointEvery === 0 && fileChanges.length > 0) {
-          try {
-            const desc = structured?.summary || ('Auto-checkpoint at iteration ' + this.currentIteration);
-            this.checkpoint.createCheckpoint(this.config.projectRoot, projectId, this.runId, this.currentIteration, desc);
-            this.emit({ type: 'checkpoint_created', iteration: this.currentIteration, description: desc });
-          } catch (err: any) {
-            this.emit({ type: 'info', message: 'Checkpoint failed: ' + err.message });
-          }
-        }
-
-        // ── Process Structured Output ──
+        // ── Process Structured Output (extracted to loop/continuousMode.ts) ──
         if (structured) {
           this.emit({ type: 'step_complete', output: structured });
 
-          const questions = structured.questionsForUser || [];
-          for (const q of questions) {
-            this.pendingQuestions.push(q);
-            this.memory.logQuestion(projectId, q, this.runId);
-            this.emit({ type: 'question_logged', question: q });
-          }
+          const autoAnsweredContext = handleQuestions(
+            structured, this.pendingQuestions,
+            {
+              projectId, conversationId: this.conversationId, runId: this.runId,
+              currentIteration: this.currentIteration, totalFilesChanged: this.totalFilesChanged,
+              totalTokens: this.totalTokens, initialTask,
+              codebaseOverview, projectLanguages: this.projectLanguages, tierContext: this.tierContext,
+              taskId: this.config.taskId,
+            },
+            {
+              continuousMode: this.config.continuousMode,
+              cooldownMs: this.config.cooldownMs || 0,
+              autoAnswerQuestions: this.config.autoAnswerQuestions,
+              projectRoot: this.config.projectRoot,
+            },
+            { memory: this.memory },
+            (e) => this.emit(e),
+          );
 
-          let autoAnsweredContext = '';
-          if (this.config.autoAnswerQuestions && questions.length > 0) {
-            for (const q of questions) {
-              const answer = buildAutoAnswer(q, {
-                codebaseOverview, task: initialTask,
-                projectLanguages: this.projectLanguages, tierContext: this.tierContext,
-              });
-              this.emit({ type: 'auto_answer', question: q, answer });
-              autoAnsweredContext += '\nQ: ' + q + '\nA: ' + answer;
-            }
-          }
+          storeStepNote(structured, {
+            projectId, conversationId: this.conversationId, runId: this.runId,
+            currentIteration: this.currentIteration, totalFilesChanged: this.totalFilesChanged,
+            totalTokens: this.totalTokens, initialTask,
+            codebaseOverview, projectLanguages: this.projectLanguages, tierContext: this.tierContext,
+          }, { memory: this.memory });
 
-          this.memory.addNote(projectId, {
-            projectId,
-            source: 'agent_log',
-            category: 'agent_step',
-            title: 'Step ' + this.currentIteration + ': ' + structured.summary.slice(0, 100),
-            content: structured.summary,
-            tags: ['agent', 'step-' + this.currentIteration, 'run-' + this.runId],
-            relatedFiles: (structured.filesChanged || []).map(f => f.path),
-            importance: 60,
-            conversationId: this.conversationId,
-          });
-
-          // Update task tracker
-          if (this.config.taskId && structured.done === false && (structured.nextSteps || []).length > 0) {
-            try {
-              const tracker = this.analyzer.getTaskTracker(this.config.taskId) as any;
-              if (tracker) {
-                const subtasks = typeof tracker.subtasks === 'string' ? JSON.parse(tracker.subtasks) : (tracker.subtasks || []);
-                const currentIdx = subtasks.findIndex((s: any) => s.status === 'in_progress');
-                if (currentIdx >= 0) {
-                  this.analyzer.updateSubtask(this.config.taskId, currentIdx, { status: 'completed' });
-                }
-                const nextIdx = subtasks.findIndex((s: any) => s.status === 'pending');
-                if (nextIdx >= 0) {
-                  this.analyzer.updateSubtask(this.config.taskId, nextIdx, { status: 'in_progress' });
-                }
-              }
-            } catch { /* ignore */ }
-          }
+          updateTaskTracker(structured, this.config.taskId, { analyzer: this.analyzer });
 
           // Check if done
           if (structured.done) {
-            try { this.checkpoint.createCheckpoint(this.config.projectRoot, projectId, this.runId, this.currentIteration, 'COMPLETED: ' + initialTask.slice(0, 100)); } catch { /* ignore */ }
+            const nextContinuousTask = handleCompletion(
+              structured,
+              {
+                projectId, conversationId: this.conversationId, runId: this.runId,
+                currentIteration: this.currentIteration, totalFilesChanged: this.totalFilesChanged,
+                totalTokens: this.totalTokens, initialTask,
+                codebaseOverview, projectLanguages: this.projectLanguages, tierContext: this.tierContext,
+              },
+              {
+                continuousMode: this.config.continuousMode,
+                cooldownMs: this.config.cooldownMs || 0,
+                autoAnswerQuestions: this.config.autoAnswerQuestions,
+                projectRoot: this.config.projectRoot,
+              },
+              { memory: this.memory, checkpoint: this.checkpoint },
+              (e) => this.emit(e),
+            );
 
-            const completionNote = 'Task: ' + initialTask + '\nSummary: ' + structured.summary + '\nSteps: ' + this.currentIteration + '\nFiles Changed: ' + this.totalFilesChanged + '\nTokens: ' + this.totalTokens;
-            const isContinuous = this.config.continuousMode;
-            this.emit({ type: 'run_complete', summary: (isContinuous ? 'Task cycle complete: ' : '') + structured.summary, totalSteps: this.currentIteration });
-            this.memory.addNote(projectId, {
-              projectId, source: 'auto_summary', category: 'task_complete',
-              title: (isContinuous ? 'Cycle Complete: ' : 'Completed: ') + initialTask.slice(0, 100),
-              content: completionNote,
-              tags: isContinuous ? ['completed', 'summary', 'continuous-mode'] : ['completed', 'summary'],
-              relatedFiles: (structured.filesChanged || []).map(f => f.path),
-              importance: 90, conversationId: this.conversationId,
-            });
-
-            if (isContinuous) {
-              this.emit({ type: 'info', message: '24/7 mode: Task cycle complete. Scanning for improvements...' });
-              currentTask = 'The previous task is complete. You are in 24/7 continuous mode.\nReview the project: fix TODOs/FIXMEs, improve code quality, add missing tests, optimize bottlenecks.\nDO NOT mark done=true unless there is genuinely nothing left to improve.';
+            if (nextContinuousTask) {
+              currentTask = nextContinuousTask;
               await this.delay(Math.max(effectiveCooldown, 10000));
               continue;
             }
@@ -942,60 +751,23 @@ export class EnhancedAgentLoop {
             break;
           }
 
-          // Build Next Iteration Task
-          let nextTask = '';
+          // Build Next Iteration Task (extracted to loop/responseProcessing.ts)
+          currentTask = buildNextTask(
+            structured, this.lastErrorContext, this.lastTestContext,
+            this.config.autoFixErrors, this.config.autoRunTests,
+            autoAnsweredContext,
+          );
 
-          if (this.lastErrorContext && this.config.autoFixErrors) {
-            nextTask = 'PRIORITY: Fix the following errors before continuing:\n\n' + this.lastErrorContext + '\n\nAfter fixing errors, continue with:\n';
-          }
-
-          if (this.lastTestContext && this.config.autoRunTests) {
-            const hasFailures = this.lastTestContext.includes('FAIL');
-            if (hasFailures) {
-              nextTask += 'FAILING TESTS:\n' + this.lastTestContext + '\n\nFix these tests, then continue with:\n';
-            }
-          }
-
-          if ((structured.nextSteps || []).length > 0) {
-            nextTask += structured.nextSteps
-              .map(s => s.stepNumber + '. ' + s.action + ': ' + s.detail + ' (target: ' + s.target + ')')
-              .join('\n');
-          } else {
-            nextTask += 'Continue with the implementation. Review what has been done and identify what remains.';
-          }
-
-          // Inject auto-answers so the LLM sees them next iteration (prevents re-asking)
-          if (autoAnsweredContext) {
-            nextTask += '\n\nAUTO-ANSWERED (do NOT re-ask these):' + autoAnsweredContext + '\nAll questions answered. Continue coding.\n';
-          }
-
-          currentTask = nextTask;
-          // Reset consecutive errors — we successfully parsed structured output
           this.consecutiveErrors = 0;
         } else {
-          // ── Structured output NOT parsed — LLM did not follow the schema ──
+          // ── Structured output NOT parsed ──
           this.consecutiveErrors++;
-          this.emit({ type: 'info', message: 'Schema miss #' + this.consecutiveErrors + ': LLM did not return structured JSON output block. ' + (fileChanges.length > 0 ? fileChanges.length + ' file changes parsed from markdown.' : 'No file changes either.') });
+          this.emit({ type: 'info', message: 'Schema miss #' + this.consecutiveErrors + ': LLM did not return structured JSON output block. ' + (fileChangesCount > 0 ? fileChangesCount + ' file changes parsed from markdown.' : 'No file changes either.') });
 
-          // Schema miss with partial progress counts less
-          if (fileChanges.length > 0) this.consecutiveErrors = Math.max(0, this.consecutiveErrors - 2);
+          if (fileChangesCount > 0) this.consecutiveErrors = Math.max(0, this.consecutiveErrors - 2);
 
-          // Rebuild task with original goal + compact format reminder
-          currentTask = [
-            initialTask.slice(0, 2000), '',
-            '---',
-            'Your previous output was missing the required JSON block. Include it this time.',
-            'Create or modify at least ONE file, then end with:',
-            '```json:structured_output',
-            '{"summary":"What you did","filesChanged":[{"path":"src/file.ts","action":"created","summary":"Created file"}],"nextSteps":[{"stepNumber":1,"action":"Next action","target":"src/file.ts","detail":"Details","priority":"high"}],"questionsForUser":[],"done":false,"confidence":80}',
-            '```',
-          ].join('\n');
+          currentTask = buildSchemaMissTask(initialTask, fileChangesCount, this.lastErrorContext);
 
-          if (this.lastErrorContext) {
-            currentTask += '\n\nPRIORITY ERRORS TO FIX:\n' + this.lastErrorContext;
-          }
-
-          // After too many schema misses without progress, bail
           if (this.consecutiveErrors >= 8) {
             this.setState('error');
             this.emit({ type: 'error', error: 'Agent stopped: ' + this.consecutiveErrors + ' consecutive iterations without valid structured output. The LLM model may be unable to follow the required schema. Try a different/larger model.' });

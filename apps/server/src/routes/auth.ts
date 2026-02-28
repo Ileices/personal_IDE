@@ -5,19 +5,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { v4 as uuid } from 'uuid';
 import type { LoginRequest, DeviceFlowStartResponse, AuthResponse, GitHubUser } from '@personal-ide/shared';
 import { appConfig } from '../config.js';
-
-// XOR encryption for token storage — key loaded from env
-function xorEncrypt(text: string): string {
-  const key = appConfig.security.encryptKey;
-  return Buffer.from(
-    text.split('').map((c, i) => c.charCodeAt(0) ^ key.charCodeAt(i % key.length))
-  ).toString('base64');
-}
-function xorDecrypt(encoded: string): string {
-  const key = appConfig.security.encryptKey;
-  const buf = Buffer.from(encoded, 'base64');
-  return Array.from(buf).map((b, i) => String.fromCharCode(b ^ key.charCodeAt(i % key.length))).join('');
-}
+import { encrypt, smartDecrypt } from '../services/crypto/index.js';
 
 // ── Cached user profile to avoid spamming GitHub API ──
 // Cache user profile for 10 minutes to avoid repeated API calls
@@ -135,7 +123,7 @@ export async function authRoutes(app: FastifyInstance) {
         is_active = 1,
         has_copilot = excluded.has_copilot,
         updated_at = datetime('now')
-    `).run(uuid(), user.id, user.login, user.name, user.email, user.avatarUrl, xorEncrypt(body.pat), user.hasCopilot ? 1 : 0);
+    `).run(uuid(), user.id, user.login, user.name, user.email, user.avatarUrl, encrypt(body.pat, appConfig.security.encryptKey), user.hasCopilot ? 1 : 0);
 
     return { success: true, user } satisfies AuthResponse;
   });
@@ -193,7 +181,10 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     // Verify token still works
-    const token = xorDecrypt(row.token_encrypted);
+    const token = smartDecrypt(row.token_encrypted, appConfig.security.encryptKey);
+    if (!token) {
+      return reply.status(401).send({ success: false, error: 'Cannot decrypt stored token. Key may have changed.' } satisfies AuthResponse);
+    }
     const user = await fetchGitHubUser(token);
     if (!user) {
       return reply.status(401).send({ success: false, error: 'Token expired. Please log in again with a new PAT.' } satisfies AuthResponse);
@@ -219,6 +210,6 @@ export async function authRoutes(app: FastifyInstance) {
     if (!row) {
       return reply.status(401).send({ error: 'Not authenticated' });
     }
-    return { token: xorDecrypt(row.token_encrypted) };
+    return { token: smartDecrypt(row.token_encrypted, appConfig.security.encryptKey) || '' };
   });
 }

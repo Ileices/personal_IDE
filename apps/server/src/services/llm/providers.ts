@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import type { ProviderType, UnifiedModel, TokenLimitCheck } from '@personal-ide/shared';
 import { MODELS } from '@personal-ide/shared';
 import { appConfig } from '../../config.js';
+import { smartDecrypt } from '../crypto/index.js';
 
 /** Create an OpenAI-compatible client for any provider */
 export function createProviderClient(
@@ -64,11 +65,8 @@ export function getClientFromDb(db: any, provider: ProviderType = 'github'): Ope
   if (provider === 'github') {
     const row = db.prepare('SELECT token_encrypted FROM auth_tokens WHERE is_active = 1').get() as any;
     if (!row || !row.token_encrypted) return null;
-    const key = appConfig.security.encryptKey;
-    const buf = Buffer.from(row.token_encrypted, 'base64');
-    const token = Array.from(buf).map((b: number, i: number) =>
-      String.fromCharCode(b ^ key.charCodeAt(i % key.length))
-    ).join('');
+    const token = smartDecrypt(row.token_encrypted, appConfig.security.encryptKey);
+    if (!token) return null;
     return createGitHubClient(token);
   }
 
@@ -80,11 +78,7 @@ export function getClientFromDb(db: any, provider: ProviderType = 'github'): Ope
 
   let apiKey = '';
   if (row.api_key_encrypted) {
-    const pkey = appConfig.security.encryptKey;
-    const buf = Buffer.from(row.api_key_encrypted, 'base64');
-    apiKey = Array.from(buf).map((b: number, i: number) =>
-      String.fromCharCode(b ^ pkey.charCodeAt(i % pkey.length))
-    ).join('');
+    apiKey = smartDecrypt(row.api_key_encrypted, appConfig.security.encryptKey) || '';
   }
 
   return createProviderClient(provider, row.base_url, apiKey);

@@ -73,6 +73,10 @@ class NanoCheckpointMeta:
 
 # ─── Simple character-level tokenizer ──────────────────────
 # Nanos are tiny (128 input) so we use char-level encoding
+# NOTE: For proper tokenization, prefer the shared BPE tokenizer:
+#   from tokenizer import SharedTokenizer
+#   tok = SharedTokenizer.get()
+# CharTokenizer is retained for backward compatibility with existing checkpoints.
 class CharTokenizer:
     """Maps characters to float vectors for nano input/output."""
 

@@ -24,6 +24,8 @@ import { previewRoutes } from './routes/preview.js';
 import { fleetRoutes } from './routes/fleet.js';
 import { openclawRoutes } from './routes/openclaw.js';
 import { terminalRoutes } from './routes/terminal.js';
+import csrfPlugin from './plugins/csrf.js';
+import { validationPlugin } from './plugins/validation.js';
 
 async function main() {
   // Initialize the database
@@ -43,14 +45,39 @@ async function main() {
 
   // CORS - allow frontend
   await app.register(cors, {
-    origin: [appConfig.frontend.url, 'http://localhost:5173', 'http://localhost:3000'],
+    origin: (origin, cb) => {
+      // Allow configured frontend URL, same-origin (no origin header), and dev servers
+      const allowed = [
+        appConfig.frontend.url,
+        'http://localhost:5173',
+        'http://localhost:3000',
+      ];
+      if (!origin || allowed.includes(origin)) {
+        cb(null, true);
+      } else {
+        cb(null, false);
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  });
+
+  // CSRF protection — validates Origin/Referer on state-changing requests
+  await app.register(csrfPlugin, {
+    allowedOrigins: [
+      appConfig.frontend.url,
+      'http://localhost:5173',
+      'http://localhost:3000',
+    ],
+    exemptPaths: ['/api/health'],
   });
 
   // Decorate with shared dependencies
   app.decorate('db', db);
   app.decorate('config', appConfig);
+
+  // Zod request body validation for all routes
+  await app.register(validationPlugin);
 
   // Register route modules
   await app.register(authRoutes, { prefix: '/api/auth' });

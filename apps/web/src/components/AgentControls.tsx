@@ -4,7 +4,7 @@
 // verbosity modes, expandable entries,
 // copy feed, message queue during runs
 // ============================================
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAgentStore, type VerbosityLevel } from '../stores/agentStore';
 import { useFleetStore, type FleetAgentInfo } from '../stores/fleetStore';
 import { useProjectStore } from '../stores/projectStore';
@@ -17,6 +17,8 @@ import {
   Users, UserPlus, Cpu, BookOpen
 } from 'lucide-react';
 import { MEGA_PROMPTS, type MegaPrompt } from '../data/megaPrompts';
+import { AgentSettings } from './agent/AgentSettings';
+import { AgentEventFeed } from './agent/AgentEventFeed';
 
 export function AgentControls() {
   const {
@@ -40,7 +42,6 @@ export function AgentControls() {
   const [fleetMode, setFleetMode] = useState(false);
   const [fleetMessage, setFleetMessage] = useState('');
   const [showPresets, setShowPresets] = useState(false);
-  const logEndRef = useRef<HTMLDivElement>(null);
 
   // Fleet store
   const {
@@ -65,10 +66,6 @@ export function AgentControls() {
     }
   }, [isFleetRunning]);
 
-  // Auto-scroll event log
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [events, fleetEvents]);
 
   const handleStart = () => {
     if (!task.trim() || !activeProject) return;
@@ -98,28 +95,6 @@ export function AgentControls() {
     setCopiedFeed(true);
     setTimeout(() => setCopiedFeed(false), 20000);
   };
-
-  // Filter events by verbosity
-  const filteredEvents = useMemo(() => {
-    if (verbosity === 'full') return events;
-
-    const minimalTypes = new Set([
-      'error', 'run_complete', 'step_complete', 'file_changed',
-      'errors_detected', 'tests_failed', 'checkpoint_created',
-      'loop_detected', 'message_queued',
-    ]);
-
-    const detailedTypes = new Set([
-      ...minimalTypes,
-      'state_change', 'step_start', 'info', 'auto_answer',
-      'question_logged', 'chunking_start', 'chunking_complete',
-      'chunking_error', 'cooldown', 'continuous_mode',
-      'rate_limit_bypass',
-    ]);
-
-    const allowed = verbosity === 'minimal' ? minimalTypes : detailedTypes;
-    return events.filter(e => allowed.has(e.type));
-  }, [events, verbosity]);
 
   const stateIcons: Record<string, React.ReactNode> = {
     idle: <div className="w-2 h-2 rounded-full bg-ide-text-dim" />,
@@ -195,214 +170,32 @@ export function AgentControls() {
 
       {/* Settings */}
       {showSettings && (
-        <div className="p-3 border-b border-ide-border bg-ide-bg/50 space-y-2 max-h-72 overflow-y-auto flex-shrink-0">
-          {/* Fleet Mode Toggle */}
-          <div className="flex items-center justify-between">
-            <label className="text-xs text-ide-text-dim flex items-center gap-1">
-              <Users className="w-3 h-3 text-cyan-400" /> Fleet Mode
-            </label>
-            <button
-              onClick={() => setFleetMode(!fleetMode)}
-              className={`relative w-8 h-4 rounded-full transition-colors ${
-                fleetMode ? 'bg-cyan-500' : 'bg-ide-border'
-              }`}
-              disabled={isRunning || isFleetRunning}
-            >
-              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                fleetMode ? 'translate-x-4' : 'translate-x-0.5'
-              }`} />
-            </button>
-          </div>
-
-          {/* Agent Count Selector (fleet mode only) */}
-          {fleetMode && (
-            <div className="flex items-center justify-between">
-              <label htmlFor="agent-count" className="text-xs text-ide-text-dim flex items-center gap-1">
-                <Cpu className="w-3 h-3 text-cyan-400" /> Agents ({selectedAgentCount})
-              </label>
-              <div className="flex items-center gap-1">
-                <input
-                  id="agent-count"
-                  name="agent-count"
-                  type="range"
-                  value={selectedAgentCount}
-                  onChange={e => setSelectedAgentCount(parseInt(e.target.value))}
-                  min={2}
-                  max={maxAgents}
-                  step={1}
-                  className="w-20"
-                  disabled={isFleetRunning}
-                />
-                <span className="text-[10px] text-ide-text-dim w-10">{selectedAgentCount}/{maxAgents}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="border-t border-ide-border/50 my-1" />
-
-          {/* 24/7 Continuous Mode Toggle */}
-          <div className="flex items-center justify-between">
-            <label className="text-xs text-ide-text-dim flex items-center gap-1">
-              <Infinity className="w-3 h-3 text-purple-400" /> 24/7 Mode
-            </label>
-            <button
-              onClick={() => setContinuousMode(!continuousMode)}
-              className={`relative w-8 h-4 rounded-full transition-colors ${
-                continuousMode ? 'bg-purple-500' : 'bg-ide-border'
-              }`}
-              disabled={isRunning}
-            >
-              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                continuousMode ? 'translate-x-4' : 'translate-x-0.5'
-              }`} />
-            </button>
-          </div>
-
-          {/* Rate Limit Bypass Toggle */}
-          <div className="flex items-center justify-between">
-            <label className="text-xs text-ide-text-dim flex items-center gap-1">
-              <ShieldOff className="w-3 h-3 text-orange-400" /> Bypass Rate Limits
-            </label>
-            <button
-              onClick={() => setBypassRateLimits(!bypassRateLimits)}
-              className={`relative w-8 h-4 rounded-full transition-colors ${
-                bypassRateLimits ? 'bg-orange-500' : 'bg-ide-border'
-              }`}
-              disabled={isRunning}
-            >
-              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                bypassRateLimits ? 'translate-x-4' : 'translate-x-0.5'
-              }`} />
-            </button>
-          </div>
-
-          {/* Smart Chunking Toggle */}
-          <div className="flex items-center justify-between">
-            <label className="text-xs text-ide-text-dim flex items-center gap-1">
-              <Puzzle className="w-3 h-3 text-blue-400" /> Smart Chunking
-            </label>
-            <button
-              onClick={() => setEnableSmartChunking(!enableSmartChunking)}
-              className={`relative w-8 h-4 rounded-full transition-colors ${
-                enableSmartChunking ? 'bg-blue-500' : 'bg-ide-border'
-              }`}
-              disabled={isRunning}
-            >
-              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-                enableSmartChunking ? 'translate-x-4' : 'translate-x-0.5'
-              }`} />
-            </button>
-          </div>
-
-          <div className="border-t border-ide-border/50 my-1" />
-
-          {/* Cooldown Slider */}
-          <div className="flex items-center justify-between">
-            <label htmlFor="agent-cooldown" className="text-xs text-ide-text-dim flex items-center gap-1">
-              <Timer className="w-3 h-3" /> Cooldown
-            </label>
-            <div className="flex items-center gap-1">
-              <input
-                id="agent-cooldown"
-                name="agent-cooldown"
-                type="range"
-                value={cooldownMs}
-                onChange={e => setCooldownMs(parseInt(e.target.value))}
-                min={0}
-                max={60000}
-                step={1000}
-                className="w-16"
-                disabled={isRunning}
-              />
-              <span className="text-[10px] text-ide-text-dim w-10">
-                {cooldownMs === 0 ? 'Off' : `${(cooldownMs / 1000).toFixed(0)}s`}
-              </span>
-            </div>
-          </div>
-
-          {/* Max Iterations (hidden in 24/7 mode) */}
-          {!continuousMode && (
-            <div className="flex items-center justify-between">
-              <label htmlFor="max-iterations" className="text-xs text-ide-text-dim">Max Iterations</label>
-              <input
-                id="max-iterations"
-                name="max-iterations"
-                type="number"
-                value={maxIterations}
-                onChange={e => setMaxIterations(parseInt(e.target.value) || 50)}
-                className="w-16 bg-ide-bg border border-ide-border rounded px-2 py-0.5 text-xs text-right focus:outline-none"
-                min={1}
-                max={1000}
-                disabled={isRunning}
-              />
-            </div>
-          )}
-
-          {/* Step Delay */}
-          <div className="flex items-center justify-between">
-            <label htmlFor="step-delay" className="text-xs text-ide-text-dim flex items-center gap-1">
-              <Clock className="w-3 h-3" /> Step Delay
-            </label>
-            <div className="flex items-center gap-1">
-              <input
-                id="step-delay"
-                name="step-delay"
-                type="range"
-                value={stepDelayMs}
-                onChange={e => setStepDelay(parseInt(e.target.value))}
-                min={500}
-                max={10000}
-                step={500}
-                className="w-20"
-              />
-              <span className="text-[10px] text-ide-text-dim w-10">{(stepDelayMs / 1000).toFixed(1)}s</span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <label htmlFor="auto-approve" className="text-xs text-ide-text-dim">Auto-approve file changes</label>
-            <input
-              id="auto-approve"
-              name="auto-approve"
-              type="checkbox"
-              checked={autoApprove}
-              onChange={e => setAutoApprove(e.target.checked)}
-              className="accent-ide-accent"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <label htmlFor="auto-answer" className="text-xs text-ide-text-dim">Auto-answer questions</label>
-            <input
-              id="auto-answer"
-              name="auto-answer"
-              type="checkbox"
-              checked={autoAnswer}
-              onChange={e => setAutoAnswer(e.target.checked)}
-              className="accent-ide-accent"
-            />
-          </div>
-
-          {/* Info badges */}
-          <div className="flex flex-wrap gap-1 pt-1">
-            {fleetMode && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">🤖 Fleet ({selectedAgentCount})</span>
-            )}
-            {continuousMode && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">∞ 24/7</span>
-            )}
-            {bypassRateLimits && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300">⚡ No Limits</span>
-            )}
-            {enableSmartChunking && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">🧩 Chunking</span>
-            )}
-            {cooldownMs > 0 && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-ide-bg text-ide-text-dim">⏱ {cooldownMs/1000}s</span>
-            )}
-          </div>
-        </div>
+        <AgentSettings
+          fleetMode={fleetMode}
+          setFleetMode={setFleetMode}
+          selectedAgentCount={selectedAgentCount}
+          setSelectedAgentCount={setSelectedAgentCount}
+          maxAgents={maxAgents}
+          continuousMode={continuousMode}
+          setContinuousMode={setContinuousMode}
+          bypassRateLimits={bypassRateLimits}
+          setBypassRateLimits={setBypassRateLimits}
+          enableSmartChunking={enableSmartChunking}
+          setEnableSmartChunking={setEnableSmartChunking}
+          cooldownMs={cooldownMs}
+          setCooldownMs={setCooldownMs}
+          maxIterations={maxIterations}
+          setMaxIterations={setMaxIterations}
+          stepDelayMs={stepDelayMs}
+          setStepDelay={setStepDelay}
+          autoApprove={autoApprove}
+          setAutoApprove={setAutoApprove}
+          autoAnswer={autoAnswer}
+          setAutoAnswer={setAutoAnswer}
+          isRunning={isRunning}
+          isFleetRunning={isFleetRunning}
+        />
       )}
-
       {/* Task Input + Controls */}
       {!isRunning && !isFleetRunning && (
         <div className="p-2">
@@ -638,192 +431,19 @@ export function AgentControls() {
       )}
 
       {/* Event Log */}
-      <div className="flex-1 min-h-0 overflow-y-auto border-t border-ide-border">
-        {/* Event Log Header with verbosity + copy */}
-        <div className="flex items-center justify-between px-3 py-1 border-b border-ide-border/50">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-ide-text-dim">
-              {isFleetRunning
-                ? `Fleet Events (${fleetEvents.length})`
-                : `Events (${filteredEvents.length}/${events.length})`}
-            </span>
-            {/* Verbosity Selector (single agent only) */}
-            {!isFleetRunning && (
-              <div className="flex items-center bg-ide-bg rounded overflow-hidden border border-ide-border/50">
-                {(['minimal', 'detailed', 'full'] as VerbosityLevel[]).map(level => (
-                  <button
-                    key={level}
-                    onClick={() => setVerbosity(level)}
-                    className={`px-1.5 py-0.5 text-[9px] transition-colors ${
-                      verbosity === level
-                        ? 'bg-ide-accent text-white'
-                        : 'text-ide-text-dim hover:text-ide-text'
-                    }`}
-                  >
-                    {level === 'minimal' ? 'Min' : level === 'detailed' ? 'Det' : 'Full'}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={handleCopyFeed}
-              className="text-[10px] text-ide-text-dim hover:text-ide-accent flex items-center gap-0.5"
-              title="Copy event feed to clipboard"
-            >
-              {copiedFeed ? <><Check className="w-3 h-3 text-ide-success" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
-            </button>
-            <button
-              onClick={isFleetRunning ? clearFleetEvents : clearEvents}
-              className="text-[10px] text-ide-text-dim hover:text-ide-accent"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-
-        {/* Fleet Events */}
-        {(isFleetRunning || fleetEvents.length > 0) && fleetMode ? (
-          <div className="p-1 space-y-0.5">
-            {fleetEvents.map((event, i) => (
-              <div key={i} className="px-2 py-1 text-[10px] flex items-start gap-1 rounded hover:bg-ide-bg/30">
-                <span className="text-ide-text-dim shrink-0">
-                  {new Date(event.timestamp).toLocaleTimeString()}
-                </span>
-                {event.agentId && (
-                  <span className={`px-1 rounded font-medium ${
-                    event.agentRole === 'lead' ? 'bg-yellow-500/20 text-yellow-300' :
-                    event.agentRole === 'implementer' ? 'bg-green-500/20 text-green-300' :
-                    event.agentRole === 'debugger' ? 'bg-red-500/20 text-red-300' :
-                    event.agentRole === 'tester' ? 'bg-blue-500/20 text-blue-300' :
-                    event.agentRole === 'reviewer' ? 'bg-purple-500/20 text-purple-300' :
-                    'bg-cyan-500/20 text-cyan-300'
-                  }`}>
-                    {event.agentRole || 'fleet'}
-                  </span>
-                )}
-                <span className={
-                  event.type.includes('error') ? 'text-ide-error font-medium' :
-                  event.type.includes('complete') ? 'text-ide-success font-medium' :
-                  event.type.includes('spawn') ? 'text-cyan-400' :
-                  event.type.includes('decompose') ? 'text-blue-400' :
-                  'text-ide-text'
-                }>
-                  [{event.type}]
-                </span>
-                <span className="text-ide-text-dim break-words select-text">
-                  {event.data?.message?.slice(0, 200) || event.data?.summary?.slice(0, 200) || event.data?.error?.slice(0, 200) || ''}
-                </span>
-              </div>
-            ))}
-            {fleetEvents.length === 0 && (
-              <p className="text-[10px] text-ide-text-dim text-center py-4">
-                Fleet events will appear here...
-              </p>
-            )}
-            <div ref={logEndRef} />
-          </div>
-        ) : (
-          /* Single Agent Events */
-          <div className="p-1 space-y-0.5">
-          {filteredEvents.map((event, i) => {
-            const realIndex = events.indexOf(event);
-            const isExpandable = event.data && (
-              event.data.delta || event.data.change || event.data.output ||
-              event.data.errors || event.data.result || event.type === 'step_content' ||
-              event.type === 'step_complete' || event.type === 'loop_detected'
-            );
-            const isExpanded = event.expanded;
-
-            return (
-              <div key={i} className="rounded hover:bg-ide-bg/30">
-                <div
-                  className={`px-2 py-1 text-[10px] flex items-start gap-1 ${isExpandable ? 'cursor-pointer' : ''}`}
-                  onClick={() => isExpandable && toggleEventExpanded(realIndex)}
-                >
-                  {/* Expand/collapse icon */}
-                  {isExpandable ? (
-                    isExpanded
-                      ? <ChevronDown className="w-3 h-3 text-ide-text-dim shrink-0 mt-0.5" />
-                      : <ChevronRight className="w-3 h-3 text-ide-text-dim shrink-0 mt-0.5" />
-                  ) : (
-                    <span className="w-3 shrink-0" />
-                  )}
-
-                  <span className="text-ide-text-dim shrink-0">
-                    {new Date(event.timestamp).toLocaleTimeString()}
-                  </span>
-                  <span className={
-                    event.type === 'error' ? 'text-ide-error font-medium' :
-                    event.type === 'run_complete' ? 'text-ide-success font-medium' :
-                    event.type === 'question_logged' ? 'text-yellow-400' :
-                    event.type === 'loop_detected' ? 'text-orange-400 font-medium' :
-                    event.type === 'message_queued' ? 'text-blue-400' :
-                    event.type === 'file_changed' ? 'text-green-400' :
-                    event.type === 'chunking_start' || event.type === 'chunking_progress' ? 'text-blue-400' :
-                    event.type === 'chunking_complete' ? 'text-blue-300' :
-                    event.type === 'chunking_error' ? 'text-red-400' :
-                    event.type === 'cooldown' ? 'text-purple-400' :
-                    event.type === 'continuous_mode' ? 'text-purple-300' :
-                    event.type === 'rate_limit_bypass' ? 'text-orange-400' :
-                    event.type === 'step_complete' ? 'text-green-300' :
-                    event.type === 'errors_detected' ? 'text-yellow-400' :
-                    event.type === 'tests_failed' ? 'text-red-400' :
-                    event.type === 'checkpoint_created' ? 'text-cyan-400' :
-                    'text-ide-text'
-                  }>
-                    [{event.type}]
-                  </span>
-                  <span className="text-ide-text-dim break-words select-text">
-                    {event.data?.step?.action?.slice(0, 120) || event.data?.summary || event.data?.error || event.data?.question || event.data?.state || event.data?.message?.slice(0, 120) || event.data?.change?.path || ''}
-                  </span>
-                </div>
-
-                {/* Expanded content */}
-                {isExpanded && (
-                  <div className="mx-6 mb-1 px-2 py-1.5 bg-ide-bg/50 rounded border border-ide-border/30 text-[10px] text-ide-text-dim max-h-40 overflow-y-auto whitespace-pre-wrap font-mono">
-                    {event.type === 'step_content' && (event.data?.delta?.slice(0, 2000) || 'No content')}
-                    {event.type === 'step_complete' && (
-                      <>
-                        <div className="text-ide-text mb-1">Summary: {event.data?.output?.summary || 'N/A'}</div>
-                        {event.data?.output?.filesChanged?.length > 0 && (
-                          <div>Files: {event.data.output.filesChanged.map((f: any) => f.path).join(', ')}</div>
-                        )}
-                        {event.data?.output?.nextSteps?.length > 0 && (
-                          <div className="mt-1">Next: {event.data.output.nextSteps.map((s: any) => s.action).join(', ')}</div>
-                        )}
-                      </>
-                    )}
-                    {event.type === 'loop_detected' && (
-                      <div className="text-orange-300">Pattern: {event.data?.pattern || 'Unknown'}</div>
-                    )}
-                    {event.type === 'errors_detected' && (
-                      <div>{event.data?.errors?.map((e: any, j: number) => <div key={j}>{e.file}:{e.line} — {e.message}</div>)}</div>
-                    )}
-                    {event.type === 'file_changed' && (
-                      <div>Path: {event.data?.change?.path}<br/>Action: {event.data?.change?.action}<br/>Summary: {event.data?.change?.summary}</div>
-                    )}
-                    {!['step_content', 'step_complete', 'loop_detected', 'errors_detected', 'file_changed'].includes(event.type) && (
-                      <div>{JSON.stringify(event.data, null, 2).slice(0, 1500)}</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {filteredEvents.length === 0 && (
-            <p className="text-[10px] text-ide-text-dim text-center py-4">
-              {events.length === 0
-                ? 'No events yet. Start the agent to see activity here.'
-                : `${events.length} events hidden by "${verbosity}" filter.`}
-            </p>
-          )}
-          <div ref={logEndRef} />
-        </div>
-        )}
-      </div>
-
+      <AgentEventFeed
+        events={events}
+        verbosity={verbosity}
+        setVerbosity={setVerbosity}
+        toggleEventExpanded={toggleEventExpanded}
+        isFleetRunning={isFleetRunning}
+        fleetMode={fleetMode}
+        fleetEvents={fleetEvents}
+        clearEvents={clearEvents}
+        clearFleetEvents={clearFleetEvents}
+        handleCopyFeed={handleCopyFeed}
+        copiedFeed={copiedFeed}
+      />
       {/* Pending Questions */}
       {questions.length > 0 && (
         <div className="border-t border-ide-border p-2">

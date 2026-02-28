@@ -8,6 +8,7 @@ import { PROVIDERS } from '@personal-ide/shared';
 import type { ProviderType } from '@personal-ide/shared';
 import { fetchProviderModels, getClientFromDb, createOllamaClient, createNanoClient, createProviderClient } from '../services/llm/providers.js';
 import { appConfig } from '../config.js';
+import { encrypt } from '../services/crypto/index.js';
 
 export async function providersRoutes(app: FastifyInstance): Promise<void> {
   const db = (app as any).db;
@@ -44,11 +45,7 @@ export async function providersRoutes(app: FastifyInstance): Promise<void> {
       // Encrypt API key if provided
       let apiKeyEncrypted: string | null = null;
       if (apiKey) {
-        const key = appConfig.security.encryptKey;
-        const encrypted = Array.from(apiKey).map((c: string, i: number) =>
-          c.charCodeAt(0) ^ key.charCodeAt(i % key.length)
-        );
-        apiKeyEncrypted = Buffer.from(encrypted).toString('base64');
+        apiKeyEncrypted = encrypt(apiKey, appConfig.security.encryptKey);
       }
 
       // Upsert config
