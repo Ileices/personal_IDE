@@ -16,6 +16,8 @@ import { RateLimitDashboard } from './components/RateLimitDashboard';
 import { ErrorPanel } from './components/ErrorPanel';
 import { CheckpointViewer } from './components/CheckpointViewer';
 import { MemoryPanel } from './components/MemoryPanel';
+import { TerminalPanel } from './components/TerminalPanel';
+import { OpenClawPanel } from './components/OpenClawPanel';
 import { Loader2 } from 'lucide-react';
 
 export default function App() {
@@ -99,6 +101,7 @@ export default function App() {
           <div className="flex-shrink-0 overflow-y-auto" style={{ maxHeight: '20%' }}>
             <RateLimitDashboard />
           </div>
+          <OpenClawPanel />
         </div>
 
         {/* Left resize handle */}
@@ -129,7 +132,10 @@ export default function App() {
             <ErrorPanel projectRoot={activeProject?.rootPath || ''} />
           </div>
         </div>
+
+        {/* Terminal Panel — spans full width below main area */}
       </div>
+      <TerminalPanel />
 
       {/* Status Bar */}
       <div className="h-6 bg-ide-accent/10 border-t border-ide-border flex items-center px-3 text-[10px] text-ide-text-dim justify-between flex-shrink-0">

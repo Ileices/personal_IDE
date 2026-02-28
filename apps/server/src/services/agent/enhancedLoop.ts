@@ -394,6 +394,13 @@ export class EnhancedAgentLoop {
           }
         } catch { /* ignore */ }
 
+        // Build code index context (token-aware outline)
+        let codeIndexContext = '';
+        try {
+          const indexBudget = Math.floor(this.contextWindow * 0.05);
+          codeIndexContext = this.codeIndexer.formatForLLM(indexBudget);
+        } catch { /* ignore */ }
+
         // Build System Prompt with v2 context
         const systemPrompt = buildAgentSystemPrompt({
           memoryContext,
@@ -410,6 +417,7 @@ export class EnhancedAgentLoop {
           logHealthContext: this.logHealthContext,
           conversationIndexContext: this.conversationIndexContext,
           platformContext: this.platformContext,
+          codeIndexContext,
         });
 
         // Build Messages

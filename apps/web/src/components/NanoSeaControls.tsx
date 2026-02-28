@@ -9,6 +9,10 @@
 //   - Peer discovery: opt-in, sharing level, peer list
 //   - Live logs viewer with real-time updates
 //   - Node status (grade, tier, nanos, uptime)
+//
+// UI widgets (Badge, Section, Toggle, Slider, fetchJson)
+// extracted to components/ui/widgets.tsx
+// Types extracted to components/nano/types.ts
 // ============================================
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
@@ -19,204 +23,13 @@ import {
   Terminal, RefreshCw,
 } from 'lucide-react';
 import { API_BASE } from '../config.js';
+import { Badge, Section, Toggle, Slider, fetchJson } from './ui/widgets';
+import type {
+  NanoStatus, NanoConfig, EnvCheck, MeshInfo,
+  PoolStats, DiscoveredPeer, DiscoveryStatus,
+} from './nano/types';
 
 const API = `${API_BASE}/api/nano`;
-
-interface NanoStatus {
-  running: boolean;
-  pid: number | null;
-  port: number;
-  config: NanoConfig;
-  api: { status: string; nano_count?: number; uptime_s?: number } | null;
-  logLines: number;
-  lastError: string | null;
-  pythonFound: boolean;
-  nanoDirExists: boolean;
-}
-
-interface NanoConfig {
-  meshEnabled: boolean;
-  port: number;
-  scanPaths: string[];
-  donationPercent: number;
-  permanentNode: boolean;
-  idleTraining: boolean;
-  username: string;
-  peerDiscovery: boolean;
-  sharingLevel: string;
-}
-
-interface EnvCheck {
-  ready: boolean;
-  python: { bin: string; extraArgs: string[] } | null;
-  pythonFound: boolean;
-  nanoDir: string;
-  nanoDirExists: boolean;
-  mainPyExists: boolean;
-  requirementsExist: boolean;
-  platform: string;
-  errors: string[];
-}
-
-interface MeshInfo {
-  node_id?: string;
-  hostname?: string;
-  compute_grade?: number;
-  tier?: number;
-  cpu_model?: string;
-  ram_gb?: number;
-  gpu_model?: string;
-  gpu_vram_gb?: number;
-  has_cuda?: boolean;
-  error?: string;
-}
-
-interface PoolStats {
-  total_members?: number;
-  online_members?: number;
-  permanent_nodes?: number;
-  total_pool_capacity?: number;
-  active_jobs?: number;
-  total_jobs_completed?: number;
-  idle_training_enabled?: boolean;
-  error?: string;
-}
-
-interface DiscoveredPeer {
-  node_id: string;
-  username: string;
-  hostname: string;
-  ip_address: string;
-  state: string;
-  compute_grade: number;
-  tier: number;
-  has_cuda: boolean;
-  gpu_name: string;
-  respect_score: number;
-  trust_level: string;
-  display_name: string;
-}
-
-interface DiscoveryStatus {
-  discoverable?: boolean;
-  opt_in?: boolean;
-  sharing_level?: string;
-  total_peers?: number;
-  connected_peers?: number;
-  pending_requests?: number;
-  error?: string;
-}
-
-// ── Helpers ─────────────────────────────────────────────────
-async function fetchJson<T = any>(url: string, opts?: RequestInit): Promise<T | null> {
-  try {
-    const res = await fetch(url, opts);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-function Badge({ children, color = 'blue' }: { children: React.ReactNode; color?: string }) {
-  const colors: Record<string, string> = {
-    blue: 'bg-blue-500/15 text-blue-400',
-    green: 'bg-green-500/15 text-green-400',
-    red: 'bg-red-500/15 text-red-400',
-    yellow: 'bg-yellow-500/15 text-yellow-400',
-    purple: 'bg-purple-500/15 text-purple-400',
-    gray: 'bg-white/5 text-ide-text-dim',
-    cyan: 'bg-cyan-500/15 text-cyan-400',
-  };
-  return (
-    <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${colors[color] || colors.blue}`}>
-      {children}
-    </span>
-  );
-}
-
-function Section({ title, icon: Icon, children, defaultOpen = true, badge }: {
-  title: string;
-  icon: React.ElementType;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-  badge?: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border border-ide-border rounded-lg overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-ide-bg/50 hover:bg-ide-bg/80 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <Icon className="w-4 h-4 text-ide-accent" />
-          <span className="text-xs font-semibold">{title}</span>
-          {badge}
-        </div>
-        {open ? <ChevronUp className="w-3 h-3 text-ide-text-dim" /> : <ChevronDown className="w-3 h-3 text-ide-text-dim" />}
-      </button>
-      {open && <div className="p-3 space-y-2">{children}</div>}
-    </div>
-  );
-}
-
-function Toggle({ checked, onChange, label, desc, disabled }: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-  desc?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <label className={`flex items-start gap-2.5 ${disabled ? 'opacity-40' : 'cursor-pointer'}`}>
-      <div
-        onClick={() => !disabled && onChange(!checked)}
-        className={`w-8 h-4.5 flex-shrink-0 rounded-full transition-colors relative mt-0.5 ${
-          checked ? 'bg-ide-accent' : 'bg-ide-border'
-        }`}
-        style={{ minWidth: 32, height: 18 }}
-      >
-        <div
-          className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${
-            checked ? 'translate-x-[15px]' : 'translate-x-[2px]'
-          }`}
-          style={{ width: 14, height: 14 }}
-        />
-      </div>
-      <div className="min-w-0">
-        <div className="text-xs font-medium">{label}</div>
-        {desc && <div className="text-[10px] text-ide-text-dim">{desc}</div>}
-      </div>
-    </label>
-  );
-}
-
-function Slider({ value, onChange, min = 0, max = 100, label, suffix = '%' }: {
-  value: number;
-  onChange: (v: number) => void;
-  min?: number;
-  max?: number;
-  label: string;
-  suffix?: string;
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium">{label}</span>
-        <span className="text-xs text-ide-accent font-mono">{value}{suffix}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        className="w-full h-1.5 bg-ide-border rounded-full appearance-none cursor-pointer accent-ide-accent"
-      />
-    </div>
-  );
-}
 
 // ═══════════════════════════════════════════════════════════════
 // Main Component

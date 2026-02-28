@@ -22,6 +22,8 @@ import { nanoRoutes } from './routes/nano.js';
 import { midwifeRoutes } from './routes/midwife.js';
 import { previewRoutes } from './routes/preview.js';
 import { fleetRoutes } from './routes/fleet.js';
+import { openclawRoutes } from './routes/openclaw.js';
+import { terminalRoutes } from './routes/terminal.js';
 
 async function main() {
   // Initialize the database
@@ -68,6 +70,8 @@ async function main() {
   await app.register(midwifeRoutes, { prefix: '/api/midwife' });
   await app.register(previewRoutes, { prefix: '/api/preview' });
   await app.register(fleetRoutes, { prefix: '/api/fleet' });
+  await app.register(openclawRoutes, { prefix: '/api/openclaw' });
+  await app.register(terminalRoutes, { prefix: '/api/terminal' });
   // Health check
   app.get('/api/health', async () => ({
     status: 'ok',

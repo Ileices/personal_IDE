@@ -360,6 +360,8 @@ export function buildAgentSystemPrompt(params: {
   conversationIndexContext?: string;
   // ── v3: platform awareness ──
   platformContext?: string;
+  // ── v4: token-aware code index ──
+  codeIndexContext?: string;
 }): string {
   const isCorpusScale = params.codebaseOverview?.includes('lines') &&
     parseInt(params.codebaseOverview.match(/(\d[\d,]+)\s*lines/)?.[1]?.replace(/,/g, '') || '0') > 10000;
@@ -438,6 +440,16 @@ ${FULL_AUTONOMY}
 
 ${APP_PREVIEW_TESTING}
 
+TERMINAL ACCESS (SURGICAL EDITING):
+You have dedicated terminal sessions for executing commands WITHOUT loading entire files:
+- POST /api/terminal/sessions { owner: "agent" } → Create your own shell
+- POST /api/terminal/exec { sessionId, command } → Run a command and get output
+- Use shell commands to READ specific lines: sed -n '10,25p' file.ts
+- Use shell commands to INJECT edits: sed -i 'Ns/old/new/' file.ts
+- This SAVES TOKENS — read 5 lines instead of loading a 500-line file
+- Use the Code Index (below) to find exact line numbers for symbols
+- Prefer terminal edits for small changes (<5 lines), file rewrites for large ones
+
 ${NANO_SEA_INTEGRATION}
 
 ${RELATIONSHIP_AWARE_EDITING}
@@ -511,6 +523,11 @@ ${params.taskTrackerContext ? `### Task Progress\n${params.taskTrackerContext}\n
 ${params.checkpointInfo ? `### Checkpoints\n${params.checkpointInfo}\n` : ''}
 
 ${params.codebaseOverview ? `### Codebase Overview\n${params.codebaseOverview}\n` : ''}
+
+${params.codeIndexContext ? `### Token-Aware Code Index
+The following index shows every file and symbol with estimated token counts.
+Use this to plan context usage — read ONLY the symbols you need via line ranges.
+${params.codeIndexContext}\n` : ''}
 
 ${params.errorContext ? `### Current Errors\n${params.errorContext}\n` : ''}
 

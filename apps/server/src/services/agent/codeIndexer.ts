@@ -13,6 +13,8 @@ export interface CodeSymbol {
   endLine: number;
   lineCount: number;
   estimatedBytes: number;
+  /** Approximate token count (bytes / 3.5 heuristic) */
+  estimatedTokens: number;
   children?: CodeSymbol[];
   signature?: string;
 }
@@ -23,6 +25,8 @@ export interface FileIndex {
   language: string;
   totalLines: number;
   totalBytes: number;
+  /** Approximate total token count for the file */
+  totalTokens: number;
   symbols: CodeSymbol[];
   imports: string[];
   exports: string[];
@@ -75,7 +79,7 @@ export class CodeIndexer {
     const fileIndex = this.index?.files.find(f => f.filePath === filePath || f.relativePath === filePath);
     if (!fileIndex) return `File not indexed: ${filePath}`;
 
-    let output = `=== ${fileIndex.relativePath} (${fileIndex.language}, ${fileIndex.totalLines} lines, ${formatBytes(fileIndex.totalBytes)}) ===\n`;
+    let output = `=== ${fileIndex.relativePath} (${fileIndex.language}, ${fileIndex.totalLines} lines, ${formatBytes(fileIndex.totalBytes)}, ~${fileIndex.totalTokens} tokens) ===\n`;
 
     if (fileIndex.imports.length > 0) {
       output += `\nIMPORTS (${fileIndex.imports.length}):\n`;
@@ -88,13 +92,13 @@ export class CodeIndexer {
       output += `\nSYMBOLS:\n`;
       for (const sym of fileIndex.symbols) {
         const sizeTag = sym.lineCount > 50 ? ' ⚠️LARGE' : '';
-        output += `  [${sym.type}] ${sym.name} (L${sym.startLine}-L${sym.endLine}, ${sym.lineCount} lines${sizeTag})`;
+        output += `  [${sym.type}] ${sym.name} (L${sym.startLine}-L${sym.endLine}, ${sym.lineCount} lines, ~${sym.estimatedTokens} tok${sizeTag})`;
         if (sym.signature) output += ` — ${sym.signature}`;
         output += '\n';
 
         if (sym.children) {
           for (const child of sym.children) {
-            output += `    [${child.type}] ${child.name} (L${child.startLine}-L${child.endLine}, ${child.lineCount} lines)\n`;
+            output += `    [${child.type}] ${child.name} (L${child.startLine}-L${child.endLine}, ${child.lineCount} lines, ~${child.estimatedTokens} tok)\n`;
           }
         }
       }
@@ -135,17 +139,18 @@ export class CodeIndexer {
   getProjectOutline(maxFiles = 100): string {
     if (!this.index) return 'No project indexed yet. Call buildIndex() first.';
 
-    let output = `=== PROJECT INDEX (${this.index.totalFiles} files, indexed ${this.index.indexedAt}) ===\n\n`;
+    const totalProjectTokens = this.index.files.reduce((sum, f) => sum + f.totalTokens, 0);
+    let output = `=== PROJECT INDEX (${this.index.totalFiles} files, ~${totalProjectTokens} total tokens, indexed ${this.index.indexedAt}) ===\n\n`;
 
     const sorted = [...this.index.files].sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 
     for (const file of sorted.slice(0, maxFiles)) {
       const symbolCount = this.countSymbols(file.symbols);
-      output += `📄 ${file.relativePath} [${file.language}] — ${file.totalLines} lines, ${symbolCount} symbols\n`;
+      output += `📄 ${file.relativePath} [${file.language}] — ${file.totalLines} lines, ~${file.totalTokens} tok, ${symbolCount} symbols\n`;
 
       for (const sym of file.symbols) {
         const sizeTag = sym.lineCount > 100 ? ' ⚠️' : '';
-        output += `   ${sym.type}: ${sym.name} (L${sym.startLine}-L${sym.endLine})${sizeTag}\n`;
+        output += `   ${sym.type}: ${sym.name} (L${sym.startLine}-L${sym.endLine}, ~${sym.estimatedTokens} tok)${sizeTag}\n`;
       }
     }
 
@@ -161,9 +166,10 @@ export class CodeIndexer {
     const outline = this.getProjectOutline();
     if (outline.length <= budget * 4) return outline; // rough chars-to-tokens
 
-    // Truncated version
+    // Truncated version — show file-level summary with token counts
     const files = this.index?.files || [];
-    let output = `PROJECT: ${files.length} files indexed\n\n`;
+    const totalTokens = files.reduce((sum, f) => sum + f.totalTokens, 0);
+    let output = `PROJECT: ${files.length} files, ~${totalTokens} total tokens\n\n`;
 
     for (const file of files) {
       const line = `${file.relativePath} [${file.language}] ${file.totalLines}L ${file.symbols.length} symbols\n`;
@@ -207,13 +213,26 @@ export class CodeIndexer {
         const lines = content.split('\n');
         const relativePath = path.relative(root, fullPath).replace(/\\/g, '/');
 
+        const totalBytes = Buffer.byteLength(content);
+        const symbols = this.parseSymbols(content, language);
+        // Add token estimates to every symbol
+        for (const sym of symbols) {
+          sym.estimatedTokens = Math.ceil(sym.estimatedBytes / 3.5);
+          if (sym.children) {
+            for (const child of sym.children) {
+              child.estimatedTokens = Math.ceil(child.estimatedBytes / 3.5);
+            }
+          }
+        }
+
         const fileIndex: FileIndex = {
           filePath: fullPath,
           relativePath,
           language,
           totalLines: lines.length,
-          totalBytes: Buffer.byteLength(content),
-          symbols: this.parseSymbols(content, language),
+          totalBytes: totalBytes,
+          totalTokens: Math.ceil(totalBytes / 3.5),
+          symbols,
           imports: this.parseImports(content, language),
           exports: this.parseExports(content, language),
         };
@@ -262,6 +281,7 @@ export class CodeIndexer {
           endLine: lineNum,
           lineCount: 1,
           estimatedBytes: 0,
+          estimatedTokens: 0,
           signature: trimmed.slice(0, 80),
           children: [],
         };
@@ -286,6 +306,7 @@ export class CodeIndexer {
           endLine: lineNum,
           lineCount: 1,
           estimatedBytes: 0,
+          estimatedTokens: 0,
           signature: trimmed.slice(0, 100),
         };
         symbols.push(sym);
@@ -293,6 +314,7 @@ export class CodeIndexer {
         sym.endLine = this.findBlockEnd(lines, i);
         sym.lineCount = sym.endLine - sym.startLine + 1;
         sym.estimatedBytes = lines.slice(i, sym.endLine).join('\n').length;
+        sym.estimatedTokens = Math.ceil(sym.estimatedBytes / 3.5);
       } else if (arrowMatch && !currentSymbol) {
         const sym: CodeSymbol = {
           name: arrowMatch[1],
@@ -301,12 +323,14 @@ export class CodeIndexer {
           endLine: lineNum,
           lineCount: 1,
           estimatedBytes: 0,
+          estimatedTokens: 0,
           signature: trimmed.slice(0, 100),
         };
         symbols.push(sym);
         sym.endLine = this.findBlockEnd(lines, i);
         sym.lineCount = sym.endLine - sym.startLine + 1;
         sym.estimatedBytes = lines.slice(i, sym.endLine).join('\n').length;
+        sym.estimatedTokens = Math.ceil(sym.estimatedBytes / 3.5);
       } else if (methodMatch && currentSymbol && currentSymbol.children) {
         const method: CodeSymbol = {
           name: methodMatch[1],
@@ -315,10 +339,12 @@ export class CodeIndexer {
           endLine: lineNum,
           lineCount: 1,
           estimatedBytes: 0,
+          estimatedTokens: 0,
         };
         method.endLine = this.findBlockEnd(lines, i);
         method.lineCount = method.endLine - method.startLine + 1;
         method.estimatedBytes = lines.slice(i, method.endLine).join('\n').length;
+        method.estimatedTokens = Math.ceil(method.estimatedBytes / 3.5);
         currentSymbol.children.push(method);
       }
 
@@ -336,6 +362,7 @@ export class CodeIndexer {
             currentSymbol.endLine = lineNum;
             currentSymbol.lineCount = currentSymbol.endLine - currentSymbol.startLine + 1;
             currentSymbol.estimatedBytes = lines.slice(currentSymbol.startLine - 1, currentSymbol.endLine).join('\n').length;
+            currentSymbol.estimatedTokens = Math.ceil(currentSymbol.estimatedBytes / 3.5);
             currentSymbol = null;
           }
         }
@@ -354,24 +381,28 @@ export class CodeIndexer {
 
       if (classMatch) {
         const endLine = this.findPyBlockEnd(lines, i);
+        const eBytes = lines.slice(i, endLine).join('\n').length;
         symbols.push({
           name: classMatch[1],
           type: 'class',
           startLine: lineNum,
           endLine,
           lineCount: endLine - lineNum + 1,
-          estimatedBytes: lines.slice(i, endLine).join('\n').length,
+          estimatedBytes: eBytes,
+          estimatedTokens: Math.ceil(eBytes / 3.5),
           signature: trimmed.slice(0, 80),
         });
       } else if (funcMatch && !line.startsWith(' ') && !line.startsWith('\t')) {
         const endLine = this.findPyBlockEnd(lines, i);
+        const eBytes = lines.slice(i, endLine).join('\n').length;
         symbols.push({
           name: funcMatch[1],
           type: 'function',
           startLine: lineNum,
           endLine,
           lineCount: endLine - lineNum + 1,
-          estimatedBytes: lines.slice(i, endLine).join('\n').length,
+          estimatedBytes: eBytes,
+          estimatedTokens: Math.ceil(eBytes / 3.5),
           signature: trimmed.slice(0, 80),
         });
       }
@@ -386,13 +417,15 @@ export class CodeIndexer {
       const funcMatch = trimmed.match(/^(?:pub\s+)?(?:async\s+)?(?:fn|func|def|function|sub|proc)\s+(\w+)/);
       if (funcMatch) {
         const endLine = this.findBlockEnd(lines, i);
+        const eBytes = lines.slice(i, endLine).join('\n').length;
         symbols.push({
           name: funcMatch[1],
           type: 'function',
           startLine: lineNum,
           endLine,
           lineCount: endLine - lineNum + 1,
-          estimatedBytes: lines.slice(i, endLine).join('\n').length,
+          estimatedBytes: eBytes,
+          estimatedTokens: Math.ceil(eBytes / 3.5),
         });
       }
     }
