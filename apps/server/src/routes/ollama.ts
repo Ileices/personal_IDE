@@ -8,6 +8,7 @@ import { execSync, spawn } from 'child_process';
 import { existsSync, statSync, readdirSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
+import { appConfig } from '../config.js';
 
 // ── Common Ollama install locations by platform ──
 const WINDOWS_PATHS = [
@@ -309,7 +310,7 @@ function findOllamaModels(): { found: boolean; path: string | null; models: stri
   return { found: false, path: null, models: [] };
 }
 
-async function testOllamaConnection(baseUrl: string = 'http://localhost:11434'): Promise<{
+async function testOllamaConnection(baseUrl: string = appConfig.services.ollamaUrl): Promise<{
   connected: boolean; version?: string; error?: string;
 }> {
   try {
@@ -350,7 +351,7 @@ export async function ollamaRoutes(app: FastifyInstance): Promise<void> {
   /** POST /api/ollama/test-connection - Test connection to Ollama */
   app.post('/test-connection', async (req: FastifyRequest) => {
     const { baseUrl } = (req.body as any) || {};
-    return testOllamaConnection(baseUrl || 'http://localhost:11434');
+    return testOllamaConnection(baseUrl || appConfig.services.ollamaUrl);
   });
 
   /** POST /api/ollama/start - Attempt to start Ollama service */
@@ -384,7 +385,8 @@ export async function ollamaRoutes(app: FastifyInstance): Promise<void> {
     if (!model) return reply.status(400).send({ error: 'model is required' });
 
     try {
-      const res = await fetch('http://localhost:11434/api/pull', {
+      const ollamaUrl = appConfig.services.ollamaUrl;
+      const res = await fetch(`${ollamaUrl}/api/pull`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: model, stream: false }),

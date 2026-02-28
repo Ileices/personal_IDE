@@ -6,6 +6,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { AgentFleet, type FleetConfig } from '../services/agent/fleet.js';
 import type { ProviderType } from '@personal-ide/shared';
 import { getModel } from '@personal-ide/shared';
+import { appConfig } from '../config.js';
 import { MemoryService } from '../services/memory/index.js';
 
 let activeFleet: AgentFleet | null = null;
@@ -72,7 +73,7 @@ export async function fleetRoutes(app: FastifyInstance) {
       cooldownMs: body.cooldownMs ?? 5000,
       bypassRateLimits: body.bypassRateLimits ?? (provider === 'ollama'),
       enableSmartChunking: body.enableSmartChunking ?? true,
-      contextWindow: body.contextWindow || getModel(modelStr)?.maxInputTokens || 128000,
+      contextWindow: body.contextWindow || getModel(modelStr)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
       maxIterationsPerAgent: body.maxIterationsPerAgent,
       enableSubAgents: body.enableSubAgents ?? false,
     };

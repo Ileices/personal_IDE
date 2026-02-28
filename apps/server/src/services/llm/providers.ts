@@ -34,13 +34,13 @@ export function createGitHubClient(token: string): OpenAI {
 }
 
 /** Create an Ollama client */
-export function createOllamaClient(baseURL: string = 'http://localhost:11434'): OpenAI {
+export function createOllamaClient(baseURL: string = appConfig.services.ollamaUrl): OpenAI {
   const cleanURL = baseURL.replace(/\/v1\/?$/, '');
   return createProviderClient('ollama', `${cleanURL}/v1`);
 }
 
 /** Create a Nano Sea client */
-export function createNanoClient(baseURL: string = 'http://localhost:5100'): OpenAI {
+export function createNanoClient(baseURL: string = appConfig.services.nanoSeaUrl): OpenAI {
   const cleanURL = baseURL.replace(/\/v1\/?$/, '');
   return createProviderClient('nano', `${cleanURL}/v1`, 'nano-local');
 }
@@ -51,14 +51,14 @@ export function getClientFromDb(db: any, provider: ProviderType = 'github'): Ope
     const row = db.prepare(
       "SELECT base_url FROM provider_configs WHERE provider_id = 'ollama' AND enabled = 1"
     ).get() as any;
-    return createOllamaClient(row?.base_url || 'http://localhost:11434');
+    return createOllamaClient(row?.base_url || appConfig.services.ollamaUrl);
   }
 
   if (provider === 'nano') {
     const row = db.prepare(
       "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
     ).get() as any;
-    return createNanoClient(row?.base_url || 'http://localhost:5100');
+    return createNanoClient(row?.base_url || appConfig.services.nanoSeaUrl);
   }
 
   if (provider === 'github') {
@@ -149,7 +149,7 @@ export async function fetchProviderModels(
     const rawModels = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
 
     const models: UnifiedModel[] = rawModels.map((m: any) => {
-      const contextWindow = m.context_length || m.context_window || m.max_model_len || 128_000;
+      const contextWindow = m.context_length || m.context_window || m.max_model_len || appConfig.contextDefaults.unknownModelContext;
       return {
         id: `${provider}/${m.id}`,
         name: m.name || m.id,
@@ -178,7 +178,7 @@ export async function fetchProviderModels(
 
 /** Fetch models from Nano Sea's /v1/models endpoint */
 async function fetchNanoModels(client: OpenAI): Promise<UnifiedModel[]> {
-  const baseURL = (client as any).baseURL?.replace('/v1', '') || 'http://localhost:5100';
+  const baseURL = (client as any).baseURL?.replace('/v1', '') || appConfig.services.nanoSeaUrl;
 
   try {
     const res = await fetch(`${baseURL}/v1/models`);
@@ -216,7 +216,7 @@ async function fetchNanoModels(client: OpenAI): Promise<UnifiedModel[]> {
 
 /** Fetch models from Ollama's /api/tags endpoint */
 async function fetchOllamaModels(client: OpenAI): Promise<UnifiedModel[]> {
-  const baseURL = (client as any).baseURL?.replace('/v1', '') || 'http://localhost:11434';
+  const baseURL = (client as any).baseURL?.replace('/v1', '') || appConfig.services.ollamaUrl;
 
   try {
     const res = await fetch(`${baseURL}/api/tags`);
@@ -224,7 +224,7 @@ async function fetchOllamaModels(client: OpenAI): Promise<UnifiedModel[]> {
     const data = await res.json();
     const models = (data.models || []).map((m: any) => {
       // Ollama context sizes: default to model-specific or 128K
-      const contextWindow = m.details?.context_length || 131_072;
+      const contextWindow = m.details?.context_length || appConfig.contextDefaults.unknownModelContext;
       const paramSize = m.details?.parameter_size || '';
       return {
         id: `ollama/${m.name}`,

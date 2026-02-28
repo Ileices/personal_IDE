@@ -10,6 +10,7 @@
 // ============================================
 import { MODELS, getModel } from '@personal-ide/shared';
 import type { ProviderType } from '@personal-ide/shared';
+import { appConfig } from '../../config.js';
 import { getClientFromDb as getGitHubClient } from '../llm/client.js';
 import { getClientFromDb as getProviderClient } from '../llm/providers.js';
 import { rateLimiter } from '../llm/rateLimiter.js';
@@ -80,7 +81,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'code_generation',
     label: 'Code Generation',
     description: 'Generate diverse code samples for nano training',
-    assignedModels: ['openai/gpt-4.1-mini', 'openai/gpt-4.1-nano', 'openai/gpt-4o-mini', 'meta/llama-4-maverick'],
+    assignedModels: ['openai/gpt-4.1-mini', 'openai/gpt-4.1-nano', 'openai/gpt-4o-mini', 'meta/llama-4-scout'],
     cooldownMs: 5000,
     enabled: true,
     promptTemplate: `Generate a high-quality {language} code example that demonstrates {concept}. Include proper error handling, comments, and best practices. Output ONLY the code.`,
@@ -89,7 +90,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'code_explanation',
     label: 'Code Explanation',
     description: 'Generate code-explanation pairs for understanding',
-    assignedModels: ['openai/gpt-4o-mini', 'openai/gpt-4.1-mini', 'openai/gpt-4.1-nano', 'meta/llama-4-maverick'],
+    assignedModels: ['openai/gpt-4o-mini', 'openai/gpt-4.1-mini', 'openai/gpt-4.1-nano', 'meta/llama-4-scout'],
     cooldownMs: 5000,
     enabled: true,
     promptTemplate: `Explain this code clearly and concisely:\n\n{code}\n\nProvide: 1) Purpose, 2) How it works step-by-step, 3) Key patterns used.`,
@@ -116,7 +117,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'refactoring',
     label: 'Refactoring',
     description: 'Generate before/after refactoring pairs',
-    assignedModels: ['openai/gpt-4.1', 'openai/gpt-4.1-mini', 'openai/gpt-4o', 'meta/llama-4-maverick'],
+    assignedModels: ['openai/gpt-4.1', 'openai/gpt-4.1-mini', 'openai/gpt-4o', 'meta/llama-4-scout'],
     cooldownMs: 10000,
     enabled: false,
     promptTemplate: `Refactor this code for better readability, performance, and maintainability:\n\n{code}\n\nExplain each change.`,
@@ -134,7 +135,7 @@ const DEFAULT_TASKS: TaskModelAssignment[] = [
     taskType: 'data_generation',
     label: 'Dataset Regurgitation',
     description: 'Generate diverse training data for all nano types',
-    assignedModels: ['openai/gpt-4.1-nano', 'openai/gpt-4.1-mini', 'openai/gpt-4o-mini', 'meta/llama-4-maverick'],
+    assignedModels: ['openai/gpt-4.1-nano', 'openai/gpt-4.1-mini', 'openai/gpt-4o-mini', 'meta/llama-4-scout'],
     cooldownMs: 3000,
     enabled: true,
     promptTemplate: `Generate a diverse set of {count} training examples for a {domain} task. Each example should have an input and expected output. Format as JSON array: [{"input": "...", "output": "..."}]`,
@@ -207,7 +208,8 @@ export class MidwifeService {
     setTimeout(async () => {
       try {
         // Check if Nano Sea is reachable before starting
-        const health = await fetch(`http://localhost:${this.config.nanoPort}/v1/health`, {
+        const nanoUrl = appConfig.services.nanoSeaUrl;
+        const health = await fetch(`${nanoUrl}/v1/health`, {
           signal: AbortSignal.timeout(5000),
         }).catch(() => null);
         if (!health?.ok) {
@@ -421,7 +423,8 @@ export class MidwifeService {
       let fedToNano = false;
       if (this.config.feedToNanoTrainer && output.length > 10) {
         try {
-          const res = await fetch(`http://localhost:${this.config.nanoPort}/v1/training/observe`, {
+          const nanoUrl = appConfig.services.nanoSeaUrl;
+          const res = await fetch(`${nanoUrl}/v1/training/observe`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

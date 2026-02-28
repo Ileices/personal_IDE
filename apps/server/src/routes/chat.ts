@@ -11,6 +11,7 @@ import { rateLimiter } from '../services/llm/rateLimiter.js';
 import { MemoryService } from '../services/memory/index.js';
 import { SYSTEM_PROMPTS, parseStructuredOutput } from '../services/modes/prompts.js';
 import { listAllFiles, readFile } from '../services/filesystem/index.js';
+import { appConfig } from '../config.js';
 
 export async function chatRoutes(app: FastifyInstance) {
   const db = (app as any).db;
@@ -142,7 +143,7 @@ export async function chatRoutes(app: FastifyInstance) {
           const nanoRow = db.prepare(
             "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
           ).get() as any;
-          const nanoBaseUrl = (nanoRow?.base_url || 'http://localhost:5100').replace(/\/v1\/?$/, '');
+          const nanoBaseUrl = (nanoRow?.base_url || appConfig.services.nanoSeaUrl).replace(/\/v1\/?$/, '');
           fetch(nanoBaseUrl + '/v1/training/observe', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

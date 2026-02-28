@@ -36,6 +36,11 @@ import { LoopDetector } from './loopDetector.js';
 import { webSearch, formatSearchForLLM } from './webSearch.js';
 import { CodeIndexer } from './codeIndexer.js';
 import { detectPlatform, formatPlatformForLLM, type PlatformInfo } from './platformDetector.js';
+// Extracted modules for <1000 LOC compliance
+import { initializeRun, resolveModelContextWindow } from './loop/runSetup.js';
+import { enforceTokenBudget, tryProactiveChunking, recoverFromTokenLimitError } from './loop/tokenRecovery.js';
+import { buildAutoAnswer } from './loop/autoAnswers.js';
+import { appConfig } from '../../config.js';
 
 type EventCallback = (event: any) => void;
 
@@ -112,8 +117,9 @@ export class EnhancedAgentLoop {
     // Use model's actual token limit, respect user overrides within model bounds
     const modelDef = getModel(config.model);
     // For known models use their context window; for dynamic models (ollama, nano)
-    // default to 128k which covers most modern models
-    const modelMax = modelDef?.maxInputTokens || 128000;
+    // use configurable default (env UNKNOWN_MODEL_CONTEXT) — will be corrected
+    // at start() via resolveModelContextWindow() which queries the provider.
+    const modelMax = modelDef?.maxInputTokens || appConfig.contextDefaults.unknownModelContext;
     this.contextWindow = config.contextWindow && config.contextWindow > 0 && config.contextWindow <= modelMax
       ? config.contextWindow
       : modelMax;
@@ -257,48 +263,42 @@ export class EnhancedAgentLoop {
       "INSERT INTO agent_runs (id, project_id, conversation_id, task, started_at) VALUES (?, ?, ?, ?, datetime('now'))"
     ).run(this.runId, projectId, this.conversationId, initialTask);
 
-    // ── Phase 0: Environment Analysis ──
+    // ── Phase 0 & -1: Environment + Knowledge Graph (extracted to loop/runSetup.ts) ──
     this.setState('planning');
 
-    // Detect host platform for cross-platform build instructions
+    // Dynamic context discovery — queries Ollama/Nano for actual model context size
+    // instead of assuming 128k for unknown models
     try {
-      this.platformInfo = detectPlatform();
-      this.platformContext = formatPlatformForLLM(this.platformInfo);
-      this.emit({ type: 'info', message: 'Host: ' + this.platformInfo.hostOS + ' ' + this.platformInfo.arch + ' | Runtimes: ' + Object.keys(this.platformInfo.runtimes).join(', ') });
+      this.contextWindow = await resolveModelContextWindow(
+        this.db, this.config.provider, this.config.model,
+        this.config.contextWindow, (e) => this.emit(e),
+      );
+      this.emit({ type: 'info', message: 'Context window: ' + this.contextWindow + ' tokens' });
     } catch (err: any) {
-      this.emit({ type: 'info', message: 'Platform detection: ' + err.message });
+      this.emit({ type: 'info', message: 'Context resolution: ' + err.message });
     }
 
-    try {
-      const stack = detectProjectStack(this.config.projectRoot);
-      this.projectLanguages = [...new Set(stack.languages)];
-      this.emit({ type: 'info', message: 'Detected languages: ' + this.projectLanguages.join(', ') });
-      this.emit({ type: 'info', message: 'Lint commands: ' + stack.lintCommands.length + ', Test commands: ' + stack.testCommands.length });
-    } catch {
-      this.emit({ type: 'info', message: 'Could not detect project stack' });
-    }
+    const setup = await initializeRun(
+      this.db,
+      { projectRoot: this.config.projectRoot, analyzeCodebase: this.config.analyzeCodebase },
+      this.contextWindow,
+      {
+        analyzer: this.analyzer,
+        relationshipIndex: this.relationshipIndex,
+        logManager: this.logManager,
+        tierEngine: this.tierEngine,
+        codeIndexer: this.codeIndexer,
+      },
+      (e) => this.emit(e),
+    );
 
-    let codebaseOverview = '';
-    if (this.config.analyzeCodebase) {
-      try {
-        this.emit({ type: 'info', message: 'Building codebase overview...' });
-        const overview = this.analyzer.buildOverview(projectId, this.config.projectRoot);
-        const overviewBudget = Math.floor(this.contextWindow * 0.15);
-        codebaseOverview = this.analyzer.formatOverviewForLLM(overview, overviewBudget);
-        this.emit({ type: 'info', message: 'Codebase: ' + overview.totalFiles + ' files, ' + overview.totalLines + ' lines' });
-      } catch (err: any) {
-        this.emit({ type: 'info', message: 'Codebase analysis failed: ' + err.message });
-      }
-    }
-
-    // Build code index for surgical editing
-    try {
-      this.emit({ type: 'info', message: 'Building code index for surgical editing...' });
-      const codeIndex = this.codeIndexer.buildIndex(this.config.projectRoot);
-      this.emit({ type: 'info', message: 'Code index: ' + codeIndex.totalFiles + ' files indexed' });
-    } catch (err: any) {
-      this.emit({ type: 'info', message: 'Code indexer: ' + err.message });
-    }
+    this.projectLanguages = setup.projectLanguages;
+    this.platformInfo = setup.platformInfo;
+    this.platformContext = setup.platformContext;
+    this.relationshipContext = setup.relationshipContext;
+    this.tierContext = setup.tierContext;
+    this.logHealthContext = setup.logHealthContext;
+    let codebaseOverview = setup.codebaseOverview;
 
     try {
       this.checkpoint.initGit(this.config.projectRoot);
@@ -306,37 +306,6 @@ export class EnhancedAgentLoop {
       this.emit({ type: 'info', message: 'Initial checkpoint created' });
     } catch (err: any) {
       this.emit({ type: 'info', message: 'Checkpoint init: ' + err.message });
-    }
-
-    // ── Phase -1: Knowledge Graph & Tier Detection ──
-    try {
-      this.emit({ type: 'info', message: 'Building code relationship index...' });
-      const files = listAllFiles(this.config.projectRoot);
-      const scanResult = this.relationshipIndex.scanProject(projectId, this.config.projectRoot, files);
-      this.relationshipContext = this.relationshipIndex.formatForLLM(projectId, Math.floor(this.contextWindow * 0.08));
-      this.emit({ type: 'info', message: 'Knowledge graph: ' + scanResult.symbolCount + ' symbols, ' + scanResult.relationshipCount + ' relationships, ' + scanResult.conflictCount + ' conflicts' });
-    } catch (err: any) {
-      this.emit({ type: 'info', message: 'Relationship index: ' + err.message });
-    }
-
-    try {
-      const tierConfig = this.tierEngine.detectTier(projectId, this.config.projectRoot);
-      this.tierContext = this.tierEngine.formatForLLM(projectId);
-      const gates = tierConfig.qualityGates ? Object.keys(tierConfig.qualityGates).filter(k => tierConfig.qualityGates[k]).join(', ') : 'none';
-      this.emit({ type: 'info', message: 'Project tier: ' + tierConfig.tier + ' | Language: ' + tierConfig.primaryLanguage + ' | Quality gates: ' + gates });
-    } catch (err: any) {
-      this.emit({ type: 'info', message: 'Tier detection: ' + err.message });
-    }
-
-    try {
-      if (this.logManager.needsCompaction()) {
-        this.emit({ type: 'info', message: 'Running log compaction...' });
-        const result = await this.logManager.runCompaction();
-        this.emit({ type: 'info', message: 'Compaction: ' + result.rowsDeleted + ' rows deleted across ' + result.tablesProcessed + ' tables' });
-      }
-      this.logHealthContext = this.logManager.formatForLLM();
-    } catch (err: any) {
-      this.emit({ type: 'info', message: 'Log manager: ' + err.message });
     }
 
     // ── Main Loop ──
@@ -601,123 +570,22 @@ export class EnhancedAgentLoop {
           iteration: this.currentIteration,
         });
 
-        // ── EARLY BUDGET ENFORCEMENT ──
-        // Before any LLM call, aggressively fit messages into the model's actual context window.
-        // This prevents sending 12k tokens to a 4k model (which caused Ollama truncation + timeouts).
-        const outputReserve = Math.min(this.config.maxTokensPerStep || 4096, Math.floor(this.contextWindow * 0.25));
-        const maxInputTokens = this.contextWindow - outputReserve;
-        let totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+        // ── EARLY BUDGET ENFORCEMENT (extracted to loop/tokenRecovery.ts) ──
+        enforceTokenBudget(messages, this.contextWindow, this.config.maxTokensPerStep, (e) => this.emit(e));
 
-        if (totalEstimated > maxInputTokens) {
-          this.emit({ type: 'info', message: 'Budget enforcement: ' + totalEstimated + '/' + maxInputTokens + ' tokens. Trimming...' });
-
-          // 1. Truncate system prompt (largest contributor) to 40% of budget
-          const systemBudget = Math.floor(maxInputTokens * 0.4);
-          if (estimateTokens(messages[0].content) > systemBudget) {
-            messages[0] = { role: 'system', content: truncateToFit(messages[0].content, systemBudget) };
-          }
-
-          // 2. Drop file list if still over
-          totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-          if (totalEstimated > maxInputTokens && messages.length > 2) {
-            const fileListIdx = messages.findIndex((m, i) => i > 0 && m.role === 'system' && m.content.startsWith('PROJECT FILES:'));
-            if (fileListIdx > 0) {
-              messages.splice(fileListIdx, 1);
-            }
-          }
-
-          // 3. Drop oldest history messages until fits
-          totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-          while (totalEstimated > maxInputTokens && messages.length > 2) {
-            // Remove the second message (first non-system, oldest history)
-            const removed = messages.splice(1, 1);
-            totalEstimated -= estimateTokens(removed[0]?.content || '');
-          }
-
-          // 4. If STILL over (system + task alone too big), truncate the task
-          totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-          if (totalEstimated > maxInputTokens) {
-            const taskBudget = maxInputTokens - estimateTokens(messages[0].content) - 100;
-            if (taskBudget > 500) {
-              messages[messages.length - 1] = {
-                role: 'user',
-                content: truncateToFit(currentTask, Math.max(500, taskBudget)),
-              };
-            }
-          }
-
-          totalEstimated = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-          this.emit({ type: 'info', message: 'After trimming: ' + totalEstimated + '/' + maxInputTokens + ' tokens (' + messages.length + ' messages)' });
-        }
-
-        // Token Limit Check — use real model limit, proactively chunk if too big
-        const totalContent = messages.map(m => m.content).join('\n');
-        const tokenCheck = checkTokenLimit(totalContent, this.contextWindow, this.config.maxTokensPerStep);
-
-        if (!tokenCheck.withinLimit) {
-          this.emit({ type: 'info', message: 'Context too large (' + tokenCheck.estimatedTokens + '/' + this.contextWindow + ' tokens). Truncating...' });
-          const truncatedSystem = truncateToFit(systemPrompt, Math.floor(this.contextWindow * 0.4));
-          messages[0] = { role: 'system', content: truncatedSystem };
-
-          // Drop file list message if still over budget
-          if (messages.length > 3) {
-            const recheck = checkTokenLimit(messages.map(m => m.content).join('\n'), this.contextWindow, this.config.maxTokensPerStep);
-            if (!recheck.withinLimit) {
-              messages.splice(1, 1);
-            }
-          }
-
-          // If STILL over budget after truncation, proactively use chunking pipeline
-          const finalCheck = checkTokenLimit(messages.map(m => m.content).join('\n'), this.contextWindow, this.config.maxTokensPerStep);
-          if (!finalCheck.withinLimit && this.config.enableSmartChunking) {
-            this.emit({ type: 'info', message: 'Still over limit after truncation (' + finalCheck.estimatedTokens + ' tokens). Proactively activating chunking pipeline...' });
-
-            if (client) {
-              const oversizedContent = messages
-                .filter(m => m.role !== 'system')
-                .map(m => m.content)
-                .join('\n\n---\n\n');
-
-              const proactivePipeline = new ChunkingPipeline({
-                modelContextWindow: this.contextWindow,
-                model: this.config.model,
-                onProgress: (event) => {
-                  this.chunkingActive = event.type !== 'pipeline_complete' && event.type !== 'pipeline_error';
-                  this.emit({
-                    type: event.type === 'chunk_start' ? 'chunking_start' :
-                          event.type === 'chunk_complete' ? 'chunking_progress' :
-                          event.type === 'pipeline_complete' ? 'chunking_complete' :
-                          event.type === 'pipeline_error' ? 'chunking_error' : 'info',
-                    chunkIndex: event.chunkIndex,
-                    totalChunks: event.totalChunks,
-                    tokensUsed: event.tokensUsed,
-                    message: event.message,
-                  } as any);
-                },
-              });
-
-              try {
-                const chunkResult = await proactivePipeline.process(
-                  client,
-                  messages[0]?.content || '',
-                  currentTask,
-                  oversizedContent
-                );
-
-                if (chunkResult.success) {
-                  this.totalTokens += chunkResult.totalTokensUsed;
-                  this.emit({ type: 'info', message: 'Proactive chunking complete: ' + chunkResult.totalChunks + ' chunks, ' + chunkResult.totalTokensUsed + ' tokens' });
-                  // Skip the normal LLM call — use chunked result directly
-                  response = {
-                    content: chunkResult.mergedResponse,
-                    usage: { total_tokens: chunkResult.totalTokensUsed },
-                  };
-                  this.consecutiveErrors = 0;
-                }
-              } catch (chunkErr: any) {
-                this.emit({ type: 'info', message: 'Proactive chunking failed: ' + chunkErr.message + '. Attempting normal call...' });
-              }
-            }
+        // ── Proactive Chunking (extracted to loop/tokenRecovery.ts) ──
+        if (this.config.enableSmartChunking) {
+          const proactiveResult = await tryProactiveChunking(
+            client, messages, currentTask, this.contextWindow,
+            this.config.model, this.config.maxTokensPerStep, (e) => this.emit(e),
+          );
+          if (proactiveResult) {
+            this.totalTokens += proactiveResult.tokensUsed;
+            response = {
+              content: proactiveResult.content,
+              usage: { total_tokens: proactiveResult.tokensUsed },
+            };
+            this.consecutiveErrors = 0;
           }
         }
 
@@ -787,128 +655,30 @@ export class EnhancedAgentLoop {
               continue;
             }
 
-            // ── Handle 413 / Token Limit Errors ──
+            // ── Handle 413 / Token Limit Errors (extracted to loop/tokenRecovery.ts) ──
             const limitCheck = isTokenLimitError(err);
             if (limitCheck.isLimit) {
-              // Extract limit from error — BUT distinguish rate-limit caps from real model limits.
-              // GitHub free plan returns "Max size: 8000 tokens" which is a *per-request rate limit*,
-              // NOT the model's actual context window (which could be 128k+).
-              // We NEVER shrink contextWindow below the model's actual capability.
-              const rateLimitMax = limitCheck.suggestedMax;
-              const modelDef = getModel(this.config.model);
-              const modelActualMax = modelDef?.maxInputTokens || 128000;
-
-              // If the error limit is much smaller than the model's actual window, it's a rate limit cap
-              const isRateLimitCap = rateLimitMax && rateLimitMax < modelActualMax * 0.25;
-
-              if (isRateLimitCap) {
-                // This is a per-request rate limit (e.g. GitHub free plan 8000 tokens), NOT the model's context window.
-                // We set a "perRequestLimit" for chunking, but keep contextWindow at the model's real capacity.
-                const perRequestLimit = Math.floor(rateLimitMax * 0.95);
-                this.emit({ type: 'info', message: 'Rate-limit token cap detected: ' + rateLimitMax + ' tokens/request (model actual: ' + modelActualMax + '). Chunking to fit.' });
-                // Store the per-request limit for chunking but DON'T shrink the context window
-                this.discoveredContextLimits.set(this.config.model, perRequestLimit);
-              } else {
-                // Real model limit (413 from the model itself)
-                const realMax = rateLimitMax || this.contextWindow;
-                this.emit({ type: 'info', message: 'Model context limit: ' + realMax + ' tokens. Adjusting window.' });
-                if (rateLimitMax && rateLimitMax < this.contextWindow) {
-                  this.contextWindow = Math.floor(rateLimitMax * 0.95);
-                  this.emit({ type: 'info', message: 'Context window corrected to ' + this.contextWindow + ' tokens' });
-                }
-              }
-
-              // For chunking, use the SMALLER of context window or discovered per-request limit
-              const chunkingLimit = Math.min(
-                this.contextWindow,
-                this.discoveredContextLimits.get(this.config.model) || this.contextWindow
+              const recovery = await recoverFromTokenLimitError(
+                err, client, messages, currentTask, this.config.model,
+                this.contextWindow, this.discoveredContextLimits,
+                this.config.enableSmartChunking, (e) => this.emit(e),
               );
 
-              // Always activate chunking pipeline on token limit errors
-              if (this.config.enableSmartChunking) {
-                this.emit({ type: 'info', message: 'Activating smart chunking pipeline (limit: ' + chunkingLimit + ' tokens, window: ' + this.contextWindow + ')...' });
+              if (recovery.contextWindowUpdate) {
+                this.contextWindow = recovery.contextWindowUpdate;
+              }
 
-                const oversizedContent = messages
-                  .filter(m => m.role !== 'system')
-                  .map(m => m.content)
-                  .join('\n\n---\n\n');
-
-                // Create fresh pipeline using the per-request limit (not the full context window)
-                const recoveryPipeline = new ChunkingPipeline({
-                  modelContextWindow: chunkingLimit,
-                  model: this.config.model,
-                  onProgress: (event) => {
-                    this.chunkingActive = event.type !== 'pipeline_complete' && event.type !== 'pipeline_error';
-                    this.emit({
-                      type: event.type === 'chunk_start' ? 'chunking_start' :
-                            event.type === 'chunk_complete' ? 'chunking_progress' :
-                            event.type === 'pipeline_complete' ? 'chunking_complete' :
-                            event.type === 'pipeline_error' ? 'chunking_error' : 'info',
-                      chunkIndex: event.chunkIndex,
-                      totalChunks: event.totalChunks,
-                      tokensUsed: event.tokensUsed,
-                      message: event.message,
-                    } as any);
-                  },
-                });
-
-                // Floor: never shrink contextWindow below 16k (rate limits are not model limits)
-                const CONTEXT_FLOOR = 16000;
-
-                try {
-                  const truncatedSystem = truncateToFit(
-                    messages[0]?.content || '',
-                    Math.floor(chunkingLimit * 0.3)
-                  );
-
-                  const chunkResult = await recoveryPipeline.process(
-                    client,
-                    truncatedSystem,
-                    currentTask,
-                    oversizedContent
-                  );
-
-                  if (chunkResult.success) {
-                    this.totalTokens += chunkResult.totalTokensUsed;
-                    this.emit({ type: 'info', message: 'Chunking recovery complete: ' + chunkResult.totalChunks + ' chunks, ' + chunkResult.totalTokensUsed + ' tokens' });
-                    response = {
-                      content: chunkResult.mergedResponse,
-                      usage: { total_tokens: chunkResult.totalTokensUsed },
-                    };
-                    // Token limit was recovered — do NOT count toward consecutive errors
-                    this.consecutiveErrors = 0;
-                  } else {
-                    this.emit({ type: 'info', message: 'Chunking pipeline failed: ' + chunkResult.error });
-                    // Reduce per-request limit for next chunking attempt, NOT the context window
-                    const currentLimit = this.discoveredContextLimits.get(this.config.model) || this.contextWindow;
-                    this.discoveredContextLimits.set(this.config.model, Math.max(CONTEXT_FLOOR, Math.floor(currentLimit * 0.7)));
-                    // Token limit recovery failed — count this one
-                    this.consecutiveErrors++;
-                    if (this.consecutiveErrors < (this.config.continuousMode ? Infinity : this.maxConsecutiveErrors)) {
-                      continue;
-                    }
-                    throw err;
-                  }
-                } catch (chunkErr: any) {
-                  if (chunkErr === err) throw err; // re-thrown from above
-                  this.emit({ type: 'info', message: 'Chunking pipeline error: ' + chunkErr.message });
-                  const currentLimit = this.discoveredContextLimits.get(this.config.model) || this.contextWindow;
-                  this.discoveredContextLimits.set(this.config.model, Math.max(CONTEXT_FLOOR, Math.floor(currentLimit * 0.7)));
-                  this.consecutiveErrors++;
-                  if (this.consecutiveErrors < (this.config.continuousMode ? Infinity : this.maxConsecutiveErrors)) {
-                    continue;
-                  }
-                  throw err;
-                }
-              } else {
-                // No chunking available — shrink per-request limit and retry, NOT the actual context window
-                const currentLimit = this.discoveredContextLimits.get(this.config.model) || this.contextWindow;
-                this.discoveredContextLimits.set(this.config.model, Math.max(16000, Math.floor(currentLimit * 0.7)));
-                this.emit({ type: 'info', message: 'Adjusted per-request limit to ' + this.discoveredContextLimits.get(this.config.model) + ' tokens (chunking disabled)' });
+              if (recovery.response) {
+                this.totalTokens += recovery.response.usage?.total_tokens || 0;
+                response = recovery.response;
+                this.consecutiveErrors = 0;
+              } else if (recovery.isRecoverableError) {
                 this.consecutiveErrors++;
                 if (this.consecutiveErrors < (this.config.continuousMode ? Infinity : this.maxConsecutiveErrors)) {
                   continue;
                 }
+                throw err;
+              } else {
                 throw err;
               }
             } else {
@@ -931,8 +701,7 @@ export class EnhancedAgentLoop {
         const content = response.content || '';
         this.totalTokens += response.usage?.total_tokens || 0;
 
-        // Only store productive responses in conversation memory
-        // (apology/refusal responses poison history and cause LLMs to repeat the pattern)
+        // Only store productive responses in memory (apologies/refusals poison future context)
         const contentLower = content.toLowerCase().slice(0, 300);
         const isFailedResponse = (contentLower.includes("i'm sorry") || contentLower.includes("i apologize") ||
           contentLower.includes("as an ai")) && !content.includes('--- FILE:');
@@ -966,8 +735,7 @@ export class EnhancedAgentLoop {
         } catch { /* LLM logging is non-critical */ }
 
         // Store discovered context limit for this model
-        if (response.usage?.total_tokens && !this.discoveredContextLimits.has(this.config.model)) {
-          this.discoveredContextLimits.set(this.config.model, this.contextWindow);
+        if (response.usage?.total_tokens && !this.discoveredContextLimits.has(this.config.model)) {          this.discoveredContextLimits.set(this.config.model, this.contextWindow);
         }
 
         // ── Bird-feed observation to Nano trainer (fire-and-forget) ──
@@ -975,7 +743,7 @@ export class EnhancedAgentLoop {
           const nanoRow = this.db.prepare(
             "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
           ).get() as any;
-          const nanoBaseUrl = (nanoRow?.base_url || 'http://localhost:5100').replace(/\/v1\/?$/, '');
+          const nanoBaseUrl = (nanoRow?.base_url || appConfig.services.nanoSeaUrl).replace(/\/v1\/?$/, '');
           fetch(nanoBaseUrl + '/v1/training/observe', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1101,7 +869,10 @@ export class EnhancedAgentLoop {
           let autoAnsweredContext = '';
           if (this.config.autoAnswerQuestions && questions.length > 0) {
             for (const q of questions) {
-              const answer = this.buildAutoAnswer(q, codebaseOverview, initialTask);
+              const answer = buildAutoAnswer(q, {
+                codebaseOverview, task: initialTask,
+                projectLanguages: this.projectLanguages, tierContext: this.tierContext,
+              });
               this.emit({ type: 'auto_answer', question: q, answer });
               autoAnsweredContext += '\nQ: ' + q + '\nA: ' + answer;
             }
@@ -1139,60 +910,27 @@ export class EnhancedAgentLoop {
 
           // Check if done
           if (structured.done) {
-            try {
-              this.checkpoint.createCheckpoint(this.config.projectRoot, projectId, this.runId, this.currentIteration, 'COMPLETED: ' + initialTask.slice(0, 100));
-            } catch { /* ignore */ }
+            try { this.checkpoint.createCheckpoint(this.config.projectRoot, projectId, this.runId, this.currentIteration, 'COMPLETED: ' + initialTask.slice(0, 100)); } catch { /* ignore */ }
 
-            if (this.config.continuousMode) {
-              this.emit({ type: 'run_complete', summary: 'Task cycle complete: ' + structured.summary, totalSteps: this.currentIteration });
-              this.emit({ type: 'info', message: '24/7 mode: Task cycle complete. Scanning for improvements and continuing...' });
-
-              this.memory.addNote(projectId, {
-                projectId,
-                source: 'auto_summary',
-                category: 'task_complete',
-                title: 'Cycle Complete: ' + initialTask.slice(0, 100),
-                content: 'Task: ' + initialTask + '\nSummary: ' + structured.summary + '\nSteps: ' + this.currentIteration + '\nFiles Changed: ' + this.totalFilesChanged + '\nTokens: ' + this.totalTokens,
-                tags: ['completed', 'summary', 'continuous-mode'],
-                relatedFiles: (structured.filesChanged || []).map(f => f.path),
-                importance: 90,
-                conversationId: this.conversationId,
-              });
-
-              currentTask = [
-                'The previous task has been marked as complete. You are in 24/7 continuous mode.',
-                'Review the current state of the project and:',
-                '1. Check for any remaining TODOs, FIXMEs, or improvement opportunities',
-                '2. Look for code quality improvements, missing error handling, or edge cases',
-                '3. Verify all tests pass and add tests for untested code paths',
-                '4. Optimize performance bottlenecks if any',
-                '5. If everything is truly complete and optimal, generate a comprehensive project status report.',
-                '',
-                'DO NOT mark done=true unless there is genuinely nothing left to improve.',
-              ].join('\n');
-
-              const reviewCooldown = Math.max(effectiveCooldown, 10000);
-              this.emit({ type: 'cooldown', ms: reviewCooldown, reason: '24/7 review cycle cooldown' } as any);
-              await this.delay(reviewCooldown);
-              continue;
-            }
-
-            // Normal mode: stop
-            this.setState('complete');
-            this.emit({ type: 'run_complete', summary: structured.summary, totalSteps: this.currentIteration });
-
+            const completionNote = 'Task: ' + initialTask + '\nSummary: ' + structured.summary + '\nSteps: ' + this.currentIteration + '\nFiles Changed: ' + this.totalFilesChanged + '\nTokens: ' + this.totalTokens;
+            const isContinuous = this.config.continuousMode;
+            this.emit({ type: 'run_complete', summary: (isContinuous ? 'Task cycle complete: ' : '') + structured.summary, totalSteps: this.currentIteration });
             this.memory.addNote(projectId, {
-              projectId,
-              source: 'auto_summary',
-              category: 'task_complete',
-              title: 'Completed: ' + initialTask.slice(0, 100),
-              content: 'Task: ' + initialTask + '\nSummary: ' + structured.summary + '\nSteps: ' + this.currentIteration + '\nFiles Changed: ' + this.totalFilesChanged + '\nTokens: ' + this.totalTokens,
-              tags: ['completed', 'summary'],
+              projectId, source: 'auto_summary', category: 'task_complete',
+              title: (isContinuous ? 'Cycle Complete: ' : 'Completed: ') + initialTask.slice(0, 100),
+              content: completionNote,
+              tags: isContinuous ? ['completed', 'summary', 'continuous-mode'] : ['completed', 'summary'],
               relatedFiles: (structured.filesChanged || []).map(f => f.path),
-              importance: 90,
-              conversationId: this.conversationId,
+              importance: 90, conversationId: this.conversationId,
             });
 
+            if (isContinuous) {
+              this.emit({ type: 'info', message: '24/7 mode: Task cycle complete. Scanning for improvements...' });
+              currentTask = 'The previous task is complete. You are in 24/7 continuous mode.\nReview the project: fix TODOs/FIXMEs, improve code quality, add missing tests, optimize bottlenecks.\nDO NOT mark done=true unless there is genuinely nothing left to improve.';
+              await this.delay(Math.max(effectiveCooldown, 10000));
+              continue;
+            }
+            this.setState('complete');
             break;
           }
 
@@ -1231,16 +969,12 @@ export class EnhancedAgentLoop {
           this.consecutiveErrors++;
           this.emit({ type: 'info', message: 'Schema miss #' + this.consecutiveErrors + ': LLM did not return structured JSON output block. ' + (fileChanges.length > 0 ? fileChanges.length + ' file changes parsed from markdown.' : 'No file changes either.') });
 
-          // File changes without structured output = partial progress (reduce but don't fully reset)
-          if (fileChanges.length > 0) {
-            this.consecutiveErrors = Math.max(0, this.consecutiveErrors - 2);
-          }
+          // Schema miss with partial progress counts less
+          if (fileChanges.length > 0) this.consecutiveErrors = Math.max(0, this.consecutiveErrors - 2);
 
-          // Rebuild task: lead with ORIGINAL task, then compact format reminder
-          // Avoid adversarial/scolding language that triggers LLM apology patterns
+          // Rebuild task with original goal + compact format reminder
           currentTask = [
-            initialTask.slice(0, 2000),
-            '',
+            initialTask.slice(0, 2000), '',
             '---',
             'Your previous output was missing the required JSON block. Include it this time.',
             'Create or modify at least ONE file, then end with:',
@@ -1269,19 +1003,9 @@ export class EnhancedAgentLoop {
       } catch (err: any) {
         this.consecutiveErrors++;
 
-        // ── Connection Error — provider is unreachable, try next one immediately ──
+        // ── Connection Error — provider unreachable ──
         const errMsg = (err.message || '').toLowerCase();
-        const isConnectionError = errMsg.includes('connection error') ||
-          errMsg.includes('econnrefused') ||
-          errMsg.includes('enotfound') ||
-          errMsg.includes('etimedout') ||
-          errMsg.includes('fetch failed') ||
-          errMsg.includes('network error') ||
-          errMsg.includes('request was aborted') ||
-          errMsg.includes('aborterror') ||
-          errMsg.includes('the operation was aborted') ||
-          errMsg.includes('timeout') ||
-          errMsg.includes('socket hang up');
+        const isConnectionError = /connection error|econnrefused|enotfound|etimedout|fetch failed|network error|request was aborted|aborterror|the operation was aborted|timeout|socket hang up/.test(errMsg);
 
         if (isConnectionError) {
           this.emit({ type: 'error', error: 'Connection error on ' + this.config.provider + '/' + this.config.model + ': ' + err.message });
@@ -1375,31 +1099,6 @@ export class EnhancedAgentLoop {
     if (!checkpoint) throw new Error('Checkpoint not found');
     this.checkpoint.rollback(this.config.projectRoot, checkpointId);
     this.emit({ type: 'rollback', checkpointId, description: checkpoint.label });
-  }
-
-  /** Build a context-aware auto-answer for LLM-generated questions */
-  private buildAutoAnswer(question: string, codebaseOverview: string, task: string): string {
-    const qLower = question.toLowerCase();
-    if (qLower.includes('language') || qLower.includes('framework') || qLower.includes('technology')) {
-      const langs = this.projectLanguages.length ? this.projectLanguages.join(', ') : 'TypeScript';
-      return 'Use ' + langs + '. ' + (this.tierContext ? this.tierContext.slice(0, 200) : 'Choose based on project type.');
-    }
-    if (qLower.includes('structure') || qLower.includes('architecture') || qLower.includes('organize') || qLower.includes('directory')) {
-      return 'Follow standard project structure. ' + (codebaseOverview ? codebaseOverview.slice(0, 300) : 'Use src/ for source, tests/ for tests.');
-    }
-    if (qLower.includes('component') || qLower.includes('section') || qLower.includes('main') || qLower.includes('files')) {
-      return 'Analyze the codebase yourself and proceed. ' + (codebaseOverview ? 'Overview: ' + codebaseOverview.slice(0, 300) : '');
-    }
-    if (qLower.includes('test')) {
-      return 'Yes, write tests using the project test framework.';
-    }
-    if (qLower.includes('implement') || qLower.includes('functionality') || qLower.includes('specific')) {
-      return 'Implement everything described in the task: ' + task.slice(0, 300);
-    }
-    if (qLower.includes('purpose') || qLower.includes('goal') || qLower.includes('expected') || qLower.includes('outcome') || qLower.includes('change')) {
-      return 'The goal is to complete the task: ' + task.slice(0, 300);
-    }
-    return 'Make your best technical decision. Languages: ' + (this.projectLanguages.join(', ') || 'auto-detect') + '. Task: ' + task.slice(0, 200);
   }
 
   private delay(ms: number): Promise<void> {

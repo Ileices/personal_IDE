@@ -46,6 +46,20 @@ export interface AppConfig {
   security: {
     encryptKey: string;
   };
+  /** Default service URLs — overridable via env or DB provider_configs */
+  services: {
+    ollamaUrl: string;
+    nanoSeaUrl: string;
+  };
+  /** Dynamic context detection settings */
+  contextDefaults: {
+    /** Default context window for unknown/dynamic models (Ollama, Nano, etc.) */
+    unknownModelContext: number;
+    /** Absolute minimum context floor — prevents shrinking below this even on errors */
+    contextFloor: number;
+    /** Default output token reserve */
+    defaultOutputReserve: number;
+  };
 }
 
 function env(key: string, fallback: string = ''): string {
@@ -99,6 +113,15 @@ export function loadConfig(): AppConfig {
     },
     security: {
       encryptKey: env('ENCRYPT_KEY', 'change-me-before-production-' + Date.now()),
+    },
+    services: {
+      ollamaUrl: env('OLLAMA_URL', 'http://localhost:11434'),
+      nanoSeaUrl: env('NANO_SEA_URL', 'http://localhost:5100'),
+    },
+    contextDefaults: {
+      unknownModelContext: envInt('UNKNOWN_MODEL_CONTEXT', 128000),
+      contextFloor: envInt('CONTEXT_FLOOR', 2048),
+      defaultOutputReserve: envInt('DEFAULT_OUTPUT_RESERVE', 4096),
     },
   };
 }

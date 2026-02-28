@@ -9,6 +9,7 @@ import { v4 as uuid } from 'uuid';
 import type Database from 'better-sqlite3';
 import type { ProviderType } from '@personal-ide/shared';
 import { getModel } from '@personal-ide/shared';
+import { appConfig } from '../../config.js';
 import { EnhancedAgentLoop } from './enhancedLoop.js';
 import { listAllFiles } from '../filesystem/index.js';
 import { readFile } from '../filesystem/index.js';
@@ -656,7 +657,7 @@ export class AgentFleet {
       bypassRateLimits: this.config.bypassRateLimits,
       enableSmartChunking: this.config.enableSmartChunking,
       provider: this.config.provider,
-      contextWindow: this.config.contextWindow || modelDef?.maxInputTokens || 128000,
+      contextWindow: this.config.contextWindow || modelDef?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
       checkpointEvery: 10,
       autoFixErrors: subtask.role === 'debugger' || subtask.role === 'implementer',
       autoRunTests: subtask.role === 'tester' || subtask.role === 'debugger',

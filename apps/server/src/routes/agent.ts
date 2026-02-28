@@ -78,7 +78,7 @@ export async function agentRoutes(app: FastifyInstance) {
       enableSmartChunking: body.enableSmartChunking ?? true,
       // Enhanced options
       provider,
-      contextWindow: body.contextWindow || getModel(modelStr)?.maxInputTokens || 128_000,
+      contextWindow: body.contextWindow || getModel(modelStr)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
       checkpointEvery: body.checkpointEvery ?? 5,
       autoFixErrors: body.autoFixErrors ?? true,
       autoRunTests: body.autoRunTests ?? true,
