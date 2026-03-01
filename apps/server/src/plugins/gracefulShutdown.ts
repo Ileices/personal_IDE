@@ -11,6 +11,7 @@
 import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
 import { userRateLimiter } from '../services/llm/userRateLimiter.js';
+import { destroyActiveAgent } from '../routes/agent.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10_000; // force-kill after 10s
 
@@ -35,6 +36,12 @@ export function registerGracefulShutdown(app: FastifyInstance): void {
         userRateLimiter.destroy();
         console.log('  ✓ Rate limiter cleaned up');
       } catch { /* already destroyed */ }
+
+      // 2b. Stop active agent loop (cleans up LogBloatManager interval)
+      try {
+        destroyActiveAgent();
+        console.log('  ✓ Active agent cleaned up');
+      } catch { /* no active agent */ }
 
       // 3. Close WebSocket connections
       try {

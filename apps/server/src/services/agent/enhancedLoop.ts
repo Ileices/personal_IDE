@@ -872,6 +872,8 @@ export class EnhancedAgentLoop {
   stop(): void {
     this.abortController?.abort();
     this.setState('complete');
+    // Clean up LogBloatManager flush interval to prevent leaks
+    this.logManager.destroy();
   }
 
   async rollback(projectId: string, checkpointId: string): Promise<void> {

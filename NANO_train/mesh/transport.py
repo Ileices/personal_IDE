@@ -160,8 +160,8 @@ class MeshTransport:
                         await callback(msg, peer_id)
                 except Exception as e:
                     logger.error(f"Error processing message from {peer_id[:12]}...: {e}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Recv loop ended for {peer_id[:12]}...: {e}")
         finally:
             self._connections.pop(peer_id, None)
 

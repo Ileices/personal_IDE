@@ -1,196 +1,25 @@
 // ============================================
 // Nano Sea Routes — Process lifecycle + pool + peers
 //
-// The IDE frontend controls the Python backend through
-// these endpoints. Handles spawn, kill, config, logs,
-// and proxies requests to the Python FastAPI server.
+// Thin route layer — all process logic lives in
+// services/nano/processManager.ts
 // ============================================
 import { FastifyInstance } from 'fastify';
-import { spawn, ChildProcess, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
-
-// ── Resolve paths relative to THIS file, not cwd ───────────
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-// apps/server/src/routes/ → 4 levels up → repo root
-const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
-const nanoDir = path.resolve(repoRoot, 'NANO_train');
-const isWindows = process.platform === 'win32';
-
-// ── State ───────────────────────────────────────────────────
-let nanoProcess: ChildProcess | null = null;
-let nanoLogs: string[] = [];
-let pythonCmd: { bin: string; extraArgs: string[] } | null = null;
-let lastError: string | null = null;
-const MAX_LOG_LINES = 500;
-
-interface NanoConfig {
-  meshEnabled: boolean;
-  port: number;
-  scanPaths: string[];
-  donationPercent: number;
-  permanentNode: boolean;
-  idleTraining: boolean;
-  username: string;
-  peerDiscovery: boolean;
-  sharingLevel: string;
-}
-
-let currentConfig: NanoConfig = {
-  meshEnabled: true,
-  port: 5100,
-  scanPaths: ['.'],
-  donationPercent: 25,
-  permanentNode: false,
-  idleTraining: true,
-  username: 'Anonymous',
-  peerDiscovery: false,
-  sharingLevel: 'metadata',
-};
-
-function appendLog(line: string) {
-  const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
-  nanoLogs.push(`[${ts}] ${line}`);
-  if (nanoLogs.length > MAX_LOG_LINES) {
-    nanoLogs = nanoLogs.slice(-MAX_LOG_LINES);
-  }
-}
-
-// ── Python detection ────────────────────────────────────────
-// Try multiple candidates and cache the first Python 3 found.
-// Checks NANO_train/.venv first, then falls back to system Python.
-function detectPython(): { bin: string; extraArgs: string[] } | null {
-  if (pythonCmd) return pythonCmd;
-
-  // Prioritize the venv inside NANO_train if it exists
-  const venvPython = isWindows
-    ? path.join(nanoDir, '.venv', 'Scripts', 'python.exe')
-    : path.join(nanoDir, '.venv', 'bin', 'python');
-
-  const candidates: { bin: string; extraArgs: string[] }[] = [];
-
-  if (fs.existsSync(venvPython)) {
-    candidates.push({ bin: venvPython, extraArgs: [] });
-  }
-
-  // Fall back to system Python
-  if (isWindows) {
-    candidates.push(
-      { bin: 'python', extraArgs: [] as string[] },
-      { bin: 'python3', extraArgs: [] as string[] },
-      { bin: 'py', extraArgs: ['-3'] },
-    );
-  } else {
-    candidates.push(
-      { bin: 'python3', extraArgs: [] as string[] },
-      { bin: 'python', extraArgs: [] as string[] },
-    );
-  }
-
-  for (const c of candidates) {
-    try {
-      const testArgs = [...c.extraArgs, '--version'].join(' ');
-      const result = execSync(`${c.bin} ${testArgs}`, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 5000,
-      });
-      const version = result.toString().trim();
-      if (version.toLowerCase().includes('python 3')) {
-        pythonCmd = c;
-        appendLog(`[IDE] Detected ${version} via "${c.bin}"`);
-        return pythonCmd;
-      }
-    } catch {
-      // candidate not found, try next
-    }
-  }
-  return null;
-}
-
-// ── Cross-platform process kill ─────────────────────────────
-// On Windows, SIGTERM doesn't propagate to child trees.
-// Use taskkill /T to kill the entire process tree.
-function killProcess(proc: ChildProcess): Promise<void> {
-  return new Promise((resolve) => {
-    if (!proc || !proc.pid) { resolve(); return; }
-
-    if (isWindows) {
-      try {
-        execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-      } catch { /* may already be dead */ }
-      setTimeout(resolve, 500);
-    } else {
-      proc.kill('SIGTERM');
-      const timeout = setTimeout(() => {
-        try { proc.kill('SIGKILL'); } catch {}
-        resolve();
-      }, 5000);
-      proc.once('exit', () => { clearTimeout(timeout); resolve(); });
-    }
-  });
-}
-
-function isAlive(): boolean {
-  if (!nanoProcess) return false;
-  try {
-    return nanoProcess.exitCode === null && !nanoProcess.killed;
-  } catch {
-    return false;
-  }
-}
-
-function spawnNano(py: { bin: string; extraArgs: string[] }): ChildProcess {
-  const pyArgs = [...py.extraArgs, 'main.py'];
-  if (currentConfig.meshEnabled) pyArgs.push('--mesh');
-  pyArgs.push('--port', String(currentConfig.port));
-  if (currentConfig.scanPaths.length) {
-    pyArgs.push('--scan-paths', ...currentConfig.scanPaths);
-  }
-
-  appendLog(`[IDE] Command: ${py.bin} ${pyArgs.join(' ')}`);
-  appendLog(`[IDE] Working dir: ${nanoDir}`);
-
-  const proc = spawn(py.bin, pyArgs, {
-    cwd: nanoDir,
-    env: {
-      ...process.env,
-      PYTHONUNBUFFERED: '1',
-      NANO_PORT: String(currentConfig.port),
-      NANO_MESH: currentConfig.meshEnabled ? '1' : '0',
-      NANO_DONATION_PCT: String(currentConfig.donationPercent),
-      NANO_PERMANENT_NODE: currentConfig.permanentNode ? '1' : '0',
-      NANO_IDLE_TRAINING: currentConfig.idleTraining ? '1' : '0',
-      NANO_USERNAME: currentConfig.username,
-      NANO_PEER_DISCOVERY: currentConfig.peerDiscovery ? '1' : '0',
-      NANO_SHARING_LEVEL: currentConfig.sharingLevel,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  proc.stdout?.on('data', (data: Buffer) => {
-    data.toString().split('\n').filter(Boolean).forEach(l => appendLog(`[OUT] ${l}`));
-  });
-  proc.stderr?.on('data', (data: Buffer) => {
-    data.toString().split('\n').filter(Boolean).forEach(l => appendLog(`[ERR] ${l}`));
-  });
-  proc.on('error', (err) => {
-    lastError = `Spawn error: ${err.message}`;
-    appendLog(`[IDE] SPAWN ERROR: ${err.message}`);
-    nanoProcess = null;
-  });
-  proc.on('exit', (code, signal) => {
-    appendLog(`[IDE] Nano Sea exited (code=${code}, signal=${signal})`);
-    if (code !== 0 && code !== null) {
-      lastError = `Process exited with code ${code}`;
-    }
-    nanoProcess = null;
-  });
-
-  appendLog(`[IDE] Process spawned — PID ${proc.pid}`);
-  return proc;
-}
+import {
+  nanoDir,
+  type NanoConfig,
+  getConfig, setConfig,
+  getLastError, setLastError,
+  getLogs, clearLogs,
+  getProcess, setProcess,
+  appendLog,
+  detectPython,
+  killProcess,
+  isAlive,
+  spawnNano,
+} from '../services/nano/processManager.js';
 
 // ═════════════════════════════════════════════════════════════
 // Routes
@@ -227,13 +56,14 @@ export async function nanoRoutes(app: FastifyInstance) {
   // ── GET /api/nano/status ────────────────────────────────────
   app.get('/status', async () => {
     const running = isAlive();
+    const config = getConfig();
 
     let apiStatus: any = null;
     if (running) {
       try {
         const controller = new AbortController();
         const t = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch(`http://localhost:${currentConfig.port}/v1/health`, {
+        const res = await fetch(`http://localhost:${config.port}/v1/health`, {
           signal: controller.signal,
         });
         clearTimeout(t);
@@ -245,12 +75,12 @@ export async function nanoRoutes(app: FastifyInstance) {
 
     return {
       running,
-      pid: nanoProcess?.pid || null,
-      port: currentConfig.port,
-      config: currentConfig,
+      pid: getProcess()?.pid || null,
+      port: config.port,
+      config,
       api: apiStatus,
-      logLines: nanoLogs.length,
-      lastError,
+      logLines: getLogs().total,
+      lastError: getLastError(),
       pythonFound: !!detectPython(),
       nanoDirExists: fs.existsSync(nanoDir),
     };
@@ -259,44 +89,45 @@ export async function nanoRoutes(app: FastifyInstance) {
   // ── POST /api/nano/start ────────────────────────────────────
   app.post('/start', async (req) => {
     if (isAlive()) {
-      return { success: false, error: 'Nano Sea is already running', pid: nanoProcess!.pid };
+      return { success: false, error: 'Nano Sea is already running', pid: getProcess()!.pid };
     }
 
     const py = detectPython();
     if (!py) {
       const msg = 'Python 3 not found. Install Python 3.10+ and add it to PATH.';
-      lastError = msg;
+      setLastError(msg);
       appendLog(`[IDE] ERROR: ${msg}`);
       return { success: false, error: msg };
     }
 
     if (!fs.existsSync(nanoDir)) {
       const msg = `NANO_train directory not found at: ${nanoDir}`;
-      lastError = msg;
+      setLastError(msg);
       appendLog(`[IDE] ERROR: ${msg}`);
       return { success: false, error: msg };
     }
 
     if (!fs.existsSync(path.join(nanoDir, 'main.py'))) {
       const msg = 'NANO_train/main.py not found.';
-      lastError = msg;
+      setLastError(msg);
       appendLog(`[IDE] ERROR: ${msg}`);
       return { success: false, error: msg };
     }
 
     // Merge config from request body
     const body = (req.body as Partial<NanoConfig>) || {};
-    Object.assign(currentConfig, body);
-    lastError = null;
+    setConfig(body);
+    setLastError(null);
 
-    nanoLogs = [];
+    clearLogs();
     appendLog('[IDE] Starting Nano Sea...');
 
     try {
-      nanoProcess = spawnNano(py);
-      return { success: true, pid: nanoProcess.pid, port: currentConfig.port };
+      const proc = spawnNano(py);
+      setProcess(proc);
+      return { success: true, pid: proc.pid, port: getConfig().port };
     } catch (err: any) {
-      lastError = err.message;
+      setLastError(err.message);
       appendLog(`[IDE] Failed to start: ${err.message}`);
       return { success: false, error: err.message };
     }
@@ -305,18 +136,18 @@ export async function nanoRoutes(app: FastifyInstance) {
   // ── POST /api/nano/stop ─────────────────────────────────────
   app.post('/stop', async () => {
     if (!isAlive()) {
-      nanoProcess = null;
+      setProcess(null);
       return { success: true, message: 'Not running' };
     }
 
     appendLog('[IDE] Stopping Nano Sea...');
     try {
-      await killProcess(nanoProcess!);
+      await killProcess(getProcess()!);
       appendLog('[IDE] Nano Sea stopped.');
     } catch (err: any) {
       appendLog(`[IDE] Error stopping: ${err.message}`);
     }
-    nanoProcess = null;
+    setProcess(null);
     return { success: true };
   });
 
@@ -325,29 +156,30 @@ export async function nanoRoutes(app: FastifyInstance) {
     appendLog('[IDE] Restarting Nano Sea...');
 
     if (isAlive()) {
-      await killProcess(nanoProcess!);
-      nanoProcess = null;
+      await killProcess(getProcess()!);
+      setProcess(null);
       await new Promise(r => setTimeout(r, 500));
     }
 
     const body = (req.body as Partial<NanoConfig>) || {};
-    Object.assign(currentConfig, body);
+    setConfig(body);
 
     const py = detectPython();
     if (!py) {
       const msg = 'Python 3 not found.';
-      lastError = msg;
+      setLastError(msg);
       return { success: false, error: msg };
     }
 
-    nanoLogs = [];
+    clearLogs();
     appendLog('[IDE] Restarting Nano Sea...');
 
     try {
-      nanoProcess = spawnNano(py);
-      return { success: true, pid: nanoProcess.pid };
+      const proc = spawnNano(py);
+      setProcess(proc);
+      return { success: true, pid: proc.pid };
     } catch (err: any) {
-      lastError = err.message;
+      setLastError(err.message);
       appendLog(`[IDE] Failed to restart: ${err.message}`);
       return { success: false, error: err.message };
     }
@@ -357,21 +189,18 @@ export async function nanoRoutes(app: FastifyInstance) {
   app.get('/logs', async (req) => {
     const query = req.query as { tail?: string };
     const tail = parseInt(query.tail || '100', 10);
-    return {
-      lines: nanoLogs.slice(-tail),
-      total: nanoLogs.length,
-    };
+    return getLogs(tail);
   });
 
   // ── PUT /api/nano/config ────────────────────────────────────
   app.put('/config', async (req) => {
     const body = req.body as Partial<NanoConfig>;
-    Object.assign(currentConfig, body);
-    return { success: true, config: currentConfig };
+    const config = setConfig(body);
+    return { success: true, config };
   });
 
   // ── GET /api/nano/config ────────────────────────────────────
-  app.get('/config', async () => currentConfig);
+  app.get('/config', async () => getConfig());
 
   // ═══════════════════════════════════════════════════════════
   // Proxy routes → Python FastAPI backend
@@ -381,7 +210,7 @@ export async function nanoRoutes(app: FastifyInstance) {
       try {
         const c = new AbortController();
         const t = setTimeout(() => c.abort(), 3000);
-        const res = await fetch(`http://localhost:${currentConfig.port}${backendPath}`, {
+        const res = await fetch(`http://localhost:${getConfig().port}${backendPath}`, {
           signal: c.signal,
         });
         clearTimeout(t);
@@ -397,7 +226,7 @@ export async function nanoRoutes(app: FastifyInstance) {
       try {
         const c = new AbortController();
         const t = setTimeout(() => c.abort(), 3000);
-        const res = await fetch(`http://localhost:${currentConfig.port}${backendPath}`, {
+        const res = await fetch(`http://localhost:${getConfig().port}${backendPath}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(req.body),
@@ -416,7 +245,7 @@ export async function nanoRoutes(app: FastifyInstance) {
       try {
         const c = new AbortController();
         const t = setTimeout(() => c.abort(), 3000);
-        const res = await fetch(`http://localhost:${currentConfig.port}${backendPath}`, {
+        const res = await fetch(`http://localhost:${getConfig().port}${backendPath}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(req.body),

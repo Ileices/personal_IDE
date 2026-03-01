@@ -358,8 +358,8 @@ class NanoTrainer:
                 try:
                     with open(latest_meta) as f:
                         info["latest"] = json.load(f)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to read checkpoint meta {latest_meta}: {e}")
 
             result["nanos"][nano_type] = info
             result["total_checkpoints"] += info["checkpoint_count"]

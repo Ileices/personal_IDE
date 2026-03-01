@@ -66,12 +66,21 @@ function runMigrations(db: Database.Database): void {
   console.log(`📦 Running ${pending.length} database migration(s)…`);
 
   for (const m of pending) {
-    const tx = db.transaction(() => {
-      m.up(db);
-      db.prepare('INSERT INTO schema_version (version, name) VALUES (?, ?)').run(m.version, m.name);
-    });
-    tx();
-    console.log(`  ✅ Migration ${String(m.version).padStart(3, '0')}: ${m.name}`);
+    try {
+      const tx = db.transaction(() => {
+        m.up(db);
+        db.prepare('INSERT INTO schema_version (version, name) VALUES (?, ?)').run(m.version, m.name);
+      });
+      tx();
+      console.log(`  ✅ Migration ${String(m.version).padStart(3, '0')}: ${m.name}`);
+    } catch (err) {
+      // Transaction auto-rolls back on throw; log and halt further migrations
+      console.error(`  ❌ Migration ${String(m.version).padStart(3, '0')} (${m.name}) FAILED — rolled back`);
+      console.error(`     Error: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`     Database remains at schema version ${getCurrentVersion(db)}`);
+      // Stop running further migrations — later ones may depend on this one
+      break;
+    }
   }
 }
 

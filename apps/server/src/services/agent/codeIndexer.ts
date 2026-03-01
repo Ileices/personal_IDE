@@ -5,6 +5,11 @@
 // ============================================
 import * as fs from 'fs';
 import * as path from 'path';
+import {
+  EXT_TO_LANG as LANGUAGE_MAP,
+  IGNORED_DIRS as IGNORE_DIRS,
+  IGNORE_EXTENSIONS,
+} from '../../constants/codeConstants.js';
 
 export interface CodeSymbol {
   name: string;
@@ -38,23 +43,6 @@ export interface ProjectIndex {
   totalFiles: number;
   indexedAt: string;
 }
-
-const LANGUAGE_MAP: Record<string, string> = {
-  '.ts': 'typescript', '.tsx': 'typescript', '.js': 'javascript', '.jsx': 'javascript',
-  '.py': 'python', '.rs': 'rust', '.go': 'go', '.java': 'java', '.cs': 'csharp',
-  '.cpp': 'cpp', '.c': 'c', '.rb': 'ruby', '.php': 'php', '.swift': 'swift',
-  '.kt': 'kotlin', '.scala': 'scala', '.vue': 'vue', '.svelte': 'svelte',
-};
-
-const IGNORE_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '__pycache__',
-  '.venv', 'venv', 'target', '.idea', '.vscode', '.ide-logs', 'coverage',
-]);
-
-const IGNORE_EXTENSIONS = new Set([
-  '.map', '.min.js', '.min.css', '.lock', '.png', '.jpg', '.gif', '.ico',
-  '.woff', '.woff2', '.ttf', '.eot', '.svg', '.mp3', '.mp4', '.zip',
-]);
 
 export class CodeIndexer {
   private index: ProjectIndex | null = null;

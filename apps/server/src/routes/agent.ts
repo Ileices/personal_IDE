@@ -11,6 +11,14 @@ import { MemoryService } from '../services/memory/index.js';
 // Active agent loop (singleton - one loop at a time)
 let activeAgent: EnhancedAgentLoop | null = null;
 
+/** Cleanup active agent's resources (called by graceful shutdown) */
+export function destroyActiveAgent(): void {
+  if (activeAgent) {
+    activeAgent.stop();
+    activeAgent = null;
+  }
+}
+
 export async function agentRoutes(app: FastifyInstance) {
   const db = (app as any).db;
   const memory = new MemoryService(db);

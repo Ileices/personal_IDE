@@ -142,6 +142,9 @@ class PeerDiscovery:
         self._my_port = DISCOVERY_PORT
         self._announce_task: Optional[asyncio.Task] = None
         self._listen_task: Optional[asyncio.Task] = None
+
+        # Protect shared mutable state (_peers, _groups, _blocked) in async context
+        self._lock = asyncio.Lock()
         self._callbacks: Dict[str, List[Callable]] = {
             "peer_discovered": [],
             "peer_connected": [],
@@ -402,34 +405,35 @@ class PeerDiscovery:
             if nid in self._blocked:
                 return
 
-            existing = self._peers.get(nid)
-            if existing:
-                # Update known peer
-                existing.ip_address = source_ip
-                existing.last_seen = time.time()
-                existing.compute_grade = msg.get("compute_grade", 0)
-                existing.tier = msg.get("tier", 10)
-                existing.has_cuda = msg.get("has_cuda", False)
-                existing.gpu_name = msg.get("gpu_name", "")
-                existing.username = msg.get("username", existing.username)
-            else:
-                # New peer discovered
-                peer = PeerInfo(
-                    node_id=nid,
-                    username=msg.get("username", "Anonymous"),
-                    hostname=msg.get("hostname", ""),
-                    ip_address=source_ip,
-                    port=msg.get("port", DISCOVERY_PORT),
-                    state=ConnectionState.DISCOVERED,
-                    compute_grade=msg.get("compute_grade", 0),
-                    tier=msg.get("tier", 10),
-                    has_cuda=msg.get("has_cuda", False),
-                    gpu_name=msg.get("gpu_name", ""),
-                    last_seen=time.time(),
-                )
-                self._peers[nid] = peer
-                self._emit("peer_discovered", peer)
-                logger.info(f"Peer discovered: {peer.display_name} at {source_ip}")
+            async with self._lock:
+                existing = self._peers.get(nid)
+                if existing:
+                    # Update known peer
+                    existing.ip_address = source_ip
+                    existing.last_seen = time.time()
+                    existing.compute_grade = msg.get("compute_grade", 0)
+                    existing.tier = msg.get("tier", 10)
+                    existing.has_cuda = msg.get("has_cuda", False)
+                    existing.gpu_name = msg.get("gpu_name", "")
+                    existing.username = msg.get("username", existing.username)
+                else:
+                    # New peer discovered
+                    peer = PeerInfo(
+                        node_id=nid,
+                        username=msg.get("username", "Anonymous"),
+                        hostname=msg.get("hostname", ""),
+                        ip_address=source_ip,
+                        port=msg.get("port", DISCOVERY_PORT),
+                        state=ConnectionState.DISCOVERED,
+                        compute_grade=msg.get("compute_grade", 0),
+                        tier=msg.get("tier", 10),
+                        has_cuda=msg.get("has_cuda", False),
+                        gpu_name=msg.get("gpu_name", ""),
+                        last_seen=time.time(),
+                    )
+                    self._peers[nid] = peer
+                    self._emit("peer_discovered", peer)
+                    logger.info(f"Peer discovered: {peer.display_name} at {source_ip}")
 
         except (json.JSONDecodeError, KeyError) as e:
             logger.debug(f"Invalid announcement from {source_ip}: {e}")

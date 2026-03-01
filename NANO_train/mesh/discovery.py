@@ -127,8 +127,8 @@ class DiscoveryService:
                     self._node.add_peer(peer_info)
                     self._known_peers.add(peer_info.node_id)
                     logger.info(f"Peer joined: {peer_info.hostname}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Invalid peer_joined data: {e}")
 
         elif msg_type == "peer_left":
             node_id = msg.get("node_id")
@@ -197,7 +197,7 @@ class DiscoveryService:
                             self._known_peers.add(peer_info.node_id)
                             logger.info(f"Found subnet peer: {ip}")
             except Exception:
-                pass
+                pass  # Expected: most IPs won't have a mesh node
 
         for i in range(1, 255):
             tasks.append(_try_peer(f"{subnet}.{i}"))

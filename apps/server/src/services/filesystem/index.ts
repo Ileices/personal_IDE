@@ -4,35 +4,10 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync, readdirSync, unlinkSync, renameSync, copyFileSync } from 'fs';
 import { join, resolve, relative, extname, basename, dirname, sep, posix } from 'path';
 import type { FileNode, FileContent, FileSearchResult } from '@personal-ide/shared';
-
-/** Directories and files to skip when listing */
-const IGNORED_DIRS = new Set([
-  'node_modules', '.git', '.svn', '.hg', '__pycache__',
-  '.next', '.nuxt', 'dist', 'build', 'out', '.cache',
-  'coverage', '.tox', '.mypy_cache', '.pytest_cache',
-  'venv', '.venv', 'env', '.env',
-]);
-
-const IGNORED_FILES = new Set([
-  '.DS_Store', 'Thumbs.db', 'desktop.ini',
-]);
+import { EXT_TO_LANG_DISPLAY as EXT_TO_LANG, IGNORED_DIRS, IGNORED_FILES } from '../../constants/codeConstants.js';
 
 /** Max file size we'll read (10MB) */
 const MAX_READ_SIZE = 10 * 1024 * 1024;
-
-/** Language detection by extension */
-const EXT_TO_LANG: Record<string, string> = {
-  '.ts': 'typescript', '.tsx': 'typescriptreact', '.js': 'javascript', '.jsx': 'javascriptreact',
-  '.py': 'python', '.rs': 'rust', '.go': 'go', '.java': 'java', '.c': 'c', '.cpp': 'cpp',
-  '.h': 'c', '.hpp': 'cpp', '.cs': 'csharp', '.rb': 'ruby', '.php': 'php',
-  '.html': 'html', '.css': 'css', '.scss': 'scss', '.less': 'less',
-  '.json': 'json', '.yaml': 'yaml', '.yml': 'yaml', '.toml': 'toml',
-  '.xml': 'xml', '.md': 'markdown', '.txt': 'plaintext',
-  '.sql': 'sql', '.sh': 'shellscript', '.bash': 'shellscript',
-  '.ps1': 'powershell', '.bat': 'bat', '.cmd': 'bat',
-  '.dockerfile': 'dockerfile', '.graphql': 'graphql',
-  '.svelte': 'svelte', '.vue': 'vue', '.swift': 'swift', '.kt': 'kotlin',
-};
 
 /**
  * Validate and resolve a path within the project root.

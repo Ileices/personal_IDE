@@ -146,6 +146,9 @@ class GlobalComputePool:
         self._idle_task: Optional[asyncio.Task] = None
         self._job_watcher_task: Optional[asyncio.Task] = None
 
+        # Protect shared mutable state in async context
+        self._lock = asyncio.Lock()
+
         # Load persisted state
         self._load_state()
 
@@ -216,11 +219,11 @@ class GlobalComputePool:
     # ── Job Submission ─────────────────────────────────────────
     async def submit_job(self, job: PoolJob) -> str:
         """Submit a job to the global pool for distributed execution."""
-        self._jobs[job.job_id] = job
-        logger.info(f"Job submitted: {job.job_id} ({job.job_type}, {job.total_shards} shards)")
-
-        # Distribute immediately
-        await self._distribute_job(job)
+        async with self._lock:
+            self._jobs[job.job_id] = job
+            logger.info(f"Job submitted: {job.job_id} ({job.job_type}, {job.total_shards} shards)")
+            # Distribute immediately
+            await self._distribute_job(job)
         return job.job_id
 
     async def _distribute_job(self, job: PoolJob) -> None:

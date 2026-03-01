@@ -9,35 +9,7 @@ import { v4 as uuid } from 'uuid';
 import type Database from 'better-sqlite3';
 import type { CodebaseOverview, CodebaseChunk } from '@personal-ide/shared';
 import { estimateTokens, chunkContent, truncateToFit } from '../llm/providers.js';
-
-const IGNORED_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', '.next', '__pycache__',
-  '.venv', 'venv', 'target', '.idea', '.vs', '.vscode', 'coverage',
-  '.cache', '.turbo', '.output', 'vendor', 'bin', 'obj',
-]);
-
-const CODE_EXTENSIONS = new Set([
-  '.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go', '.java', '.kt',
-  '.c', '.cpp', '.cc', '.h', '.hpp', '.cs', '.rb', '.php', '.swift',
-  '.lua', '.zig', '.v', '.dart', '.scala', '.ex', '.exs', '.erl',
-  '.hs', '.ml', '.clj', '.r', '.jl', '.sql', '.sh', '.bash', '.ps1',
-  '.yaml', '.yml', '.toml', '.json', '.xml', '.html', '.css', '.scss',
-  '.svelte', '.vue', '.astro', '.md', '.mdx', '.proto', '.graphql',
-  '.dockerfile', '.tf', '.hcl', '.nix', '.cmake',
-]);
-
-const EXT_TO_LANG: Record<string, string> = {
-  '.ts': 'typescript', '.tsx': 'typescript', '.js': 'javascript', '.jsx': 'javascript',
-  '.py': 'python', '.rs': 'rust', '.go': 'go', '.java': 'java', '.kt': 'kotlin',
-  '.c': 'c', '.cpp': 'cpp', '.cc': 'cpp', '.h': 'c', '.hpp': 'cpp',
-  '.cs': 'csharp', '.rb': 'ruby', '.php': 'php', '.swift': 'swift',
-  '.lua': 'lua', '.zig': 'zig', '.dart': 'dart', '.scala': 'scala',
-  '.ex': 'elixir', '.exs': 'elixir', '.erl': 'erlang', '.hs': 'haskell',
-  '.r': 'r', '.jl': 'julia', '.sql': 'sql', '.sh': 'bash', '.ps1': 'powershell',
-  '.html': 'html', '.css': 'css', '.scss': 'scss', '.svelte': 'svelte',
-  '.vue': 'vue', '.astro': 'astro', '.proto': 'protobuf', '.graphql': 'graphql',
-  '.yaml': 'yaml', '.yml': 'yaml', '.toml': 'toml', '.json': 'json', '.xml': 'xml',
-};
+import { IGNORED_DIRS, CODE_EXTENSIONS, EXT_TO_LANG } from '../../constants/codeConstants.js';
 
 interface FileInfo {
   path: string;

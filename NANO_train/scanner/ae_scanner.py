@@ -100,8 +100,8 @@ class AEScanner:
         if self._seed_file.exists():
             try:
                 return json.loads(self._seed_file.read_text())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to read AE seed file: {e}")
         return None
 
     # ── Scanning ───────────────────────────────────────────────
