@@ -8,6 +8,7 @@ import {
   Cog, Play, ChevronDown, ChevronRight,
   Wrench, Shield, FileText, Zap, Search,
   Workflow, Clock, CheckCircle, XCircle,
+  AlertTriangle,
 } from 'lucide-react';
 
 const categoryIcon = (cat: string) => {
@@ -43,12 +44,12 @@ function SkillCard({ skill, onExecute }: { skill: ClawSkill; onExecute: (s: Claw
       {expanded && (
         <div className="mt-1.5 ml-5 text-[10px] text-ide-text-dim">
           <p>{skill.description}</p>
-          {Object.keys(skill.inputSchema).length > 0 && (
+          {skill.inputSchema && Object.keys(skill.inputSchema).length > 0 && (
             <div className="mt-1">
               <span className="text-ide-text">Inputs: </span>
               {Object.entries(skill.inputSchema).map(([key, val]: [string, any]) => (
                 <span key={key} className="inline-block bg-ide-bg-darker px-1 rounded mr-1">
-                  {key}: {val.type || 'any'}
+                  {key}: {val?.type || 'any'}
                 </span>
               ))}
             </div>
@@ -75,6 +76,7 @@ export function OpenClawPanel() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'skills' | 'workflows' | 'log'>('skills');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [safetyDismissed, setSafetyDismissed] = useState(false);
 
   useEffect(() => {
     if (panelOpen) {
@@ -86,7 +88,11 @@ export function OpenClawPanel() {
   }, [panelOpen]);
 
   const handleExecute = async (skill: ClawSkill) => {
-    await executeSkill(skill.id);
+    try {
+      await executeSkill(skill.id);
+    } catch (err: any) {
+      console.error('OpenClaw skill execution failed:', skill.id, err);
+    }
   };
 
   const filteredSkills = skills.filter(s => {
@@ -132,6 +138,24 @@ export function OpenClawPanel() {
         </div>
         <button onClick={togglePanel} className="ml-2 text-ide-text-dim hover:text-ide-text text-xs">✕</button>
       </div>
+
+      {/* Safety Warning Banner */}
+      {!safetyDismissed && (
+        <div className="mx-2 mt-1.5 p-2 rounded border border-yellow-500/40 bg-yellow-500/10 text-[10px]">
+          <div className="flex items-start gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold text-yellow-300 mb-0.5">⚠ Automated Usage Risks</p>
+              <p className="text-ide-text-dim leading-relaxed">
+                Automated/bulk API usage may violate ToS for: <strong className="text-yellow-300">GitHub Copilot</strong> (no automated pipelines),{' '}
+                <strong className="text-yellow-300">OpenAI</strong> (rate limits enforced), <strong className="text-yellow-300">Google Gemini</strong> (abuse detection).{' '}
+                Use local models (Ollama) or APIs with explicit automation support for fleet/24-7 mode. Always respect rate limits and cooldowns.
+              </p>
+            </div>
+            <button onClick={() => setSafetyDismissed(true)} className="text-ide-text-dim hover:text-ide-text ml-1 flex-shrink-0">✕</button>
+          </div>
+        </div>
+      )}
 
       {/* Skills tab */}
       {activeTab === 'skills' && (

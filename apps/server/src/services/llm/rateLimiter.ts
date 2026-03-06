@@ -106,14 +106,21 @@ class ProductionRateLimiter {
       };
     }
 
-    // 2. Exponential backoff active
+    // 2. Exponential backoff active — uses timestamp-based expiry so it
+    //    naturally decays even without a successful call to reset it.
     if (s.consecutiveFailures > 0 && s.backoffMs > 0) {
-      return {
-        allowed: false,
-        reason: `Backoff: ${s.consecutiveFailures} consecutive failures, wait ${Math.ceil(s.backoffMs / 1000)}s`,
-        retryAfterMs: s.backoffMs,
-        fallbackModel: this.findFallback(modelId, mode),
-      };
+      const backoffExpiry = s.retryAfterUntil || 0;
+      // Only block if the backoff window hasn't expired yet
+      if (backoffExpiry > now) {
+        const waitMs = backoffExpiry - now;
+        return {
+          allowed: false,
+          reason: `Backoff: ${s.consecutiveFailures} consecutive failures, wait ${Math.ceil(waitMs / 1000)}s`,
+          retryAfterMs: waitMs,
+          fallbackModel: this.findFallback(modelId, mode),
+        };
+      }
+      // Backoff window expired — allow through (will be cleared on success by recordEnd)
     }
 
     // 3. Max retries exceeded — hard stop, wait for full cooldown
@@ -251,13 +258,17 @@ class ProductionRateLimiter {
       // Rate limited — increase exponential backoff
       s.consecutiveFailures++;
       s.backoffMs = Math.min(
-        (s.backoffMs || 1000) * 2,   // base 1s, doubling
-        s.maxBackoffMs               // capped at 5 min
+        Math.max(s.backoffMs * 2, 1000),   // start at 1s, doubling
+        s.maxBackoffMs                      // capped at 5 min
       );
 
-      // If server didn't send retry-after, use our calculated backoff
+      // Always set a timestamp-based expiry so the backoff naturally decays
+      const backoffExpiry = Date.now() + s.backoffMs;
+      // Use the later of server retry-after or our calculated backoff
       if (s.retryAfterUntil <= Date.now()) {
-        s.retryAfterUntil = Date.now() + s.backoffMs;
+        s.retryAfterUntil = backoffExpiry;
+      } else {
+        s.retryAfterUntil = Math.max(s.retryAfterUntil, backoffExpiry);
       }
     } else if (info.success || (info.statusCode && info.statusCode >= 200 && info.statusCode < 300)) {
       // Success — reset backoff state entirely

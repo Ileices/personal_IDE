@@ -43,6 +43,7 @@ import { buildAutoAnswer } from './loop/autoAnswers.js';
 import { assembleContext, appendHistory, appendSchemaReminder } from './loop/contextAssembly.js';
 import { processResponse, buildNextTask, buildSchemaMissTask } from './loop/responseProcessing.js';
 import { handleQuestions, storeStepNote, updateTaskTracker, handleCompletion } from './loop/continuousMode.js';
+import { checkRateLimitAndFallback, extractErrorHeaders } from './loop/cooldownManager.js';
 import { appConfig } from '../../config.js';
 
 type EventCallback = (event: any) => void;
@@ -314,10 +315,12 @@ export class EnhancedAgentLoop {
     // ── Main Loop ──
     let currentTask = initialTask;
     const effectiveMaxIterations = this.config.continuousMode ? Infinity : this.config.maxIterations;
-    const effectiveCooldown = this.config.cooldownMs || 0;
+    // Store the original model so we can retry it after rate-limit windows reset
+    const originalModel = this.config.model;
+    let lastModelResetCheck = Date.now();
 
     if (this.config.continuousMode) {
-      this.emit({ type: 'continuous_mode', enabled: true, cooldownMs: effectiveCooldown } as any);
+      this.emit({ type: 'continuous_mode', enabled: true, cooldownMs: this.config.cooldownMs || 0 } as any);
       this.emit({ type: 'info', message: '24/7 Continuous Mode ACTIVE' });
     }
     if (this.config.bypassRateLimits) {
@@ -345,8 +348,20 @@ export class EnhancedAgentLoop {
           break;
         }
 
-        // Rate Limit Check (skip if bypassed)
+        // Rate Limit Check (skip if bypassed, but still respect cooldowns)
         if (!this.config.bypassRateLimits) {
+          // Periodically try to switch back to original model (every 2 minutes)
+          if (this.config.model !== originalModel && Date.now() - lastModelResetCheck > 120_000) {
+            lastModelResetCheck = Date.now();
+            const originalCheck = rateLimiter.canRequest(originalModel, 'agent');
+            if (originalCheck.allowed) {
+              this.emit({ type: 'info', message: 'Rate limit window reset — switching back to primary model: ' + originalModel });
+              this.config.model = originalModel;
+              const origModelDef = getModel(originalModel);
+              if (origModelDef) this.contextWindow = origModelDef.maxInputTokens;
+            }
+          }
+
           const canProceed = rateLimiter.canRequest(this.config.model, 'agent');
           if (!canProceed.allowed) {
             // Try ordered fallback chain first, then smart headroom-based fallback
@@ -355,6 +370,9 @@ export class EnhancedAgentLoop {
             if (fallback) {
               this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + fallback });
               this.config.model = fallback;
+              // Update contextWindow for the fallback model
+              const fallbackModelDef = getModel(fallback);
+              if (fallbackModelDef) this.contextWindow = fallbackModelDef.maxInputTokens;
             } else if (this.config.continuousMode) {
               const waitMs = canProceed.retryAfterMs || 60000;
               this.emit({ type: 'cooldown', ms: waitMs, reason: 'Rate limited: ' + canProceed.reason + '. Waiting...' } as any);
@@ -527,9 +545,13 @@ export class EnhancedAgentLoop {
             // Extract status code from OpenAI SDK error
             const statusCode = err?.status || err?.statusCode || (err?.error?.status);
 
-            // Record the failed request in rate limiter (only place we call recordEnd for errors)
+            // Extract rate-limit headers from error response (extracted to cooldownManager.ts)
+            const parsedHeaders = extractErrorHeaders(err);
+
+            // Record the failed request in rate limiter WITH error headers
             rateLimiter.recordEnd(this.config.model, {
               statusCode,
+              headers: parsedHeaders,
               success: false,
             });
 
@@ -744,7 +766,7 @@ export class EnhancedAgentLoop {
 
             if (nextContinuousTask) {
               currentTask = nextContinuousTask;
-              await this.delay(Math.max(effectiveCooldown, 10000));
+              await this.delay(Math.max(this.config.cooldownMs || 0, 10000));
               continue;
             }
             this.setState('complete');
@@ -832,10 +854,11 @@ export class EnhancedAgentLoop {
         continue;
       }
 
-      // Cooldown between iterations (24/7 mode)
-      if (effectiveCooldown > 0 && (this.state as string) !== 'complete') {
-        this.emit({ type: 'cooldown', ms: effectiveCooldown, reason: 'Cooldown between iterations' } as any);
-        await this.delay(effectiveCooldown);
+      // Cooldown between iterations (24/7 mode) — re-read config each iteration
+      const iterationCooldown = this.config.cooldownMs || 0;
+      if (iterationCooldown > 0 && (this.state as string) !== 'complete') {
+        this.emit({ type: 'cooldown', ms: iterationCooldown, reason: 'Cooldown between iterations' } as any);
+        await this.delay(iterationCooldown);
       }
 
       // Periodic compaction (every 50 iterations)

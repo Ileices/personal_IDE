@@ -14,6 +14,7 @@ import { estimateTokens, chunkContent, isTokenLimitError } from './providers.js'
 import { completeChatResponse } from './streaming.js';
 import { generateBridgeSummary } from './bridgeSummarizer.js';
 import { mergeChunkResponses } from './chunkMerger.js';
+import { rateLimiter } from './rateLimiter.js';
 
 /** Result from processing a single chunk */
 export interface ChunkProcessResult {
@@ -144,12 +145,15 @@ export class ChunkingPipeline {
     const systemTokens = estimateTokens(systemPrompt);
     const taskTokens = estimateTokens(taskPrompt);
     const existingTokens = existingMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-    const fixedOverhead = systemTokens + taskTokens + Math.min(existingTokens, overheadBudget);
+    // Per-chunk metadata overhead (the "--- DATA (Part X of Y) ---" wrappers, bridge summary header, etc.)
+    const perChunkMetadataOverhead = 150; // conservative estimate for wrapper text
+    const fixedOverhead = systemTokens + taskTokens + Math.min(existingTokens, overheadBudget)
+      + maxOutputTokens + perChunkMetadataOverhead;
 
-    // Actual tokens available per chunk for data
+    // Actual tokens available per chunk for data — ensure we leave room for ALL overhead
     const dataTokensPerChunk = Math.max(
-      1000, // minimum chunk size
-      chunkTokenBudget - fixedOverhead
+      500, // minimum chunk size (was 1000, too aggressive for small windows)
+      effectiveLimit - fixedOverhead
     );
 
     // Split the oversized content into chunks
@@ -220,6 +224,24 @@ export class ChunkingPipeline {
     for (let i = 0; i < totalChunks; i++) {
       const chunk = dataChunks[i];
 
+      // ── Rate-limit check + inter-chunk delay to prevent API spam ──
+      if (i > 0) {
+        const canProceed = rateLimiter.canRequest(model);
+        if (!canProceed.allowed) {
+          const waitMs = Math.min(canProceed.retryAfterMs || 5000, 60_000);
+          onProgress?.({
+            type: 'chunk_start',
+            chunkIndex: i,
+            totalChunks,
+            message: `Rate limited before chunk ${i + 1}. Waiting ${Math.ceil(waitMs / 1000)}s...`,
+          });
+          await new Promise(r => setTimeout(r, waitMs));
+        } else {
+          // Even when allowed, add a small inter-chunk delay (1.5s) to avoid burst-triggering rate limits
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+
       onProgress?.({
         type: 'chunk_start',
         chunkIndex: i,
@@ -271,13 +293,26 @@ export class ChunkingPipeline {
 
         chunkMessages.push({ role: 'user', content: userContent });
 
-        // Execute LLM call for this chunk
-        const response = await completeChatResponse(client, model, chunkMessages, {
-          temperature,
-          maxTokens: maxOutputTokens,
-        });
+        // Execute LLM call for this chunk (with rate-limit tracking)
+        rateLimiter.recordStart(model);
+        let chunkResponse: { content: string; usage: any; headers?: Record<string, string>; statusCode?: number };
+        try {
+          chunkResponse = await completeChatResponse(client, model, chunkMessages, {
+            temperature,
+            maxTokens: maxOutputTokens,
+          });
+          rateLimiter.recordEnd(model, {
+            statusCode: chunkResponse.statusCode,
+            headers: chunkResponse.headers,
+            success: true,
+          });
+        } catch (chunkErr: any) {
+          const sc = chunkErr?.status || chunkErr?.statusCode || chunkErr?.error?.status;
+          rateLimiter.recordEnd(model, { statusCode: sc, success: false });
+          throw chunkErr;
+        }
 
-        const chunkTokens = response.usage?.total_tokens || 0;
+        const chunkTokens = chunkResponse.usage?.total_tokens || 0;
         totalTokensUsed += chunkTokens;
 
         onProgress?.({
@@ -291,12 +326,18 @@ export class ChunkingPipeline {
         // Generate bridge summary for next chunk (unless this is the last chunk)
         let bridgeSummary = '';
         if (i < totalChunks - 1) {
+          // Rate-limit check before bridge summary call
+          const bridgeCheck = rateLimiter.canRequest(model);
+          if (!bridgeCheck.allowed) {
+            await new Promise(r => setTimeout(r, Math.min(bridgeCheck.retryAfterMs || 3000, 30_000)));
+          }
+
           bridgeSummary = await this.generateBridgeSummary(
             client,
             model,
             temperature,
             runningBridgeSummary,
-            response.content,
+            chunkResponse.content,
             i + 1,
             totalChunks,
             bridgeTokenBudget
@@ -315,7 +356,7 @@ export class ChunkingPipeline {
         results.push({
           chunkIndex: i,
           totalChunks,
-          response: response.content,
+          response: chunkResponse.content,
           tokensUsed: chunkTokens,
           bridgeSummary,
         });
