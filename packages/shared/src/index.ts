@@ -13,5 +13,6 @@ export * from './types/knowledge.js';
 
 // Constants
 export * from './constants/models.js';
+export * from './constants/modelPresets.js';
 export * from './constants/schema.js';
 export * from './constants/providers.js';

@@ -226,9 +226,17 @@ export function buildNextTask(
   }
 
   if ((structured.nextSteps || []).length > 0) {
-    nextTask += structured.nextSteps
-      .map(s => s.stepNumber + '. ' + s.action + ': ' + s.detail + ' (target: ' + s.target + ')')
+    const formattedSteps = structured.nextSteps
+      .filter(s => s && (s.action || s.detail || s.target))
+      .map(s => {
+        const num = s.stepNumber ?? '?';
+        const action = s.action || 'Continue';
+        const detail = s.detail || 'Continue implementation';
+        const target = s.target ? ` (target: ${s.target})` : '';
+        return `${num}. ${action}: ${detail}${target}`;
+      })
       .join('\n');
+    nextTask += formattedSteps || 'Continue with the implementation. Review what has been done and identify what remains.';
   } else {
     nextTask += 'Continue with the implementation. Review what has been done and identify what remains.';
   }

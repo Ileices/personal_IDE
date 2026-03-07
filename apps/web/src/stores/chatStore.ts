@@ -1,9 +1,21 @@
 // ============================================
 // Chat Store - Messages, streaming, conversations
+// Enhanced: conversation list, tabs, management
 // ============================================
 import { create } from 'zustand';
 import type { AssistantMode, ChatMessage } from '@personal-ide/shared';
 import { apiStream, apiGet } from '../api/client';
+
+/** Summary info for a conversation in the sidebar */
+export interface ConversationInfo {
+  id: string;
+  title: string;
+  mode: string;
+  model: string;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface ChatStore {
   messages: ChatMessage[];
@@ -15,6 +27,10 @@ interface ChatStore {
   contextFiles: string[];
   abortController: AbortController | null;
 
+  // Conversation management
+  conversations: ConversationInfo[];
+  conversationsLoaded: boolean;
+
   setMode: (mode: AssistantMode) => void;
   setModel: (model: string) => void;
   setContextFiles: (files: string[]) => void;
@@ -23,6 +39,10 @@ interface ChatStore {
   loadConversation: (conversationId: string) => Promise<void>;
   newConversation: () => void;
   clearMessages: () => void;
+  // New conversation management
+  loadConversations: (projectId: string) => Promise<void>;
+  deleteConversation: (conversationId: string) => Promise<void>;
+  renameConversation: (conversationId: string, title: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -34,6 +54,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   selectedModel: 'openai/gpt-4.1',
   contextFiles: [],
   abortController: null,
+
+  // Conversation management
+  conversations: [],
+  conversationsLoaded: false,
 
   setMode: (mode) => set({ mode }),
   setModel: (model) => set({ selectedModel: model }),
@@ -205,4 +229,52 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   }),
 
   clearMessages: () => set({ messages: [], conversationId: null }),
+
+  // ── Conversation Management ──
+
+  loadConversations: async (projectId: string) => {
+    try {
+      const data = await apiGet<{ conversations: any[] }>(`/chat/conversations?projectId=${projectId}`);
+      const convos: ConversationInfo[] = (data.conversations || []).map((c: any) => ({
+        id: c.id,
+        title: c.title || c.summary || 'Untitled',
+        mode: c.mode || 'ask',
+        model: c.model || '',
+        messageCount: c.message_count || 0,
+        createdAt: c.created_at || c.createdAt || '',
+        updatedAt: c.updated_at || c.updatedAt || '',
+      }));
+      set({ conversations: convos, conversationsLoaded: true });
+    } catch {
+      // Server may not support this endpoint yet — graceful degradation
+      set({ conversations: [], conversationsLoaded: true });
+    }
+  },
+
+  deleteConversation: async (conversationId: string) => {
+    try {
+      await apiGet(`/chat/conversations/${conversationId}/delete`);
+      set(s => ({
+        conversations: s.conversations.filter(c => c.id !== conversationId),
+        ...(s.conversationId === conversationId ? { messages: [], conversationId: null } : {}),
+      }));
+    } catch {
+      // Graceful — just remove from local state
+      set(s => ({
+        conversations: s.conversations.filter(c => c.id !== conversationId),
+      }));
+    }
+  },
+
+  renameConversation: async (conversationId: string, title: string) => {
+    try {
+      // Try to rename on server — may not be supported yet
+      await apiGet(`/chat/conversations/${conversationId}/rename?title=${encodeURIComponent(title)}`);
+    } catch { /* non-critical */ }
+    set(s => ({
+      conversations: s.conversations.map(c =>
+        c.id === conversationId ? { ...c, title } : c
+      ),
+    }));
+  },
 }));

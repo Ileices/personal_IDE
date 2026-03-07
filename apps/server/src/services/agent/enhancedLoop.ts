@@ -44,6 +44,10 @@ import { assembleContext, appendHistory, appendSchemaReminder } from './loop/con
 import { processResponse, buildNextTask, buildSchemaMissTask } from './loop/responseProcessing.js';
 import { handleQuestions, storeStepNote, updateTaskTracker, handleCompletion } from './loop/continuousMode.js';
 import { checkRateLimitAndFallback, extractErrorHeaders } from './loop/cooldownManager.js';
+import { TimingService } from './loop/timingService.js';
+import { DatasetBuilder } from './loop/datasetBuilder.js';
+import { adaptPromptForModel } from '../modes/modelPromptAdapter.js';
+import { OllamaHealthMonitor } from '../ollama/healthMonitor.js';
 import { appConfig } from '../../config.js';
 
 type EventCallback = (event: any) => void;
@@ -110,6 +114,10 @@ export class EnhancedAgentLoop {
   private loopBreakoutAttempts = 0;
   private iterationsWithoutFileChanges = 0;
   private maxIterationsWithoutProgress = 15;
+  // v4 services
+  private timingService: TimingService;
+  private datasetBuilder: DatasetBuilder | null = null;
+  private ollamaHealthMonitor: OllamaHealthMonitor | null = null;
 
   constructor(
     private db: Database.Database,
@@ -134,6 +142,20 @@ export class EnhancedAgentLoop {
     // v3 services
     this.loopDetector = new LoopDetector();
     this.codeIndexer = new CodeIndexer();
+    // v4 services
+    this.timingService = new TimingService();
+
+    // Start Ollama health monitor if provider is ollama
+    if (config.provider === 'ollama') {
+      try {
+        const ollamaRow = db.prepare(
+          "SELECT base_url FROM provider_configs WHERE provider_id = 'ollama' AND enabled = 1"
+        ).get() as any;
+        const ollamaUrl = ollamaRow?.base_url || 'http://localhost:11434';
+        this.ollamaHealthMonitor = new OllamaHealthMonitor(ollamaUrl);
+        this.ollamaHealthMonitor.startMonitoring(30_000);
+      } catch { /* non-critical */ }
+    }
 
     if (config.enableSmartChunking) {
       this.chunkingPipeline = new ChunkingPipeline({
@@ -259,6 +281,17 @@ export class EnhancedAgentLoop {
       this.emit({ type: 'info', message: 'Log writer init failed: ' + err.message });
     }
 
+    // Initialize dataset builder for NANO training pipeline
+    try {
+      this.datasetBuilder = new DatasetBuilder(this.config.projectRoot);
+      this.emit({ type: 'info', message: 'Dataset builder: ' + this.datasetBuilder.getOutputPath() });
+    } catch (err: any) {
+      this.emit({ type: 'info', message: 'Dataset builder init failed: ' + err.message });
+    }
+
+    // Reset timing service for new run
+    this.timingService.reset();
+
     this.conversationId = this.memory.createConversation(
       projectId, 'Agent: ' + initialTask.slice(0, 50), 'agent', this.config.model
     );
@@ -368,7 +401,9 @@ export class EnhancedAgentLoop {
             const fallback = canProceed.fallbackModel
               || rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
             if (fallback) {
+              const previousModel = this.config.model;
               this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + fallback });
+              this.emit({ type: 'model_switch', from: previousModel, to: fallback, reason: 'Rate limited (pre-call check)' } as any);
               this.config.model = fallback;
               // Update contextWindow for the fallback model
               const fallbackModelDef = getModel(fallback);
@@ -413,6 +448,16 @@ export class EnhancedAgentLoop {
         });
 
         const messages = assembled.messages;
+
+        // ── Adapt system prompt for model capabilities ──
+        // Canvas illusion for local/small models, reasoning mode for o3/deepseek, etc.
+        if (messages.length > 0 && messages[0].role === 'system') {
+          messages[0].content = adaptPromptForModel(
+            messages[0].content,
+            this.config.model,
+            this.contextWindow,
+          );
+        }
 
         // Append conversation history (extracted to loop/contextAssembly.ts)
         appendHistory(messages, this.conversationId, this.contextWindow, this.memory);
@@ -534,6 +579,7 @@ export class EnhancedAgentLoop {
         // Execute LLM Call (skip if we already got a response from proactive chunking)
         if (!response) {
           rateLimiter.recordStart(this.config.model);
+          const timingCallId = this.timingService.startCall(this.config.model, this.currentIteration);
           let llmCallSucceeded = false;
           try {
             response = await completeChatResponse(client, this.config.model, messages, {
@@ -542,6 +588,8 @@ export class EnhancedAgentLoop {
             });
             llmCallSucceeded = true;
           } catch (err: any) {
+            // Cancel timing on error
+            this.timingService.cancelCall();
             // Extract status code from OpenAI SDK error
             const statusCode = err?.status || err?.statusCode || (err?.error?.status);
 
@@ -558,9 +606,11 @@ export class EnhancedAgentLoop {
             // ── Handle 404 — Model not found (bad model ID in fallback chain) ──
             if (statusCode === 404) {
               this.emit({ type: 'info', message: '404: Model "' + this.config.model + '" not found. Switching to fallback...' });
+              const notFoundModel = this.config.model;
               const fallback = rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
               if (fallback) {
                 this.emit({ type: 'auto_answer', question: 'Model not found: ' + this.config.model, answer: 'Switching to ' + fallback });
+                this.emit({ type: 'model_switch', from: notFoundModel, to: fallback, reason: '404 model not found' } as any);
                 this.config.model = fallback;
                 const fallbackModelDef = getModel(fallback);
                 if (fallbackModelDef) {
@@ -579,10 +629,12 @@ export class EnhancedAgentLoop {
             if (statusCode === 429 || statusCode === 403) {
               const check = rateLimiter.canRequest(this.config.model);
               this.emit({ type: 'info', message: `Rate limited (${statusCode}): ${check.reason || 'backing off'}` });
+              const rateLimitedModel = this.config.model;
               const fallback = check.fallbackModel
                 || rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
               if (fallback) {
                 this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + fallback });
+                this.emit({ type: 'model_switch', from: rateLimitedModel, to: fallback, reason: `Rate limited (${statusCode})` } as any);
                 this.config.model = fallback;
                 // Update contextWindow for the new model
                 const fallbackModelDef = getModel(fallback);
@@ -635,6 +687,12 @@ export class EnhancedAgentLoop {
               headers: response?.headers,
               success: true,
             });
+            // End timing and emit timing event
+            this.timingService.endCall(timingCallId, {
+              tokensUsed: response.usage?.total_tokens || 0,
+              success: true,
+            });
+            this.emit({ type: 'timing_update', timing: this.timingService.formatForEvent() });
           }
         }
 
@@ -693,6 +751,23 @@ export class EnhancedAgentLoop {
         this.conversationIndexContext = responseResult.conversationIndexContext;
         const structured = responseResult.structured;
         const fileChangesCount = responseResult.fileChangesCount;
+
+        // ── Record in Dataset Builder for NANO Training ──
+        try {
+          this.datasetBuilder?.recordIteration({
+            task: currentTask.slice(0, 8000),
+            response: content.slice(0, 16000),
+            model: this.config.model,
+            provider: this.config.provider,
+            iteration: this.currentIteration,
+            runId: this.runId,
+            structured,
+            filesChanged: fileChangesCount,
+            errors: this.lastErrorContext,
+            isFailedResponse: isFailedResponse,
+          });
+          this.emit({ type: 'dataset_update', dataset: this.datasetBuilder?.formatForEvent() });
+        } catch { /* non-critical */ }
 
         // ── No-Progress Detection ──
         if (fileChangesCount > 0) {
@@ -878,6 +953,10 @@ export class EnhancedAgentLoop {
         "UPDATE agent_runs SET final_state = ?, iterations = ?, total_tokens = ?, completed_at = datetime('now') WHERE id = ?"
       ).run(this.state, this.currentIteration, this.totalTokens, this.runId);
     }
+
+    // ── Finalize services at end of run ──
+    try { this.datasetBuilder?.finalize(); } catch { /* non-critical */ }
+    try { this.ollamaHealthMonitor?.destroy(); } catch { /* non-critical */ }
   }
 
   pause(): void {
@@ -895,6 +974,12 @@ export class EnhancedAgentLoop {
   stop(): void {
     this.abortController?.abort();
     this.setState('complete');
+    // Finalize dataset builder — flush remaining pairs to disk
+    try { this.datasetBuilder?.finalize(); } catch { /* non-critical */ }
+    // Destroy Ollama health monitor polling
+    try { this.ollamaHealthMonitor?.destroy(); } catch { /* non-critical */ }
+    // Reset timing service
+    this.timingService.reset();
     // Clean up LogBloatManager flush interval to prevent leaks
     this.logManager.destroy();
   }

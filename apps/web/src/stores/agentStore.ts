@@ -43,6 +43,12 @@ interface AgentStore {
   verbosity: VerbosityLevel;
   queuedMessageCount: number;
 
+  // v4: timing, dataset, model switching
+  timingData: { lastCallMs: number; avgCallMs: number; totalCalls: number; tokPerSec: number; activeMs: number } | null;
+  datasetStats: { total: number; success: number; failures: number; avgQuality: number } | null;
+  currentModel: string | null;
+  modelSwitchHistory: Array<{ from: string; to: string; reason: string; timestamp: string }>;
+
   startAgent: (projectId: string, task: string, model: string) => Promise<void>;
   stopAgent: () => Promise<void>;
   pauseAgent: () => Promise<void>;
@@ -89,6 +95,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   // v3 defaults
   verbosity: 'detailed',
   queuedMessageCount: 0,
+
+  // v4 defaults
+  timingData: null,
+  datasetStats: null,
+  currentModel: null,
+  modelSwitchHistory: [],
 
   startAgent: async (projectId, task, model) => {
     const { maxIterations, stepDelayMs, autoApprove, autoAnswer, continuousMode, cooldownMs, bypassRateLimits, enableSmartChunking } = get();
@@ -233,6 +245,23 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
           break;
         case 'message_queued':
           set({ queuedMessageCount: event.queueSize || 0 });
+          break;
+        case 'timing_update':
+          set({ timingData: event.timing || null });
+          break;
+        case 'dataset_update':
+          set({ datasetStats: event.dataset || null });
+          break;
+        case 'model_switch':
+          set(s => ({
+            currentModel: event.to || s.currentModel,
+            modelSwitchHistory: [...s.modelSwitchHistory.slice(-19), {
+              from: event.from || '',
+              to: event.to || '',
+              reason: event.reason || 'rate-limited',
+              timestamp: new Date().toISOString(),
+            }],
+          }));
           break;
         // Ignore heartbeat / status (initial handshake)
       }

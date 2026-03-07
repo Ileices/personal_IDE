@@ -1,12 +1,16 @@
 // ============================================
 // Agent Settings Panel — Configuration toggles and sliders
-// Extracted from AgentControls.tsx for component decomposition
+// Enhanced with model preset selector and fallback chain display
 // ============================================
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Infinity, ShieldOff, Puzzle, Timer, Clock,
-  Users, Cpu,
+  Users, Cpu, Layers, Zap, ChevronDown, ChevronRight,
 } from 'lucide-react';
+import {
+  MODEL_PRESETS, getPresetModels, estimateDailyCapacity, getModelCooldown,
+  type ModelPreset, type AgentTaskType,
+} from '@personal-ide/shared';
 import type { VerbosityLevel } from '../../stores/agentStore';
 
 interface AgentSettingsProps {
@@ -32,6 +36,24 @@ interface AgentSettingsProps {
   setAutoApprove: (v: boolean) => void;
   autoAnswer: boolean;
   setAutoAnswer: (v: boolean) => void;
+  // Preset support
+  selectedPresetId: string;
+  onPresetChange: (presetId: string) => void;
+  // Timing display
+  timingData?: {
+    lastCallMs: number;
+    avgCallMs: number;
+    totalCalls: number;
+    tokPerSec: number;
+    activeMs: number;
+  } | null;
+  // Dataset display
+  datasetStats?: {
+    total: number;
+    success: number;
+    failures: number;
+    avgQuality: number;
+  } | null;
   // Disabled states
   isRunning: boolean;
   isFleetRunning: boolean;
@@ -43,10 +65,73 @@ export function AgentSettings({
   enableSmartChunking, setEnableSmartChunking, cooldownMs, setCooldownMs,
   maxIterations, setMaxIterations, stepDelayMs, setStepDelay,
   autoApprove, setAutoApprove, autoAnswer, setAutoAnswer,
+  selectedPresetId, onPresetChange,
+  timingData, datasetStats,
   isRunning, isFleetRunning,
 }: AgentSettingsProps) {
+  const [showFallbackChain, setShowFallbackChain] = useState(false);
+  const selectedPreset = MODEL_PRESETS.find(p => p.id === selectedPresetId) || MODEL_PRESETS[0];
+
   return (
-    <div className="p-3 border-b border-ide-border bg-ide-bg/50 space-y-2 max-h-72 overflow-y-auto flex-shrink-0">
+    <div className="p-3 border-b border-ide-border bg-ide-bg/50 space-y-2 max-h-[45vh] overflow-y-auto flex-shrink-0">
+      {/* ── Model Strategy Preset ── */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1 text-[10px] text-ide-accent font-medium uppercase tracking-wide">
+          <Layers className="w-3 h-3" /> Model Strategy
+        </div>
+        <select
+          value={selectedPresetId}
+          onChange={e => onPresetChange(e.target.value)}
+          disabled={isRunning || isFleetRunning}
+          className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-xs text-ide-text focus:outline-none focus:border-ide-accent disabled:opacity-50"
+        >
+          {MODEL_PRESETS.map(preset => (
+            <option key={preset.id} value={preset.id}>
+              {preset.name}
+            </option>
+          ))}
+        </select>
+        <div className="text-[9px] text-ide-text-dim px-1">{selectedPreset.description}</div>
+
+        {/* Preset Stats */}
+        <div className="flex flex-wrap gap-1.5 text-[9px]">
+          <span className="px-1.5 py-0.5 rounded bg-green-500/15 text-green-300">
+            ~{estimateDailyCapacity(selectedPreset)} RPD
+          </span>
+          <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300">
+            {getPresetModels(selectedPreset).length} models
+          </span>
+          {selectedPreset.continuousReady && (
+            <span className="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300">24/7 Ready</span>
+          )}
+        </div>
+
+        {/* Fallback Chain (expandable) */}
+        <button
+          onClick={() => setShowFallbackChain(!showFallbackChain)}
+          className="flex items-center gap-1 text-[10px] text-ide-text-dim hover:text-ide-accent"
+        >
+          {showFallbackChain ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          Fallback Chain ({selectedPreset.fallbackChain.length} models)
+        </button>
+        {showFallbackChain && (
+          <div className="space-y-0.5 pl-2 border-l-2 border-ide-border/50">
+            {selectedPreset.fallbackChain.map((modelId, i) => {
+              const cooldown = selectedPreset.cooldowns[modelId] || getModelCooldown(modelId);
+              return (
+                <div key={modelId} className="flex items-center justify-between text-[9px]">
+                  <span className="text-ide-text">
+                    <span className="text-ide-text-dim">{i + 1}.</span> {modelId.split('/')[1] || modelId}
+                  </span>
+                  <span className="text-ide-text-dim">{(cooldown / 1000).toFixed(0)}s</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-ide-border/50 my-1" />
       {/* Fleet Mode Toggle */}
       <ToggleRow
         icon={<Users className="w-3 h-3 text-cyan-400" />}
@@ -151,6 +236,48 @@ export function AgentSettings({
           <span className="text-[9px] px-1.5 py-0.5 rounded bg-ide-bg text-ide-text-dim">⏱ {cooldownMs/1000}s</span>
         )}
       </div>
+
+      {/* ── Live Timing Display ── */}
+      {timingData && timingData.totalCalls > 0 && (
+        <div className="border-t border-ide-border/50 pt-1.5 mt-1">
+          <div className="flex items-center gap-1 text-[10px] text-ide-accent font-medium mb-1">
+            <Zap className="w-3 h-3" /> Call Timing
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[9px]">
+            <span className="text-ide-text-dim">Last call:</span>
+            <span className="text-ide-text text-right">{(timingData.lastCallMs / 1000).toFixed(1)}s</span>
+            <span className="text-ide-text-dim">Avg call:</span>
+            <span className="text-ide-text text-right">{(timingData.avgCallMs / 1000).toFixed(1)}s</span>
+            <span className="text-ide-text-dim">Total calls:</span>
+            <span className="text-ide-text text-right">{timingData.totalCalls}</span>
+            <span className="text-ide-text-dim">Tok/sec:</span>
+            <span className="text-ide-text text-right">{timingData.tokPerSec}</span>
+            {timingData.activeMs > 0 && (
+              <>
+                <span className="text-ide-text-dim">Active:</span>
+                <span className="text-yellow-300 text-right animate-pulse">{(timingData.activeMs / 1000).toFixed(0)}s</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Dataset Stats ── */}
+      {datasetStats && datasetStats.total > 0 && (
+        <div className="border-t border-ide-border/50 pt-1.5 mt-1">
+          <div className="flex items-center gap-1 text-[10px] text-green-400 font-medium mb-1">
+            📊 Training Data
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[9px]">
+            <span className="text-ide-text-dim">Total pairs:</span>
+            <span className="text-ide-text text-right">{datasetStats.total}</span>
+            <span className="text-ide-text-dim">Quality avg:</span>
+            <span className="text-ide-text text-right">{(datasetStats.avgQuality * 100).toFixed(0)}%</span>
+            <span className="text-ide-text-dim">Success/Fail:</span>
+            <span className="text-ide-text text-right">{datasetStats.success}/{datasetStats.failures}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ import {
   AlertCircle, CheckCircle, Loader2, MessageSquare, Bot,
   Infinity, Zap, Puzzle, Timer, ShieldOff, Copy, Check,
   ChevronDown, ChevronRight, Send, Eye, EyeOff, Filter,
-  Users, UserPlus, Cpu, BookOpen
+  Users, UserPlus, Cpu, BookOpen, ArrowRightLeft
 } from 'lucide-react';
 import { MEGA_PROMPTS, type MegaPrompt } from '../data/megaPrompts';
 import { AgentSettings } from './agent/AgentSettings';
@@ -27,6 +27,8 @@ export function AgentControls() {
     continuousMode, cooldownMs, bypassRateLimits, enableSmartChunking,
     chunkingActive, chunkingProgress,
     verbosity, queuedMessageCount,
+    timingData: storeTimingData, datasetStats: storeDatasetStats,
+    currentModel, modelSwitchHistory,
     startAgent, stopAgent, pauseAgent, resumeAgent,
     setStepDelay, setAutoApprove, setAutoAnswer, setMaxIterations, clearEvents,
     setContinuousMode, setCooldownMs, setBypassRateLimits, setEnableSmartChunking,
@@ -42,6 +44,21 @@ export function AgentControls() {
   const [fleetMode, setFleetMode] = useState(false);
   const [fleetMessage, setFleetMessage] = useState('');
   const [showPresets, setShowPresets] = useState(false);
+  const [selectedPresetId, setSelectedPresetId] = useState('all-models-balanced');
+  const [timingData, setTimingData] = useState<{
+    lastCallMs: number; avgCallMs: number; totalCalls: number; tokPerSec: number; activeMs: number;
+  } | null>(null);
+  const [datasetStats, setDatasetStats] = useState<{
+    total: number; success: number; failures: number; avgQuality: number;
+  } | null>(null);
+
+  // Sync timing/dataset from store events
+  useEffect(() => {
+    if (storeTimingData) setTimingData(storeTimingData);
+  }, [storeTimingData]);
+  useEffect(() => {
+    if (storeDatasetStats) setDatasetStats(storeDatasetStats);
+  }, [storeDatasetStats]);
 
   // Fleet store
   const {
@@ -136,6 +153,11 @@ export function AgentControls() {
               24/7
             </span>
           )}
+          {currentModel && isRunning && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300 font-medium truncate max-w-24" title={currentModel}>
+              {currentModel.split('/')[1] || currentModel}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {isRunning && (
@@ -192,6 +214,10 @@ export function AgentControls() {
           setAutoApprove={setAutoApprove}
           autoAnswer={autoAnswer}
           setAutoAnswer={setAutoAnswer}
+          selectedPresetId={selectedPresetId}
+          onPresetChange={setSelectedPresetId}
+          timingData={timingData}
+          datasetStats={datasetStats}
           isRunning={isRunning}
           isFleetRunning={isFleetRunning}
         />

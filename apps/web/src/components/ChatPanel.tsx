@@ -1,5 +1,6 @@
 // ============================================
 // Chat Panel - Messages, streaming, input
+// Enhanced: Conversation sidebar integration
 // ============================================
 import React, { useState, useRef, useEffect } from 'react';
 import { useChatStore } from '../stores/chatStore';
@@ -7,7 +8,8 @@ import { useProjectStore } from '../stores/projectStore';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Send, Square, Bot, User, Copy, Check, Loader2, ClipboardCopy } from 'lucide-react';
+import { Send, Square, Bot, User, Copy, Check, Loader2, ClipboardCopy, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { ConversationSidebar } from './ConversationSidebar';
 
 export function ChatPanel() {
   const {
@@ -18,6 +20,7 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedConvo, setCopiedConvo] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -56,7 +59,15 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full">
+      {/* Conversation Sidebar */}
+      <ConversationSidebar
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
+
+      {/* Main Chat Area */}
+      <div className="flex flex-col flex-1 min-w-0">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && !isStreaming && (
@@ -229,6 +240,7 @@ export function ChatPanel() {
             <button onClick={newConversation} className="hover:text-ide-accent">New Chat</button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
