@@ -362,14 +362,17 @@ export class ChunkingPipeline {
         });
 
       } catch (err: any) {
-        // ── Rate limit errors (429) are NOT token-size problems — propagate immediately ──
+        // ── Rate limit errors (429) are NOT token-size problems — propagate with minimum cooldown ──
         const statusCode = err?.status || err?.statusCode || err?.error?.status;
         if (statusCode === 429 || statusCode === 403) {
+          // Ensure caller waits at least 30s before retrying (prevents rapid 429 loops)
+          const retryAfterHeader = err?.headers?.['retry-after'] || err?.error?.headers?.['retry-after'];
+          const retryAfterMs = Math.max(30_000, retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : 30_000);
           onProgress?.({
             type: 'pipeline_error',
             chunkIndex: i,
             totalChunks,
-            message: `Rate limited (${statusCode}) on chunk ${i + 1}. Propagating to caller for backoff.`,
+            message: `Rate limited (${statusCode}) on chunk ${i + 1}. Retry after ${Math.ceil(retryAfterMs / 1000)}s. Propagating to caller.`,
           });
           return {
             success: false,
@@ -377,7 +380,7 @@ export class ChunkingPipeline {
             mergedResponse: results.map(r => r.response).join('\n\n---\n\n'),
             totalTokensUsed,
             totalChunks,
-            error: `Rate limited (${statusCode}): ${err.message}`,
+            error: `Rate limited (${statusCode}): ${err.message}. retryAfterMs=${retryAfterMs}`,
           };
         }
 

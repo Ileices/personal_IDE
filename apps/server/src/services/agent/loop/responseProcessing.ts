@@ -92,22 +92,40 @@ export function processResponse(
     });
   } catch { /* non-critical */ }
 
-  // Bird-feed observation to Nano trainer (fire-and-forget)
+  // Bird-feed observation to Nano trainer (with retry logic)
   try {
     const nanoRow = ctx.db.prepare(
       "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
     ).get() as any;
     const nanoBaseUrl = (nanoRow?.base_url || appConfig.services.nanoSeaUrl).replace(/\/v1\/?$/, '');
-    fetch(nanoBaseUrl + '/v1/training/observe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: currentTask.slice(0, 4000),
-        response: content.slice(0, 8000),
-        source: 'agent',
-        quality: 0.8,
-      }),
-    }).catch(() => {});
+    const nanoPayload = JSON.stringify({
+      query: currentTask.slice(0, 4000),
+      response: content.slice(0, 8000),
+      source: 'agent',
+      quality: 0.8,
+    });
+
+    // Retry up to 2 times with backoff on failure
+    const sendToNano = async (attempt: number) => {
+      try {
+        const res = await fetch(nanoBaseUrl + '/v1/training/observe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: nanoPayload,
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          emit({ type: 'nano_training_received', attempt, status: res.status });
+        } else if (attempt < 2) {
+          setTimeout(() => sendToNano(attempt + 1), 3000 * attempt);
+        }
+      } catch {
+        if (attempt < 2) {
+          setTimeout(() => sendToNano(attempt + 1), 3000 * attempt);
+        }
+      }
+    };
+    sendToNano(1);
   } catch { /* non-critical */ }
 
   // Index conversation messages

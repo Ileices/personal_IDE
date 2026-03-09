@@ -29,6 +29,11 @@ function detectCapabilityTier(modelId: string, contextWindow: number): ModelCapa
   // Local/small models that may refuse agentic tasks → canvas illusion
   if (isLocal) return 'canvas_illusion';
 
+  // External free providers — full agent mode (they have massive context and follow instructions well)
+  if (modelId.startsWith('gemini/') || modelId.startsWith('groq/') || modelId.startsWith('cerebras/')) {
+    return 'full_agent';
+  }
+
   // DeepSeek via cloud (may refuse agent tasks in some configurations)
   if (modelId.includes('deepseek') && !isReasoning) return 'canvas_illusion';
 

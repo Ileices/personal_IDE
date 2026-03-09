@@ -3,7 +3,7 @@
 // ============================================
 
 /** Tier determines rate limits */
-export type ModelTier = 'low' | 'high' | 'reasoning' | 'reasoning_mini' | 'deepseek' | 'grok' | 'grok_mini';
+export type ModelTier = 'low' | 'high' | 'reasoning' | 'reasoning_mini' | 'deepseek' | 'grok' | 'grok_mini' | 'gemini_free' | 'gemini_pro' | 'groq_free' | 'cerebras_free';
 
 /** A model available through GitHub Models */
 export interface ModelDefinition {
@@ -141,16 +141,75 @@ export const MODELS: ModelDefinition[] = [
     recommendedFor: ['plan', 'agent'],
   },
   // --- Meta ---
-  // NOTE: Llama 4 Maverick was removed — returns 404 on GitHub Models.
-  // Re-add when the model is available on the platform.
+  // NOTE: Llama 4 Scout & Maverick REMOVED — both return 404 on GitHub Models.
+  // Re-add when Meta models are available on the platform.
+
+  // --- Google Gemini (via Gemini API — FREE tier) ---
   {
-    id: 'meta/llama-4-scout',
-    name: 'Llama 4 Scout',
-    publisher: 'Meta',
-    tier: 'low',
-    description: 'Open-source from Meta. Good for coding with generous rate limits.',
-    maxInputTokens: 524288,
+    id: 'gemini/gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    publisher: 'Google',
+    tier: 'gemini_free',
+    description: 'Ultra-fast Gemini model. FREE 1M context window, 15 RPM, 1500 RPD. Best free-tier value.',
+    maxInputTokens: 1048576,
+    maxOutputTokens: 65536,
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsJsonMode: true,
+    supportsVision: true,
+    recommendedFor: ['ask', 'edit', 'plan', 'agent'],
+  },
+  {
+    id: 'gemini/gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    publisher: 'Google',
+    tier: 'gemini_pro',
+    description: 'Most capable Gemini model. FREE 1M context, deep reasoning. 50 RPD limit.',
+    maxInputTokens: 1048576,
+    maxOutputTokens: 65536,
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsJsonMode: true,
+    supportsVision: true,
+    isReasoning: true,
+    recommendedFor: ['plan', 'agent'],
+  },
+  // --- Groq (via Groq API — FREE tier, ultra-fast inference) ---
+  {
+    id: 'groq/llama-3.3-70b-versatile',
+    name: 'Llama 3.3 70B (Groq)',
+    publisher: 'Groq',
+    tier: 'groq_free',
+    description: 'Llama 3.3 70B on Groq hardware. FREE, 131K context, 30 RPM, ~280 tok/s.',
+    maxInputTokens: 131072,
     maxOutputTokens: 32768,
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsJsonMode: true,
+    recommendedFor: ['ask', 'edit', 'agent'],
+  },
+  {
+    id: 'groq/llama-4-scout-17b-16e-instruct',
+    name: 'Llama 4 Scout 17B (Groq)',
+    publisher: 'Groq',
+    tier: 'groq_free',
+    description: 'Meta Llama 4 Scout on Groq. FREE, 131K context, blazing fast inference.',
+    maxInputTokens: 131072,
+    maxOutputTokens: 16384,
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsJsonMode: true,
+    recommendedFor: ['ask', 'edit', 'agent'],
+  },
+  // --- Cerebras (via Cerebras API — FREE tier, fastest inference anywhere) ---
+  {
+    id: 'cerebras/llama-4-scout-17b-16e-instruct',
+    name: 'Llama 4 Scout (Cerebras)',
+    publisher: 'Cerebras',
+    tier: 'cerebras_free',
+    description: 'Llama 4 Scout on Cerebras Wafer-Scale Engine. FREE, 131K context, ~3000 tok/s.',
+    maxInputTokens: 131072,
+    maxOutputTokens: 16384,
     supportsStreaming: true,
     supportsTools: true,
     supportsJsonMode: true,
@@ -203,13 +262,19 @@ export const MODELS: ModelDefinition[] = [
 
 /** Rate limits by tier (GitHub free plan — from docs.github.com) */
 export const RATE_LIMITS: Record<ModelTier, RateLimits> = {
-  low:            { requestsPerMinute: 15, requestsPerDay: 150, maxInputTokens: 8000, maxOutputTokens: 4000, maxConcurrent: 5 },
-  high:           { requestsPerMinute: 10, requestsPerDay: 50,  maxInputTokens: 8000, maxOutputTokens: 4000, maxConcurrent: 2 },
-  reasoning:      { requestsPerMinute: 1,  requestsPerDay: 8,   maxInputTokens: 4000, maxOutputTokens: 4000, maxConcurrent: 1 },
-  reasoning_mini: { requestsPerMinute: 2,  requestsPerDay: 12,  maxInputTokens: 4000, maxOutputTokens: 4000, maxConcurrent: 1 },
-  deepseek:       { requestsPerMinute: 1,  requestsPerDay: 8,   maxInputTokens: 4000, maxOutputTokens: 4000, maxConcurrent: 1 },
-  grok:           { requestsPerMinute: 1,  requestsPerDay: 15,  maxInputTokens: 4000, maxOutputTokens: 4000, maxConcurrent: 1 },
-  grok_mini:      { requestsPerMinute: 2,  requestsPerDay: 30,  maxInputTokens: 4000, maxOutputTokens: 8000, maxConcurrent: 1 },
+  // GitHub Models tiers (8K per-request cap)
+  low:            { requestsPerMinute: 15, requestsPerDay: 150, maxInputTokens: 8000,    maxOutputTokens: 4000,  maxConcurrent: 5 },
+  high:           { requestsPerMinute: 10, requestsPerDay: 50,  maxInputTokens: 8000,    maxOutputTokens: 4000,  maxConcurrent: 2 },
+  reasoning:      { requestsPerMinute: 1,  requestsPerDay: 8,   maxInputTokens: 4000,    maxOutputTokens: 4000,  maxConcurrent: 1 },
+  reasoning_mini: { requestsPerMinute: 2,  requestsPerDay: 12,  maxInputTokens: 4000,    maxOutputTokens: 4000,  maxConcurrent: 1 },
+  deepseek:       { requestsPerMinute: 1,  requestsPerDay: 8,   maxInputTokens: 4000,    maxOutputTokens: 4000,  maxConcurrent: 1 },
+  grok:           { requestsPerMinute: 1,  requestsPerDay: 15,  maxInputTokens: 4000,    maxOutputTokens: 4000,  maxConcurrent: 1 },
+  grok_mini:      { requestsPerMinute: 2,  requestsPerDay: 30,  maxInputTokens: 4000,    maxOutputTokens: 8000,  maxConcurrent: 1 },
+  // External free-tier providers (NO per-request token cap!)
+  gemini_free:    { requestsPerMinute: 15, requestsPerDay: 1500, maxInputTokens: 1048576, maxOutputTokens: 65536, maxConcurrent: 5 },
+  gemini_pro:     { requestsPerMinute: 2,  requestsPerDay: 50,   maxInputTokens: 1048576, maxOutputTokens: 65536, maxConcurrent: 1 },
+  groq_free:      { requestsPerMinute: 30, requestsPerDay: 1000, maxInputTokens: 131072,  maxOutputTokens: 32768, maxConcurrent: 5 },
+  cerebras_free:  { requestsPerMinute: 30, requestsPerDay: 1000, maxInputTokens: 131072,  maxOutputTokens: 16384, maxConcurrent: 5 },
 };
 
 /** Default model ID */

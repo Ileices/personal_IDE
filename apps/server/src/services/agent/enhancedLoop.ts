@@ -48,6 +48,7 @@ import { TimingService } from './loop/timingService.js';
 import { DatasetBuilder } from './loop/datasetBuilder.js';
 import { adaptPromptForModel } from '../modes/modelPromptAdapter.js';
 import { OllamaHealthMonitor } from '../ollama/healthMonitor.js';
+import { ToolExecutor } from './loop/toolExecutor.js';
 import { appConfig } from '../../config.js';
 
 type EventCallback = (event: any) => void;
@@ -118,6 +119,7 @@ export class EnhancedAgentLoop {
   private timingService: TimingService;
   private datasetBuilder: DatasetBuilder | null = null;
   private ollamaHealthMonitor: OllamaHealthMonitor | null = null;
+  private toolExecutor: ToolExecutor;
 
   constructor(
     private db: Database.Database,
@@ -144,6 +146,7 @@ export class EnhancedAgentLoop {
     this.codeIndexer = new CodeIndexer();
     // v4 services
     this.timingService = new TimingService();
+    this.toolExecutor = new ToolExecutor(config.projectRoot);
 
     // Start Ollama health monitor if provider is ollama
     if (config.provider === 'ollama') {
@@ -605,22 +608,34 @@ export class EnhancedAgentLoop {
 
             // ── Handle 404 — Model not found (bad model ID in fallback chain) ──
             if (statusCode === 404) {
-              this.emit({ type: 'info', message: '404: Model "' + this.config.model + '" not found. Switching to fallback...' });
+              this.emit({ type: 'info', message: '404: Model "' + this.config.model + '" not found. Blacklisting and switching to fallback...' });
               const notFoundModel = this.config.model;
+
+              // Mark this model as dead so it's never picked again during this session
+              rateLimiter.markDead(notFoundModel);
+
               const fallback = rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
               if (fallback) {
                 this.emit({ type: 'auto_answer', question: 'Model not found: ' + this.config.model, answer: 'Switching to ' + fallback });
-                this.emit({ type: 'model_switch', from: notFoundModel, to: fallback, reason: '404 model not found' } as any);
+                this.emit({ type: 'model_switch', from: notFoundModel, to: fallback, reason: '404 model not found (blacklisted)' } as any);
                 this.config.model = fallback;
                 const fallbackModelDef = getModel(fallback);
                 if (fallbackModelDef) {
                   this.contextWindow = fallbackModelDef.maxInputTokens;
                 }
               } else {
-                // No fallback available — try the default model
-                this.emit({ type: 'info', message: 'No fallback available. Falling back to openai/gpt-4.1-mini.' });
-                this.config.model = 'openai/gpt-4.1-mini';
-                this.contextWindow = 1047576;
+                // Last resort: pick a guaranteed-working model
+                const lastResort = 'openai/gpt-4.1-mini';
+                if (!rateLimiter.isDead(lastResort)) {
+                  this.emit({ type: 'info', message: 'No fallback available. Last resort: ' + lastResort });
+                  this.config.model = lastResort;
+                  this.contextWindow = 1047576;
+                } else {
+                  // All models dead — halt
+                  this.setState('error');
+                  this.emit({ type: 'error', error: 'All models returning 404. Cannot proceed.' });
+                  break;
+                }
               }
               continue;
             }
@@ -769,6 +784,23 @@ export class EnhancedAgentLoop {
           this.emit({ type: 'dataset_update', dataset: this.datasetBuilder?.formatForEvent() });
         } catch { /* non-critical */ }
 
+        // ── Execute Agent Commands via ToolExecutor ──
+        if (structured?.commands && structured.commands.length > 0) {
+          try {
+            this.emit({ type: 'info', message: 'Executing ' + structured.commands.length + ' agent command(s)...' });
+            const { results, formattedForLLM } = await this.toolExecutor.executeCommands(
+              structured.commands,
+              (e: any) => this.emit(e),
+            );
+            if (formattedForLLM) {
+              currentTask = (currentTask || '') + '\n\n' + formattedForLLM;
+            }
+            this.emit({ type: 'info', message: 'Commands complete: ' + results.filter(r => r.success).length + '/' + results.length + ' succeeded' });
+          } catch (cmdErr: any) {
+            this.emit({ type: 'info', message: 'Command execution error: ' + cmdErr.message });
+          }
+        }
+
         // ── No-Progress Detection ──
         if (fileChangesCount > 0) {
           this.iterationsWithoutFileChanges = 0;
@@ -818,6 +850,33 @@ export class EnhancedAgentLoop {
           }, { memory: this.memory });
 
           updateTaskTracker(structured, this.config.taskId, { analyzer: this.analyzer });
+
+          // ── Self-Reflection (every 10 iterations or when done) ──
+          if (structured.done || (this.currentIteration > 1 && this.currentIteration % 10 === 0)) {
+            const reflectionReason = structured.done ? 'completion' : 'periodic';
+            this.emit({ type: 'info', message: '🔍 Self-reflection (' + reflectionReason + ') at iteration ' + this.currentIteration });
+            const reflectionPrompt = [
+              'SELF-REFLECTION CHECKPOINT — Review your work so far:',
+              '• Iterations completed: ' + this.currentIteration,
+              '• Files changed: ' + this.totalFilesChanged,
+              '• Tokens used: ' + this.totalTokens,
+              '• Current confidence: ' + (structured.confidence || 'N/A'),
+              '• Last summary: ' + (structured.summary || 'N/A').slice(0, 200),
+              this.lastErrorContext ? '• Outstanding errors:\n' + this.lastErrorContext.slice(0, 500) : '• No outstanding errors',
+              this.lastTestContext ? '• Test status:\n' + this.lastTestContext.slice(0, 300) : '',
+              '',
+              'Questions to consider:',
+              '1. Are there any bugs or regressions introduced?',
+              '2. Did I miss any edge cases or error handling?',
+              '3. Is the code clean and well-structured?',
+              '4. Are there any TODOs/FIXMEs I should address?',
+              structured.done ? '5. Is the task TRULY complete, or am I marking done prematurely?' : '',
+              '',
+              'If you find issues, set done=false and address them. Otherwise continue.',
+            ].filter(Boolean).join('\n');
+            // Inject reflection into the current task so the model sees it next iteration
+            currentTask = reflectionPrompt + '\n\n' + (currentTask || '');
+          }
 
           // Check if done
           if (structured.done) {
@@ -978,6 +1037,8 @@ export class EnhancedAgentLoop {
     try { this.datasetBuilder?.finalize(); } catch { /* non-critical */ }
     // Destroy Ollama health monitor polling
     try { this.ollamaHealthMonitor?.destroy(); } catch { /* non-critical */ }
+    // Destroy tool executor terminal sessions
+    try { this.toolExecutor?.destroy(); } catch { /* non-critical */ }
     // Reset timing service
     this.timingService.reset();
     // Clean up LogBloatManager flush interval to prevent leaks

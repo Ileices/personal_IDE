@@ -45,6 +45,27 @@ export interface StructuredAgentOutput {
 
   /** Confidence level 0-100 */
   confidence: number;
+
+  /**
+   * Shell commands the agent wants to execute (e.g., npm install, npm run dev, test commands).
+   * These are executed via the ToolExecutor and results fed back into the next iteration.
+   */
+  commands?: AgentCommand[];
+
+  /** Edit log tracking symbols affected by changes */
+  editLog?: { file: string; symbolsAffected: string[]; changeReason: string }[];
+}
+
+/** A command the agent wants to execute in the terminal */
+export interface AgentCommand {
+  /** Shell command to run */
+  command: string;
+  /** Purpose of this command */
+  purpose: string;
+  /** Working directory relative to project root */
+  cwd?: string;
+  /** Timeout in ms (default 30000) */
+  timeoutMs?: number;
 }
 
 /** A single file change record */

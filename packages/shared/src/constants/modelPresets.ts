@@ -23,6 +23,10 @@ export interface ModelPreset {
   tags: string[];
   /** Whether this preset is suitable for 24/7 continuous mode */
   continuousReady: boolean;
+  /** Estimated cost per 24h in USD (0 = free tier only) */
+  estimatedCostPer24h?: number;
+  /** Whether this preset includes paid API models */
+  paidModelsIncluded?: boolean;
 }
 
 /**
@@ -56,10 +60,15 @@ const MODEL_COOLDOWNS: Record<string, number> = {
   'openai/gpt-4o-mini':   safeCooldown(15),  // ~4.6s → 5s
   'openai/o3':            safeCooldown(1),   // ~69s → 69s
   'openai/o4-mini':       safeCooldown(2),   // ~34.5s → 35s
-  'meta/llama-4-scout':   safeCooldown(15),  // ~4.6s → 5s
   'deepseek/DeepSeek-R1': safeCooldown(1),   // ~69s → 69s
   'xai/grok-3':           safeCooldown(1),   // ~69s → 69s
   'xai/grok-3-mini':      safeCooldown(2),   // ~34.5s → 35s
+  // External free providers (generous rate limits → low cooldowns)
+  'gemini/gemini-2.5-flash':              safeCooldown(15),  // ~4.6s
+  'gemini/gemini-2.5-pro':                safeCooldown(2),   // ~34.5s
+  'groq/llama-3.3-70b-versatile':         safeCooldown(30),  // ~2.3s
+  'groq/llama-4-scout-17b-16e-instruct':  safeCooldown(30),  // ~2.3s
+  'cerebras/llama-4-scout-17b-16e-instruct': safeCooldown(30), // ~2.3s
 };
 
 // ── Daily budget cooldowns (for 24/7 mode — spread RPD across 24h) ──
@@ -71,10 +80,15 @@ const DAILY_BUDGET_COOLDOWNS: Record<string, number> = {
   'openai/gpt-4o-mini':   Math.ceil(86400000 / 150 * 1.1),
   'openai/o3':            Math.ceil(86400000 / 8 * 1.1),     // ~11880s → ~3.3h
   'openai/o4-mini':       Math.ceil(86400000 / 12 * 1.1),    // ~7920s → ~2.2h
-  'meta/llama-4-scout':   Math.ceil(86400000 / 150 * 1.1),
   'deepseek/DeepSeek-R1': Math.ceil(86400000 / 8 * 1.1),
   'xai/grok-3':           Math.ceil(86400000 / 15 * 1.1),    // ~6336s → ~1.76h
   'xai/grok-3-mini':      Math.ceil(86400000 / 30 * 1.1),    // ~3168s → ~53min
+  // External providers — much more generous
+  'gemini/gemini-2.5-flash':              Math.ceil(86400000 / 1500 * 1.1), // ~63s
+  'gemini/gemini-2.5-pro':                Math.ceil(86400000 / 50 * 1.1),
+  'groq/llama-3.3-70b-versatile':         Math.ceil(86400000 / 1000 * 1.1), // ~95s
+  'groq/llama-4-scout-17b-16e-instruct':  Math.ceil(86400000 / 1000 * 1.1),
+  'cerebras/llama-4-scout-17b-16e-instruct': Math.ceil(86400000 / 1000 * 1.1),
 };
 
 /** Get per-minute safe cooldown for a model */
@@ -96,60 +110,69 @@ export const MODEL_PRESETS: ModelPreset[] = [
   {
     id: 'all-models-balanced',
     name: 'All Models — Balanced Rotation',
-    description: 'Uses all 11 models with smart rotation. Maximizes daily throughput by spreading requests across every available model. Best for 24/7 operation.',
+    description: 'Uses all available models with smart rotation. Maximizes daily throughput by spreading requests across every provider. Best for 24/7 operation.',
     primaryModel: 'openai/gpt-4.1',
     fallbackChain: [
       'openai/gpt-4.1',
       'openai/gpt-4.1-mini',
-      'meta/llama-4-scout',
+      'gemini/gemini-2.5-flash',
+      'groq/llama-3.3-70b-versatile',
       'openai/gpt-4o',
       'xai/grok-3-mini',
       'openai/gpt-4o-mini',
       'openai/gpt-4.1-nano',
+      'cerebras/llama-4-scout-17b-16e-instruct',
+      'groq/llama-4-scout-17b-16e-instruct',
       'xai/grok-3',
       'openai/o4-mini',
       'deepseek/DeepSeek-R1',
       'openai/o3',
     ],
     taskAssignments: {
-      planning: ['openai/o3', 'deepseek/DeepSeek-R1', 'openai/gpt-4.1', 'openai/o4-mini'],
-      coding: ['openai/gpt-4.1', 'xai/grok-3', 'meta/llama-4-scout', 'openai/gpt-4o'],
-      iteration: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini', 'xai/grok-3-mini', 'meta/llama-4-scout', 'openai/gpt-4.1-nano'],
+      planning: ['openai/o3', 'deepseek/DeepSeek-R1', 'openai/gpt-4.1', 'openai/o4-mini', 'gemini/gemini-2.5-pro'],
+      coding: ['openai/gpt-4.1', 'xai/grok-3', 'gemini/gemini-2.5-flash', 'groq/llama-3.3-70b-versatile', 'openai/gpt-4o'],
+      iteration: ['openai/gpt-4.1-mini', 'groq/llama-3.3-70b-versatile', 'cerebras/llama-4-scout-17b-16e-instruct', 'openai/gpt-4o-mini', 'xai/grok-3-mini', 'openai/gpt-4.1-nano'],
       review: ['openai/o4-mini', 'openai/gpt-4.1', 'deepseek/DeepSeek-R1', 'xai/grok-3'],
-      debugging: ['openai/gpt-4.1', 'openai/o4-mini', 'openai/gpt-4o', 'xai/grok-3'],
-      general: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini', 'meta/llama-4-scout'],
+      debugging: ['openai/gpt-4.1', 'openai/o4-mini', 'gemini/gemini-2.5-flash', 'openai/gpt-4o', 'xai/grok-3'],
+      general: ['openai/gpt-4.1-mini', 'groq/llama-3.3-70b-versatile', 'openai/gpt-4o-mini'],
     },
     cooldowns: { ...MODEL_COOLDOWNS },
     tags: ['all', 'balanced', '24/7', 'recommended'],
     continuousReady: true,
+    estimatedCostPer24h: 0,
+    paidModelsIncluded: false,
   },
 
   // ── 2. Speed & Volume ──
   {
     id: 'speed-volume',
     name: 'Speed & Volume — Low-Tier Focus',
-    description: 'Prioritizes fast, high-rate-limit models for maximum iteration speed. 150 RPD per model = 750+ total daily requests. Best for bulk file operations.',
+    description: 'Prioritizes fast, high-rate-limit models for maximum iteration speed. Includes Groq & Cerebras for ultra-fast inference. Best for bulk file operations.',
     primaryModel: 'openai/gpt-4.1-mini',
     fallbackChain: [
       'openai/gpt-4.1-mini',
+      'groq/llama-3.3-70b-versatile',
+      'cerebras/llama-4-scout-17b-16e-instruct',
       'openai/gpt-4o-mini',
-      'meta/llama-4-scout',
+      'groq/llama-4-scout-17b-16e-instruct',
       'openai/gpt-4.1-nano',
       'xai/grok-3-mini',
       'openai/gpt-4.1',
       'openai/gpt-4o',
     ],
     taskAssignments: {
-      planning: ['openai/gpt-4.1-mini', 'meta/llama-4-scout'],
-      coding: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini', 'meta/llama-4-scout'],
-      iteration: ['openai/gpt-4.1-nano', 'openai/gpt-4.1-mini', 'xai/grok-3-mini'],
-      review: ['openai/gpt-4.1-mini', 'meta/llama-4-scout'],
+      planning: ['openai/gpt-4.1-mini', 'groq/llama-3.3-70b-versatile'],
+      coding: ['openai/gpt-4.1-mini', 'groq/llama-3.3-70b-versatile', 'openai/gpt-4o-mini'],
+      iteration: ['cerebras/llama-4-scout-17b-16e-instruct', 'groq/llama-4-scout-17b-16e-instruct', 'openai/gpt-4.1-nano', 'xai/grok-3-mini'],
+      review: ['openai/gpt-4.1-mini', 'groq/llama-3.3-70b-versatile'],
       debugging: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini'],
-      general: ['openai/gpt-4.1-nano', 'openai/gpt-4o-mini'],
+      general: ['openai/gpt-4.1-nano', 'cerebras/llama-4-scout-17b-16e-instruct', 'openai/gpt-4o-mini'],
     },
     cooldowns: { ...MODEL_COOLDOWNS },
     tags: ['speed', 'volume', 'bulk', '24/7'],
     continuousReady: true,
+    estimatedCostPer24h: 0,
+    paidModelsIncluded: false,
   },
 
   // ── 3. Reasoning Focus ──
@@ -165,12 +188,12 @@ export const MODEL_PRESETS: ModelPreset[] = [
       'openai/gpt-4.1',
       'xai/grok-3',
       'openai/gpt-4.1-mini',
-      'meta/llama-4-scout',
+      'groq/llama-3.3-70b-versatile',
     ],
     taskAssignments: {
       planning: ['openai/o3', 'deepseek/DeepSeek-R1', 'openai/o4-mini'],
       coding: ['openai/gpt-4.1', 'xai/grok-3', 'openai/o4-mini'],
-      iteration: ['openai/gpt-4.1-mini', 'meta/llama-4-scout'],
+      iteration: ['openai/gpt-4.1-mini', 'groq/llama-3.3-70b-versatile'],
       review: ['openai/o3', 'openai/o4-mini', 'deepseek/DeepSeek-R1'],
       debugging: ['openai/o4-mini', 'openai/gpt-4.1'],
       general: ['openai/o4-mini', 'openai/gpt-4.1-mini'],
@@ -188,9 +211,11 @@ export const MODEL_PRESETS: ModelPreset[] = [
     primaryModel: 'openai/gpt-4.1-mini',
     fallbackChain: [
       'openai/gpt-4.1-mini',
-      'meta/llama-4-scout',
+      'gemini/gemini-2.5-flash',
+      'groq/llama-3.3-70b-versatile',
       'openai/gpt-4o-mini',
       'openai/gpt-4.1-nano',
+      'cerebras/llama-4-scout-17b-16e-instruct',
       'xai/grok-3-mini',
       'openai/gpt-4.1',
       'openai/gpt-4o',
@@ -199,15 +224,17 @@ export const MODEL_PRESETS: ModelPreset[] = [
     ],
     taskAssignments: {
       planning: ['openai/gpt-4.1', 'openai/gpt-4.1-mini'],
-      coding: ['openai/gpt-4.1-mini', 'meta/llama-4-scout', 'openai/gpt-4o-mini'],
-      iteration: ['openai/gpt-4.1-nano', 'openai/gpt-4.1-mini', 'meta/llama-4-scout'],
+      coding: ['openai/gpt-4.1-mini', 'gemini/gemini-2.5-flash', 'groq/llama-3.3-70b-versatile', 'openai/gpt-4o-mini'],
+      iteration: ['openai/gpt-4.1-nano', 'cerebras/llama-4-scout-17b-16e-instruct', 'openai/gpt-4.1-mini'],
       review: ['openai/gpt-4.1-mini', 'openai/gpt-4.1'],
       debugging: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini'],
-      general: ['openai/gpt-4.1-nano', 'meta/llama-4-scout'],
+      general: ['openai/gpt-4.1-nano', 'groq/llama-3.3-70b-versatile'],
     },
     cooldowns: { ...DAILY_BUDGET_COOLDOWNS },
     tags: ['conservative', '24/7', 'ban-free', 'marathon'],
     continuousReady: true,
+    estimatedCostPer24h: 0,
+    paidModelsIncluded: false,
   },
 
   // ── 5. Grok + GitHub Hybrid ──
@@ -221,13 +248,13 @@ export const MODEL_PRESETS: ModelPreset[] = [
       'openai/gpt-4.1',
       'xai/grok-3-mini',
       'openai/gpt-4.1-mini',
-      'meta/llama-4-scout',
+      'groq/llama-3.3-70b-versatile',
       'openai/gpt-4o-mini',
       'openai/o4-mini',
     ],
     taskAssignments: {
       planning: ['xai/grok-3', 'openai/gpt-4.1', 'openai/o4-mini'],
-      coding: ['xai/grok-3', 'openai/gpt-4.1', 'meta/llama-4-scout'],
+      coding: ['xai/grok-3', 'openai/gpt-4.1', 'groq/llama-3.3-70b-versatile'],
       iteration: ['xai/grok-3-mini', 'openai/gpt-4.1-mini', 'openai/gpt-4o-mini'],
       review: ['xai/grok-3', 'openai/gpt-4.1'],
       debugging: ['openai/gpt-4.1', 'xai/grok-3'],
@@ -262,14 +289,16 @@ export const MODEL_PRESETS: ModelPreset[] = [
     continuousReady: true,
   },
 
-  // ── 7. Meta Open-Source Focus ──
+  // ── 7. Open-Source Focus (Groq/Cerebras) ──
   {
-    id: 'meta-opensource',
-    name: 'Meta + Open-Source Focus',
-    description: 'Prioritizes Llama and other open-source models. Generous rate limits. Falls back to OpenAI mini models when needed.',
-    primaryModel: 'meta/llama-4-scout',
+    id: 'open-source-focus',
+    name: 'Open-Source Focus — Groq + Cerebras',
+    description: 'Prioritizes open-source Llama models on Groq & Cerebras hardware. Ultra-fast, FREE, 131K context. Falls back to GitHub mini models when needed.',
+    primaryModel: 'groq/llama-3.3-70b-versatile',
     fallbackChain: [
-      'meta/llama-4-scout',
+      'groq/llama-3.3-70b-versatile',
+      'groq/llama-4-scout-17b-16e-instruct',
+      'cerebras/llama-4-scout-17b-16e-instruct',
       'openai/gpt-4.1-mini',
       'openai/gpt-4o-mini',
       'openai/gpt-4.1-nano',
@@ -277,16 +306,138 @@ export const MODEL_PRESETS: ModelPreset[] = [
       'xai/grok-3-mini',
     ],
     taskAssignments: {
-      planning: ['meta/llama-4-scout', 'deepseek/DeepSeek-R1'],
-      coding: ['meta/llama-4-scout', 'openai/gpt-4.1-mini'],
-      iteration: ['meta/llama-4-scout', 'openai/gpt-4.1-nano'],
-      review: ['deepseek/DeepSeek-R1', 'meta/llama-4-scout'],
-      debugging: ['meta/llama-4-scout', 'openai/gpt-4.1-mini'],
-      general: ['meta/llama-4-scout', 'openai/gpt-4o-mini'],
+      planning: ['groq/llama-3.3-70b-versatile', 'deepseek/DeepSeek-R1'],
+      coding: ['groq/llama-3.3-70b-versatile', 'cerebras/llama-4-scout-17b-16e-instruct', 'openai/gpt-4.1-mini'],
+      iteration: ['cerebras/llama-4-scout-17b-16e-instruct', 'groq/llama-4-scout-17b-16e-instruct', 'openai/gpt-4.1-nano'],
+      review: ['deepseek/DeepSeek-R1', 'groq/llama-3.3-70b-versatile'],
+      debugging: ['groq/llama-3.3-70b-versatile', 'openai/gpt-4.1-mini'],
+      general: ['groq/llama-4-scout-17b-16e-instruct', 'openai/gpt-4o-mini'],
     },
     cooldowns: { ...MODEL_COOLDOWNS },
-    tags: ['open-source', 'meta', 'llama'],
+    tags: ['open-source', 'groq', 'cerebras', 'llama', 'fast'],
     continuousReady: true,
+    estimatedCostPer24h: 0,
+    paidModelsIncluded: false,
+  },
+
+  // ── 8. High-Context Free (NEW) ──
+  {
+    id: 'high-context-free',
+    name: 'High-Context Free — Gemini + Groq',
+    description: 'Eliminates the 8K token bottleneck by using Gemini (1M context) and Groq (131K context). Zero chunking overhead. FREE. Best for large codebases.',
+    primaryModel: 'gemini/gemini-2.5-flash',
+    fallbackChain: [
+      'gemini/gemini-2.5-flash',
+      'groq/llama-3.3-70b-versatile',
+      'groq/llama-4-scout-17b-16e-instruct',
+      'cerebras/llama-4-scout-17b-16e-instruct',
+      'gemini/gemini-2.5-pro',
+      'openai/gpt-4.1-mini',
+      'openai/gpt-4.1-nano',
+    ],
+    taskAssignments: {
+      planning: ['gemini/gemini-2.5-pro', 'gemini/gemini-2.5-flash', 'groq/llama-3.3-70b-versatile'],
+      coding: ['gemini/gemini-2.5-flash', 'groq/llama-3.3-70b-versatile', 'cerebras/llama-4-scout-17b-16e-instruct'],
+      iteration: ['groq/llama-4-scout-17b-16e-instruct', 'cerebras/llama-4-scout-17b-16e-instruct', 'gemini/gemini-2.5-flash'],
+      review: ['gemini/gemini-2.5-pro', 'groq/llama-3.3-70b-versatile'],
+      debugging: ['gemini/gemini-2.5-flash', 'groq/llama-3.3-70b-versatile'],
+      general: ['gemini/gemini-2.5-flash', 'groq/llama-4-scout-17b-16e-instruct'],
+    },
+    cooldowns: { ...MODEL_COOLDOWNS },
+    tags: ['high-context', 'no-chunking', 'free', '24/7', 'recommended'],
+    continuousReady: true,
+    estimatedCostPer24h: 0,
+    paidModelsIncluded: false,
+  },
+
+  // ── 9. Speed Demon (NEW) ──
+  {
+    id: 'speed-demon',
+    name: 'Speed Demon — Cerebras + Groq',
+    description: 'Maximum inference speed. Cerebras (~3000 tok/s) + Groq (~2200 tok/s). FREE. Best for rapid iteration cycles.',
+    primaryModel: 'cerebras/llama-4-scout-17b-16e-instruct',
+    fallbackChain: [
+      'cerebras/llama-4-scout-17b-16e-instruct',
+      'groq/llama-4-scout-17b-16e-instruct',
+      'groq/llama-3.3-70b-versatile',
+      'gemini/gemini-2.5-flash',
+      'openai/gpt-4.1-mini',
+      'openai/gpt-4.1-nano',
+    ],
+    taskAssignments: {
+      planning: ['groq/llama-3.3-70b-versatile', 'gemini/gemini-2.5-flash'],
+      coding: ['cerebras/llama-4-scout-17b-16e-instruct', 'groq/llama-3.3-70b-versatile'],
+      iteration: ['cerebras/llama-4-scout-17b-16e-instruct', 'groq/llama-4-scout-17b-16e-instruct'],
+      review: ['groq/llama-3.3-70b-versatile', 'gemini/gemini-2.5-flash'],
+      debugging: ['groq/llama-3.3-70b-versatile', 'cerebras/llama-4-scout-17b-16e-instruct'],
+      general: ['cerebras/llama-4-scout-17b-16e-instruct', 'groq/llama-4-scout-17b-16e-instruct'],
+    },
+    cooldowns: { ...MODEL_COOLDOWNS },
+    tags: ['speed', 'fastest', 'free', 'cerebras', 'groq'],
+    continuousReady: true,
+    estimatedCostPer24h: 0,
+    paidModelsIncluded: false,
+  },
+
+  // ── 10. GitHub Free Compressed (NEW) ──
+  {
+    id: 'github-free-compressed',
+    name: 'GitHub Free — Compressed Prompts',
+    description: 'Uses ONLY GitHub Models with compressed prompts to maximize the 8K per-request budget. No external API keys needed.',
+    primaryModel: 'openai/gpt-4.1-mini',
+    fallbackChain: [
+      'openai/gpt-4.1-mini',
+      'openai/gpt-4o-mini',
+      'openai/gpt-4.1-nano',
+      'xai/grok-3-mini',
+      'openai/gpt-4.1',
+      'openai/gpt-4o',
+    ],
+    taskAssignments: {
+      planning: ['openai/gpt-4.1', 'openai/gpt-4.1-mini'],
+      coding: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini'],
+      iteration: ['openai/gpt-4.1-nano', 'openai/gpt-4.1-mini'],
+      review: ['openai/gpt-4.1', 'openai/gpt-4.1-mini'],
+      debugging: ['openai/gpt-4.1-mini', 'openai/gpt-4o-mini'],
+      general: ['openai/gpt-4.1-nano', 'openai/gpt-4o-mini'],
+    },
+    cooldowns: { ...MODEL_COOLDOWNS },
+    tags: ['github-only', 'compressed', 'no-external-keys'],
+    continuousReady: true,
+    estimatedCostPer24h: 0,
+    paidModelsIncluded: false,
+  },
+
+  // ── 11. Mixed Free + Paid (NEW) ──
+  {
+    id: 'mixed-free-paid',
+    name: 'Mixed Free + Paid — Best Quality',
+    description: 'Uses free-tier providers for routine work, premium GitHub models for complex tasks. Maximizes quality while minimizing cost. Ideal hybrid strategy.',
+    primaryModel: 'gemini/gemini-2.5-flash',
+    fallbackChain: [
+      'gemini/gemini-2.5-flash',
+      'groq/llama-3.3-70b-versatile',
+      'openai/gpt-4.1',
+      'openai/gpt-4o',
+      'cerebras/llama-4-scout-17b-16e-instruct',
+      'openai/gpt-4.1-mini',
+      'openai/o4-mini',
+      'gemini/gemini-2.5-pro',
+      'openai/o3',
+    ],
+    taskAssignments: {
+      planning: ['openai/o3', 'gemini/gemini-2.5-pro', 'openai/gpt-4.1'],
+      coding: ['gemini/gemini-2.5-flash', 'openai/gpt-4.1', 'groq/llama-3.3-70b-versatile'],
+      iteration: ['groq/llama-3.3-70b-versatile', 'cerebras/llama-4-scout-17b-16e-instruct', 'openai/gpt-4.1-mini'],
+      review: ['openai/o4-mini', 'gemini/gemini-2.5-pro', 'openai/gpt-4.1'],
+      debugging: ['openai/gpt-4.1', 'gemini/gemini-2.5-flash', 'openai/o4-mini'],
+      general: ['gemini/gemini-2.5-flash', 'groq/llama-3.3-70b-versatile'],
+    },
+    cooldowns: { ...MODEL_COOLDOWNS },
+    tags: ['mixed', 'quality', 'hybrid', 'free+paid', '24/7'],
+    continuousReady: true,
+    estimatedCostPer24h: 0,
+    paidModelsIncluded: false,
   },
 ];
 
@@ -346,11 +497,42 @@ export function estimateDailyCapacity(preset: ModelPreset): number {
     'openai/gpt-4o-mini': 150,
     'openai/o3': 8,
     'openai/o4-mini': 12,
-    'meta/llama-4-scout': 150,
     'deepseek/DeepSeek-R1': 8,
     'xai/grok-3': 15,
     'xai/grok-3-mini': 30,
+    // External free providers
+    'gemini/gemini-2.5-flash': 1500,
+    'gemini/gemini-2.5-pro': 50,
+    'groq/llama-3.3-70b-versatile': 1000,
+    'groq/llama-4-scout-17b-16e-instruct': 1000,
+    'cerebras/llama-4-scout-17b-16e-instruct': 1000,
   };
   const models = getPresetModels(preset).filter(m => !m.startsWith('ollama/'));
   return models.reduce((sum, m) => sum + (RPD[m] || 0), 0);
+}
+
+/**
+ * Get the maximum context window available in a preset's model chain.
+ * Useful for determining if chunking can be avoided.
+ */
+export function getMaxContextInPreset(preset: ModelPreset): number {
+  const CONTEXT: Record<string, number> = {
+    'gemini/gemini-2.5-flash': 1048576,
+    'gemini/gemini-2.5-pro': 1048576,
+    'groq/llama-3.3-70b-versatile': 131072,
+    'groq/llama-4-scout-17b-16e-instruct': 131072,
+    'cerebras/llama-4-scout-17b-16e-instruct': 131072,
+    'openai/gpt-4.1': 1047576,
+    'openai/gpt-4.1-mini': 1047576,
+    'openai/gpt-4.1-nano': 1047576,
+    'openai/gpt-4o': 128000,
+    'openai/gpt-4o-mini': 128000,
+    'openai/o3': 200000,
+    'openai/o4-mini': 200000,
+    'deepseek/DeepSeek-R1': 128000,
+    'xai/grok-3': 131072,
+    'xai/grok-3-mini': 131072,
+  };
+  const models = getPresetModels(preset);
+  return Math.max(...models.map(m => CONTEXT[m] || 8000));
 }

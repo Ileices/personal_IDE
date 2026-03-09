@@ -57,6 +57,20 @@ export const STRUCTURED_OUTPUT_SCHEMA = {
       maximum: 100,
       description: 'Confidence level in the quality of the output. 0-100.',
     },
+    commands: {
+      type: 'array',
+      description: 'Shell commands to execute (npm install, npm run dev, test commands, etc). Optional.',
+      items: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'Shell command to run' },
+          purpose: { type: 'string', description: 'Why this command needs to run' },
+          cwd: { type: 'string', description: 'Working directory relative to project root. Optional.' },
+          timeoutMs: { type: 'number', description: 'Timeout in ms. Default 30000.' },
+        },
+        required: ['command', 'purpose'],
+      },
+    },
   },
   required: ['summary', 'filesChanged', 'nextSteps', 'questionsForUser', 'done', 'confidence'],
 };

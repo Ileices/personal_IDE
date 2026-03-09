@@ -299,4 +299,88 @@ export async function previewRoutes(app: FastifyInstance) {
 
     return { capabilities };
   });
+
+  // ── Start a dev server for preview ──
+  app.post<{ Body: { command: string; cwd?: string; port?: number } }>('/preview/start-server', async (request) => {
+    const { command, cwd, port = 5173 } = request.body;
+    const projectRoot = cwd || process.cwd();
+
+    // Check if something is already running on this port
+    try {
+      const response = await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(2000) });
+      return { running: true, url: `http://localhost:${port}`, port, alreadyRunning: true };
+    } catch {
+      // Port is free, start the server
+    }
+
+    return new Promise((resolve) => {
+      const proc = spawn(isWindows ? 'cmd' : 'sh', isWindows ? ['/c', command] : ['-c', command], {
+        cwd: projectRoot,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PORT: String(port) },
+        detached: false,
+      });
+
+      let output = '';
+      let started = false;
+
+      proc.stdout?.on('data', (d: Buffer) => { output += d.toString(); });
+      proc.stderr?.on('data', (d: Buffer) => { output += d.toString(); });
+
+      proc.on('error', (err) => {
+        if (!started) {
+          started = true;
+          resolve({ running: false, error: err.message, output: output.slice(-1000) });
+        }
+      });
+
+      // Poll for the server to be ready
+      const startTime = Date.now();
+      const poller = setInterval(async () => {
+        if (Date.now() - startTime > 30000) {
+          clearInterval(poller);
+          if (!started) {
+            started = true;
+            resolve({ running: false, error: 'Timeout: server not ready after 30s', output: output.slice(-1000) });
+          }
+          return;
+        }
+        try {
+          await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(2000) });
+          clearInterval(poller);
+          if (!started) {
+            started = true;
+            resolve({
+              running: true,
+              url: `http://localhost:${port}`,
+              port,
+              startupTimeMs: Date.now() - startTime,
+              pid: proc.pid,
+            });
+          }
+        } catch { /* not ready yet */ }
+      }, 1000);
+    });
+  });
+
+  // ── Check server status ──
+  app.get<{ Querystring: { port?: string } }>('/preview/status', async (request) => {
+    const port = parseInt(request.query.port || '5173', 10);
+    try {
+      const response = await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(3000) });
+      return {
+        running: true,
+        url: `http://localhost:${port}`,
+        port,
+        statusCode: response.status,
+      };
+    } catch (err: any) {
+      return {
+        running: false,
+        url: `http://localhost:${port}`,
+        port,
+        error: err.message,
+      };
+    }
+  });
 }

@@ -158,7 +158,29 @@ export function handleCompletion(
 
   if (isContinuous) {
     emit({ type: 'info', message: '24/7 mode: Task cycle complete. Scanning for improvements...' });
-    return 'The previous task is complete. You are in 24/7 continuous mode.\nReview the project: fix TODOs/FIXMEs, improve code quality, add missing tests, optimize bottlenecks.\nDO NOT mark done=true unless there is genuinely nothing left to improve.';
+
+    // Dynamic review prompt — gives the model specific things to look for
+    const reviewPrompt = [
+      'The previous task is complete. You are in 24/7 continuous mode.',
+      '',
+      '## REVIEW CHECKLIST — Scan the project for:',
+      '1. **TODO/FIXME comments** — Find and resolve them',
+      '2. **Lint/type errors** — Run checks and fix any issues',
+      '3. **Missing tests** — Add unit tests for untested code paths',
+      '4. **Error handling gaps** — Add try/catch, input validation, null checks',
+      '5. **Performance issues** — Optimize hot paths, reduce bundle size',
+      '6. **Dead code** — Remove unused imports, functions, variables',
+      '7. **Security concerns** — Fix hardcoded secrets, XSS vectors, injection risks',
+      '8. **Documentation** — Add JSDoc to exported functions missing it',
+      '',
+      'Previous cycle stats: ' + ctx.currentIteration + ' iterations, ' +
+        ctx.totalFilesChanged + ' files changed, ' + ctx.totalTokens + ' tokens used.',
+      '',
+      'DO NOT mark done=true unless there is genuinely nothing left to improve.',
+      'Focus on the HIGHEST IMPACT improvements first.',
+    ].join('\n');
+
+    return reviewPrompt;
   }
 
   return null; // Signal to break the loop

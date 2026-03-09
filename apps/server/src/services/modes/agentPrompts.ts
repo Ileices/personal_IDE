@@ -22,6 +22,7 @@ ${OUTPUT_MARKERS.start}
   "questionsForUser": [],
   "done": false,
   "confidence": 85,
+  "commands": [{"command": "npm install", "purpose": "Install dependencies"}],
   "editLog": [{"file": "path", "symbolsAffected": ["fn_name"], "changeReason": "why"}]
 }
 ${OUTPUT_MARKERS.end}
@@ -32,6 +33,7 @@ RULES:
 - confidence: 0-100 score. Below 60 = pause and re-analyze
 - done: true ONLY when ALL subtasks are complete AND tests pass
 - editLog: track EVERY file change with the symbols affected and reason for the change
+- commands: Shell commands you need to run (npm install, npm test, npm run dev, etc). The IDE will execute them and feed results back.
 `;
 
 // ── Critical Format Header (survives truncation — placed at top of system prompt) ──

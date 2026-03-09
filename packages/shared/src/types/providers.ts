@@ -3,7 +3,7 @@
 // ============================================
 
 /** Supported LLM providers */
-export type ProviderType = 'github' | 'ollama' | 'groq' | 'huggingface' | 'cohere' | 'mistral' | 'gemini' | 'together' | 'openrouter' | 'lmstudio' | 'nano';
+export type ProviderType = 'github' | 'ollama' | 'groq' | 'huggingface' | 'cohere' | 'mistral' | 'gemini' | 'together' | 'openrouter' | 'lmstudio' | 'nano' | 'cerebras';
 
 /** Provider configuration */
 export interface ProviderConfig {

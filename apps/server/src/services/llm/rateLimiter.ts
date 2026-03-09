@@ -76,6 +76,31 @@ class ProductionRateLimiter {
   // Safety margin: stop when remaining falls to this % of limit
   private safetyMarginPercent = 10;
 
+  /** Models that returned 404 — blacklisted with TTL to prevent infinite fallback loops */
+  private deadModels = new Map<string, number>(); // modelId -> expiry timestamp
+  private static DEAD_MODEL_TTL = 3600_000; // 1 hour
+
+  /** Mark a model as dead (404). It will be skipped in fallback selection for DEAD_MODEL_TTL. */
+  markDead(modelId: string): void {
+    this.deadModels.set(modelId, Date.now() + ProductionRateLimiter.DEAD_MODEL_TTL);
+  }
+
+  /** Check if a model is in the dead-model blacklist */
+  isDead(modelId: string): boolean {
+    const expiry = this.deadModels.get(modelId);
+    if (!expiry) return false;
+    if (Date.now() > expiry) {
+      this.deadModels.delete(modelId);
+      return false;
+    }
+    return true;
+  }
+
+  /** Clear dead model blacklist (for testing/reset) */
+  clearDeadModels(): void {
+    this.deadModels.clear();
+  }
+
   // ────────────────────────────────────
   //  Public API  (backward-compatible)
   // ────────────────────────────────────
@@ -318,6 +343,7 @@ class ProductionRateLimiter {
     if (orderedFallbacks?.length) {
       for (const fbId of orderedFallbacks) {
         if (fbId === preferredModelId) continue;
+        if (this.isDead(fbId)) continue; // Skip 404-blacklisted models
         const check = this.canRequest(fbId);
         if (check.allowed) return fbId;
       }
@@ -325,7 +351,7 @@ class ProductionRateLimiter {
 
     // Score each candidate by remaining capacity headroom
     const candidates = MODELS
-      .filter(m => m.id !== preferredModelId && (!mode || m.recommendedFor.includes(mode as any)));
+      .filter(m => m.id !== preferredModelId && !this.isDead(m.id) && (!mode || m.recommendedFor.includes(mode as any)));
 
     const scored = candidates.map(m => {
       const p = this.primary.get(m.id);

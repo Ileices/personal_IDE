@@ -163,6 +163,20 @@ export const PROVIDERS: ProviderConfig[] = [
     notes: 'Run "python NANO_train/main.py" to start the Sea of Nanos. No API key needed. The nanos learn from your codebase over time.',
     enabled: false,
   },
+
+  // ── Cerebras (Free tier — fastest inference) ──
+  {
+    id: 'cerebras',
+    name: 'Cerebras Cloud',
+    description: 'Fastest AI inference anywhere (~3000 tok/s). Free tier with Llama models on Wafer-Scale Engine hardware.',
+    baseURL: 'https://api.cerebras.ai/v1',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: true,
+    setupUrl: 'https://cloud.cerebras.ai/',
+    notes: 'Free tier available. Sign up at cloud.cerebras.ai for an API key. OpenAI-compatible API. ~3000 tokens/second.',
+    enabled: false,
+  },
 ];
 
 /** Get enabled providers */
