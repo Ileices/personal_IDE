@@ -92,7 +92,7 @@ export function processResponse(
     });
   } catch { /* non-critical */ }
 
-  // Bird-feed observation to Nano trainer (with retry logic)
+  // Bird-feed observation to Nano trainer (with retry logic + cleanup)
   try {
     const nanoRow = ctx.db.prepare(
       "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
@@ -106,6 +106,8 @@ export function processResponse(
     });
 
     // Retry up to 2 times with backoff on failure
+    // Track pending timers so they can be garbage collected
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const sendToNano = async (attempt: number) => {
       try {
         const res = await fetch(nanoBaseUrl + '/v1/training/observe', {
@@ -117,11 +119,15 @@ export function processResponse(
         if (res.ok) {
           emit({ type: 'nano_training_received', attempt, status: res.status });
         } else if (attempt < 2) {
-          setTimeout(() => sendToNano(attempt + 1), 3000 * attempt);
+          retryTimer = setTimeout(() => { retryTimer = null; sendToNano(attempt + 1); }, 3000 * attempt);
+        } else {
+          emit({ type: 'info', message: `Nano training observe failed after ${attempt} attempts (status ${res.status})` });
         }
-      } catch {
+      } catch (err: any) {
         if (attempt < 2) {
-          setTimeout(() => sendToNano(attempt + 1), 3000 * attempt);
+          retryTimer = setTimeout(() => { retryTimer = null; sendToNano(attempt + 1); }, 3000 * attempt);
+        } else {
+          emit({ type: 'info', message: `Nano training observe failed after ${attempt} attempts: ${err.message?.slice(0, 100)}` });
         }
       }
     };

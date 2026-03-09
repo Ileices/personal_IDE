@@ -8,6 +8,7 @@
 // ============================================
 
 import { getModel, type ModelDefinition } from '@personal-ide/shared';
+import { buildCompressedSystemPrompt, needsCompressedPrompt } from './compressedAgentPrompt.js';
 
 /** Model capability tier for prompt adaptation */
 type ModelCapabilityTier = 'full_agent' | 'reasoning_agent' | 'canvas_illusion' | 'compressed';
@@ -173,13 +174,30 @@ export function adaptPromptForModel(
     }
 
     case 'compressed': {
-      // Drastically reduce prompt size for tiny context windows
-      // Keep only: compressed prefix + memory context + schema reminder
+      // Use the dedicated compressed prompt builder for models with severe token caps
+      const iterMatch = baseSystemPrompt.match(/\*\*Iteration\*\*: (\d+)\/(\d+)/);
+      const iteration = iterMatch ? parseInt(iterMatch[1], 10) : 1;
+      const maxIterations = iterMatch ? parseInt(iterMatch[2], 10) : 50;
+
       const memoryMatch = baseSystemPrompt.match(/### Project Memory\n([\s\S]*?)(?=\n###|\n## ⚡)/);
-      const memorySection = memoryMatch ? '\n\nMEMORY:\n' + memoryMatch[1].slice(0, 2000) : '';
-      const iterMatch = baseSystemPrompt.match(/\*\*Iteration\*\*: (\d+\/\d+)/);
-      const iterInfo = iterMatch ? '\nIteration: ' + iterMatch[1] : '';
-      return COMPRESSED_PREFIX + iterInfo + memorySection + AGENTIC_ENFORCEMENT_FOOTER;
+      const memorySnippet = memoryMatch ? memoryMatch[1].trim() : undefined;
+
+      const errorMatch = baseSystemPrompt.match(/PRIORITY.*?Fix.*?errors?:?\n([\s\S]*?)(?=\n###|\n## |$)/i);
+      const errorsSnippet = errorMatch ? errorMatch[1].trim() : undefined;
+
+      // Detect project languages from the base prompt
+      const langMatch = baseSystemPrompt.match(/(?:Language|Stack|Tech):?\s*([^\n]+)/i);
+      const projectLanguages = langMatch
+        ? langMatch[1].split(/[,/|]/).map(l => l.trim()).filter(Boolean).slice(0, 3)
+        : undefined;
+
+      return buildCompressedSystemPrompt({
+        iteration,
+        maxIterations,
+        projectLanguages,
+        memorySnippet,
+        errorsSnippet,
+      }) + AGENTIC_ENFORCEMENT_FOOTER;
     }
 
     case 'full_agent':

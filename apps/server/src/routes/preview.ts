@@ -8,7 +8,7 @@
 // - Compile and run code (C++, Rust, Go, etc.)
 // ============================================
 import { FastifyInstance, FastifyRequest } from 'fastify';
-import { spawn, execSync } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
@@ -41,6 +41,48 @@ interface PreviewUrlRequest {
 }
 
 const isWindows = process.platform === 'win32';
+
+// ── Active server process registry (prevents leaks) ──
+interface TrackedServer {
+  pid: number;
+  proc: ChildProcess;
+  command: string;
+  port: number;
+  startedAt: string;
+}
+const activeServers = new Map<number, TrackedServer>();
+
+/** Kill a tracked server by port */
+function killTrackedServer(port: number): boolean {
+  const entry = activeServers.get(port);
+  if (!entry) return false;
+  try {
+    if (isWindows) {
+      // Windows: taskkill with /T to kill the entire tree
+      try { execSync(`taskkill /pid ${entry.pid} /T /F`, { stdio: 'ignore', timeout: 5000 }); } catch { /* ignore */ }
+    } else {
+      // Unix: kill the process group
+      try { process.kill(-entry.pid, 'SIGTERM'); } catch { /* ignore */ }
+      setTimeout(() => { try { process.kill(-entry.pid, 'SIGKILL'); } catch { /* ignore */ } }, 3000);
+    }
+    entry.proc.kill('SIGKILL');
+  } catch { /* ignore */ }
+  activeServers.delete(port);
+  return true;
+}
+
+// Cleanup all tracked servers on process exit
+process.on('exit', () => {
+  for (const [port] of activeServers) killTrackedServer(port);
+});
+process.on('SIGINT', () => {
+  for (const [port] of activeServers) killTrackedServer(port);
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  for (const [port] of activeServers) killTrackedServer(port);
+  process.exit(0);
+});
 
 function execWithTimeout(cmd: string, cwd: string, timeoutMs: number, stdin?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
@@ -108,9 +150,17 @@ export async function previewRoutes(app: FastifyInstance) {
   app.post('/run', async (req: FastifyRequest) => {
     const body = req.body as RunCommandRequest;
     if (!body.command) return { error: 'command is required' };
+    if (typeof body.command !== 'string' || body.command.length > 2000) {
+      return { error: 'command must be a string under 2000 chars' };
+    }
 
+    // Validate cwd exists if provided
     const cwd = body.cwd || process.cwd();
-    const timeoutMs = Math.min(body.timeoutMs || 30000, 120000); // max 2 minutes
+    if (body.cwd && !fs.existsSync(body.cwd)) {
+      return { error: 'cwd does not exist: ' + body.cwd };
+    }
+
+    const timeoutMs = Math.min(Math.max(body.timeoutMs || 30000, 1000), 120000);
 
     const result = await execWithTimeout(body.command, cwd, timeoutMs, body.stdin);
     return {
@@ -300,14 +350,32 @@ export async function previewRoutes(app: FastifyInstance) {
     return { capabilities };
   });
 
-  // ── Start a dev server for preview ──
+  // ── Start a dev server for preview (PID-tracked) ──
   app.post<{ Body: { command: string; cwd?: string; port?: number } }>('/preview/start-server', async (request) => {
     const { command, cwd, port = 5173 } = request.body;
-    const projectRoot = cwd || process.cwd();
 
-    // Check if something is already running on this port
+    // Input validation
+    if (!command || typeof command !== 'string' || command.length > 1000) {
+      return { error: 'command must be a non-empty string under 1000 chars' };
+    }
+    if (port < 1024 || port > 65535 || !Number.isInteger(port)) {
+      return { error: 'port must be an integer between 1024 and 65535' };
+    }
+
+    const projectRoot = cwd || process.cwd();
+    if (cwd && !fs.existsSync(cwd)) {
+      return { error: 'cwd does not exist: ' + cwd };
+    }
+
+    // Kill any existing server on this port (tracked by us)
+    if (activeServers.has(port)) {
+      killTrackedServer(port);
+      await new Promise(r => setTimeout(r, 1000)); // let port free up
+    }
+
+    // Check if something external is already running on this port
     try {
-      const response = await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(2000) });
+      await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(2000) });
       return { running: true, url: `http://localhost:${port}`, port, alreadyRunning: true };
     } catch {
       // Port is free, start the server
@@ -318,30 +386,64 @@ export async function previewRoutes(app: FastifyInstance) {
         cwd: projectRoot,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, PORT: String(port) },
-        detached: false,
+        detached: !isWindows, // Detach on Unix for process group kill
       });
 
       let output = '';
       let started = false;
+      let crashed = false;
 
-      proc.stdout?.on('data', (d: Buffer) => { output += d.toString(); });
-      proc.stderr?.on('data', (d: Buffer) => { output += d.toString(); });
+      proc.stdout?.on('data', (d: Buffer) => {
+        output += d.toString();
+        if (output.length > 50000) output = output.slice(-20000); // cap memory
+      });
+      proc.stderr?.on('data', (d: Buffer) => {
+        output += d.toString();
+        if (output.length > 50000) output = output.slice(-20000);
+      });
 
       proc.on('error', (err) => {
+        crashed = true;
+        activeServers.delete(port);
         if (!started) {
           started = true;
           resolve({ running: false, error: err.message, output: output.slice(-1000) });
         }
       });
 
+      proc.on('exit', (code, signal) => {
+        crashed = true;
+        activeServers.delete(port);
+        if (!started) {
+          started = true;
+          resolve({ running: false, error: `Process exited early (code=${code}, signal=${signal})`, output: output.slice(-1000) });
+        }
+      });
+
+      // Track the process immediately
+      if (proc.pid) {
+        activeServers.set(port, {
+          pid: proc.pid,
+          proc,
+          command,
+          port,
+          startedAt: new Date().toISOString(),
+        });
+      }
+
       // Poll for the server to be ready
       const startTime = Date.now();
       const poller = setInterval(async () => {
+        if (crashed) {
+          clearInterval(poller);
+          return; // Already resolved via exit/error handler
+        }
         if (Date.now() - startTime > 30000) {
           clearInterval(poller);
           if (!started) {
             started = true;
-            resolve({ running: false, error: 'Timeout: server not ready after 30s', output: output.slice(-1000) });
+            // Don't kill the server — it might still be building
+            resolve({ running: false, error: 'Timeout: server not ready after 30s', output: output.slice(-1000), pid: proc.pid });
           }
           return;
         }
@@ -361,6 +463,30 @@ export async function previewRoutes(app: FastifyInstance) {
         } catch { /* not ready yet */ }
       }, 1000);
     });
+  });
+
+  // ── Stop a tracked server ──
+  app.post<{ Body: { port: number } }>('/preview/stop-server', async (request) => {
+    const { port } = request.body;
+    if (!port || typeof port !== 'number') {
+      return { error: 'port is required (number)' };
+    }
+    const killed = killTrackedServer(port);
+    return { stopped: killed, port };
+  });
+
+  // ── List all tracked servers ──
+  app.get('/preview/servers', async () => {
+    const servers: Array<{ port: number; pid: number; command: string; startedAt: string; alive: boolean }> = [];
+    for (const [port, entry] of activeServers) {
+      let alive = false;
+      try {
+        await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(2000) });
+        alive = true;
+      } catch { /* dead */ }
+      servers.push({ port, pid: entry.pid, command: entry.command, startedAt: entry.startedAt, alive });
+    }
+    return { servers };
   });
 
   // ── Check server status ──

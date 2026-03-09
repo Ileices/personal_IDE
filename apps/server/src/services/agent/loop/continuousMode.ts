@@ -30,6 +30,10 @@ export interface CompletionContext {
   projectLanguages: string[];
   tierContext: string;
   taskId?: string;
+  /** Last lint error context from previous cycle */
+  lastErrorContext?: string;
+  /** Last test result context from previous cycle */
+  lastTestContext?: string;
 }
 
 /**
@@ -160,7 +164,7 @@ export function handleCompletion(
     emit({ type: 'info', message: '24/7 mode: Task cycle complete. Scanning for improvements...' });
 
     // Dynamic review prompt — gives the model specific things to look for
-    const reviewPrompt = [
+    const reviewParts = [
       'The previous task is complete. You are in 24/7 continuous mode.',
       '',
       '## REVIEW CHECKLIST — Scan the project for:',
@@ -173,14 +177,33 @@ export function handleCompletion(
       '7. **Security concerns** — Fix hardcoded secrets, XSS vectors, injection risks',
       '8. **Documentation** — Add JSDoc to exported functions missing it',
       '',
-      'Previous cycle stats: ' + ctx.currentIteration + ' iterations, ' +
-        ctx.totalFilesChanged + ' files changed, ' + ctx.totalTokens + ' tokens used.',
-      '',
-      'DO NOT mark done=true unless there is genuinely nothing left to improve.',
-      'Focus on the HIGHEST IMPACT improvements first.',
-    ].join('\n');
+      `Previous cycle stats: ${ctx.currentIteration} iterations, ` +
+        `${ctx.totalFilesChanged} files changed, ${ctx.totalTokens} tokens used.`,
+    ];
 
-    return reviewPrompt;
+    // Inject real lint errors if we have them
+    if (ctx.lastErrorContext) {
+      reviewParts.push('');
+      reviewParts.push('## 🔴 KNOWN LINT/TYPE ERRORS FROM PREVIOUS CYCLE:');
+      reviewParts.push(ctx.lastErrorContext.slice(0, 2000));
+      reviewParts.push('Fix these FIRST before scanning for new issues.');
+    }
+
+    // Inject real test failures if we have them
+    if (ctx.lastTestContext) {
+      reviewParts.push('');
+      reviewParts.push('## 🧪 TEST RESULTS FROM PREVIOUS CYCLE:');
+      reviewParts.push(ctx.lastTestContext.slice(0, 1500));
+      if (ctx.lastTestContext.toLowerCase().includes('fail')) {
+        reviewParts.push('Fix failing tests FIRST before moving on.');
+      }
+    }
+
+    reviewParts.push('');
+    reviewParts.push('DO NOT mark done=true unless there is genuinely nothing left to improve.');
+    reviewParts.push('Focus on the HIGHEST IMPACT improvements first.');
+
+    return reviewParts.join('\n');
   }
 
   return null; // Signal to break the loop

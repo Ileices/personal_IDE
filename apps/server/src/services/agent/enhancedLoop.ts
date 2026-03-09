@@ -15,7 +15,7 @@ import type {
   AgentConfig, AgentState, AgentRunStatus,
   StructuredAgentOutput, ProviderType,
 } from '@personal-ide/shared';
-import { getModel } from '@personal-ide/shared';
+import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
 import { getClientFromDb, isTokenLimitError, estimateTokens, checkTokenLimit, truncateToFit } from '../llm/providers.js';
 import { ChunkingPipeline } from '../llm/chunkingPipeline.js';
 import { completeChatResponse } from '../llm/streaming.js';
@@ -199,6 +199,45 @@ export class EnhancedAgentLoop {
   private setState(newState: AgentState): void {
     this.state = newState;
     this.emit({ type: 'state_change', state: newState });
+  }
+
+  /**
+   * Switch to a different model, automatically syncing the provider if the model
+   * belongs to a different provider (e.g., switching from openai/gpt-4.1 to gemini/gemini-2.5-flash
+   * also switches provider from 'github' to 'gemini').
+   * This prevents the critical bug where getClientFromDb() creates a client for the wrong provider.
+   */
+  private switchModel(newModelId: string, reason: string): void {
+    const previousModel = this.config.model;
+    const previousProvider = this.config.provider;
+    this.config.model = newModelId;
+
+    // Sync provider from model ID prefix
+    const newProvider = extractProviderFromModelId(newModelId) as ProviderType;
+    if (newProvider !== this.config.provider) {
+      this.config.provider = newProvider;
+      this.emit({
+        type: 'provider_switch',
+        from: previousProvider,
+        to: newProvider,
+        reason: 'Model ' + newModelId + ' requires provider ' + newProvider,
+      } as any);
+    }
+
+    // Sync context window
+    const modelDef = getModel(newModelId);
+    if (modelDef) {
+      this.contextWindow = modelDef.maxInputTokens;
+    }
+
+    this.emit({
+      type: 'model_switch',
+      from: previousModel,
+      to: newModelId,
+      provider: newProvider,
+      contextWindow: this.contextWindow,
+      reason,
+    } as any);
   }
 
   /** Queue a user message to be picked up by the agent loop */
@@ -392,9 +431,7 @@ export class EnhancedAgentLoop {
             const originalCheck = rateLimiter.canRequest(originalModel, 'agent');
             if (originalCheck.allowed) {
               this.emit({ type: 'info', message: 'Rate limit window reset — switching back to primary model: ' + originalModel });
-              this.config.model = originalModel;
-              const origModelDef = getModel(originalModel);
-              if (origModelDef) this.contextWindow = origModelDef.maxInputTokens;
+              this.switchModel(originalModel, 'Rate limit window reset — returning to primary');
             }
           }
 
@@ -404,13 +441,8 @@ export class EnhancedAgentLoop {
             const fallback = canProceed.fallbackModel
               || rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
             if (fallback) {
-              const previousModel = this.config.model;
               this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + fallback });
-              this.emit({ type: 'model_switch', from: previousModel, to: fallback, reason: 'Rate limited (pre-call check)' } as any);
-              this.config.model = fallback;
-              // Update contextWindow for the fallback model
-              const fallbackModelDef = getModel(fallback);
-              if (fallbackModelDef) this.contextWindow = fallbackModelDef.maxInputTokens;
+              this.switchModel(fallback, 'Rate limited (pre-call check)');
             } else if (this.config.continuousMode) {
               const waitMs = canProceed.retryAfterMs || 60000;
               this.emit({ type: 'cooldown', ms: waitMs, reason: 'Rate limited: ' + canProceed.reason + '. Waiting...' } as any);
@@ -617,19 +649,13 @@ export class EnhancedAgentLoop {
               const fallback = rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
               if (fallback) {
                 this.emit({ type: 'auto_answer', question: 'Model not found: ' + this.config.model, answer: 'Switching to ' + fallback });
-                this.emit({ type: 'model_switch', from: notFoundModel, to: fallback, reason: '404 model not found (blacklisted)' } as any);
-                this.config.model = fallback;
-                const fallbackModelDef = getModel(fallback);
-                if (fallbackModelDef) {
-                  this.contextWindow = fallbackModelDef.maxInputTokens;
-                }
+                this.switchModel(fallback, '404 model not found (blacklisted)');
               } else {
                 // Last resort: pick a guaranteed-working model
                 const lastResort = 'openai/gpt-4.1-mini';
                 if (!rateLimiter.isDead(lastResort)) {
                   this.emit({ type: 'info', message: 'No fallback available. Last resort: ' + lastResort });
-                  this.config.model = lastResort;
-                  this.contextWindow = 1047576;
+                  this.switchModel(lastResort, 'Last resort — all other models 404');
                 } else {
                   // All models dead — halt
                   this.setState('error');
@@ -649,13 +675,7 @@ export class EnhancedAgentLoop {
                 || rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
               if (fallback) {
                 this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + fallback });
-                this.emit({ type: 'model_switch', from: rateLimitedModel, to: fallback, reason: `Rate limited (${statusCode})` } as any);
-                this.config.model = fallback;
-                // Update contextWindow for the new model
-                const fallbackModelDef = getModel(fallback);
-                if (fallbackModelDef) {
-                  this.contextWindow = fallbackModelDef.maxInputTokens;
-                }
+                this.switchModel(fallback, `Rate limited (${statusCode})`);
               } else {
                 await this.delay(check.retryAfterMs || 30000);
               }
@@ -948,11 +968,7 @@ export class EnhancedAgentLoop {
           const fallback = rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
           if (fallback) {
             this.emit({ type: 'info', message: 'Provider unreachable. Switching to ' + fallback });
-            this.config.model = fallback;
-            const fallbackModelDef = getModel(fallback);
-            if (fallbackModelDef) {
-              this.contextWindow = fallbackModelDef.maxInputTokens;
-            }
+            this.switchModel(fallback, 'Provider unreachable — connection error');
             // Connection errors are provider-level, not logic errors — reset counter on switch
             this.consecutiveErrors = 0;
             continue;

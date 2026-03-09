@@ -303,12 +303,16 @@ class ProductionRateLimiter {
   }
 
   /** Get full status for all models (for the dashboard / status route) */
-  getAllStatus(): Record<string, { usage: any; limits: RateLimits; tier: ModelTier }> {
+  getAllStatus(): Record<string, any> {
+    const now = Date.now();
     const result: Record<string, any> = {};
     for (const model of MODELS) {
       const p = this.getPrimary(model.id);
       const s = this.getSecondary(model.id);
-      this.resetWindowsIfNeeded(p, Date.now());
+      this.resetWindowsIfNeeded(p, now);
+
+      const isDead = this.isDead(model.id);
+      const deadExpiry = this.deadModels.get(model.id);
 
       result[model.id] = {
         usage: {
@@ -327,8 +331,21 @@ class ProductionRateLimiter {
         },
         limits: RATE_LIMITS[model.tier],
         tier: model.tier,
+        // Dead model status (404-blacklisted)
+        dead: isDead,
+        ...(isDead && deadExpiry ? { deadUntil: deadExpiry, deadRemainingMs: deadExpiry - now } : {}),
       };
     }
+
+    // Summary of dead models for quick dashboard display
+    const deadSummary: Array<{ modelId: string; expiresAt: number; remainingMs: number }> = [];
+    for (const [modelId, expiry] of this.deadModels) {
+      if (expiry > now) {
+        deadSummary.push({ modelId, expiresAt: expiry, remainingMs: expiry - now });
+      }
+    }
+    result._deadModels = { count: deadSummary.length, models: deadSummary };
+
     return result;
   }
 

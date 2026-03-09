@@ -79,6 +79,42 @@ export function PreviewPanel({
     }
   }, [serverStatus?.errors]);
 
+  // Listen for postMessage from iframe (console capture)
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      // Only accept messages from our iframe's origin or localhost
+      if (!event.origin.startsWith('http://localhost') && !event.origin.startsWith('https://localhost')) {
+        return;
+      }
+      const data = event.data;
+      if (!data || typeof data !== 'object' || !data.type) return;
+
+      switch (data.type) {
+        case 'console-log':
+          setConsoleOutput(prev => [...prev.slice(-200), `📝 ${data.message || ''}`]);
+          break;
+        case 'console-error':
+          setConsoleOutput(prev => [...prev.slice(-200), `❌ ${data.message || ''}`]);
+          break;
+        case 'console-warn':
+          setConsoleOutput(prev => [...prev.slice(-200), `⚠️ ${data.message || ''}`]);
+          break;
+        case 'console-info':
+          setConsoleOutput(prev => [...prev.slice(-200), `ℹ️ ${data.message || ''}`]);
+          break;
+        case 'runtime-error':
+          setConsoleOutput(prev => [...prev.slice(-200), `💥 Runtime Error: ${data.message || ''}`]);
+          break;
+        default:
+          // Unknown message type — ignore
+          break;
+      }
+    };
+
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
   return (
     <div className="flex flex-col bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden" style={{ height }}>
       {/* URL Bar */}

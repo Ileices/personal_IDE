@@ -328,3 +328,29 @@ export function getModelRateLimits(modelId: string): RateLimits | undefined {
 export function getModelsForMode(mode: 'ask' | 'edit' | 'plan' | 'agent'): ModelDefinition[] {
   return MODELS.filter(m => m.recommendedFor.includes(mode));
 }
+
+/**
+ * Extract the provider ID from a model ID string.
+ * e.g., 'openai/gpt-4.1' -> 'github' (OpenAI models go through GitHub)
+ *       'gemini/gemini-2.5-flash' -> 'gemini'
+ *       'groq/llama-3.3-70b-versatile' -> 'groq'
+ *       'cerebras/llama-4-scout-17b-16e-instruct' -> 'cerebras'
+ *       'ollama/codestral' -> 'ollama'
+ *       'nano/some-model' -> 'nano'
+ */
+export function extractProviderFromModelId(modelId: string): string {
+  const slashIdx = modelId.indexOf('/');
+  if (slashIdx <= 0) return 'github'; // No prefix = GitHub Models
+
+  const prefix = modelId.substring(0, slashIdx).toLowerCase();
+
+  // These prefixes map directly to provider IDs
+  const directProviders = [
+    'ollama', 'groq', 'gemini', 'cerebras', 'huggingface',
+    'cohere', 'mistral', 'together', 'openrouter', 'lmstudio', 'nano',
+  ];
+  if (directProviders.includes(prefix)) return prefix;
+
+  // OpenAI / Meta / Microsoft / xAI / DeepSeek models go through GitHub Models API
+  return 'github';
+}

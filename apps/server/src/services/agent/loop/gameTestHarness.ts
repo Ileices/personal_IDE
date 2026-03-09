@@ -6,10 +6,12 @@
 // Starts a dev server, waits for it to be ready,
 // injects console logging capture, and reports results.
 // ============================================
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import { createServer } from 'http';
 
 type EmitFn = (event: any) => void;
+
+const isWindows = process.platform === 'win32';
 
 export interface GameTestConfig {
   /** Project root where the game lives */
@@ -81,23 +83,46 @@ export async function runGameTest(
       shell: true,
       env: { ...process.env, PORT: String(port) },
       stdio: ['pipe', 'pipe', 'pipe'],
+      detached: !isWindows, // For Unix process group kill
     });
 
     let serverOutput = '';
+    let processCrashed = false;
+
     serverProcess.stdout?.on('data', (data: Buffer) => {
       serverOutput += data.toString();
+      if (serverOutput.length > 50000) serverOutput = serverOutput.slice(-20000);
     });
     serverProcess.stderr?.on('data', (data: Buffer) => {
       const text = data.toString();
       serverOutput += text;
+      if (serverOutput.length > 50000) serverOutput = serverOutput.slice(-20000);
       // Capture error lines
       if (text.toLowerCase().includes('error') || text.toLowerCase().includes('failed')) {
         result.consoleErrors.push(text.trim().slice(0, 500));
       }
     });
 
+    // Detect early crashes (process exits before server is ready)
+    serverProcess.on('exit', (code, signal) => {
+      processCrashed = true;
+      emit({
+        type: 'game_test_crash',
+        port,
+        exitCode: code,
+        signal,
+        output: serverOutput.slice(-500),
+      });
+    });
+
+    serverProcess.on('error', (err) => {
+      processCrashed = true;
+      result.consoleErrors.push('Process error: ' + err.message);
+      emit({ type: 'game_test_error', port, error: err.message });
+    });
+
     // Wait for the server to be ready by polling the port
-    const serverReady = await waitForPort(port, startupTimeoutMs);
+    const serverReady = await waitForPort(port, startupTimeoutMs, () => processCrashed);
     result.startupTimeMs = Date.now() - startTime;
 
     if (!serverReady) {
@@ -133,15 +158,22 @@ export async function runGameTest(
     });
 
   } finally {
-    // Clean up the server process
-    if (serverProcess && !serverProcess.killed) {
-      serverProcess.kill('SIGTERM');
-      // Force kill after 3s if it doesn't exit
-      setTimeout(() => {
-        if (serverProcess && !serverProcess.killed) {
-          serverProcess.kill('SIGKILL');
+    // Clean up the server process — Windows-safe
+    if (serverProcess) {
+      const pid = serverProcess.pid;
+      try {
+        if (isWindows && pid) {
+          // Windows: taskkill /T kills the entire process tree
+          try { execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore', timeout: 5000 }); } catch { /* ignore */ }
+        } else if (pid) {
+          // Unix: kill the process group
+          try { process.kill(-pid, 'SIGTERM'); } catch { /* ignore */ }
+          setTimeout(() => {
+            try { process.kill(-pid, 'SIGKILL'); } catch { /* ignore */ }
+          }, 3000);
         }
-      }, 3000);
+        serverProcess.kill('SIGKILL');
+      } catch { /* ignore */ }
     }
   }
 
@@ -149,11 +181,13 @@ export async function runGameTest(
 }
 
 /**
- * Poll a TCP port until it's accepting connections or timeout.
+ * Poll a TCP port until it's accepting connections, timeout, or early crash.
  */
-async function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
+async function waitForPort(port: number, timeoutMs: number, hasCrashed?: () => boolean): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
+    // Short-circuit if the process has already crashed
+    if (hasCrashed?.()) return false;
     try {
       const response = await fetch(`http://localhost:${port}/`, {
         signal: AbortSignal.timeout(2000),
