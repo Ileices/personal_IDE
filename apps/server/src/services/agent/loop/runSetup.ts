@@ -14,6 +14,9 @@ import { ProjectTierEngine } from '../../analysis/projectTierEngine.js';
 import { listAllFiles } from '../../filesystem/index.js';
 import { CodeIndexer } from '../codeIndexer.js';
 import { detectPlatform, formatPlatformForLLM, type PlatformInfo } from '../platformDetector.js';
+import { buildDepGraph, type DepGraph } from '../../analysis/depGraph.js';
+import { clusterModules, type ClusterResult, type ModuleInfo } from '../../analysis/clustering/moduleClustering.js';
+import { HierarchicalCodeIndex, type IndexStats } from '../indexer/hierarchicalIndex.js';
 import { appConfig } from '../../../config.js';
 
 export interface RunSetupResult {
@@ -24,6 +27,14 @@ export interface RunSetupResult {
   relationshipContext: string;
   tierContext: string;
   logHealthContext: string;
+  /** Dependency graph context for the LLM */
+  depGraphContext: string;
+  /** Module clustering context for the LLM */
+  moduleClusterContext: string;
+  /** Hierarchical index stats */
+  hierarchicalIndexStats: IndexStats | null;
+  /** Total code files found (for exploration gate) */
+  totalCodeFiles: number;
   /** The actual context window after dynamic model discovery */
   resolvedContextWindow: number;
 }
@@ -103,6 +114,7 @@ export async function initializeRun(
     logManager: LogBloatManager;
     tierEngine: ProjectTierEngine;
     codeIndexer: CodeIndexer;
+    hierarchicalIndex: HierarchicalCodeIndex;
   },
   emit: EmitFn,
 ): Promise<RunSetupResult> {
@@ -114,6 +126,10 @@ export async function initializeRun(
     relationshipContext: '',
     tierContext: '',
     logHealthContext: '',
+    depGraphContext: '',
+    moduleClusterContext: '',
+    hierarchicalIndexStats: null,
+    totalCodeFiles: 0,
     resolvedContextWindow: contextWindow,
   };
 
@@ -157,9 +173,65 @@ export async function initializeRun(
   try {
     emit({ type: 'info', message: 'Building code index for surgical editing...' });
     const codeIndex = services.codeIndexer.buildIndex(config.projectRoot);
+    result.totalCodeFiles = codeIndex.totalFiles;
     emit({ type: 'info', message: `Code index: ${codeIndex.totalFiles} files indexed` });
   } catch (err: any) {
     emit({ type: 'info', message: 'Code indexer: ' + err.message });
+  }
+
+  // ── Hierarchical Code Index (v2) ──
+  try {
+    emit({ type: 'info', message: 'Building hierarchical code index...' });
+    const hStats = services.hierarchicalIndex.buildIndex(config.projectRoot);
+    result.hierarchicalIndexStats = hStats;
+    result.totalCodeFiles = Math.max(result.totalCodeFiles, hStats.totalFiles);
+    emit({
+      type: 'info',
+      message: `Hierarchical index: ${hStats.totalNodes} nodes, ${hStats.totalFiles} files, ~${hStats.totalTokens}tok, depth ${hStats.maxDepth}`,
+    });
+  } catch (err: any) {
+    emit({ type: 'info', message: 'Hierarchical indexer: ' + err.message });
+  }
+
+  // ── Dependency Graph (wires orphaned depGraph module) ──
+  try {
+    const indexObj = services.codeIndexer.getIndex();
+    if (indexObj && indexObj.files.length > 0) {
+      const depFiles = indexObj.files.map(f => ({
+        relativePath: f.relativePath,
+        imports: f.imports,
+      }));
+      const depGraph = buildDepGraph(depFiles);
+      result.depGraphContext = formatDepGraphForLLM(depGraph, Math.floor(contextWindow * 0.03));
+      emit({
+        type: 'info',
+        message: `Dep graph: ${depGraph.nodes.size} nodes, ${depGraph.roots.length} entry points, ${depGraph.cycles.length} cycles`,
+      });
+    }
+  } catch (err: any) {
+    emit({ type: 'info', message: 'Dep graph: ' + err.message });
+  }
+
+  // ── Module Clustering (wires orphaned moduleClustering module) ──
+  try {
+    const indexObj = services.codeIndexer.getIndex();
+    if (indexObj && indexObj.files.length > 0) {
+      const modules: ModuleInfo[] = indexObj.files.map(f => ({
+        path: f.relativePath,
+        imports: f.imports,
+        exports: f.exports,
+        size: f.totalBytes,
+        tokens: f.totalTokens,
+      }));
+      const clusters = clusterModules(modules);
+      result.moduleClusterContext = formatClustersForLLM(clusters, Math.floor(contextWindow * 0.02));
+      emit({
+        type: 'info',
+        message: `Module clusters: ${clusters.clusters.length} clusters, ${clusters.outliers.length} outliers`,
+      });
+    }
+  } catch (err: any) {
+    emit({ type: 'info', message: 'Module clustering: ' + err.message });
   }
 
   // ── Knowledge Graph ──
@@ -211,4 +283,54 @@ export async function initializeRun(
   }
 
   return result;
+}
+
+// ── Formatting Helpers ──
+
+function formatDepGraphForLLM(graph: DepGraph, budget: number): string {
+  let output = `### Dependency Graph\n`;
+  output += `Entry points: ${graph.roots.join(', ') || 'none detected'}\n`;
+
+  if (graph.cycles.length > 0) {
+    output += `⚠️ Circular dependencies (${graph.cycles.length}):\n`;
+    for (const cycle of graph.cycles.slice(0, 5)) {
+      output += `  ${cycle.join(' → ')} → [cycle]\n`;
+    }
+  }
+
+  output += `\nDependency chains:\n`;
+  const sorted = [...graph.nodes.entries()]
+    .sort((a, b) => b[1].dependsOn.length - a[1].dependsOn.length);
+
+  for (const [file, node] of sorted) {
+    if (output.length > budget * 3.5) break;
+    if (node.dependsOn.length > 0) {
+      output += `  ${file} → [${node.dependsOn.join(', ')}]\n`;
+    }
+  }
+
+  return output;
+}
+
+function formatClustersForLLM(result: ClusterResult, budget: number): string {
+  let output = `### Module Clusters (${result.clusters.length} groups, ${result.outliers.length} outliers)\n`;
+
+  for (const cluster of result.clusters) {
+    if (output.length > budget * 3.5) break;
+    output += `\n📦 ${cluster.name} (${cluster.members.length} files, cohesion: ${cluster.cohesion}):\n`;
+    for (const member of cluster.members.slice(0, 10)) {
+      output += `  - ${member}\n`;
+    }
+    if (cluster.members.length > 10) {
+      output += `  ... and ${cluster.members.length - 10} more\n`;
+    }
+  }
+
+  if (result.outliers.length > 0) {
+    output += `\n🔹 Outliers: ${result.outliers.slice(0, 5).join(', ')}`;
+    if (result.outliers.length > 5) output += ` (+${result.outliers.length - 5} more)`;
+    output += '\n';
+  }
+
+  return output;
 }

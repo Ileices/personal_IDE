@@ -10,6 +10,7 @@ import type { MemoryService } from '../../memory/index.js';
 import type { CheckpointService } from '../../checkpoint/index.js';
 import type { CodebaseAnalyzer } from '../../analysis/codebase.js';
 import type { CodeIndexer } from '../codeIndexer.js';
+import type { HierarchicalCodeIndex } from '../indexer/hierarchicalIndex.js';
 
 export interface ContextConfig {
   projectRoot: string;
@@ -27,6 +28,10 @@ export interface ContextConfig {
   logHealthContext: string;
   conversationIndexContext: string;
   platformContext: string;
+  // v3 context strings (new — depGraph, clustering, exploration)
+  depGraphContext?: string;
+  moduleClusterContext?: string;
+  explorationContext?: string;
   // Error/test state
   lastErrorContext: string;
   lastTestContext: string;
@@ -38,6 +43,7 @@ export interface ContextServices {
   checkpoint: CheckpointService;
   analyzer: CodebaseAnalyzer;
   codeIndexer: CodeIndexer;
+  hierarchicalIndex?: HierarchicalCodeIndex;
 }
 
 export interface AssembledContext {
@@ -84,11 +90,16 @@ export function assembleContext(
     }
   } catch { /* ignore */ }
 
-  // Code index context (token-aware outline)
+  // Code index context — prefer hierarchical index, fall back to flat index
   let codeIndexContext = '';
   try {
-    const indexBudget = Math.floor(config.contextWindow * 0.05);
-    codeIndexContext = services.codeIndexer.formatForLLM(indexBudget);
+    if (services.hierarchicalIndex && services.hierarchicalIndex.getRootId()) {
+      const indexBudget = Math.floor(config.contextWindow * 0.07);
+      codeIndexContext = services.hierarchicalIndex.formatAtDepth(indexBudget);
+    } else {
+      const indexBudget = Math.floor(config.contextWindow * 0.05);
+      codeIndexContext = services.codeIndexer.formatForLLM(indexBudget);
+    }
   } catch { /* ignore */ }
 
   // Memory context
@@ -111,6 +122,9 @@ export function assembleContext(
     conversationIndexContext: config.conversationIndexContext,
     platformContext: config.platformContext,
     codeIndexContext,
+    depGraphContext: config.depGraphContext,
+    moduleClusterContext: config.moduleClusterContext,
+    explorationContext: config.explorationContext,
   });
 
   // Messages array

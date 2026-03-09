@@ -47,6 +47,11 @@ export interface ProjectIndex {
 export class CodeIndexer {
   private index: ProjectIndex | null = null;
 
+  /** Get the current index (null if not yet built) */
+  getIndex(): ProjectIndex | null {
+    return this.index;
+  }
+
   /** Build a full project index */
   buildIndex(projectRoot: string): ProjectIndex {
     const files: FileIndex[] = [];

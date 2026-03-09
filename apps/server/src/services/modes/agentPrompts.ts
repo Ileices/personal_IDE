@@ -364,6 +364,10 @@ export function buildAgentSystemPrompt(params: {
   platformContext?: string;
   // ── v4: token-aware code index ──
   codeIndexContext?: string;
+  // ── v5: hierarchical index + dep graph + clustering + exploration ──
+  depGraphContext?: string;
+  moduleClusterContext?: string;
+  explorationContext?: string;
 }): string {
   const isCorpusScale = params.codebaseOverview?.includes('lines') &&
     parseInt(params.codebaseOverview.match(/(\d[\d,]+)\s*lines/)?.[1]?.replace(/,/g, '') || '0') > 10000;
@@ -530,6 +534,18 @@ ${params.codeIndexContext ? `### Token-Aware Code Index
 The following index shows every file and symbol with estimated token counts.
 Use this to plan context usage — read ONLY the symbols you need via line ranges.
 ${params.codeIndexContext}\n` : ''}
+
+${params.depGraphContext ? `### Dependency Graph
+File-level dependency chains and entry points. Use to understand import relationships.
+${params.depGraphContext}\n` : ''}
+
+${params.moduleClusterContext ? `### Module Clusters
+Files grouped by import similarity and domain. Use to understand codebase organization.
+${params.moduleClusterContext}\n` : ''}
+
+${params.explorationContext ? `### Architecture Understanding
+Summary from codebase exploration — use this to guide ALL implementation decisions.
+${params.explorationContext}\n` : ''}
 
 ${params.errorContext ? `### Current Errors\n${params.errorContext}\n` : ''}
 

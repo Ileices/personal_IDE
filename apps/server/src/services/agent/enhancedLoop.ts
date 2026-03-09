@@ -1,13 +1,9 @@
 // ============================================
-// Enhanced Agent Loop v3
-// Integrates: multi-provider, token management,
-// checkpoints, error feedback, test running,
-// codebase analysis, task tracking,
-// PLUS: relationship index, log manager,
-// tier engine, conversation indexer,
-// message queue, loop detection, web search,
-// code indexing, persistent logging,
-// dynamic context discovery
+// Enhanced Agent Loop v5
+// Orchestrates multi-provider LLM calls, token management,
+// hierarchical code indexing, exploration gating,
+// checkpoints, error feedback, loop detection,
+// and continuous mode.
 // ============================================
 import { v4 as uuid } from 'uuid';
 import type Database from 'better-sqlite3';
@@ -15,7 +11,7 @@ import type {
   AgentConfig, AgentState, AgentRunStatus,
   StructuredAgentOutput, ProviderType,
 } from '@personal-ide/shared';
-import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
+import { getModel } from '@personal-ide/shared';
 import { getClientFromDb, isTokenLimitError, estimateTokens, checkTokenLimit, truncateToFit } from '../llm/providers.js';
 import { ChunkingPipeline } from '../llm/chunkingPipeline.js';
 import { completeChatResponse } from '../llm/streaming.js';
@@ -49,17 +45,13 @@ import { DatasetBuilder } from './loop/datasetBuilder.js';
 import { adaptPromptForModel } from '../modes/modelPromptAdapter.js';
 import { OllamaHealthMonitor } from '../ollama/healthMonitor.js';
 import { ToolExecutor } from './loop/toolExecutor.js';
+import { HierarchicalCodeIndex } from './indexer/hierarchicalIndex.js';
+import { checkExplorationGate, storeArchitectureSummary, extractArchitectureSummary } from './loop/explorationGate.js';
+import { switchModel as switchModelFn, handle404ModelNotFound, handleRateLimit as handleRateLimitSwitch, shouldResetToOriginalModel } from './loop/modelSwitcher.js';
+import { drainMessageQueue, formatQueuedMessages, buildLoopBreakoutTask as buildLoopBreakout, isFailedResponse, type QueuedMessage } from './loop/messageAssembly.js';
 import { appConfig } from '../../config.js';
 
 type EventCallback = (event: any) => void;
-
-/** Queued user message to inject into the agent loop */
-interface QueuedMessage {
-  id: string;
-  content: string;
-  timestamp: string;
-  priority: 'normal' | 'high';
-}
 
 interface EnhancedAgentConfig extends AgentConfig {
   provider: ProviderType;
@@ -120,6 +112,12 @@ export class EnhancedAgentLoop {
   private datasetBuilder: DatasetBuilder | null = null;
   private ollamaHealthMonitor: OllamaHealthMonitor | null = null;
   private toolExecutor: ToolExecutor;
+  // v5 services — hierarchical index + exploration gate
+  private hierarchicalIndex: HierarchicalCodeIndex;
+  private depGraphContext = '';
+  private moduleClusterContext = '';
+  private explorationContext = '';
+  private totalCodeFiles = 0;
 
   constructor(
     private db: Database.Database,
@@ -147,6 +145,8 @@ export class EnhancedAgentLoop {
     // v4 services
     this.timingService = new TimingService();
     this.toolExecutor = new ToolExecutor(config.projectRoot);
+    // v5 services
+    this.hierarchicalIndex = new HierarchicalCodeIndex(db);
 
     // Start Ollama health monitor if provider is ollama
     if (config.provider === 'ollama') {
@@ -202,42 +202,16 @@ export class EnhancedAgentLoop {
   }
 
   /**
-   * Switch to a different model, automatically syncing the provider if the model
-   * belongs to a different provider (e.g., switching from openai/gpt-4.1 to gemini/gemini-2.5-flash
-   * also switches provider from 'github' to 'gemini').
-   * This prevents the critical bug where getClientFromDb() creates a client for the wrong provider.
+   * Switch to a different model — delegates to extracted modelSwitcher module.
    */
   private switchModel(newModelId: string, reason: string): void {
-    const previousModel = this.config.model;
-    const previousProvider = this.config.provider;
-    this.config.model = newModelId;
-
-    // Sync provider from model ID prefix
-    const newProvider = extractProviderFromModelId(newModelId) as ProviderType;
-    if (newProvider !== this.config.provider) {
-      this.config.provider = newProvider;
-      this.emit({
-        type: 'provider_switch',
-        from: previousProvider,
-        to: newProvider,
-        reason: 'Model ' + newModelId + ' requires provider ' + newProvider,
-      } as any);
-    }
-
-    // Sync context window
-    const modelDef = getModel(newModelId);
-    if (modelDef) {
-      this.contextWindow = modelDef.maxInputTokens;
-    }
-
-    this.emit({
-      type: 'model_switch',
-      from: previousModel,
-      to: newModelId,
-      provider: newProvider,
-      contextWindow: this.contextWindow,
-      reason,
-    } as any);
+    const result = switchModelFn(
+      this.config.model, this.config.provider, this.contextWindow,
+      newModelId, reason, (e) => this.emit(e),
+    );
+    this.config.model = result.newModel;
+    this.config.provider = result.newProvider;
+    this.contextWindow = result.newContextWindow;
   }
 
   /** Queue a user message to be picked up by the agent loop */
@@ -264,15 +238,10 @@ export class EnhancedAgentLoop {
   }
 
   /** Drain the message queue — returns all queued messages and clears the queue */
-  private drainMessageQueue(): QueuedMessage[] {
-    if (this.messageQueue.length === 0) return [];
-    // Sort high priority first
-    const messages = [...this.messageQueue].sort((a, b) =>
-      a.priority === 'high' && b.priority !== 'high' ? -1 :
-      b.priority === 'high' && a.priority !== 'high' ? 1 : 0
-    );
-    this.messageQueue = [];
-    return messages;
+  private drainQueue(): QueuedMessage[] {
+    const result = drainMessageQueue(this.messageQueue);
+    this.messageQueue = result.remaining;
+    return result.messages;
   }
 
   getStatus(): AgentRunStatus {
@@ -311,25 +280,15 @@ export class EnhancedAgentLoop {
     this.loopDetector.reset();
     this.messageQueue = [];
 
-    // Initialize persistent logger
+    // Initialize persistent logger + dataset builder
     try {
       this.logWriter = new LogWriter(this.config.projectRoot);
-      this.logWriter.logSummary('=== Agent Run Started ===');
-      this.logWriter.logSummary('Task: ' + initialTask);
-      this.logWriter.logSummary('Model: ' + this.config.model);
-      this.logWriter.logSummary('Context Window: ' + this.contextWindow);
+      this.logWriter.logSummary('=== Agent Run Started === Task: ' + initialTask.slice(0, 100) + ' | Model: ' + this.config.model + ' | Context: ' + this.contextWindow);
       this.emit({ type: 'info', message: 'Logs: ' + this.logWriter.getLogDir() });
-    } catch (err: any) {
-      this.emit({ type: 'info', message: 'Log writer init failed: ' + err.message });
-    }
-
-    // Initialize dataset builder for NANO training pipeline
+    } catch (err: any) { this.emit({ type: 'info', message: 'Log writer init failed: ' + err.message }); }
     try {
       this.datasetBuilder = new DatasetBuilder(this.config.projectRoot);
-      this.emit({ type: 'info', message: 'Dataset builder: ' + this.datasetBuilder.getOutputPath() });
-    } catch (err: any) {
-      this.emit({ type: 'info', message: 'Dataset builder init failed: ' + err.message });
-    }
+    } catch (err: any) { this.emit({ type: 'info', message: 'Dataset builder init failed: ' + err.message }); }
 
     // Reset timing service for new run
     this.timingService.reset();
@@ -367,6 +326,7 @@ export class EnhancedAgentLoop {
         logManager: this.logManager,
         tierEngine: this.tierEngine,
         codeIndexer: this.codeIndexer,
+        hierarchicalIndex: this.hierarchicalIndex,
       },
       (e) => this.emit(e),
     );
@@ -377,6 +337,9 @@ export class EnhancedAgentLoop {
     this.relationshipContext = setup.relationshipContext;
     this.tierContext = setup.tierContext;
     this.logHealthContext = setup.logHealthContext;
+    this.depGraphContext = setup.depGraphContext;
+    this.moduleClusterContext = setup.moduleClusterContext;
+    this.totalCodeFiles = setup.totalCodeFiles;
     let codebaseOverview = setup.codebaseOverview;
 
     try {
@@ -394,17 +357,9 @@ export class EnhancedAgentLoop {
     const originalModel = this.config.model;
     let lastModelResetCheck = Date.now();
 
-    if (this.config.continuousMode) {
-      this.emit({ type: 'continuous_mode', enabled: true, cooldownMs: this.config.cooldownMs || 0 } as any);
-      this.emit({ type: 'info', message: '24/7 Continuous Mode ACTIVE' });
-    }
-    if (this.config.bypassRateLimits) {
-      this.emit({ type: 'rate_limit_bypass', enabled: true } as any);
-      this.emit({ type: 'info', message: 'Rate limit bypass ENABLED' });
-    }
-    if (this.config.enableSmartChunking) {
-      this.emit({ type: 'info', message: 'Smart chunking pipeline ENABLED' });
-    }
+    if (this.config.continuousMode) this.emit({ type: 'continuous_mode', enabled: true, cooldownMs: this.config.cooldownMs || 0 } as any);
+    if (this.config.bypassRateLimits) this.emit({ type: 'rate_limit_bypass', enabled: true } as any);
+    if (this.config.enableSmartChunking) this.emit({ type: 'info', message: 'Smart chunking pipeline ENABLED' });
 
     while (
       this.currentIteration < effectiveMaxIterations &&
@@ -426,13 +381,10 @@ export class EnhancedAgentLoop {
         // Rate Limit Check (skip if bypassed, but still respect cooldowns)
         if (!this.config.bypassRateLimits) {
           // Periodically try to switch back to original model (every 2 minutes)
-          if (this.config.model !== originalModel && Date.now() - lastModelResetCheck > 120_000) {
+          if (shouldResetToOriginalModel(this.config.model, originalModel, lastModelResetCheck, 120_000, rateLimiter)) {
             lastModelResetCheck = Date.now();
-            const originalCheck = rateLimiter.canRequest(originalModel, 'agent');
-            if (originalCheck.allowed) {
-              this.emit({ type: 'info', message: 'Rate limit window reset — switching back to primary model: ' + originalModel });
-              this.switchModel(originalModel, 'Rate limit window reset — returning to primary');
-            }
+            this.emit({ type: 'info', message: 'Rate limit window reset — switching back to primary model: ' + originalModel });
+            this.switchModel(originalModel, 'Rate limit window reset — returning to primary');
           }
 
           const canProceed = rateLimiter.canRequest(this.config.model, 'agent');
@@ -456,6 +408,24 @@ export class EnhancedAgentLoop {
           }
         }
 
+        // ── Exploration Gate (v5) — force agent to read before writing ──
+        const explorationResult = checkExplorationGate({
+          currentIteration: this.currentIteration,
+          totalCodeFiles: this.totalCodeFiles,
+          projectRoot: this.config.projectRoot,
+          projectId: projectId,
+          userTask: currentTask,
+          codeIndex: this.hierarchicalIndex,
+          memory: this.memory,
+        });
+        if (explorationResult.explorationPrompt) {
+          currentTask = explorationResult.explorationPrompt;
+          this.emit({ type: 'info', message: '🔍 Exploration gate: forcing codebase scan before writing' });
+        }
+        if (explorationResult.architectureSummary) {
+          this.explorationContext = explorationResult.architectureSummary;
+        }
+
         // Build Context (extracted to loop/contextAssembly.ts)
         const assembled = assembleContext({
           projectRoot: this.config.projectRoot,
@@ -475,11 +445,15 @@ export class EnhancedAgentLoop {
           lastErrorContext: this.lastErrorContext,
           lastTestContext: this.lastTestContext,
           codebaseOverview,
+          depGraphContext: this.depGraphContext,
+          moduleClusterContext: this.moduleClusterContext,
+          explorationContext: this.explorationContext,
         }, {
           memory: this.memory,
           checkpoint: this.checkpoint,
           analyzer: this.analyzer,
           codeIndexer: this.codeIndexer,
+          hierarchicalIndex: this.hierarchicalIndex,
         });
 
         const messages = assembled.messages;
@@ -498,18 +472,13 @@ export class EnhancedAgentLoop {
         appendHistory(messages, this.conversationId, this.contextWindow, this.memory);
 
         // ── Drain queued user messages ──
-        const queuedMsgs = this.drainMessageQueue();
+        const queuedMsgs = this.drainQueue();
         if (queuedMsgs.length > 0) {
           this.emit({ type: 'info', message: 'Processing ' + queuedMsgs.length + ' queued user message(s)' });
-          let queueContext = '\n\n--- USER MESSAGES (queued while you were working) ---\n';
           for (const qm of queuedMsgs) {
-            queueContext += `[${qm.priority.toUpperCase()}] ${qm.content}\n\n`;
-            // Store in memory
             this.memory.addMessage(this.conversationId, 'user', '[Queued] ' + qm.content, this.config.model, 'agent');
           }
-          queueContext += '--- END QUEUED MESSAGES ---\n';
-          queueContext += 'Incorporate these user requests into your current work plan. High priority messages should be addressed first.\n';
-          currentTask = currentTask + queueContext;
+          currentTask = currentTask + formatQueuedMessages(queuedMsgs);
         }
 
         // ── Loop Detection ──
@@ -532,32 +501,14 @@ export class EnhancedAgentLoop {
           // Reset detector history so the breakout prompt gets a fresh start
           this.loopDetector.reset();
 
-          // Use the ORIGINAL task on escalation, not the accumulated junk
-          currentTask = this.loopDetector.generateBreakoutPrompt(
+          // Use extracted breakout prompt builder (includes schema re-injection)
+          currentTask = buildLoopBreakout(
             this.config.projectRoot,
             initialTask,
             loopCheck.pattern || 'Repeated pattern',
-            codebaseOverview
+            codebaseOverview,
+            this.loopBreakoutAttempts,
           );
-
-          // Forcefully re-inject the schema requirement
-          currentTask += [
-            '',
-            '',
-            'ABSOLUTE REQUIREMENT: You MUST output file changes using --- FILE: path --- markers AND end with the structured JSON block.',
-            'If you cannot complete the full task in one step, create at least ONE file with meaningful content.',
-            'Example:',
-            '',
-            '--- FILE: src/main.ts ---',
-            '```typescript',
-            '// your code here',
-            '```',
-            '--- END FILE ---',
-            '',
-            '```json:structured_output',
-            '{"summary": "Created main.ts", "filesChanged": [{"path": "src/main.ts", "action": "created", "summary": "Initial implementation"}], "nextSteps": [{"stepNumber": 1, "action": "Expand implementation", "target": "src/main.ts", "detail": "Add core logic", "priority": "high"}], "questionsForUser": [], "done": false, "confidence": 75}',
-            '```',
-          ].join('\n');
 
           // Try web search to find new approaches when stuck
           try {
@@ -638,48 +589,31 @@ export class EnhancedAgentLoop {
               success: false,
             });
 
-            // ── Handle 404 — Model not found (bad model ID in fallback chain) ──
+            // ── Handle 404 — Model not found (extracted to modelSwitcher.ts) ──
             if (statusCode === 404) {
-              this.emit({ type: 'info', message: '404: Model "' + this.config.model + '" not found. Blacklisting and switching to fallback...' });
-              const notFoundModel = this.config.model;
-
-              // Mark this model as dead so it's never picked again during this session
-              rateLimiter.markDead(notFoundModel);
-
-              const fallback = rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
+              const fallback = handle404ModelNotFound(
+                this.config.model, this.config.fallbackModels, rateLimiter, (e) => this.emit(e),
+              );
               if (fallback) {
-                this.emit({ type: 'auto_answer', question: 'Model not found: ' + this.config.model, answer: 'Switching to ' + fallback });
                 this.switchModel(fallback, '404 model not found (blacklisted)');
               } else {
-                // Last resort: pick a guaranteed-working model
-                const lastResort = 'openai/gpt-4.1-mini';
-                if (!rateLimiter.isDead(lastResort)) {
-                  this.emit({ type: 'info', message: 'No fallback available. Last resort: ' + lastResort });
-                  this.switchModel(lastResort, 'Last resort — all other models 404');
-                } else {
-                  // All models dead — halt
-                  this.setState('error');
-                  this.emit({ type: 'error', error: 'All models returning 404. Cannot proceed.' });
-                  break;
-                }
+                this.setState('error');
+                this.emit({ type: 'error', error: 'All models returning 404. Cannot proceed.' });
+                break;
               }
               continue;
             }
 
-            // ── Handle 429/403 Rate Limits ──
+            // ── Handle 429/403 Rate Limits (extracted to modelSwitcher.ts) ──
             if (statusCode === 429 || statusCode === 403) {
-              const check = rateLimiter.canRequest(this.config.model);
-              this.emit({ type: 'info', message: `Rate limited (${statusCode}): ${check.reason || 'backing off'}` });
-              const rateLimitedModel = this.config.model;
-              const fallback = check.fallbackModel
-                || rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
-              if (fallback) {
-                this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + fallback });
-                this.switchModel(fallback, `Rate limited (${statusCode})`);
+              const rl = handleRateLimitSwitch(
+                this.config.model, statusCode, this.config.fallbackModels, rateLimiter, (e) => this.emit(e),
+              );
+              if (rl.fallback) {
+                this.switchModel(rl.fallback, `Rate limited (${statusCode})`);
               } else {
-                await this.delay(check.retryAfterMs || 30000);
+                await this.delay(rl.waitMs);
               }
-              // Rate limit errors are recoverable — do NOT count toward consecutive errors
               continue;
             }
 
@@ -736,10 +670,8 @@ export class EnhancedAgentLoop {
         this.totalTokens += response.usage?.total_tokens || 0;
 
         // Only store productive responses in memory
-        const contentLower = content.toLowerCase().slice(0, 300);
-        const isFailedResponse = (contentLower.includes("i'm sorry") || contentLower.includes("i apologize") ||
-          contentLower.includes("as an ai")) && !content.includes('--- FILE:');
-        if (!isFailedResponse) {
+        const failedResp = isFailedResponse(content);
+        if (!failedResp) {
           this.memory.addMessage(this.conversationId, 'assistant', content, this.config.model, 'agent');
         }
         this.emit({ type: 'step_content', delta: content });
@@ -787,6 +719,16 @@ export class EnhancedAgentLoop {
         const structured = responseResult.structured;
         const fileChangesCount = responseResult.fileChangesCount;
 
+        // ── Extract architecture summary after exploration gate iteration ──
+        if (this.currentIteration === 1 && this.totalCodeFiles >= 3) {
+          const archSummary = extractArchitectureSummary(content);
+          if (archSummary) {
+            storeArchitectureSummary(this.memory, projectId, this.conversationId, archSummary);
+            this.explorationContext = archSummary;
+            this.emit({ type: 'info', message: '📐 Architecture summary captured (' + archSummary.length + ' chars)' });
+          }
+        }
+
         // ── Record in Dataset Builder for NANO Training ──
         try {
           this.datasetBuilder?.recordIteration({
@@ -799,7 +741,7 @@ export class EnhancedAgentLoop {
             structured,
             filesChanged: fileChangesCount,
             errors: this.lastErrorContext,
-            isFailedResponse: isFailedResponse,
+            isFailedResponse: failedResp,
           });
           this.emit({ type: 'dataset_update', dataset: this.datasetBuilder?.formatForEvent() });
         } catch { /* non-critical */ }
@@ -873,29 +815,16 @@ export class EnhancedAgentLoop {
 
           // ── Self-Reflection (every 10 iterations or when done) ──
           if (structured.done || (this.currentIteration > 1 && this.currentIteration % 10 === 0)) {
-            const reflectionReason = structured.done ? 'completion' : 'periodic';
-            this.emit({ type: 'info', message: '🔍 Self-reflection (' + reflectionReason + ') at iteration ' + this.currentIteration });
-            const reflectionPrompt = [
-              'SELF-REFLECTION CHECKPOINT — Review your work so far:',
-              '• Iterations completed: ' + this.currentIteration,
-              '• Files changed: ' + this.totalFilesChanged,
-              '• Tokens used: ' + this.totalTokens,
-              '• Current confidence: ' + (structured.confidence || 'N/A'),
-              '• Last summary: ' + (structured.summary || 'N/A').slice(0, 200),
-              this.lastErrorContext ? '• Outstanding errors:\n' + this.lastErrorContext.slice(0, 500) : '• No outstanding errors',
-              this.lastTestContext ? '• Test status:\n' + this.lastTestContext.slice(0, 300) : '',
-              '',
-              'Questions to consider:',
-              '1. Are there any bugs or regressions introduced?',
-              '2. Did I miss any edge cases or error handling?',
-              '3. Is the code clean and well-structured?',
-              '4. Are there any TODOs/FIXMEs I should address?',
-              structured.done ? '5. Is the task TRULY complete, or am I marking done prematurely?' : '',
-              '',
-              'If you find issues, set done=false and address them. Otherwise continue.',
-            ].filter(Boolean).join('\n');
-            // Inject reflection into the current task so the model sees it next iteration
-            currentTask = reflectionPrompt + '\n\n' + (currentTask || '');
+            this.emit({ type: 'info', message: '🔍 Self-reflection at iteration ' + this.currentIteration });
+            currentTask = [
+              'SELF-REFLECTION: Iterations=' + this.currentIteration + ' Files=' + this.totalFilesChanged + ' Tokens=' + this.totalTokens,
+              'Confidence: ' + (structured.confidence || 'N/A') + ' Summary: ' + (structured.summary || '').slice(0, 200),
+              this.lastErrorContext ? 'Errors:\n' + this.lastErrorContext.slice(0, 400) : 'No errors',
+              this.lastTestContext ? 'Tests:\n' + this.lastTestContext.slice(0, 200) : '',
+              'Check: bugs? edge cases? clean code? TODOs?',
+              structured.done ? 'Is the task TRULY complete, or marking done prematurely?' : '',
+              'Set done=false if issues found.',
+            ].filter(Boolean).join('\n') + '\n\n' + (currentTask || '');
           }
 
           // Check if done

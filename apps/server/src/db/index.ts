@@ -350,21 +350,59 @@ const MIGRATIONS: Migration[] = [
   },
 
   // ──────────────────────────────────────────
-  // Future migrations go here, e.g.:
-  //
-  // {
-  //   version: 2,
-  //   name: 'add_user_preferences',
-  //   up(db) {
-  //     db.exec(`
-  //       CREATE TABLE IF NOT EXISTS user_preferences (
-  //         user_id TEXT PRIMARY KEY,
-  //         theme TEXT DEFAULT 'dark',
-  //         ...
-  //       );
-  //     `);
-  //   },
-  // },
+  // Migration v2: Hierarchical Code Index
+  // ──────────────────────────────────────────
+  {
+    version: 2,
+    name: 'hierarchical_code_index',
+    up(db: Database.Database) {
+      db.exec(`
+        -- Hierarchical AST node tree for codebase indexing
+        -- Depth levels: ROOT(0) → DIR(1) → SUBDIR(2+) → FILE → IMPORT_BLOCK → CLASS → METHOD → FUNCTION → BLOCK → STATEMENT
+        CREATE TABLE IF NOT EXISTS code_index_nodes (
+          id TEXT PRIMARY KEY,
+          project_root TEXT NOT NULL,
+          parent_id TEXT,
+          node_type TEXT NOT NULL,
+          label TEXT NOT NULL,
+          depth INTEGER NOT NULL DEFAULT 0,
+          file_path TEXT,
+          line_start INTEGER,
+          line_end INTEGER,
+          byte_start INTEGER,
+          byte_end INTEGER,
+          token_count INTEGER NOT NULL DEFAULT 0,
+          signature TEXT,
+          docstring TEXT,
+          collapsed_summary TEXT,
+          language TEXT,
+          last_indexed INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (parent_id) REFERENCES code_index_nodes(id) ON DELETE CASCADE
+        );
+
+        -- Ordered parent→child join table for preserving source order
+        CREATE TABLE IF NOT EXISTS code_index_edges (
+          parent_id TEXT NOT NULL,
+          child_id TEXT NOT NULL,
+          position INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (parent_id, child_id),
+          FOREIGN KEY (parent_id) REFERENCES code_index_nodes(id) ON DELETE CASCADE,
+          FOREIGN KEY (child_id) REFERENCES code_index_nodes(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_cin_parent ON code_index_nodes(parent_id);
+        CREATE INDEX IF NOT EXISTS idx_cin_project ON code_index_nodes(project_root);
+        CREATE INDEX IF NOT EXISTS idx_cin_file ON code_index_nodes(file_path);
+        CREATE INDEX IF NOT EXISTS idx_cin_type ON code_index_nodes(node_type);
+        CREATE INDEX IF NOT EXISTS idx_cin_depth ON code_index_nodes(depth);
+        CREATE INDEX IF NOT EXISTS idx_cie_parent ON code_index_edges(parent_id);
+        CREATE INDEX IF NOT EXISTS idx_cie_child ON code_index_edges(child_id);
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Future migrations go here
   // ──────────────────────────────────────────
 ];
 

@@ -168,6 +168,23 @@ export function processResponse(
           "INSERT INTO code_edit_log (id, project_id, file_path, edit_type, symbols_affected, change_reason, agent_run_id, created_at) VALUES (?, ?, ?, 'modify', '[]', ?, ?, datetime('now'))"
         ).run(uuid(), ctx.projectId, change.path, 'Agent step ' + ctx.currentIteration, ctx.runId);
       } catch { /* non-critical */ }
+
+      // Wire file summaries — record what each file contains for cross-session memory
+      try {
+        const ext = change.path.match(/\.(\w+)$/)?.[1] || 'unknown';
+        const langMap: Record<string, string> = { ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript', py: 'python', rs: 'rust', go: 'go' };
+        const contentHash = simpleHash(change.content);
+        const keySymbols = extractKeySymbols(change.content, langMap[ext] || ext);
+        services.memory.upsertFileSummary(ctx.projectId, {
+          projectId: ctx.projectId,
+          filePath: change.path,
+          summary: (structured?.filesChanged?.find(f => f.path === change.path)?.summary || 'Modified by agent').slice(0, 500),
+          language: langMap[ext] || ext,
+          fileSize: change.content.length,
+          contentHash,
+          keySymbols,
+        });
+      } catch { /* non-critical — file summaries are best-effort */ }
     } catch (err: any) {
       emit({ type: 'error', error: 'Failed to write ' + change.path + ': ' + err.message });
     }
@@ -295,4 +312,40 @@ export function buildSchemaMissTask(
   }
 
   return retryTask;
+}
+
+// ── File Summary Helpers ──
+
+function simpleHash(content: string): string {
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function extractKeySymbols(content: string, language: string): string[] {
+  const symbols: string[] = [];
+  const lines = content.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (['typescript', 'javascript'].includes(language)) {
+      const expMatch = trimmed.match(/^export\s+(?:default\s+)?(?:class|function|interface|type|enum|const|let|var|async)\s+(\w+)/);
+      if (expMatch) symbols.push(expMatch[1]);
+    } else if (language === 'python') {
+      const defMatch = trimmed.match(/^(?:class|def|async def)\s+(\w+)/);
+      if (defMatch) symbols.push(defMatch[1]);
+    } else {
+      const funcMatch = trimmed.match(/^(?:pub\s+)?(?:fn|func|function|def)\s+(\w+)/);
+      if (funcMatch) symbols.push(funcMatch[1]);
+    }
+
+    if (symbols.length >= 20) break;
+  }
+
+  return symbols;
 }
