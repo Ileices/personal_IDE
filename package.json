@@ -9,6 +9,7 @@
     "start": "pnpm --filter @personal-ide/server start",
     "dev:server": "pnpm --filter @personal-ide/server dev",
     "dev:web": "pnpm --filter @personal-ide/web dev",
+    "smoke:phase4": "node scripts/smoke/phase4-smoke.mjs",
     "clean": "rimraf apps/*/dist packages/*/dist",
     "setup": "node scripts/setup.js",
     "postinstall": "pnpm --filter @personal-ide/shared build"
