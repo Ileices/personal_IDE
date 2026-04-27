@@ -53,10 +53,10 @@ const firstEventTimeoutOption =
 
 const BASE_URL = (baseUrlOption || process.env.PHASE4_BASE_URL || 'http://127.0.0.1:3001').replace(/\/+$/, '');
 const ORIGIN = originOption || process.env.PHASE4_ORIGIN || 'http://localhost:5173';
-const MODEL = modelOption || process.env.PHASE4_MODEL || 'ollama/llama3.2';
-const REQUEST_TIMEOUT_MS = parsePositiveInt(requestTimeoutOption, 10000);
-const CHAT_TIMEOUT_MS = parsePositiveInt(chatTimeoutOption, 60000);
-const FIRST_EVENT_TIMEOUT_MS = parsePositiveInt(firstEventTimeoutOption, 30000);
+const MODEL = modelOption || process.env.PHASE4_MODEL || 'ollama/qwen2.5-coder:7b';
+const REQUEST_TIMEOUT_MS = parsePositiveInt(requestTimeoutOption, 30000);
+const CHAT_TIMEOUT_MS = parsePositiveInt(chatTimeoutOption, 120000);
+const FIRST_EVENT_TIMEOUT_MS = parsePositiveInt(firstEventTimeoutOption, 60000);
 
 const requestHeaders = {
   Origin: ORIGIN,
