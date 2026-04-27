@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const BASE_URL = (process.env.PHASE4_BASE_URL || 'http://localhost:3001').replace(/\/+$/, '');
+const BASE_URL = (process.env.PHASE4_BASE_URL || 'http://127.0.0.1:3001').replace(/\/+$/, '');
 const ORIGIN = process.env.PHASE4_ORIGIN || 'http://localhost:5173';
 const MODEL = process.env.PHASE4_MODEL || 'ollama/llama3.2';
 
@@ -8,6 +8,10 @@ const requestHeaders = {
   Origin: ORIGIN,
   Referer: `${ORIGIN}/`,
 };
+
+function logStep(step) {
+  console.error(`[phase4-smoke] ${step}`);
+}
 
 function extractFirstSseEvent(content) {
   const lines = content.split(/\r?\n/);
@@ -75,31 +79,115 @@ async function request(method, path, body, timeoutMs = 15000) {
 }
 
 async function sendChat(projectId, message) {
-  const res = await request(
-    'POST',
-    '/api/chat/send',
-    {
-    projectId,
-    message,
-    mode: 'ask',
-    model: MODEL,
-    },
-    45000,
-  );
+  const url = `${BASE_URL}/api/chat/send`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
 
-  const firstEvent = extractFirstSseEvent(res.text);
-  const parsed = firstEvent.parsed;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...requestHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectId,
+        message,
+        mode: 'ask',
+        model: MODEL,
+      }),
+      signal: controller.signal,
+    });
 
-  return {
-    ok: res.ok,
-    status: res.status,
-    firstType: parsed?.type ?? null,
-    conversationId: parsed?.conversationId ?? null,
-    messageId: parsed?.messageId ?? null,
-    hasConversationId: Boolean(parsed?.conversationId),
-    hasMessageId: Boolean(parsed?.messageId),
-    firstEventRaw: firstEvent.raw,
-  };
+    const status = res.status;
+    const ok = res.ok;
+
+    if (!res.body) {
+      return {
+        ok,
+        status,
+        firstType: null,
+        conversationId: null,
+        messageId: null,
+        hasConversationId: false,
+        hasMessageId: false,
+        firstEventRaw: null,
+      };
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let firstEventRaw = null;
+    let parsed = null;
+
+    const firstEventDeadlineMs = 15000;
+    const firstEventUntil = Date.now() + firstEventDeadlineMs;
+
+    while (Date.now() < firstEventUntil) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data:')) {
+          continue;
+        }
+
+        const raw = line.slice(5).trim();
+        if (!raw) {
+          continue;
+        }
+
+        firstEventRaw = raw;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          parsed = null;
+        }
+        break;
+      }
+
+      if (firstEventRaw) {
+        break;
+      }
+    }
+
+    try {
+      await reader.cancel();
+    } catch {
+      // Ignore reader cancellation errors.
+    }
+
+    return {
+      ok,
+      status,
+      firstType: parsed?.type ?? null,
+      conversationId: parsed?.conversationId ?? null,
+      messageId: parsed?.messageId ?? null,
+      hasConversationId: Boolean(parsed?.conversationId),
+      hasMessageId: Boolean(parsed?.messageId),
+      firstEventRaw,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      firstType: null,
+      conversationId: null,
+      messageId: null,
+      hasConversationId: false,
+      hasMessageId: false,
+      firstEventRaw: String(error),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function pick(result, keys) {
@@ -119,13 +207,16 @@ const report = {
   details: {},
 };
 
+logStep('health');
 const health = await request('GET', '/api/health');
 report.details.health = pick(health, ['ok', 'status']);
 report.checks.health = health.ok;
 
+logStep('reset orchestrators');
 await request('POST', '/api/agent/stop', {});
 await request('POST', '/api/fleet/stop', {});
 
+logStep('create project');
 const createProject = await request('POST', '/api/memory/projects', {
   name: `Phase4 Smoke ${Date.now()}`,
   rootPath: 'z:/personal_IDE-master/personal_IDE-master',
@@ -159,6 +250,7 @@ if (!projectId) {
 
 report.checks.projectCreate = true;
 
+logStep('chat primary + legacy');
 const chatPrimary = await sendChat(projectId, 'phase4 smoke primary message');
 const chatLegacy = await sendChat(projectId, 'phase4 smoke legacy message');
 
@@ -171,6 +263,7 @@ report.checks.chatSseIds =
   chatPrimary.hasConversationId &&
   chatPrimary.hasMessageId;
 
+logStep('conversation routes');
 const queryList = await request('GET', `/api/chat/conversations?projectId=${encodeURIComponent(projectId)}`);
 const pathList = await request('GET', `/api/chat/conversations/${encodeURIComponent(projectId)}`);
 
@@ -232,6 +325,7 @@ report.checks.legacyConversationRoutes =
   legacyDelete.ok &&
   legacyDelete.json?.success === true;
 
+logStep('agent lifecycle');
 await request('POST', '/api/agent/stop', {});
 
 const agentStart = await request('POST', '/api/agent/start', {
@@ -281,6 +375,7 @@ report.checks.agentLifecycle =
   agentStop.ok &&
   agentStop.json?.success === true;
 
+logStep('fleet lifecycle');
 await request('POST', '/api/fleet/stop', {});
 
 const fleetStart = await request('POST', '/api/fleet/start', {
@@ -331,6 +426,7 @@ report.checks.fleetLifecycle =
   fleetStop.ok &&
   fleetStop.json?.success === true;
 
+logStep('ollama routes');
 const ollamaDiagnose = await request('GET', '/api/ollama/diagnose');
 const allModels = await request('GET', '/api/providers/all-models');
 
@@ -347,6 +443,7 @@ report.details.ollama = {
 
 report.checks.ollamaRoutes = ollamaDiagnose.status !== 404 && allModels.status !== 404;
 
+logStep('nano routes');
 const nanoStatus = await request('GET', '/api/nano/status');
 const nanoDonation = await request('PUT', '/api/nano/pool/donation', { percent: 25 });
 const nanoIdleTraining = await request('PUT', '/api/nano/pool/idle-training', { enabled: true });
@@ -405,6 +502,7 @@ const criticalChecks = [
 
 report.checks.allPassed = criticalChecks.every(Boolean);
 
+logStep('complete');
 console.log(JSON.stringify(report, null, 2));
 
 if (!report.checks.allPassed) {
