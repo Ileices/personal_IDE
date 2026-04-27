@@ -187,6 +187,8 @@ async function sendChat(projectId, message) {
       }
 
       if (firstEventRaw) {
+        // Hard-abort after first event so long model generation does not hold sockets.
+        controller.abort();
         break;
       }
     }
