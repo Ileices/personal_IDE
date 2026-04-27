@@ -1,0 +1,24 @@
+{
+  "learning_phase": "TEST",
+  "test_data": {
+    "input": "can you understand me?",
+    "timestamp": 1750221923.1672242,
+    "processed": 0,
+    "cluster_id": "cluster_1"
+  },
+  "cluster_id": "cluster_1",
+  "_evolution_metadata": {
+    "cycle": 4,
+    "complexity": 0.1143637663094082,
+    "component_weights": {
+      "Blue": 0.35612158233370633,
+      "Yellow": 0.30518026053458647,
+      "Self": 0.33869815713170726
+    },
+    "alliances": {
+      "Red-Blue": -0.019090980967100345,
+      "Yellow-Red": -0.03288837896834218
+    }
+  },
+  "_intelligence_growth": 0.6829861695947955
+}

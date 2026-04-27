@@ -1,0 +1,831 @@
+﻿THE SILICON FACTORY
+Autonomous Multi-Agent Software Construction System
+Computer Science Architecture & Developer Stack Reference
+  
+
+
+Version 1.0  ·  Architectural Design Document
+Constraint-driven, hardware-aware, 24/7 agentic codebase construction using token-limited models
+
+
+Executive Summary
+The Silicon Factory is a complete autonomous software construction architecture enabling a token-limited AI model - as small as 512 tokens - to build production-grade software systems of arbitrary complexity, including AAA game engines, social platforms, and enterprise applications, entirely on consumer local hardware running 24 hours a day without human supervision.
+The system solves the context-window problem not by seeking larger models, but by treating the AI as a CPU rather than a thinker. Intelligence is externalized into infrastructure. The model handles only micro-decisions - one function, one fix, one diff - while the surrounding system maintains memory, continuity, verification, and recovery.
+The architecture was derived through a systematic analysis of the constraints imposed by the 512-token limit and the tools required to overcome each constraint without modifying the model itself. The result is a layered system of agents, protocols, and infrastructure components that together constitute a functioning software factory staffed entirely by artificial intelligence.
+
+Core Design Axioms
+• Persistence over speed - a small model running 24/7 with perfect memory outperforms a large model with no infrastructure
+• The context lives in the tools, not the model - the model only needs to handle the present atom
+• Intelligence is sharded - no single agent needs to understand the whole system
+• Every task is addressable - the database is the ground truth, not the chat session
+• Hardware is a first-class constraint - thermal, VRAM, and power must be managed as inputs to the scheduler
+
+System Architecture Overview
+The Silicon Factory consists of five hierarchical layers. Each layer addresses a distinct failure mode of the token-limited model. Layers communicate through the Inter-Agent Protocol (IAP) and share persistent state through the Task Ledger.
+
+Layer
+Name
+Primary Function
+Failure Mode Addressed
+1
+Strategy & Orchestration
+Translates human intent into atomic task trees
+Goal drift, vague requirements
+2
+Context & Memory
+Manages external knowledge and handoff state
+Token overflow, amnesia between tasks
+3
+Execution & Sandbox
+Writes and tests code in isolation
+Hallucination, unsafe filesystem access
+4
+Verification & QA
+Reviews, tests, and approves all output
+Silent bugs, architectural violations
+5
+Governance & Safety
+Manages hardware, costs, loops, and humans
+Thermal damage, runaway loops, cost blowout
+The Background Daemon is the cross-cutting process that operates independently of the user interface. It survives browser tab closure, screen sleep, and OS reboots. The web-based IDE connects to the daemon as a read-only monitoring and steering interface, never as the execution host.
+
+The Agent Swarm - Personnel Specification
+The swarm is organized as a corporate hierarchy. Each agent is a specialized 512-token instance with a single role, a defined set of tool permissions, and a specific communication interface. No agent has global visibility of the codebase.
+
+Tier 1 - Management
+The Architect
+Role: Goal decomposition. The Architect receives a high-level project goal or a compressed segment of the human's brainstorm and produces a list of atomic micro-tasks stored in the Task Ledger. It never writes code. Its output is a Task Tree - a dependency graph of tasks where each leaf is achievable within a single 512-token window.
+• Input: Goal statement + project manifesto + current build state summary
+• Output: Batch of Task objects with dependency pointers, task type, estimated complexity, and required context keys
+• Tool access: Task Ledger write, Symbol Graph read, PRD Spec read
+
+The Executive (Non-AI Orchestrator)
+Role: Master control logic. The Executive is not an LLM. It is the deterministic process written in the developer's codebase that routes tasks between agents, manages the queue, triggers tool calls, and enforces sequencing. It is the factory's operating system.
+• Implemented as: A state machine with a persistent 60-second heartbeat loop
+• Responsibilities: Queue polling, agent instantiation, tool call routing, failure escalation, thermal throttle enforcement
+
+The Ambiguity Detector
+Role: Pre-processor for goal clarity. Before any task reaches the Coder, the Ambiguity Detector inspects the instruction for load-bearing vague terms. It pauses the factory and requests a technical definition rather than allowing the Coder to guess.
+• Trigger words: 'good', 'clean', 'fast', 'handle', 'make it look', 'work properly'
+• Output: A clarification request injected into the human-facing dashboard
+
+Tier 2 - Memory & Context
+The Librarian
+Role: Context scout. Before each Coder invocation, the Librarian queries the Vector DB and Symbol Graph for the minimum set of code snippets relevant to the current task. It acts as a pre-filter ensuring the Coder's 512-token window is maximally relevant.
+• Query strategy: Hybrid BM25 + vector similarity, filtered by file recency and import graph proximity
+• Output: A context package of ≤ 200 tokens containing function signatures, relevant snippets, and open file state
+
+The Scribe
+Role: State manager and handoff writer. After the Coder completes a task, the Scribe reads the raw output and compresses it into a 50-token Mental Seed stored in the Task Ledger. This seed forms the Ghost (look-back) component of the next task's prompt.
+• Output schema: { summary: string, mental_seed: string, variables_defined: string[], files_modified: string[] }
+• Rejection rule: If the Coder's output does not include a parseable JSON block, the Scribe flags the task as FAILED and routes to Forensic
+
+The Vector Custodian
+Role: Memory hygiene. Periodically scans the Vector DB for outdated, duplicated, or superseded function versions. Deduplicates and removes ghost entries to ensure the Librarian always retrieves the current source of truth.
+• Run schedule: Every 500 completed tasks or triggered by Librarian confidence threshold drop
+
+Tier 3 - Production (The Floor)
+The Coder
+Role: Pure code generation. The Coder receives a fully assembled 512-token prompt - the Handshake Envelope - and outputs a raw code diff. It does not reason about tests, project goals, or architectural decisions. It executes exactly one micro-task.
+• Context structure: Global Anchor (30 tokens) + Ghost (50 tokens) + Task (350 tokens) + Seed teaser (30 tokens) + format instruction (50 tokens)
+• Output format: Raw diff or function body + trailing JSON handshake block
+• Prohibited operations: File deletion, dependency installation, schema changes - all blocked at the Hallucination Firewall
+
+The Janitor
+Role: Background refactoring. Runs as a low-priority agent on completed files, identifying redundant functions, duplicate utility code, inconsistent naming, and import bloat. Issues surgical edit instructions routed through the Atomic Merger.
+• Trigger: Activated when the queue depth exceeds 50 pending tasks (factory is busy and can afford cleanup in parallel)
+
+The Token Economist
+Role: Aggressive prompt compression. Takes the assembled Handshake Envelope before it is sent to the Coder and applies a minification pass to bring the token count to the target budget, preserving semantic content while stripping whitespace, verbosity, and filler.
+• Techniques: Variable aliasing, comment stripping, whitespace normalization, DSL substitution
+• Target: Reduce any prompt to ≤ 480 tokens, leaving 32 tokens of output headroom
+
+Tier 4 - Quality Assurance
+The Critic
+Role: Output gatekeeper. Receives the Coder's diff and checks it against the Architectural Manifesto and the project spec. Issues PASS or FAIL with a ≤ 30-token reason. Only PASS outputs proceed to the Atomic Merger.
+• Check sequence: Syntax validity → Manifest compliance → Spec contract → Security red flags
+• FAIL routing: Sends failure reason directly to Forensic Agent with the original task context
+
+The Forensic Agent
+Role: Dedicated debugger. Woken only when the compiler, unit tests, or CI/CD reports a failure. Receives the error output, the failing file, and the task history. Issues a targeted fix instruction without seeing the rest of the codebase.
+• Escalation threshold: If Forensic fails to resolve within 3 attempts, task is flagged ESCALATED and added to the human dashboard
+
+The Security Auditor
+Role: Vulnerability scanner. A periodic agent that scans recently committed code for SQL injection surfaces, hardcoded secrets, unvalidated inputs, and exposed endpoints. Operates independently of the main task queue.
+• Run schedule: Every 200 committed tasks or at every CI/CD merge event
+
+The Integration Tester
+Role: End-to-end bridge verification. Writes tests not for individual functions but for the communication boundaries between modules. Ensures that when Module A calls Module B, the contract is verified by an automated test.
+
+Tier 5 - Operations & Support
+The Context Stitcher
+Role: Global redundancy detector. Scans the Symbol Graph for functions or classes that have been implemented more than once across different files. Flags redundancies to the Architect for consolidation into a shared utility.
+
+The Wiring Agent
+Role: Interconnect specialist. Ensures that modules built in isolation are correctly connected. Examines the spaces between files - event bus subscriptions, import chains, API contracts - and issues the bridge code that ties the factory's isolated output into a coherent application.
+
+The Continuity Agent
+Role: Artistic and stylistic consistency watcher. For projects with visual components (games, frontends, films), this agent compares generated assets and UI code against the Vibe-Check Embedding vector to detect stylistic drift.
+
+The Deployment Agent
+Role: Release manager. Generates Dockerfiles, CI/CD YAML, cloud environment variable configurations, and build scripts. Executes after the Production-Ready Hardener signs off on the codebase.
+
+The Prompt Optimizer (Meta-Agent)
+Role: Communication quality controller. If the Coder repeatedly fails tasks routed from a specific Architect output, the Prompt Optimizer analyzes the failing prompts and rewrites the Architect's task format to be more parseable by the Coder. It fixes the communication layer, not the code.
+
+The Agent Handshake Protocol
+The Handshake Protocol is the mechanism that creates Cognitive Continuity - the illusion of a single, unified build process across millions of independent 512-token model calls. Without this protocol, each model invocation is amnesiac. With it, each invocation inherits just enough context from its predecessor to produce code that integrates cleanly.
+
+The 10/80/10 Stride Rule
+Every prompt delivered to the Coder is structured with three temporal zones:
+• THE GHOST (10%) - a 50-token compressed summary of the immediately preceding task output, written by the Scribe. This prevents the Coder from contradicting work it cannot see.
+• THE FLESH (80%) - the actual micro-task instruction. At 512-token budget, this is approximately 400 tokens of working space for logic.
+• THE SEED (10%) - a 30-token hint about the immediately following task. This causes the Coder to write output-compatible code - returning values instead of printing them, using interfaces instead of concrete types, leaving extension points open.
+
+The Global Anchor
+A permanent 30-token string prepended to every single prompt for the duration of the project build. It enforces global consistency across all agents and all time. It never changes mid-build.
+
+  EXAMPLE ANCHOR
+  PROJECT_ANCHOR: [Lang: TypeScript, Style: Google, Pattern: ECS, Arch: Microservice, Vibe: High-Fidelity]
+
+Handshake Envelope Schema
+The Scribe writes a structured JSON block at the end of every completed task. This block is stored in the Task Ledger and becomes the Ghost of the next task.
+
+  HANDSHAKE JSON SCHEMA
+  {
+    "task_id": "PHYS_042",
+    "status": "COMPLETED",
+    "output_summary": "Implemented gravity constant and projectile collision.",
+    "mental_seed": "Hook collision into DamageHandler in combat.py via OnHit interface.",
+    "context_lock": {
+      "vibe": "Deterministic low-latency physics",
+      "last_variable": "G_CONSTANT = 9.81",
+      "open_files": ["src/physics/engine.py"]
+    }
+  }
+
+Prompt Assembly - JavaScript Implementation
+The following is the production assembler used by the Background Daemon to construct the Handshake Envelope before sending to the local inference engine:
+
+  ASSEMBLEHANDSHAKEPROMPT() - HANDSHAKE.JS
+  async function assembleHandshakePrompt(taskId) {
+    const task = await db.tasks.get(taskId);
+    const prev = await db.tasks.get(task.previous_id);
+    const anchor = await db.config.get('global_anchor');
+  
+    const ghost = prev?.handshake?.mental_seed ?? 'Start of project.';
+    const prevSummary = prev?.handshake?.output_summary ?? 'None';
+    const seedTeaser = task.next_step_hint ?? 'Prepare for integration.';
+  
+    const prompt = [
+      `[ANCHOR]: ${anchor}`,
+      `[GHOST]: ${ghost} (Prior: ${prevSummary})`,
+      `[FLESH]: ${task.instruction}`,
+      `[SEED]: Next: ${seedTeaser}`,
+      'OUTPUT: Raw code only. End with JSON: {"summary":"","mental_seed":""}'
+    ].join('\n').trim();
+  
+    return prompt;
+  }
+  
+  async function triggerCoder(taskId, model = 'qwen2.5-coder:7b') {
+    const prompt = await assembleHandshakePrompt(taskId);
+    const compressed = await tokenEconomist.minify(prompt, 480);
+  
+    const res = await fetch('http://localhost:11434/api/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        model,
+        prompt: compressed,
+        stream: false,
+        options: { num_ctx: 512, temperature: 0.1 }
+      })
+    });
+  
+    const json = await res.json();
+    return parseCoderOutput(json.response);
+  }
+
+Complete Tool Catalog
+Tools are external processes that operate outside the model's context window. They are the factory's infrastructure - storage, verification, execution, and communication. The model calls tools through a strict Schema-Enforced Proxy that validates every call before execution.
+
+Memory & Storage Tools
+Tool
+Implementation
+Function
+Vector DB
+ChromaDB / LanceDB (local)
+Stores embeddings of all function signatures, docstrings, and code snippets for semantic retrieval by the Librarian
+Symbol Graph
+Tree-Sitter + SQLite adjacency table
+Maps all function/class/import relationships across the codebase. Allows dependency traversal without reading files
+Task Ledger
+SQLite / local Postgres
+Persistent record of every micro-task: status, input, output, handshake blob, timing, agent ID, token count
+Knowledge Graph
+Neo4j (local) or SQLite graph
+Semantic entity map. When a variable is renamed, the graph identifies every downstream file requiring update
+Registry of Assumptions
+JSON flat file in project root
+Stores top-N project-wide decisions injected into every prompt as immutable context (e.g., 'Database: PostgreSQL')
+State Snapshotter
+Serialized JSON + git tag
+Periodic full-factory state backup. Enables rollback to a known-good state when the factory enters a logic loop
+Code Comprehension Tools
+Tool
+Implementation
+Function
+Signature Extractor
+Tree-Sitter AST parser
+Strips implementation and returns function/class signatures only. Allows model to understand a 1000-line file in 50 tokens
+Tree Generator
+OS file walk + depth filter
+Outputs project file tree. Used by Architect for orientation without reading any file content
+Repo-Map
+Tree-Sitter + Symbol Graph query
+Generates a 90ms full-repository map: variable names, definition locations, and usage counts
+AST Pinning
+Tree-Sitter node selector
+Restricts Coder edits to specific AST nodes, preventing accidental deletion of surrounding functions
+Code Age Weighting
+Task Ledger timestamp query
+Tags Vector DB entries with recency and import frequency. Ensures Librarian retrieves current, hot code over ghost versions
+Execution & Verification Tools
+Tool
+Implementation
+Function
+Isolated Sandbox
+Docker container per task
+Executes generated code in a fully isolated environment with its own filesystem and network namespace
+Virtual File System (VFS)
+In-memory FS with git-diff logging
+Exposes Read_Range, Edit_Line, and Cursor tools. Prevents full-file rewrites that would overflow the context
+Compiler-Trace Matcher
+Regex + LLM summarizer
+Translates raw compiler errors into ≤20 token hints consumable by the Forensic Agent
+Unit Test Runner
+Jest / Pytest subprocess
+Executes tests after every micro-edit. Failure output is routed to Forensic Agent before any other task proceeds
+CI/CD Connector
+GitHub Actions webhook
+Triggers full build pipeline and reports binary Success/Failure back to the Executive
+Mock-to-Real Swapper
+Config file + import aliasing
+Builds all logic against mock data sources first, then a specialized agent substitutes real API/DB connections
+Hallucination Firewall
+JSON Schema validator proxy
+Intercepts all tool calls from model. Rejects any call not matching the registered tool schema. Returns structured error
+Context Management Tools
+Tool
+Implementation
+Function
+Token Economist
+tiktoken + minification rules
+Compresses assembled prompts to target token budget. Strips whitespace, substitutes DSL tokens, aliases long names
+Context Budgeter
+Priority queue + token counter
+Ranks context fragments by relevance. Ejects lowest-priority content when approaching token limit
+Domain-Specific Tokenizer
+Custom tokenizer trained on codebase vocabulary
+Encodes common project patterns as single tokens, effectively expanding the 512-token window by 20-30%
+Delta-Update Engine
+Diff engine (diff-match-patch)
+Sends only file changes to model context instead of full files. Allows 512-token model to 'see' changes in large files
+LSP Snippet Inserter
+Language Server Protocol client
+Fetches function signatures and docs from LSP on demand. Injects into prompt just before Coder invocation
+Recursive Idea-Mill
+Sequential sliding-window summarizer
+Processes human million-word brainstorm in 300-word chunks with state carry-over, producing a structured plan
+Safety & Governance Tools
+Tool
+Implementation
+Function
+Entropy Monitor
+AST diff against baseline snapshot
+Detects architectural drift by comparing current codebase structure against the original Architectural Manifesto
+Logic-Loop Breaker
+Attempt counter per task + similarity hash
+Detects when Forensic Agent produces near-identical outputs. Forces escalation after 3 failed attempts on same task
+Sync-Lock Manager
+File-level mutex (SQLite advisory lock)
+Prevents concurrent agent writes to the same file. Any second write attempt is queued until the lock releases
+Semantic Router
+Classifier model + complexity scorer
+Routes simple tasks to fast small models and complex architectural tasks to heavier reasoning models
+Confidence Threshold Monitor
+Log-probability scoring on model output
+Pauses factory and alerts human dashboard if model output probability drops below configurable threshold
+Automated Req Validator
+Spec contract checker
+Compares all committed code against PRD spec contracts. Rejects code that violates a defined requirement before merge
+Governance Engine
+Token counter + time tracker
+Monitors cost-per-feature. Stops factory if a single task exceeds configurable token budget or wall-clock limit
+Communication & Integration Tools
+Tool
+Implementation
+Function
+IAP (Inter-Agent Protocol)
+Custom JSON-RPC dialect over local socket
+Ultra-dense agent-to-agent messaging format. Minimizes token waste in cross-agent communication
+Atomic Merger
+Git patch applier + conflict detector
+Applies Coder micro-diffs to main branch. Runs dependency check to flag cross-file breakage before commit
+Semantic Linker
+Import graph traversal + cycle detector
+Detects circular dependencies before they reach the compiler. Routes fix instruction to Coder
+Global Bus
+Event emitter (Node.js EventEmitter or Redis pub/sub)
+Connects module events across the codebase. Ensures a DB schema change propagates to frontend watchers
+A2A / MCP Protocol
+Model Context Protocol (Anthropic spec)
+Standard tool-calling interface. Enables model to invoke terminal, file system, and browser from within context
+WebSocket State Bridge
+ws library, 2s heartbeat
+Syncs human IDE edits into agent context in near-real-time. Prevents agent from building on stale file state
+Persistence & Recovery Tools
+Tool
+Implementation
+Function
+Deep-State Serializer
+SQLite dump + vector index snapshot + JSON cognitive state
+Saves complete factory state on every task completion. Enables full resume after power loss or OS reboot
+Z-State Serializer
+Partial output buffer + token position tracker
+Saves mid-sentence model output if inference is interrupted. Next cycle finishes the generation exactly where it stopped
+Neural Black Box Recorder
+Append-only log of every prompt + response + timestamp + agent ID
+Immutable audit trail. Enables forensic replay of any moment in the build to diagnose logic errors days later
+Line-Level Provenance Tracker
+Task ID tag on every committed line
+Tags each line in the codebase with the Task ID that generated it. Enables surgical rollback of specific task outputs
+State Snapshotter
+Periodic git tag + vector index export
+Saves a known-good checkpoint every N tasks. Used by Logic-Loop Breaker to revert the codebase to a stable state
+Hardware & Performance Tools
+Tool
+Implementation
+Function
+Thermal Governor
+Platform temp sensors + inference rate limiter
+Monitors CPU/GPU temperature. Pauses agent queue if hardware exceeds safe thermal limit. Resumes automatically
+VRAM Hot-Swapper
+Ollama model load/unload API
+Unloads current model weights before loading next agent's model. Prevents OOM crashes on consumer GPUs
+Hardware-Aware Scheduler
+System resource monitor + queue prioritizer
+Detects user activity and shifts LLM inference to background priority. Makes factory invisible during normal computer use
+Distributed Inference Bridge
+Ollama remote API / Petals peer network
+Routes inference tasks to other machines on local network. Turns home network into distributed compute cluster
+Inference Load Balancer
+Latency monitor + machine selector
+Routes next task to the coolest or least-loaded machine in the local cluster
+VRAM Budget Monitor
+nvidia-smi / ROCm SMI poller
+Tracks real-time VRAM usage per agent. Prevents scheduling a new agent that would exceed available GPU memory
+Human Interface Tools
+Tool
+Implementation
+Function
+Real-Time Progress Dashboard
+Web IDE sidebar - force-directed graph or Gantt
+Visualizes task tree completion: green=done, pulsing=active, grey=pending. Gives human peace-of-mind view
+Natural Language Stand-Up
+Cron-triggered Executive summary + TTS output
+Daily plain-English report of what agents built overnight. Optional voice readout via local TTS
+Visual Milestone Mapper
+Task tag → human milestone translation map
+Converts 'Merged PR #402: raycasting' into 'Player can now shoot at walls'. Tracks project story not just commits
+Global Constraint Injector
+Manifest file watcher + priority queue interrupt
+Detects human changes to project manifest. Propagates updated constraints to all active agents as P1 interrupt
+Baton-Drop Alert
+Critic output classifier + push notification
+Detects when Coder completely misunderstood Ghost context. Alerts human with specific misalignment details
+Human-in-Loop Gateway
+Low-confidence trigger + dashboard pause + response input
+Pauses factory when confidence drops or escalation count exceeds threshold. Accepts one-sentence human hint
+Background Service Architecture
+The Background Daemon is the factory's heartbeat. It is a persistent OS-level process - a systemd service on Linux, a launchd agent on macOS, or a Windows Service - that runs the agent queue independently of the web browser. The IDE connects to the daemon via a local WebSocket and is purely a monitoring and steering interface.
+
+Daemon Component Map
+Component
+Technology
+Responsibility
+Supervisor Loop
+Node.js setInterval (60s) / Python asyncio
+Polls task queue, instantiates agents, monitors heartbeat, triggers recovery on crash
+Task Queue
+SQLite WAL mode / Redis local
+Persistent FIFO queue with priority lanes: P0=escalations, P1=constraint changes, P2=normal tasks
+Agent Spawner
+Child process fork / Docker exec
+Launches agent processes in isolation. Enforces memory limits and tool permission scope per agent type
+Context Assembler
+Node.js module / Python service
+Pulls task + Ghost + Anchor + context package. Runs Token Economist. Delivers final prompt to inference engine
+Inference Client
+Ollama REST API (localhost:11434)
+Sends prompt to local model. Handles streaming response. Detects mid-generation truncation for Z-State Serializer
+Output Parser
+JSON + regex fallback
+Extracts code diff and handshake JSON from raw model output. Routes to Critic if parse fails
+Heartbeat Monitor
+1s pulse + WebSocket emit to IDE
+Broadcasts live status to IDE. If pulse stops, IDE triggers emergency save-all and sends mobile notification
+Thermal Monitor
+OS temp sensor polling (30s)
+Reads CPU/GPU temperature. Injects 'THROTTLE' command to queue if thresholds exceeded
+Session Resetter
+Ollama model reload every 1000 tasks
+Force-quits inference engine, flushes VRAM, reloads model from disk. Prevents memory fragmentation during long builds
+Task Ledger Database Schema
+The Task Ledger is the canonical source of truth for the entire build. It must survive hardware failures. All agents read from and write to this schema. No agent holds state in memory across invocations.
+
+  TASKS TABLE - SQLITE DDL
+  CREATE TABLE tasks (
+    id              TEXT PRIMARY KEY,
+    parent_id       TEXT REFERENCES tasks(id),
+    previous_id     TEXT REFERENCES tasks(id),
+    status          TEXT NOT NULL DEFAULT 'PENDING',
+    --              PENDING | ACTIVE | COMPLETED | FAILED | ESCALATED
+    agent_type      TEXT NOT NULL,
+    instruction     TEXT NOT NULL,
+    context_keys    TEXT,  -- JSON array of Vector DB keys
+    next_step_hint  TEXT,
+    output_raw      TEXT,
+    handshake_blob  TEXT,  -- JSON: { summary, mental_seed, context_lock }
+    files_modified  TEXT,  -- JSON array
+    token_count_in  INTEGER,
+    token_count_out INTEGER,
+    attempt_count   INTEGER DEFAULT 0,
+    created_at      INTEGER NOT NULL,  -- Unix ms
+    completed_at    INTEGER,
+    thermal_at_run  REAL,  -- CPU temp in Celsius when task ran
+    provenance_tags TEXT   -- JSON: { file: [line_start, line_end] }
+  );
+
+  PROJECT_CONFIG TABLE
+  CREATE TABLE project_config (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  -- Keys: global_anchor, vibe_embedding, architectural_manifesto,
+  --       confidence_threshold, thermal_limit_celsius, max_attempt_count
+
+Cold-Boot Resumption Logic
+When the daemon starts after a crash or reboot, it executes the following recovery sequence before processing any new tasks:
+• 1. Load Task Ledger from disk. Query all tasks with status = 'ACTIVE'.
+• 2. For each ACTIVE task: reset status to PENDING, increment attempt_count, re-queue.
+• 3. Load Z-State buffer. If a partial output exists for a task, inject it as a Ghost prefix on re-run.
+• 4. Reload Vector DB index from last snapshot. If snapshot is older than 1 hour, trigger Vector Custodian pass.
+• 5. Restore Architectural Manifesto from project_config. Validate against current file tree.
+• 6. Resume queue processing from highest-priority PENDING task.
+
+Recommended Developer Stack
+The following stack represents the production-grade implementation of the Silicon Factory across all hardware tiers. All components are open source. The stack is organized by layer.
+
+Local Inference Engine
+Tool
+Use Case
+Hardware Target
+Install
+Ollama
+Primary local inference server. OpenAI-compatible REST API. Auto-manages model downloads.
+All tiers - CPU to multi-GPU
+ollama.com
+llama.cpp
+Low-level inference for maximum quantization control. Backend for Ollama.
+Regular user - CPU-only
+github.com/ggerganov/llama.cpp
+LM Studio
+GUI model manager with VRAM preview before loading. Good for gamer tier.
+Gamer - RTX 3060 to 4090
+lmstudio.ai
+vLLM
+High-throughput parallel inference for enterprise multi-GPU setups.
+Enterprise - A100 / H100
+github.com/vllm-project/vllm
+TensorRT-LLM
+NVIDIA-optimized inference compiler. Maximum throughput on NVIDIA hardware.
+Enterprise - NVIDIA only
+github.com/NVIDIA/TensorRT-LLM
+Llamafile
+Single-executable model file. Zero install. Cross-platform.
+Regular user - any OS
+github.com/Mozilla-Ocho/llamafile
+Recommended Local Models by Agent Role
+Agent
+Recommended Model
+Parameters
+Rationale
+Coder
+Qwen2.5-Coder:7B or 14B
+7B / 14B
+Top-ranked for tool-calling and code generation on local hardware. Supports structured output.
+Architect
+Qwen3:8B (thinking mode)
+8B
+Strong multi-step planning. Thinking mode produces verifiable reasoning chains.
+Forensic / Critic
+DeepSeek-R1:8B
+8B
+Designed for chain-of-thought reasoning. Excellent at diagnosing logical errors.
+Scribe / Librarian
+Llama3.2:3B
+3B
+Lightweight, fast, accurate for summarization and retrieval tasks. Low VRAM.
+Orchestrator Tasks
+Llama3.2:1B
+1B
+Routing and classification tasks only. Maximum speed, minimum memory footprint.
+Agent Orchestration
+Tool
+Role
+Notes
+LangGraph
+Stateful multi-step agent graph
+Preferred for modeling agent behavior as a directed graph with checkpointing and loop detection
+CrewAI
+Role-based agent crew coordination
+Simplifies agent team definitions. Good for the Management tier (Architect + Executive)
+Multiagent-Orchestrator (AWS)
+Lightweight routing orchestrator
+Specifically tested with Ollama backends. Handles 1B-3B model orchestration efficiently
+AutoGen (Microsoft)
+Conversational multi-agent system
+Useful for Critic ↔ Coder feedback loops. Supports structured back-and-forth without full re-prompting
+Vector Database & Memory
+Tool
+Role
+Notes
+ChromaDB
+Primary local vector store
+Zero-config local mode. Python and JavaScript clients. Persistent on-disk storage. Best for most hardware tiers.
+LanceDB
+High-performance local vector store
+Columnar format. Better performance for large codebases (>100k functions). Embedded mode, no server.
+AnythingLLM
+All-in-one local RAG + Ollama integration
+Bundles vector store, document embedding, and Ollama connection. Good rapid-prototype starting point.
+Neo4j Community
+Knowledge Graph for dependency mapping
+Local install. Used for the Symbol Graph and cross-file dependency tracking. Cypher query language.
+SQLite (WAL mode)
+Task Ledger + project config
+Zero-dependency. Write-ahead logging enables concurrent reads during active writes. Required for all tiers.
+Code Analysis & AST Tools
+Tool
+Role
+Notes
+Tree-Sitter
+Language-agnostic AST parser
+Supports 40+ languages. Used for Signature Extractor, AST Pinning, and Symbol Graph population.
+Promptfoo
+Agent output evaluation framework
+CLI-based. Write evaluation suites as YAML. Use like unit tests for prompt reliability.
+Outlines
+Structured output enforcement
+Constrains model sampling to valid JSON schema or regex. Critical for reliable tool-call output from small models.
+Guidance (Microsoft)
+Grammar-constrained generation
+Alternative to Outlines. More expressive grammar control. Useful for DSL output enforcement.
+diff-match-patch
+Delta computation
+Google's diff library. Used by Delta-Update Engine and Atomic Merger for patch generation and application.
+IDE Integration Layer
+Tool
+Role
+Notes
+Model Context Protocol (MCP)
+Standard tool-calling interface
+Anthropic's open protocol. Enables model to call terminal, filesystem, browser from within its context window.
+Continue.dev
+Open-source coding assistant framework
+Study its architecture for LSP integration patterns and local model handshake implementation.
+Open WebUI
+Local model UI with ModelFile support
+Enables defining agent roles via Ollama ModelFiles. Useful reference for agent capability registry design.
+Language Server Protocol (LSP)
+Live code intelligence
+Used by LSP Snippet Inserter. Provides function definitions, type info, and reference lookup on demand.
+ws (Node.js WebSocket)
+Real-time IDE ↔ Daemon sync
+2-second heartbeat bridge. Syncs human edits into agent context and streams agent status to dashboard.
+Hardware Tier Deployment Summary
+Tier
+Hardware Profile
+Inference Stack
+Agent Parallelism
+Estimated Build Speed
+Regular User
+8-16GB RAM, integrated GPU or CPU-only
+Llamafile or Ollama CPU mode, llama.cpp
+Serial (1 agent at a time)
+Months for AAA scale
+Laptop Dev
+16-32GB RAM, 8GB VRAM (RTX 3060 mobile)
+Ollama GPU mode, 7B quantized models
+2 agents (queue-based swap)
+Weeks for large platforms
+Gaming Desktop
+32-64GB RAM, 16-24GB VRAM (RTX 3090/4090)
+LM Studio or Ollama, 14B-34B models
+3-4 concurrent agents
+Days to weeks for AAA
+Workstation
+128GB RAM, 2× RTX 4090 or A6000
+vLLM multi-GPU, 70B models
+8-12 concurrent agents
+Days for large projects
+Enterprise
+512GB+ RAM, A100/H100 cluster
+TensorRT-LLM, full-precision large models
+20+ concurrent agents
+Hours to days for any project
+Plan Construction System - From Brainstorm to Task Tree
+The system must convert unstructured human input - potentially millions of words of brainstorm, reference material, and creative direction - into a precisely structured Task Tree that the agent swarm can execute. This process is itself run by the factory's infrastructure.
+
+Recursive Idea-Mill
+The human's input is processed sequentially in 300-word chunks with state carry-over. This prevents any single model invocation from receiving more input than its context window allows, while preserving the semantic momentum of the full brainstorm.
+
+Stage
+Process
+Output
+Chunk Ingestion
+Divide raw input into 300-word segments with 50-word overlap (sliding window)
+Ordered chunk array with overlap indices
+Sequential Summarization
+Process chunk[n] alongside summary of chunk[n-1]. Model produces 3 key points + 1 'Mental Seed' to carry forward
+Ordered list of extracted concepts with continuity chain
+Contradiction Resolution
+Argument Resolver scans full concept list for conflicting statements. Presents conflicts to human for binary resolution
+Conflict-free concept list
+Atomic Decomposition
+Architect converts concept list into Task Tree. Each leaf task must be completable in a single 512-token Coder invocation
+Task Ledger pre-populated with PENDING tasks
+Overlap Atom Insertion
+Each task receives: pointer to prerequisite task, pointer to dependent task, and 30-token next_step_hint
+Fully linked Task Tree with Handshake-ready metadata
+Vibe-Check Embedding
+As the human's brainstorm is processed, a parallel pass extracts the project's stylistic and architectural intent into a fixed-dimension embedding vector stored in project_config. This vector is injected into every Coder and Continuity Agent prompt as a permanent constraint.
+• Extracted dimensions: Visual aesthetic, performance priority, architectural pattern, target audience, emotional tone
+• Storage: Float array in project_config under key 'vibe_embedding'
+• Usage: Cosine similarity check between generated asset and vibe vector by Continuity Agent
+
+Living Specification Contract
+The Spec-Kit tool translates the human's requirements into a machine-readable contract stored as a JSON spec file. This contract is used by the Automated Requirement Validator to reject any code that violates a stated requirement, regardless of whether the code compiles and passes unit tests.
+
+  SPEC CONTRACT EXAMPLE - SPEC.JSON
+  {
+    "requirements": [
+      { "id": "REQ-001", "rule": "All API endpoints must return typed responses", "enforcer": "TypeScript strict mode" },
+      { "id": "REQ-002", "rule": "No global mutable state outside Redux store", "enforcer": "ESLint plugin" },
+      { "id": "REQ-003", "rule": "All async functions must have error boundaries", "enforcer": "AST check" }
+    ]
+  }
+
+Scale Analysis - Bottleneck Elimination
+The factory is designed to build projects of arbitrary complexity. The following analysis maps the known bottlenecks at scale and the specific tools that eliminate each one.
+
+Bottleneck
+Root Cause
+Eliminating Tool / Strategy
+Serial execution speed
+One agent processes one task at a time on single GPU
+Git Worktree isolation + dynamic task claiming enables parallel agent execution without merge conflicts
+Context poisoning / lost-in-middle
+Large model degrades reasoning as context window fills
+Context Sculptor with LSP anchoring + <important> tagging + Delta-Update Engine
+Code rot over time
+Agents make local optimizations that degrade global architecture
+Entropy Monitor + Janitor agent + Architectural Manifesto enforcement on every commit
+Hallucinated tool calls
+Small models invent non-existent functions or parameters
+Hallucination Firewall - schema-enforced proxy rejects invalid calls before filesystem contact
+Memory leaks during long runs
+Inference engine accumulates fragmented state over thousands of tasks
+Session Resetter - periodic VRAM flush and model reload every 1000 tasks
+Thermal throttling
+Sustained GPU load causes clock-speed reduction
+Thermal Governor - automatic queue pause at temperature threshold, automatic resume on cool-down
+Dependency conflicts
+Agents install incompatible package versions into shared environment
+Isolated Sandbox (Docker) per task + Dependency Manager agent validates version compatibility before install
+Merge conflicts in parallel work
+Multiple agents modify same file concurrently
+Sync-Lock Manager - advisory file locks in SQLite prevent concurrent writes to same code shard
+Logic rot from redundancy
+Same utility written independently in multiple files
+Context Stitcher - Symbol Graph query detects duplicate function signatures across files, routes consolidation task
+Runaway cost from loop bugs
+Forensic Agent fails to fix same bug repeatedly
+Logic-Loop Breaker - after 3 failed attempts, task is escalated and queue moves on
+Brainstorm → plan translation
+Human input is too large and unstructured for direct processing
+Recursive Idea-Mill - sliding window summarizer with state carry-over converts input to atomic task tree
+Post-sleep cold starts
+Factory loses cognitive state when machine hibernates
+Deep-State Serializer - full factory state snapshot on every task completion enables exact resume
+Project Lifecycle - End to End
+The following is the complete operational sequence from human brainstorm to production-ready deployed software, executed entirely by the Silicon Factory.
+
+Phase 1 - Ingestion
+• Human provides project goal via IDE chat interface
+• Argument Resolver scans for contradictions and ambiguous requirements. Requests clarification.
+• Vibe-Check Embedding extracted from human input
+• Spec-Kit generates spec.json contract from parsed requirements
+• Architectural Manifesto written to project_config
+
+Phase 2 - Plan Construction
+• Recursive Idea-Mill processes full human input into ordered concept list
+• Architect decomposes concepts into Task Tree stored in Task Ledger
+• Overlap Atoms inserted: each task receives previous_id, next_step_hint, context_key dependencies
+• Continuity Agent seeds vibe_embedding and artistic constraint registry
+
+Phase 3 - Autonomous Construction (24/7 Loop)
+• Background Daemon polls Task Ledger for next PENDING task
+• Thermal Governor checks hardware state before task dispatch
+• Librarian fetches context package from Vector DB and Symbol Graph
+• Context Assembler builds 10/80/10 Handshake Envelope. Token Economist compresses to target.
+• Coder invoked on local inference engine. Output parsed for code diff + handshake JSON.
+• Hallucination Firewall validates all tool calls in the output.
+• Critic checks diff against Manifesto and Spec. Issues PASS or FAIL.
+• On PASS: Atomic Merger applies diff. Scribe writes Mental Seed to Task Ledger. Task marked COMPLETED.
+• On FAIL: Forensic Agent invoked with error + task context. Fix applied. Critic re-checks.
+• Unit tests run after every commit. CI/CD triggered at milestone boundaries.
+• Security Auditor runs every 200 tasks. Context Stitcher runs every 500 tasks.
+• Session Resetter flushes VRAM every 1000 tasks.
+• Heartbeat pulses to IDE every 1 second. Natural Language Stand-Up generated every 24 hours.
+
+Phase 4 - Integration
+• Wiring Agent examines inter-module boundaries and generates connection code
+• Integration Tester writes E2E tests for all module communication contracts
+• Semantic Linker runs full import graph cycle detection
+• Mock-to-Real Swapper replaces all mock data sources with live API connections
+• Global Bus subscriptions verified across all event-driven modules
+
+Phase 5 - Hardening
+• Janitor runs final global refactor pass: redundancy elimination, import cleanup, naming normalization
+• Entropy Monitor runs final architectural integrity comparison against original Manifesto
+• Production-Ready Hardener removes all agent scaffold comments, debug flags, and internal handshake JSON
+• Automated Requirement Validator runs full spec.json contract check against final codebase
+• Documentation Lead generates JSDoc, README, and API reference from completed codebase
+
+Phase 6 - Deployment
+• Deployment Agent generates Dockerfile, CI/CD YAML, and environment configuration
+• CI/CD Connector triggers final build pipeline. Reports Success/Failure to dashboard.
+• Neural Black Box Recorder archives complete build history to secondary storage
+• Human receives completion notification with: task count, human-decisions required count, escalation log
+
+Core Term Reference
+Quick-reference definitions for all primary architectural terms.
+
+Term
+Definition
+512-Token Limit
+The physical bound of the model's working memory per invocation. Treated as a CPU cycle, not a limitation.
+Silicon Factory
+The complete system architecture - a 24/7 autonomous software construction engine where AI is a background utility.
+Cognitive Continuity
+The illusion of a unified build process achieved through overlapping context handoffs between independent model calls.
+Overlapping Atoms
+The 10/80/10 prompt structure: 10% look-back (Ghost), 80% execution (Flesh), 10% look-forward (Seed).
+Mental Seed
+The 50-token compressed summary of a completed task, written by the Scribe and injected as the Ghost of the next task.
+Global Anchor
+A permanent 30-token string prepended to every prompt enforcing language, style, architecture, and vibe.
+Task Ledger
+The SQLite database that is the canonical ground truth of the entire build. All agents read from and write to it.
+Background Daemon
+The OS-level process that runs the agent queue 24/7 independent of the web browser or user session.
+Hallucination Firewall
+A schema-enforced proxy that intercepts all model tool calls and rejects any not matching the registered tool schema.
+Handshake Envelope
+The fully assembled prompt containing Anchor + Ghost + Flesh + Seed, produced by the Context Assembler.
+Sharded Intelligence
+The strategy of distributing cognitive load across specialized agents so no single agent needs global visibility.
+Vibe-Check Embedding
+A fixed vector encoding the project's stylistic and architectural intent, injected into every agent prompt.
+Entropy Monitor
+AST diff tool that compares current codebase structure against the Architectural Manifesto to detect drift.
+Logic-Loop Breaker
+Attempt counter that escalates a task after 3 failed Forensic passes rather than repeating indefinitely.
+Deep-State Serializer
+Full factory state snapshot (DB + vector index + cognitive state) enabling exact resume after power loss.
+Token Economist
+Compression tool that minifies assembled prompts to the target token budget while preserving semantic content.
+Baton-Drop Rate
+Metric measuring how often a Coder agent fails to correctly interpret the Ghost from its predecessor.
+Silicon Autonomy Score
+Percentage of the codebase written and verified without a Human-in-Loop intervention.
+IAP
+Inter-Agent Protocol - the dense JSON-RPC dialect used for agent-to-agent communication within the factory.
+Persistence over Speed
+The core design philosophy: a small model running 24/7 with perfect infrastructure beats a large model with none.
+The Silicon Factory - Architecture & Dev Stack Reference
+
+Page  - Confidential Design Document
+

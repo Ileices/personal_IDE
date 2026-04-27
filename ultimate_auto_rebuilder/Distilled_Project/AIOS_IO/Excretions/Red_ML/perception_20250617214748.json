@@ -1,0 +1,195 @@
+{
+  "original_pattern": {
+    "word_count": 1,
+    "char_count": 4,
+    "unique_ratio": 1.0,
+    "sentiment": 0.0,
+    "vectors": {
+      "help": [
+        0.44,
+        0.63,
+        0.79,
+        0.54,
+        0.42
+      ]
+    },
+    "timestamp": 1750221960.3490071,
+    "perception_id": "red_1750221960",
+    "is_concept": 0,
+    "is_feedback": 0,
+    "feedback_type": null,
+    "previous_responses": [],
+    "is_direct_feedback": 0,
+    "feedback_words": [],
+    "target_knowledge_key": null,
+    "direct_command": null,
+    "input_type": "STATEMENT",
+    "_evolution_metadata": {
+      "cycle": 5,
+      "complexity": 0.11705496789063752,
+      "component_weights": {
+        "Blue": 0.36771714586773985,
+        "Yellow": 0.30473531255829367,
+        "Self": 0.32754754157396637
+      },
+      "alliances": {
+        "Red-Blue": 0.0780658232422521,
+        "Yellow-Red": 0.07782558903766447
+      }
+    },
+    "_intelligence_growth": 0.9633779215016626,
+    "variation": 2,
+    "perception_variant_id": "red_variant_2_1750221960"
+  },
+  "mutations": [
+    {
+      "word_count": 1,
+      "char_count": 4,
+      "unique_ratio": 1.0,
+      "sentiment": 0.0,
+      "vectors": {
+        "help": [
+          0.44,
+          0.63,
+          0.79,
+          0.54,
+          0.42
+        ]
+      },
+      "timestamp": 1750221960.3490071,
+      "perception_id": "red_1750221960",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "STATEMENT",
+      "_evolution_metadata": {
+        "cycle": 5,
+        "complexity": 0.11705496789063752,
+        "component_weights": {
+          "Blue": 0.36771714586773985,
+          "Yellow": 0.30473531255829367,
+          "Self": 0.32754754157396637
+        },
+        "alliances": {
+          "Red-Blue": 0.0780658232422521,
+          "Yellow-Red": 0.07782558903766447
+        }
+      },
+      "_intelligence_growth": 0.9633779215016626,
+      "variation": 2,
+      "perception_variant_id": "red_variant_2_1750221960",
+      "_tier1_variation": 1,
+      "_tier2_variation": 1,
+      "_tier3_variation": 1
+    },
+    {
+      "word_count": 1,
+      "char_count": 4,
+      "unique_ratio": 1.0,
+      "sentiment": 0.0,
+      "vectors": {
+        "help": [
+          0.44,
+          0.63,
+          0.79,
+          0.54,
+          0.42
+        ]
+      },
+      "timestamp": 1750221960.3490071,
+      "perception_id": "red_1750221960",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "STATEMENT",
+      "_evolution_metadata": {
+        "cycle": 5,
+        "complexity": 0.11705496789063752,
+        "component_weights": {
+          "Blue": 0.36771714586773985,
+          "Yellow": 0.30473531255829367,
+          "Self": 0.32754754157396637
+        },
+        "alliances": {
+          "Red-Blue": 0.0780658232422521,
+          "Yellow-Red": 0.07782558903766447
+        }
+      },
+      "_intelligence_growth": 0.9633779215016626,
+      "variation": 2,
+      "perception_variant_id": "red_variant_2_1750221960",
+      "_tier1_variation": 1,
+      "_tier2_variation": 1,
+      "_tier3_variation": 1
+    },
+    {
+      "word_count": 1,
+      "char_count": 4,
+      "unique_ratio": 1.0,
+      "sentiment": 0.0,
+      "vectors": {
+        "help": [
+          0.44,
+          0.63,
+          0.79,
+          0.54,
+          0.42
+        ]
+      },
+      "timestamp": 1750221960.3490071,
+      "perception_id": "red_1750221960",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "STATEMENT",
+      "_evolution_metadata": {
+        "cycle": 5,
+        "complexity": 0.11705496789063752,
+        "component_weights": {
+          "Blue": 0.36771714586773985,
+          "Yellow": 0.30473531255829367,
+          "Self": 0.32754754157396637
+        },
+        "alliances": {
+          "Red-Blue": 0.0780658232422521,
+          "Yellow-Red": 0.07782558903766447
+        }
+      },
+      "_intelligence_growth": 0.9633779215016626,
+      "variation": 2,
+      "perception_variant_id": "red_variant_2_1750221960",
+      "_tier1_variation": 1,
+      "_tier2_variation": 1,
+      "_tier3_variation": 1
+    }
+  ],
+  "_evolution_metadata": {
+    "cycle": 5,
+    "complexity": 0.12005544652348504,
+    "component_weights": {
+      "Blue": 0.36771714586773985,
+      "Yellow": 0.30473531255829367,
+      "Self": 0.32754754157396637
+    },
+    "alliances": {
+      "Red-Blue": 0.16056768895299872,
+      "Yellow-Red": 0.021135691845227792
+    }
+  },
+  "_intelligence_growth": 1.4210542074234076
+}

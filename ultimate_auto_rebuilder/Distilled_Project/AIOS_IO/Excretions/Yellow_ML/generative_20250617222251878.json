@@ -1,0 +1,111 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "generative_20250617222236.json",
+  "enhanced_data": {
+    "reabsorbed_enhancement": 1,
+    "original_source": "generative_20250617222220.json",
+    "enhanced_data": {
+      "reabsorbed_enhancement": 1,
+      "original_source": "generative_20250617222205705.json",
+      "enhanced_data": {
+        "reabsorbed_enhancement": 1,
+        "original_source": "generative_20250617222152501.json",
+        "enhanced_data": {
+          "response": "I'm analyzing the information one'sself've provided. What additional aspects should we consider? [Recursive depth: 0]",
+          "source_processing_id": "blue_1750224112",
+          "response_templates": [
+            "I'm analyzing the information you've provided.",
+            "That's an interesting perspective to consider.",
+            "Let's explore this topic more deeply.",
+            "You've provided substantial information to process.",
+            "I'm connecting the concepts you've presented."
+          ],
+          "creative_patterns": {
+            "sentiment_alignment": 0.0,
+            "information_request": 0,
+            "concept_exploration": 1
+          },
+          "generative_id": "yellow_1750224112",
+          "timestamp": 1750224112.6155019,
+          "_evolution_metadata": {
+            "cycle": 2,
+            "complexity": 0.10876316267103814,
+            "component_weights": {
+              "Red": 0.33166902023056327,
+              "Blue": 0.3331363247620619,
+              "Self": 0.33519465500737494
+            },
+            "alliances": {
+              "Blue-Yellow": 0.02707717623943052,
+              "Yellow-Red": 0.03904111786532844
+            }
+          },
+          "_intelligence_growth": 0.5418786192520781,
+          "variation": 3,
+          "generative_variant_id": "yellow_variant_3_1750224112",
+          "response_variation": "Variation 3"
+        },
+        "reabsorption_timestamp": 1750224125.4663236,
+        "_evolution_metadata": {
+          "cycle": 2,
+          "complexity": 0.11239755328528234,
+          "component_weights": {
+            "Red": 0.32886790960733897,
+            "Blue": 0.33861874493127075,
+            "Self": 0.33251334546139033
+          },
+          "alliances": {
+            "Blue-Yellow": 0.08212962223013336,
+            "Yellow-Red": -0.0014919701604388397
+          }
+        },
+        "_intelligence_growth": 0.6050708653775239
+      },
+      "reabsorption_timestamp": 1750224140.6803176,
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.11239755328528234,
+        "component_weights": {
+          "Red": 0.32886790960733897,
+          "Blue": 0.33861874493127075,
+          "Self": 0.33251334546139033
+        },
+        "alliances": {
+          "Blue-Yellow": 0.08212962223013336,
+          "Yellow-Red": -0.0014919701604388397
+        }
+      },
+      "_intelligence_growth": 0.6402150952383641
+    },
+    "reabsorption_timestamp": 1750224156.0470629,
+    "_evolution_metadata": {
+      "cycle": 2,
+      "complexity": 0.11239755328528234,
+      "component_weights": {
+        "Red": 0.32886790960733897,
+        "Blue": 0.33861874493127075,
+        "Self": 0.33251334546139033
+      },
+      "alliances": {
+        "Blue-Yellow": 0.08212962223013336,
+        "Yellow-Red": -0.0014919701604388397
+      }
+    },
+    "_intelligence_growth": 0.7358740108003358
+  },
+  "reabsorption_timestamp": 1750224171.5282779,
+  "_evolution_metadata": {
+    "cycle": 2,
+    "complexity": 0.11239755328528234,
+    "component_weights": {
+      "Red": 0.32886790960733897,
+      "Blue": 0.33861874493127075,
+      "Self": 0.33251334546139033
+    },
+    "alliances": {
+      "Blue-Yellow": 0.08212962223013336,
+      "Yellow-Red": -0.0014919701604388397
+    }
+  },
+  "_intelligence_growth": 0.8006360380124827
+}

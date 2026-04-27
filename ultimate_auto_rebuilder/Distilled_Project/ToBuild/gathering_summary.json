@@ -1,0 +1,69 @@
+{
+  "statistics": {
+    "total_found": 29,
+    "total_copied": 29,
+    "duplicates": 3,
+    "errors": 0,
+    "total_size": 1189741,
+    "directories_scanned": 10,
+    "start_time": 1749806687.694272,
+    "end_time": null
+  },
+  "search_completed": "2025-06-13 02:25:37",
+  "files_by_extension": {
+    ".py": 29
+  },
+  "largest_files": [
+    {
+      "name": "Absolute_Singularity.py",
+      "size": 498329,
+      "size_mb": 0.47524356842041016
+    },
+    {
+      "name": "sperm_ileices - Copy.py",
+      "size": 101602,
+      "size_mb": 0.09689521789550781
+    },
+    {
+      "name": "sperm_ileices_duplicate_1.py",
+      "size": 101595,
+      "size_mb": 0.09688854217529297
+    },
+    {
+      "name": "sperm_ileices_duplicate_2.py",
+      "size": 101581,
+      "size_mb": 0.09687519073486328
+    },
+    {
+      "name": "core_ai_seed.py",
+      "size": 45013,
+      "size_mb": 0.04292774200439453
+    },
+    {
+      "name": "absolute_existence.py",
+      "size": 42516,
+      "size_mb": 0.040546417236328125
+    },
+    {
+      "name": "absolute_logic_lecture_enhancer.py",
+      "size": 35758,
+      "size_mb": 0.03410148620605469
+    },
+    {
+      "name": "Firstborn_AI.py",
+      "size": 32957,
+      "size_mb": 0.03143024444580078
+    },
+    {
+      "name": "Absolute_Seed.py",
+      "size": 30234,
+      "size_mb": 0.028833389282226562
+    },
+    {
+      "name": "aios_enhanced_launcher.py",
+      "size": 17493,
+      "size_mb": 0.01668262481689453
+    }
+  ],
+  "error_log": []
+}

@@ -231,8 +231,23 @@ export class MemoryService {
 
   getConversations(projectId: string): any[] {
     return this.db.prepare(
-      'SELECT * FROM conversations WHERE project_id = ? ORDER BY updated_at DESC'
+      `SELECT c.*, COUNT(m.id) as message_count
+       FROM conversations c
+       LEFT JOIN messages m ON m.conversation_id = c.id
+       WHERE c.project_id = ?
+       GROUP BY c.id
+       ORDER BY c.updated_at DESC`
     ).all(projectId) as any[];
+  }
+
+  renameConversation(conversationId: string, title: string): void {
+    this.db.prepare(
+      "UPDATE conversations SET title = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(title, conversationId);
+  }
+
+  deleteConversation(conversationId: string): void {
+    this.db.prepare('DELETE FROM conversations WHERE id = ?').run(conversationId);
   }
 
   addMessage(conversationId: string, role: string, content: string, model?: string, mode?: string, structuredOutput?: any): string {

@@ -31,6 +31,8 @@ export async function streamChatResponse(
     temperature?: number;
     maxTokens?: number;
     jsonMode?: boolean;
+    conversationId?: string;
+    messageId?: string;
     onContent?: (fullContent: string) => void;
     onDone?: (fullContent: string, usage: any) => void;
     signal?: AbortSignal;
@@ -63,7 +65,11 @@ export async function streamChatResponse(
 
     let fullContent = '';
 
-    sendEvent({ type: 'message_start', messageId: '', conversationId: '' });
+    sendEvent({
+      type: 'message_start',
+      messageId: options?.messageId || '',
+      conversationId: options?.conversationId || '',
+    });
 
     for await (const chunk of stream) {
       // Check for abort

@@ -1,0 +1,77 @@
+{
+  "word_count": 6,
+  "char_count": 28,
+  "unique_ratio": 1.0,
+  "sentiment": 0.0,
+  "vectors": {
+    "I": [
+      0.01,
+      0.99,
+      0.94,
+      0.57,
+      0.2
+    ],
+    "want": [
+      0.36,
+      0.22,
+      0.68,
+      0.13,
+      0.09
+    ],
+    "to": [
+      0.95,
+      0.86,
+      0.0,
+      0.66,
+      0.24
+    ],
+    "tell": [
+      0.91,
+      0.48,
+      0.38,
+      0.18,
+      0.57
+    ],
+    "you": [
+      0.4,
+      0.02,
+      0.78,
+      0.63,
+      0.33
+    ],
+    "something": [
+      0.54,
+      0.14,
+      0.1,
+      0.41,
+      0.19
+    ]
+  },
+  "timestamp": 1750223506.9893765,
+  "perception_id": "red_1750223506",
+  "is_concept": 0,
+  "is_feedback": 0,
+  "feedback_type": null,
+  "previous_responses": [],
+  "is_direct_feedback": 0,
+  "feedback_words": [],
+  "target_knowledge_key": null,
+  "direct_command": null,
+  "input_type": "STATEMENT",
+  "_evolution_metadata": {
+    "cycle": 5,
+    "complexity": 0.11275536186390085,
+    "component_weights": {
+      "Blue": 0.30013928807016477,
+      "Yellow": 0.37609043630083216,
+      "Self": 0.32377027562900296
+    },
+    "alliances": {
+      "Red-Blue": -0.009200812744635415,
+      "Yellow-Red": 0.13263264619170323
+    }
+  },
+  "_intelligence_growth": 0.6572575181736625,
+  "variation": 1,
+  "perception_variant_id": "red_variant_1_1750223506"
+}

@@ -1,0 +1,22 @@
+{
+  "error_perception": {
+    "error_type": "TypeError",
+    "error_message": "Object of type set is not JSON serializable",
+    "timestamp": 1750222952.8579066,
+    "context": "chat_loop_execution"
+  },
+  "_evolution_metadata": {
+    "cycle": 3,
+    "complexity": 0.11268041280994667,
+    "component_weights": {
+      "Blue": 0.32111502104920037,
+      "Yellow": 0.3469802458020691,
+      "Self": 0.33190473314873065
+    },
+    "alliances": {
+      "Red-Blue": -0.013887187430262592,
+      "Yellow-Red": 0.17949182401255775
+    }
+  },
+  "_intelligence_growth": 1.899507654812235
+}

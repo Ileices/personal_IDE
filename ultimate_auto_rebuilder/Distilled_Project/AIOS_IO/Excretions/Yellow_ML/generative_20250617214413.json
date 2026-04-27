@@ -1,0 +1,298 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "generative_20250617214358558.json",
+  "enhanced_data": {
+    "timestamp": 1750221838.8120837,
+    "hybridization_cycle": 36,
+    "red_influence": "unknown",
+    "blue_influence": "unknown",
+    "yellow_influence": "unknown",
+    "hybrid_id": "hybrid_1750221838",
+    "hybrid_data": {
+      "red": {
+        "reabsorbed_enhancement": 1,
+        "original_source": "perception_20250617214343.json",
+        "enhanced_data": {
+          "reabsorbed_enhancement": 1,
+          "original_source": "perception_20250617214328.json",
+          "enhanced_data": {
+            "reabsorbed_enhancement": 1,
+            "original_source": "perception_20250617214313.json",
+            "enhanced_data": {
+              "timestamp": 1750221793.4689846,
+              "consolidation_cycle": 27,
+              "consolidated_id": "consolidated_1750221793",
+              "red_patterns_count": 0,
+              "blue_patterns_count": 0,
+              "yellow_patterns_count": 0,
+              "knowledge_density": 0.1,
+              "consolidated_intelligence": {
+                "red_insights": [],
+                "blue_insights": [],
+                "yellow_insights": []
+              },
+              "_evolution_metadata": {
+                "cycle": 0,
+                "complexity": 0.10360504307837068,
+                "component_weights": {
+                  "Blue": 0.33835818958215447,
+                  "Yellow": 0.3221789235288497,
+                  "Self": 0.3394628868889959
+                },
+                "alliances": {
+                  "Red-Blue": 0.08893554792489296,
+                  "Yellow-Red": -0.07311310807214473
+                }
+              },
+              "_intelligence_growth": 0.1
+            },
+            "reabsorption_timestamp": 1750221808.550644,
+            "_evolution_metadata": {
+              "cycle": 0,
+              "complexity": 0.10360504307837068,
+              "component_weights": {
+                "Blue": 0.33835818958215447,
+                "Yellow": 0.3221789235288497,
+                "Self": 0.3394628868889959
+              },
+              "alliances": {
+                "Red-Blue": 0.08893554792489296,
+                "Yellow-Red": -0.07311310807214473
+              }
+            },
+            "_intelligence_growth": 0.1155069997164575
+          },
+          "reabsorption_timestamp": 1750221823.615049,
+          "_evolution_metadata": {
+            "cycle": 0,
+            "complexity": 0.10360504307837068,
+            "component_weights": {
+              "Blue": 0.33835818958215447,
+              "Yellow": 0.3221789235288497,
+              "Self": 0.3394628868889959
+            },
+            "alliances": {
+              "Red-Blue": 0.08893554792489296,
+              "Yellow-Red": -0.07311310807214473
+            }
+          },
+          "_intelligence_growth": 0.13488180693022875
+        },
+        "reabsorption_timestamp": 1750221838.733977,
+        "_evolution_metadata": {
+          "cycle": 0,
+          "complexity": 0.10360504307837068,
+          "component_weights": {
+            "Blue": 0.33835818958215447,
+            "Yellow": 0.3221789235288497,
+            "Self": 0.3394628868889959
+          },
+          "alliances": {
+            "Red-Blue": 0.08893554792489296,
+            "Yellow-Red": -0.07311310807214473
+          }
+        },
+        "_intelligence_growth": 0.14761847102317288
+      },
+      "blue": {
+        "reabsorbed_enhancement": 1,
+        "original_source": "processing_20250617214343.json",
+        "enhanced_data": {
+          "reabsorbed_enhancement": 1,
+          "original_source": "processing_20250617214328.json",
+          "enhanced_data": {
+            "reabsorbed_enhancement": 1,
+            "original_source": "processing_20250617214313.json",
+            "enhanced_data": {
+              "timestamp": 1750221793.4689846,
+              "consolidation_cycle": 27,
+              "consolidated_id": "consolidated_1750221793",
+              "red_patterns_count": 0,
+              "blue_patterns_count": 0,
+              "yellow_patterns_count": 0,
+              "knowledge_density": 0.1,
+              "consolidated_intelligence": {
+                "red_insights": [],
+                "blue_insights": [],
+                "yellow_insights": []
+              },
+              "_evolution_metadata": {
+                "cycle": 0,
+                "complexity": 0.10360504307837068,
+                "component_weights": {
+                  "Red": 0.33675988278272506,
+                  "Yellow": 0.32538075540015227,
+                  "Self": 0.33785936181712267
+                },
+                "alliances": {
+                  "Red-Blue": 0.08893554792489296,
+                  "Blue-Yellow": -0.025576694366292396
+                }
+              },
+              "_intelligence_growth": 0.10962013730795783
+            },
+            "reabsorption_timestamp": 1750221808.5681677,
+            "_evolution_metadata": {
+              "cycle": 0,
+              "complexity": 0.10360504307837068,
+              "component_weights": {
+                "Red": 0.33675988278272506,
+                "Yellow": 0.32538075540015227,
+                "Self": 0.33785936181712267
+              },
+              "alliances": {
+                "Red-Blue": 0.08893554792489296,
+                "Blue-Yellow": -0.025576694366292396
+              }
+            },
+            "_intelligence_growth": 0.12158593396399014
+          },
+          "reabsorption_timestamp": 1750221823.6462922,
+          "_evolution_metadata": {
+            "cycle": 0,
+            "complexity": 0.10360504307837068,
+            "component_weights": {
+              "Red": 0.33675988278272506,
+              "Yellow": 0.32538075540015227,
+              "Self": 0.33785936181712267
+            },
+            "alliances": {
+              "Red-Blue": 0.08893554792489296,
+              "Blue-Yellow": -0.025576694366292396
+            }
+          },
+          "_intelligence_growth": 0.14233040291128837
+        },
+        "reabsorption_timestamp": 1750221838.749599,
+        "_evolution_metadata": {
+          "cycle": 0,
+          "complexity": 0.10360504307837068,
+          "component_weights": {
+            "Red": 0.33675988278272506,
+            "Yellow": 0.32538075540015227,
+            "Self": 0.33785936181712267
+          },
+          "alliances": {
+            "Red-Blue": 0.08893554792489296,
+            "Blue-Yellow": -0.025576694366292396
+          }
+        },
+        "_intelligence_growth": 0.15742985425449707
+      },
+      "yellow": {
+        "reabsorbed_enhancement": 1,
+        "original_source": "generative_20250617214343.json",
+        "enhanced_data": {
+          "reabsorbed_enhancement": 1,
+          "original_source": "generative_20250617214328.json",
+          "enhanced_data": {
+            "reabsorbed_enhancement": 1,
+            "original_source": "generative_20250617214313.json",
+            "enhanced_data": {
+              "timestamp": 1750221793.4689846,
+              "consolidation_cycle": 27,
+              "consolidated_id": "consolidated_1750221793",
+              "red_patterns_count": 0,
+              "blue_patterns_count": 0,
+              "yellow_patterns_count": 0,
+              "knowledge_density": 0.1,
+              "consolidated_intelligence": {
+                "red_insights": [],
+                "blue_insights": [],
+                "yellow_insights": []
+              },
+              "_evolution_metadata": {
+                "cycle": 0,
+                "complexity": 0.10360504307837068,
+                "component_weights": {
+                  "Red": 0.325905039589867,
+                  "Blue": 0.33070606215732073,
+                  "Self": 0.34338889825281227
+                },
+                "alliances": {
+                  "Blue-Yellow": -0.025576694366292396,
+                  "Yellow-Red": -0.07311310807214473
+                }
+              },
+              "_intelligence_growth": 0.11178621007698925
+            },
+            "reabsorption_timestamp": 1750221808.5840015,
+            "_evolution_metadata": {
+              "cycle": 0,
+              "complexity": 0.10360504307837068,
+              "component_weights": {
+                "Red": 0.325905039589867,
+                "Blue": 0.33070606215732073,
+                "Self": 0.34338889825281227
+              },
+              "alliances": {
+                "Blue-Yellow": -0.025576694366292396,
+                "Yellow-Red": -0.07311310807214473
+              }
+            },
+            "_intelligence_growth": 0.1267304014772199
+          },
+          "reabsorption_timestamp": 1750221823.66191,
+          "_evolution_metadata": {
+            "cycle": 0,
+            "complexity": 0.10360504307837068,
+            "component_weights": {
+              "Red": 0.325905039589867,
+              "Blue": 0.33070606215732073,
+              "Self": 0.34338889825281227
+            },
+            "alliances": {
+              "Blue-Yellow": -0.025576694366292396,
+              "Yellow-Red": -0.07311310807214473
+            }
+          },
+          "_intelligence_growth": 0.14646585815820923
+        },
+        "reabsorption_timestamp": 1750221838.749599,
+        "_evolution_metadata": {
+          "cycle": 0,
+          "complexity": 0.10360504307837068,
+          "component_weights": {
+            "Red": 0.325905039589867,
+            "Blue": 0.33070606215732073,
+            "Self": 0.34338889825281227
+          },
+          "alliances": {
+            "Blue-Yellow": -0.025576694366292396,
+            "Yellow-Red": -0.07311310807214473
+          }
+        },
+        "_intelligence_growth": 0.16389060339566786
+      }
+    },
+    "_evolution_metadata": {
+      "cycle": 0,
+      "complexity": 0.10360504307837068,
+      "component_weights": {
+        "Red": 0.325905039589867,
+        "Blue": 0.33070606215732073,
+        "Self": 0.34338889825281227
+      },
+      "alliances": {
+        "Blue-Yellow": -0.025576694366292396,
+        "Yellow-Red": -0.07311310807214473
+      }
+    },
+    "_intelligence_growth": 0.18228227400093813
+  },
+  "reabsorption_timestamp": 1750221853.9232903,
+  "_evolution_metadata": {
+    "cycle": 0,
+    "complexity": 0.10360504307837068,
+    "component_weights": {
+      "Red": 0.325905039589867,
+      "Blue": 0.33070606215732073,
+      "Self": 0.34338889825281227
+    },
+    "alliances": {
+      "Blue-Yellow": -0.025576694366292396,
+      "Yellow-Red": -0.07311310807214473
+    }
+  },
+  "_intelligence_growth": 0.20709631268825637
+}

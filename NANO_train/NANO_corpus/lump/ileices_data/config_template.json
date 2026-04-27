@@ -1,0 +1,44 @@
+{
+  "node_name": null,
+  "role": "worker",
+  "commander_address": null,
+  "data_dir": "ileices_data",
+  "log_level": "INFO",
+  "log_file": null,
+  "mesh": {
+    "listen_host": "0.0.0.0",
+    "listen_port": 7777,
+    "max_peers": 128,
+    "heartbeat_interval_s": 5.0,
+    "heartbeat_timeout_s": 15.0,
+    "gossip_interval_s": 10.0,
+    "message_max_bytes": 67108864,
+    "connection_timeout_s": 10.0,
+    "reconnect_delay_s": 5.0,
+    "max_reconnect_attempts": 20
+  },
+  "crypto": {
+    "enabled": true,
+    "key_dir": ".ileices_keys",
+    "require_auth": true
+  },
+  "benchmark": {
+    "gpu_warmup_iters": 50,
+    "gpu_bench_iters": 200,
+    "matrix_size": 4096,
+    "disk_test_size_mb": 256
+  },
+  "nanopool": {
+    "max_gpu_nanos": 50000,
+    "max_cpu_nanos": 200000,
+    "nano_checkpoint_dir": "nano_checkpoints",
+    "checkpoint_interval_steps": 100
+  },
+  "training": {
+    "default_batch_size": 32,
+    "default_lr": 0.001,
+    "gradient_compression": "topk",
+    "topk_ratio": 0.01,
+    "federated_avg_interval_steps": 50
+  }
+}

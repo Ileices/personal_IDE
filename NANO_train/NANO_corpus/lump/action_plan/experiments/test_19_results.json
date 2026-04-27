@@ -1,0 +1,17 @@
+{
+  "test": "test_19_simulation",
+  "local_metrics": {
+    "loss": 2.0832258820533753,
+    "perplexity": 8.030332080246874,
+    "accuracy": 0.3822021484375,
+    "bpc": 3.0054596490899415
+  },
+  "distributed_metrics": {
+    "loss": 2.0832258820533753,
+    "perplexity": 8.030332080246874,
+    "accuracy": 0.3822021484375,
+    "bpc": 3.0054596490899415
+  },
+  "quality_match": true,
+  "overhead": 7.067211186329903
+}

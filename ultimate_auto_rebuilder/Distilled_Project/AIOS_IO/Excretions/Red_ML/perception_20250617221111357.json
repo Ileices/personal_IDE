@@ -1,0 +1,42 @@
+{
+  "word_count": 1,
+  "char_count": 5,
+  "unique_ratio": 1.0,
+  "sentiment": 0.0,
+  "vectors": {
+    "hello": [
+      0.76,
+      0.87,
+      0.75,
+      0.13,
+      0.76
+    ]
+  },
+  "timestamp": 1750223471.4518082,
+  "perception_id": "red_1750223471",
+  "is_concept": 0,
+  "is_feedback": 0,
+  "feedback_type": null,
+  "previous_responses": [],
+  "is_direct_feedback": 0,
+  "feedback_words": [],
+  "target_knowledge_key": null,
+  "direct_command": null,
+  "input_type": "STATEMENT",
+  "_evolution_metadata": {
+    "cycle": 1,
+    "complexity": 0.10286992361109981,
+    "component_weights": {
+      "Blue": 0.32676832639080666,
+      "Yellow": 0.33674404876233405,
+      "Self": 0.33648762484685935
+    },
+    "alliances": {
+      "Red-Blue": 0.0017924811778183979,
+      "Yellow-Red": 0.10259100557713194
+    }
+  },
+  "_intelligence_growth": 0.2948235263138138,
+  "variation": 3,
+  "perception_variant_id": "red_variant_3_1750223471"
+}

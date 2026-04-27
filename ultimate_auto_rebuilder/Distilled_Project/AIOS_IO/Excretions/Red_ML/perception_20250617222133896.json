@@ -1,0 +1,153 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "perception_20250617222116739.json",
+  "enhanced_data": {
+    "reabsorbed_enhancement": 1,
+    "original_source": "perception_20250617222108130.json",
+    "enhanced_data": {
+      "reabsorbed_enhancement": 1,
+      "original_source": "perception_20250617221151752.json",
+      "enhanced_data": {
+        "reabsorbed_enhancement": 1,
+        "original_source": "perception_20250617221146228.json",
+        "enhanced_data": {
+          "word_count": 6,
+          "char_count": 28,
+          "unique_ratio": 1.0,
+          "sentiment": 0.0,
+          "vectors": {
+            "I": [
+              0.01,
+              0.99,
+              0.94,
+              0.57,
+              0.2
+            ],
+            "want": [
+              0.36,
+              0.22,
+              0.68,
+              0.13,
+              0.09
+            ],
+            "to": [
+              0.95,
+              0.86,
+              0.0,
+              0.66,
+              0.24
+            ],
+            "tell": [
+              0.91,
+              0.48,
+              0.38,
+              0.18,
+              0.57
+            ],
+            "you": [
+              0.4,
+              0.02,
+              0.78,
+              0.63,
+              0.33
+            ],
+            "something": [
+              0.54,
+              0.14,
+              0.1,
+              0.41,
+              0.19
+            ]
+          },
+          "timestamp": 1750223506.9893765,
+          "perception_id": "red_1750223506",
+          "is_concept": 0,
+          "is_feedback": 0,
+          "feedback_type": null,
+          "previous_responses": [],
+          "is_direct_feedback": 0,
+          "feedback_words": [],
+          "target_knowledge_key": null,
+          "direct_command": null,
+          "input_type": "STATEMENT",
+          "_evolution_metadata": {
+            "cycle": 5,
+            "complexity": 0.11275536186390085,
+            "component_weights": {
+              "Blue": 0.30013928807016477,
+              "Yellow": 0.37609043630083216,
+              "Self": 0.32377027562900296
+            },
+            "alliances": {
+              "Red-Blue": -0.009200812744635415,
+              "Yellow-Red": 0.13263264619170323
+            }
+          },
+          "_intelligence_growth": 0.6667054891837761,
+          "variation": 3,
+          "perception_variant_id": "red_variant_3_1750223506"
+        },
+        "reabsorption_timestamp": 1750223511.2662883,
+        "_evolution_metadata": {
+          "cycle": 5,
+          "complexity": 0.11772832074370886,
+          "component_weights": {
+            "Blue": 0.29314137980472443,
+            "Yellow": 0.3899885883821033,
+            "Self": 0.3168700318131724
+          },
+          "alliances": {
+            "Red-Blue": -0.0061438571650396685,
+            "Yellow-Red": 0.22390644507360555
+          }
+        },
+        "_intelligence_growth": 0.7268859677626951
+      },
+      "reabsorption_timestamp": 1750224068.3255775,
+      "_evolution_metadata": {
+        "cycle": 0,
+        "complexity": 0.10477357365434123,
+        "component_weights": {
+          "Blue": 0.33151168520871155,
+          "Yellow": 0.33051137712717693,
+          "Self": 0.33797693766411147
+        },
+        "alliances": {
+          "Red-Blue": 0.034960478367888556,
+          "Yellow-Red": 0.024897521111918675
+        }
+      },
+      "_intelligence_growth": 0.1413486731700504
+    },
+    "reabsorption_timestamp": 1750224076.9503295,
+    "_evolution_metadata": {
+      "cycle": 0,
+      "complexity": 0.10477357365434123,
+      "component_weights": {
+        "Blue": 0.33151168520871155,
+        "Yellow": 0.33051137712717693,
+        "Self": 0.33797693766411147
+      },
+      "alliances": {
+        "Red-Blue": 0.034960478367888556,
+        "Yellow-Red": 0.024897521111918675
+      }
+    },
+    "_intelligence_growth": 0.2447015608239951
+  },
+  "reabsorption_timestamp": 1750224093.7777503,
+  "_evolution_metadata": {
+    "cycle": 0,
+    "complexity": 0.10477357365434123,
+    "component_weights": {
+      "Blue": 0.33151168520871155,
+      "Yellow": 0.33051137712717693,
+      "Self": 0.33797693766411147
+    },
+    "alliances": {
+      "Red-Blue": 0.034960478367888556,
+      "Yellow-Red": 0.024897521111918675
+    }
+  },
+  "_intelligence_growth": 0.2978386754076544
+}

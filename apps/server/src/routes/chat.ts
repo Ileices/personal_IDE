@@ -3,7 +3,7 @@
 // ============================================
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ChatRequest, ProviderType } from '@personal-ide/shared';
-import { getModel } from '@personal-ide/shared';
+import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
 import { getClientFromDb as getGitHubClient } from '../services/llm/client.js';
 import { getClientFromDb as getProviderClient } from '../services/llm/providers.js';
 import { streamChatResponse } from '../services/llm/streaming.js';
@@ -11,7 +11,7 @@ import { rateLimiter } from '../services/llm/rateLimiter.js';
 import { userRateLimiter } from '../services/llm/userRateLimiter.js';
 import { MemoryService } from '../services/memory/index.js';
 import { SYSTEM_PROMPTS, parseStructuredOutput } from '../services/modes/prompts.js';
-import { listAllFiles, readFile } from '../services/filesystem/index.js';
+import { readFile } from '../services/filesystem/index.js';
 import { appConfig } from '../config.js';
 
 export async function chatRoutes(app: FastifyInstance) {
@@ -28,16 +28,7 @@ export async function chatRoutes(app: FastifyInstance) {
     }
 
     // Detect provider from model string
-    let provider: ProviderType = 'github';
-    const modelStr = body.model;
-    const slashIdx = modelStr.indexOf('/');
-    if (slashIdx > 0) {
-      const prefix = modelStr.substring(0, slashIdx).toLowerCase();
-      const knownProviders: ProviderType[] = ['github', 'ollama', 'groq', 'huggingface', 'cohere', 'mistral', 'gemini', 'together', 'openrouter', 'lmstudio', 'nano'];
-      if (knownProviders.includes(prefix as ProviderType)) {
-        provider = prefix as ProviderType;
-      }
-    }
+    const provider = extractProviderFromModelId(body.model) as ProviderType;
 
     // Get LLM client for the detected provider
     const client = provider === 'github' ? getGitHubClient(db) : getProviderClient(db, provider);
@@ -81,7 +72,7 @@ export async function chatRoutes(app: FastifyInstance) {
     }
 
     // Save user message
-    memory.addMessage(conversationId, 'user', body.message, body.model, body.mode);
+    const userMessageId = memory.addMessage(conversationId, 'user', body.message, body.model, body.mode);
 
     // Build memory context
     let memoryContext = '';
@@ -121,9 +112,6 @@ export async function chatRoutes(app: FastifyInstance) {
       messages.push({ role: msg.role, content: msg.content });
     }
 
-    // Add current message
-    messages.push({ role: 'user', content: body.message });
-
     // Stream the response
     rateLimiter.recordStart(body.model);
     const modelDef = getModel(body.model);
@@ -131,6 +119,8 @@ export async function chatRoutes(app: FastifyInstance) {
     await streamChatResponse(client, body.model, messages, reply, {
       maxTokens: modelDef?.maxOutputTokens || 4096,
       temperature: body.mode === 'agent' ? 0.3 : 0.7,
+      conversationId,
+      messageId: userMessageId,
       onDone: (fullContent, usage) => {
         rateLimiter.recordEnd(body.model);
 
@@ -180,9 +170,54 @@ export async function chatRoutes(app: FastifyInstance) {
   });
 
   // --- GET /api/chat/conversations/:projectId ---
+  app.get('/conversations', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { projectId } = req.query as { projectId?: string };
+    if (!projectId) {
+      return reply.status(400).send({ error: 'projectId is required' });
+    }
+    return { conversations: memory.getConversations(projectId) };
+  });
+
   app.get('/conversations/:projectId', async (req: FastifyRequest) => {
     const { projectId } = req.params as { projectId: string };
     return { conversations: memory.getConversations(projectId) };
+  });
+
+  // --- DELETE /api/chat/conversations/:conversationId ---
+  app.delete('/conversations/:conversationId', async (req: FastifyRequest) => {
+    const { conversationId } = req.params as { conversationId: string };
+    memory.deleteConversation(conversationId);
+    return { success: true };
+  });
+
+  // --- PUT /api/chat/conversations/:conversationId ---
+  app.put('/conversations/:conversationId', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { conversationId } = req.params as { conversationId: string };
+    const { title } = (req.body || {}) as { title?: string };
+    const nextTitle = (title || '').trim();
+    if (!nextTitle) {
+      return reply.status(400).send({ error: 'title is required' });
+    }
+    memory.renameConversation(conversationId, nextTitle);
+    return { success: true };
+  });
+
+  // --- Legacy compatibility endpoints ---
+  app.get('/conversations/:conversationId/delete', async (req: FastifyRequest) => {
+    const { conversationId } = req.params as { conversationId: string };
+    memory.deleteConversation(conversationId);
+    return { success: true };
+  });
+
+  app.get('/conversations/:conversationId/rename', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { conversationId } = req.params as { conversationId: string };
+    const { title } = req.query as { title?: string };
+    const nextTitle = (title || '').trim();
+    if (!nextTitle) {
+      return reply.status(400).send({ error: 'title is required' });
+    }
+    memory.renameConversation(conversationId, nextTitle);
+    return { success: true };
   });
 
   // --- GET /api/chat/messages/:conversationId ---

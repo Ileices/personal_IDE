@@ -1,0 +1,67 @@
+{
+  "compound_mild": {
+    "name": "MILD(8exp,top1,2500st)",
+    "params": 580929,
+    "test_ppl": 8.384009885431695,
+    "test_acc": 0.36739908854166664,
+    "test_bpc": 3.067640417931527,
+    "test_loss": 2.12632630666097,
+    "time_s": 109.58957290649414,
+    "steps": 2500,
+    "handicap": "8exp + top1 + 2500 steps"
+  },
+  "compound_med": {
+    "name": "MED(4exp,top1,1000st)",
+    "params": 315713,
+    "test_ppl": 11.491343862885758,
+    "test_acc": 0.285498046875,
+    "test_bpc": 3.52247561967298,
+    "test_loss": 2.441594044367472,
+    "time_s": 34.32802104949951,
+    "steps": 1000,
+    "handicap": "4exp + top1 + 1000 steps"
+  },
+  "compound_severe": {
+    "name": "SEVERE(2exp,top1,500st,d48)",
+    "params": 131457,
+    "test_ppl": 12.755530070626536,
+    "test_acc": 0.26414794921875,
+    "test_bpc": 3.673050947914332,
+    "test_loss": 2.5459649085998537,
+    "time_s": 14.487417936325073,
+    "steps": 500,
+    "handicap": "2exp + top1 + 500 steps + d_model=48"
+  },
+  "compound_brutal": {
+    "name": "BRUTAL(2exp,top1,250st,d32,noBal)",
+    "params": 83905,
+    "test_ppl": 16.903192022122628,
+    "test_acc": 0.23894856770833334,
+    "test_bpc": 4.079223807645784,
+    "test_loss": 2.82750248114268,
+    "time_s": 6.6571290493011475,
+    "steps": 250,
+    "handicap": "2exp + top1 + 250 steps + d_model=32 + no balance"
+  },
+  "flop_dense": {
+    "name": "Dense-ff520",
+    "params": 184785,
+    "test_ppl": 6.628175636787742,
+    "test_acc": 0.43594970703125,
+    "test_bpc": 2.728611832336886,
+    "test_loss": 1.8913295984268188,
+    "time_s": 120.75951862335205,
+    "steps": 5000,
+    "ff_matched": 520
+  },
+  "flop_moe": {
+    "name": "NanoMoE-16exp-top2",
+    "params": 1111361,
+    "test_ppl": 6.093797052959944,
+    "test_acc": 0.46685791015625,
+    "test_bpc": 2.6073414534927726,
+    "test_loss": 1.807271377245585,
+    "time_s": 302.9288408756256,
+    "steps": 5000
+  }
+}

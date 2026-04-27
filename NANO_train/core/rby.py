@@ -1,9 +1,14 @@
 """
-RBY Color Vectoring System — The canonical implementation.
+RBY Color Vectoring System — The canonical implementation (v2).
 R (Red)   = Perception / Novelty / Entropy
 B (Blue)  = Cognition / Structure / Regularity
 Y (Yellow)= Execution / Integration / Action
 Constraint: r + b + y = 1.0 (AE = C = 1)
+
+v2 additions:
+- aitchison_distance() — correct metric on the simplex (NOT Euclidean)
+- compute_uf_io()      — the driving forces
+- update_rby()         — dynamics update with plasticity
 
 PTAIE_MAP from corpus rby_encryption_core.py — these are NOT arbitrary.
 """
@@ -12,6 +17,8 @@ import math
 import hashlib
 from dataclasses import dataclass, field
 from typing import Tuple, Optional, Dict
+
+import torch
 
 # ─── Canonical PTAIE Character→RBY Map (from corpus) ───────
 # Each character maps to an (R, B, Y) tuple defining its perceptual color
@@ -183,3 +190,98 @@ def text_to_rby_sequence(text: str) -> list:
         else:
             result.append((0.33, 0.34, 0.33))
     return result
+
+
+# =============================================================================
+# v2 additions — proven canonical in experiments
+# =============================================================================
+
+def aitchison_distance(
+    x: torch.Tensor, z: torch.Tensor, eps: float = 1e-8
+) -> torch.Tensor:
+    """
+    The CORRECT distance metric for points on the RBY simplex.
+
+    Euclidean distance is WRONG on the simplex (distorts edges).
+    Aitchison distance respects the compositional constraint R+B+Y=1.
+
+    Used by Chromatic Router for all RBY distance calculations.
+    Proven in test_22.
+
+    Args:
+        x: (..., 3) RBY tensor
+        z: (..., 3) RBY tensor
+
+    Returns:
+        (...,) scalar distances
+    """
+    x = x.clamp(min=eps)
+    z = z.clamp(min=eps)
+    g_x = x.prod(dim=-1, keepdim=True).pow(1.0 / 3.0)
+    g_z = z.prod(dim=-1, keepdim=True).pow(1.0 / 3.0)
+    clr_x = (x / g_x).log()
+    clr_z = (z / g_z).log()
+    return (clr_x - clr_z).norm(dim=-1)
+
+
+def compute_uf_io(
+    success: float, error: float, complexity: float
+) -> Tuple[float, float]:
+    """
+    Compute the driving forces of the Nano Sea.
+
+    UF (Unstoppable Force) = expansion drive
+    IO (Immovable Object) = stability resistance
+
+    Proven canonical in test_02.
+
+    Args:
+        success: 0.0–1.0 success rate
+        error: 0.0–1.0 error rate
+        complexity: 0.0–1.0 task complexity
+
+    Returns:
+        (UF, IO) tuple of floats
+    """
+    UF = success * (1 - math.tanh(complexity))
+    IO = error * math.tanh(complexity)
+    return UF, IO
+
+
+def update_rby(
+    rby: Tuple[float, float, float],
+    UF: float,
+    IO: float,
+    success: float,
+    error: float,
+    plasticity: Tuple[float, float, float] = (0.1, 0.05, 0.08),
+) -> Tuple[float, float, float]:
+    """
+    Update the RBY seed based on current dynamics.
+
+    Proven canonical in test_02.
+
+    Args:
+        rby: current (R, B, Y) tuple
+        UF: unstoppable force
+        IO: immovable object
+        success: success rate
+        error: error rate
+        plasticity: per-channel learning rates (pr, pb, py)
+
+    Returns:
+        new (R, B, Y) tuple, normalized to sum=1
+    """
+    r, b, y = rby
+    pr, pb, py = plasticity
+
+    r_new = r + pr * (error - r) * UF
+    b_new = b + pb * (math.tanh(success) - b) * IO
+
+    total = r_new + b_new
+    if total >= 1.0:
+        r_new = r_new / (total + 0.01) * 0.99
+        b_new = b_new / (total + 0.01) * 0.99
+    y_new = 1.0 - r_new - b_new
+
+    return (max(0.01, r_new), max(0.01, b_new), max(0.01, y_new))

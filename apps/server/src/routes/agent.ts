@@ -4,7 +4,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { EnhancedAgentLoop } from '../services/agent/enhancedLoop.js';
 import type { AgentConfig, ProviderType } from '@personal-ide/shared';
-import { getModel } from '@personal-ide/shared';
+import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
 import { appConfig } from '../config.js';
 import { MemoryService } from '../services/memory/index.js';
 
@@ -59,17 +59,9 @@ export async function agentRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    // Detect provider from model string (e.g. "ollama/llama3" -> "ollama")
-    let provider: ProviderType = body.provider || 'github';
     const modelStr = body.model || 'openai/gpt-4.1';
-    const slashIdx = modelStr.indexOf('/');
-    if (slashIdx > 0 && !body.provider) {
-      const prefix = modelStr.substring(0, slashIdx);
-      const knownProviders: ProviderType[] = ['github', 'ollama', 'groq', 'huggingface', 'cohere', 'mistral', 'gemini', 'together', 'openrouter', 'lmstudio'];
-      if (knownProviders.includes(prefix as ProviderType)) {
-        provider = prefix as ProviderType;
-      }
-    }
+    // Detect provider from model string (e.g. "nano/nano-sea" -> "nano")
+    const provider: ProviderType = body.provider || (extractProviderFromModelId(modelStr) as ProviderType);
 
     const config = {
       maxIterations: body.maxIterations || appConfig.agent.maxIterations,

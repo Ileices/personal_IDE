@@ -1,0 +1,58 @@
+{
+  "timestamp": 1750223171.532073,
+  "consolidation_cycle": 108,
+  "consolidated_id": "consolidated_1750223171",
+  "red_patterns_count": 9,
+  "blue_patterns_count": 9,
+  "yellow_patterns_count": 9,
+  "knowledge_density": 3.1064168906283647,
+  "consolidated_intelligence": {
+    "red_insights": [
+      "red_1750222653",
+      "red_1750222653",
+      "red_1750222653",
+      "red_1750222952",
+      "red_1750222952",
+      "red_1750222952",
+      "red_1750222952",
+      "red_1750222954",
+      "red_1750222954"
+    ],
+    "blue_insights": [
+      "blue_1750222653",
+      "blue_1750222653",
+      "blue_1750222653",
+      "blue_1750222952",
+      "blue_1750222952",
+      "blue_1750222952",
+      "blue_1750222954",
+      "blue_1750222954",
+      "blue_1750222954"
+    ],
+    "yellow_insights": [
+      "yellow_1750222653",
+      "yellow_1750222653",
+      "yellow_1750222952",
+      "yellow_1750222952",
+      "yellow_1750222952",
+      "yellow_1750222952",
+      "yellow_1750222954",
+      "yellow_1750222954",
+      "yellow_1750222954"
+    ]
+  },
+  "_evolution_metadata": {
+    "cycle": 4,
+    "complexity": 0.11387167119996047,
+    "component_weights": {
+      "Red": 0.3188209931661178,
+      "Yellow": 0.3531810360146289,
+      "Self": 0.32799797081925314
+    },
+    "alliances": {
+      "Red-Blue": 0.015066787539701205,
+      "Blue-Yellow": 0.1476538627680609
+    }
+  },
+  "_intelligence_growth": 3.1135688698228425
+}

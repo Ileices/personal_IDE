@@ -1,0 +1,835 @@
+{
+  "history": [
+    {
+      "input": "",
+      "perception": {
+        "word_count": 0,
+        "char_count": 0,
+        "unique_ratio": 0.0,
+        "sentiment": 0.0,
+        "vectors": {},
+        "timestamp": 1750221875.0355356,
+        "perception_id": "red_1750221875",
+        "is_concept": 0,
+        "is_feedback": 0,
+        "feedback_type": null,
+        "previous_responses": [],
+        "is_direct_feedback": 0,
+        "feedback_words": [],
+        "target_knowledge_key": null,
+        "direct_command": null,
+        "input_type": "STATEMENT",
+        "_evolution_metadata": {
+          "cycle": 1,
+          "complexity": 0.10360504307837068,
+          "component_weights": {
+            "Blue": 0.3561795832395261,
+            "Yellow": 0.30688279097066873,
+            "Self": 0.33693762578980524
+          },
+          "alliances": {
+            "Red-Blue": 0.08893554792489296,
+            "Yellow-Red": -0.07311310807214473
+          }
+        },
+        "_intelligence_growth": 0.24465464643833978
+      }
+    },
+    {
+      "input": "hello",
+      "perception": {
+        "word_count": 1,
+        "char_count": 5,
+        "unique_ratio": 1.0,
+        "sentiment": 0.0,
+        "vectors": {
+          "hello": [
+            0.46,
+            0.58,
+            0.94,
+            0.14,
+            0.22
+          ]
+        },
+        "timestamp": 1750221881.9178655,
+        "perception_id": "red_1750221881",
+        "is_concept": 0,
+        "is_feedback": 0,
+        "feedback_type": null,
+        "previous_responses": [],
+        "is_direct_feedback": 0,
+        "feedback_words": [],
+        "target_knowledge_key": null,
+        "direct_command": null,
+        "input_type": "STATEMENT",
+        "_evolution_metadata": {
+          "cycle": 2,
+          "complexity": 0.1085674830531413,
+          "component_weights": {
+            "Blue": 0.3561795832395261,
+            "Yellow": 0.30688279097066873,
+            "Self": 0.33693762578980524
+          },
+          "alliances": {
+            "Red-Blue": 0.14697383268382735,
+            "Yellow-Red": -0.11158234941248174
+          }
+        },
+        "_intelligence_growth": 0.320498416681315
+      }
+    }
+  ],
+  "reinforcement": {
+    "1750221875.1203809": {
+      "response": "Could you elaborate further on your thoughts? I'd like to understand your perspective further.",
+      "processed_data": {
+        "refined_data": {
+          "refined_sentiment": 0.0,
+          "sentiment_trend": 0.0,
+          "information_density": 0.0,
+          "variant_insight": "Processing variation 3 perspective"
+        },
+        "source_perception_id": "red_1750221875",
+        "processing_id": "blue_1750221875",
+        "timestamp": 1750221875.1039863,
+        "processing_metadata": {
+          "confidence": 0.7411048864427995,
+          "processing_time_ms": 32.99689591623357
+        },
+        "_evolution_metadata": {
+          "cycle": 1,
+          "complexity": 0.10360504307837068,
+          "component_weights": {
+            "Red": 0.34965509876931977,
+            "Yellow": 0.31975133801008465,
+            "Self": 0.3305935632205957
+          },
+          "alliances": {
+            "Red-Blue": 0.08893554792489296,
+            "Blue-Yellow": -0.025576694366292396
+          }
+        },
+        "_intelligence_growth": 0.2688117443638968,
+        "processing_depth": 0
+      }
+    },
+    "1750221881.9998271": {
+      "response": "I'm connecting the concepts you've presented. Does this align with your expectations?",
+      "processed_data": {
+        "refined_data": {
+          "semantic_center": [
+            0.46,
+            0.58,
+            0.94,
+            0.14,
+            0.22
+          ],
+          "refined_sentiment": 0.0,
+          "sentiment_trend": 0.0,
+          "information_density": 2.0,
+          "variant_insight": "Processing variation 3 perspective"
+        },
+        "source_perception_id": "red_1750221881",
+        "processing_id": "blue_1750221881",
+        "timestamp": 1750221881.9685843,
+        "processing_metadata": {
+          "confidence": 0.9059342282134505,
+          "processing_time_ms": 21.951189418905457
+        },
+        "_evolution_metadata": {
+          "cycle": 2,
+          "complexity": 0.1085674830531413,
+          "component_weights": {
+            "Red": 0.34965509876931977,
+            "Yellow": 0.31975133801008465,
+            "Self": 0.3305935632205957
+          },
+          "alliances": {
+            "Red-Blue": 0.14697383268382735,
+            "Blue-Yellow": 0.04272331507309347
+          }
+        },
+        "_intelligence_growth": 0.35445699277892234,
+        "perception_feedback": {
+          "weight": 0.3702610306158272,
+          "data": {
+            "word_count": 1,
+            "char_count": 5,
+            "unique_ratio": 1.0,
+            "sentiment": 0.0,
+            "vectors": {
+              "hello": [
+                0.46,
+                0.58,
+                0.94,
+                0.14,
+                0.22
+              ]
+            },
+            "timestamp": 1750221881.9178655,
+            "perception_id": "red_1750221881",
+            "is_concept": 0,
+            "is_feedback": 0,
+            "feedback_type": null,
+            "previous_responses": [],
+            "is_direct_feedback": 0,
+            "feedback_words": [],
+            "target_knowledge_key": null,
+            "direct_command": null,
+            "input_type": "STATEMENT",
+            "_evolution_metadata": {
+              "cycle": 2,
+              "complexity": 0.1085674830531413,
+              "component_weights": {
+                "Blue": 0.3518104634373943,
+                "Yellow": 0.30992382221068543,
+                "Self": 0.3382657143519203
+              },
+              "alliances": {
+                "Red-Blue": 0.14697383268382735,
+                "Yellow-Red": -0.11158234941248174
+              }
+            },
+            "_intelligence_growth": 0.320498416681315
+          }
+        },
+        "response_guidance": {
+          "weight": 0.33042691885102954,
+          "templates": [
+            "I'm analyzing the information you've provided.",
+            "That's an interesting perspective to consider.",
+            "Let's explore this topic more deeply.",
+            "Could you elaborate further on your thoughts?"
+          ]
+        },
+        "processing_depth": 0
+      }
+    }
+  },
+  "adjustments": {
+    "1750221875.1039863": {
+      "refined_sentiment": 0.0,
+      "sentiment_trend": 0.0,
+      "information_density": 0.0,
+      "variant_insight": "Processing variation 3 perspective"
+    },
+    "1750221881.9685843": {
+      "semantic_center": [
+        0.46,
+        0.58,
+        0.94,
+        0.14,
+        0.22
+      ],
+      "refined_sentiment": 0.0,
+      "sentiment_trend": 0.0,
+      "information_density": 2.0,
+      "variant_insight": "Processing variation 3 perspective"
+    }
+  },
+  "red_patterns": {
+    "1750221875.0355356": {
+      "word_count": 0,
+      "char_count": 0,
+      "unique_ratio": 0.0,
+      "sentiment": 0.0,
+      "vectors": {},
+      "timestamp": 1750221875.0355356,
+      "perception_id": "red_1750221875",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "STATEMENT",
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Blue": 0.3561795832395261,
+          "Yellow": 0.30688279097066873,
+          "Self": 0.33693762578980524
+        },
+        "alliances": {
+          "Red-Blue": 0.08893554792489296,
+          "Yellow-Red": -0.07311310807214473
+        }
+      },
+      "_intelligence_growth": 0.24465464643833978
+    },
+    "1750221875.0375357": {
+      "word_count": 0,
+      "char_count": 0,
+      "unique_ratio": 0.0,
+      "sentiment": 0.0,
+      "vectors": {},
+      "timestamp": 1750221875.0355356,
+      "perception_id": "red_1750221875",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "STATEMENT",
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Blue": 0.3561795832395261,
+          "Yellow": 0.30688279097066873,
+          "Self": 0.33693762578980524
+        },
+        "alliances": {
+          "Red-Blue": 0.08893554792489296,
+          "Yellow-Red": -0.07311310807214473
+        }
+      },
+      "_intelligence_growth": 0.2621317261151365,
+      "variation": 3,
+      "perception_variant_id": "red_variant_3_1750221875"
+    },
+    "1750221881.9178655": {
+      "word_count": 1,
+      "char_count": 5,
+      "unique_ratio": 1.0,
+      "sentiment": 0.0,
+      "vectors": {
+        "hello": [
+          0.46,
+          0.58,
+          0.94,
+          0.14,
+          0.22
+        ]
+      },
+      "timestamp": 1750221881.9178655,
+      "perception_id": "red_1750221881",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "STATEMENT",
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.1085674830531413,
+        "component_weights": {
+          "Blue": 0.3561795832395261,
+          "Yellow": 0.30688279097066873,
+          "Self": 0.33693762578980524
+        },
+        "alliances": {
+          "Red-Blue": 0.14697383268382735,
+          "Yellow-Red": -0.11158234941248174
+        }
+      },
+      "_intelligence_growth": 0.320498416681315
+    },
+    "1750221881.9316378": {
+      "word_count": 1,
+      "char_count": 5,
+      "unique_ratio": 1.0,
+      "sentiment": 0.0,
+      "vectors": {
+        "hello": [
+          0.46,
+          0.58,
+          0.94,
+          0.14,
+          0.22
+        ]
+      },
+      "timestamp": 1750221881.9178655,
+      "perception_id": "red_1750221881",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "STATEMENT",
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.1085674830531413,
+        "component_weights": {
+          "Blue": 0.3561795832395261,
+          "Yellow": 0.30688279097066873,
+          "Self": 0.33693762578980524
+        },
+        "alliances": {
+          "Red-Blue": 0.14697383268382735,
+          "Yellow-Red": -0.11158234941248174
+        }
+      },
+      "_intelligence_growth": 0.34598485725226635,
+      "variation": 3,
+      "perception_variant_id": "red_variant_3_1750221881"
+    }
+  },
+  "blue_patterns": {
+    "1750221875.1039863": {
+      "refined_data": {
+        "refined_sentiment": 0.0,
+        "sentiment_trend": 0.0,
+        "information_density": 0.0,
+        "variant_insight": "Processing variation 3 perspective"
+      },
+      "source_perception_id": "red_1750221875",
+      "processing_id": "blue_1750221875",
+      "timestamp": 1750221875.1039863,
+      "processing_metadata": {
+        "confidence": 0.7411048864427995,
+        "processing_time_ms": 32.99689591623357
+      },
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.34965509876931977,
+          "Yellow": 0.31975133801008465,
+          "Self": 0.3305935632205957
+        },
+        "alliances": {
+          "Red-Blue": 0.08893554792489296,
+          "Blue-Yellow": -0.025576694366292396
+        }
+      },
+      "_intelligence_growth": 0.2710354955780753,
+      "variation": 1,
+      "processing_variant_id": "blue_variant_1_1750221875"
+    },
+    "1750221875.1049862": {
+      "refined_data": {
+        "refined_sentiment": 0.0,
+        "sentiment_trend": 0.0,
+        "information_density": 0.0,
+        "variant_insight": "Processing variation 3 perspective"
+      },
+      "source_perception_id": "red_1750221875",
+      "processing_id": "blue_1750221875",
+      "timestamp": 1750221875.1039863,
+      "processing_metadata": {
+        "confidence": 0.7411048864427995,
+        "processing_time_ms": 32.99689591623357
+      },
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.34965509876931977,
+          "Yellow": 0.31975133801008465,
+          "Self": 0.3305935632205957
+        },
+        "alliances": {
+          "Red-Blue": 0.08893554792489296,
+          "Blue-Yellow": -0.025576694366292396
+        }
+      },
+      "_intelligence_growth": 0.2777961413606805,
+      "variation": 2,
+      "processing_variant_id": "blue_variant_2_1750221875"
+    },
+    "1750221875.1059864": {
+      "refined_data": {
+        "refined_sentiment": 0.0,
+        "sentiment_trend": 0.0,
+        "information_density": 0.0,
+        "variant_insight": "Processing variation 3 perspective"
+      },
+      "source_perception_id": "red_1750221875",
+      "processing_id": "blue_1750221875",
+      "timestamp": 1750221875.1039863,
+      "processing_metadata": {
+        "confidence": 0.7411048864427995,
+        "processing_time_ms": 32.99689591623357
+      },
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.34965509876931977,
+          "Yellow": 0.31975133801008465,
+          "Self": 0.3305935632205957
+        },
+        "alliances": {
+          "Red-Blue": 0.08893554792489296,
+          "Blue-Yellow": -0.025576694366292396
+        }
+      },
+      "_intelligence_growth": 0.2864303045746664,
+      "variation": 3,
+      "processing_variant_id": "blue_variant_3_1750221875"
+    },
+    "1750221881.9685843": {
+      "refined_data": {
+        "semantic_center": [
+          0.46,
+          0.58,
+          0.94,
+          0.14,
+          0.22
+        ],
+        "refined_sentiment": 0.0,
+        "sentiment_trend": 0.0,
+        "information_density": 2.0,
+        "variant_insight": "Processing variation 3 perspective"
+      },
+      "source_perception_id": "red_1750221881",
+      "processing_id": "blue_1750221881",
+      "timestamp": 1750221881.9685843,
+      "processing_metadata": {
+        "confidence": 0.9059342282134505,
+        "processing_time_ms": 21.951189418905457
+      },
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.1085674830531413,
+        "component_weights": {
+          "Red": 0.34965509876931977,
+          "Yellow": 0.31975133801008465,
+          "Self": 0.3305935632205957
+        },
+        "alliances": {
+          "Red-Blue": 0.14697383268382735,
+          "Blue-Yellow": 0.04272331507309347
+        }
+      },
+      "_intelligence_growth": 0.3585231612088019,
+      "variation": 1,
+      "processing_variant_id": "blue_variant_1_1750221881"
+    },
+    "1750221881.9695842": {
+      "refined_data": {
+        "semantic_center": [
+          0.46,
+          0.58,
+          0.94,
+          0.14,
+          0.22
+        ],
+        "refined_sentiment": 0.0,
+        "sentiment_trend": 0.0,
+        "information_density": 2.0,
+        "variant_insight": "Processing variation 3 perspective"
+      },
+      "source_perception_id": "red_1750221881",
+      "processing_id": "blue_1750221881",
+      "timestamp": 1750221881.9685843,
+      "processing_metadata": {
+        "confidence": 0.9059342282134505,
+        "processing_time_ms": 21.951189418905457
+      },
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.1085674830531413,
+        "component_weights": {
+          "Red": 0.34965509876931977,
+          "Yellow": 0.31975133801008465,
+          "Self": 0.3305935632205957
+        },
+        "alliances": {
+          "Red-Blue": 0.14697383268382735,
+          "Blue-Yellow": 0.04272331507309347
+        }
+      },
+      "_intelligence_growth": 0.3609039662371469,
+      "variation": 2,
+      "processing_variant_id": "blue_variant_2_1750221881"
+    },
+    "1750221881.9705844": {
+      "refined_data": {
+        "semantic_center": [
+          0.46,
+          0.58,
+          0.94,
+          0.14,
+          0.22
+        ],
+        "refined_sentiment": 0.0,
+        "sentiment_trend": 0.0,
+        "information_density": 2.0,
+        "variant_insight": "Processing variation 3 perspective"
+      },
+      "source_perception_id": "red_1750221881",
+      "processing_id": "blue_1750221881",
+      "timestamp": 1750221881.9685843,
+      "processing_metadata": {
+        "confidence": 0.9059342282134505,
+        "processing_time_ms": 21.951189418905457
+      },
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.1085674830531413,
+        "component_weights": {
+          "Red": 0.34965509876931977,
+          "Yellow": 0.31975133801008465,
+          "Self": 0.3305935632205957
+        },
+        "alliances": {
+          "Red-Blue": 0.14697383268382735,
+          "Blue-Yellow": 0.04272331507309347
+        }
+      },
+      "_intelligence_growth": 0.3647181872186557,
+      "variation": 3,
+      "processing_variant_id": "blue_variant_3_1750221881"
+    }
+  },
+  "yellow_patterns": {
+    "1750221875.1203809": {
+      "response": "Could you elaborate further on your thoughts? I'd like to understand your perspective further.",
+      "source_processing_id": "blue_1750221875",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "Could you elaborate further on your thoughts?"
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 1,
+        "concept_exploration": 0
+      },
+      "generative_id": "yellow_1750221875",
+      "timestamp": 1750221875.1203809,
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.3165704704000453,
+          "Blue": 0.33604360540136624,
+          "Self": 0.3473859241985884
+        },
+        "alliances": {
+          "Blue-Yellow": -0.025576694366292396,
+          "Yellow-Red": -0.07311310807214473
+        }
+      },
+      "_intelligence_growth": 0.29700487537971343,
+      "variation": 1,
+      "generative_variant_id": "yellow_variant_1_1750221875",
+      "response_variation": "Variation 1"
+    },
+    "1750221875.1213808": {
+      "response": "Could you elaborate further on your thoughts? I'd like to understand your perspective further.",
+      "source_processing_id": "blue_1750221875",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "Could you elaborate further on your thoughts?"
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 1,
+        "concept_exploration": 0
+      },
+      "generative_id": "yellow_1750221875",
+      "timestamp": 1750221875.1203809,
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.3165704704000453,
+          "Blue": 0.33604360540136624,
+          "Self": 0.3473859241985884
+        },
+        "alliances": {
+          "Blue-Yellow": -0.025576694366292396,
+          "Yellow-Red": -0.07311310807214473
+        }
+      },
+      "_intelligence_growth": 0.2994092150632243,
+      "variation": 2,
+      "generative_variant_id": "yellow_variant_2_1750221875",
+      "response_variation": "Variation 2"
+    },
+    "1750221875.122381": {
+      "response": "Could one'sself elaborate further on one'sselfr thoughts? I'd like to understand one'sselfr perspective further.",
+      "source_processing_id": "blue_1750221875",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "Could you elaborate further on your thoughts?"
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 1,
+        "concept_exploration": 0
+      },
+      "generative_id": "yellow_1750221875",
+      "timestamp": 1750221875.1203809,
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.3165704704000453,
+          "Blue": 0.33604360540136624,
+          "Self": 0.3473859241985884
+        },
+        "alliances": {
+          "Blue-Yellow": -0.025576694366292396,
+          "Yellow-Red": -0.07311310807214473
+        }
+      },
+      "_intelligence_growth": 0.3062987459611891,
+      "variation": 3,
+      "generative_variant_id": "yellow_variant_3_1750221875",
+      "response_variation": "Variation 3"
+    },
+    "1750221881.9998271": {
+      "response": "I'm connecting the concepts you've presented. Does this align with your expectations?",
+      "source_processing_id": "blue_1750221881",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "You've provided substantial information to process.",
+        "I'm connecting the concepts you've presented."
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 0,
+        "concept_exploration": 1
+      },
+      "generative_id": "yellow_1750221881",
+      "timestamp": 1750221881.9998271,
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.1085674830531413,
+        "component_weights": {
+          "Red": 0.3165704704000453,
+          "Blue": 0.33604360540136624,
+          "Self": 0.3473859241985884
+        },
+        "alliances": {
+          "Blue-Yellow": 0.04272331507309347,
+          "Yellow-Red": -0.11158234941248174
+        }
+      },
+      "_intelligence_growth": 0.3722525302118915,
+      "variation": 1,
+      "generative_variant_id": "yellow_variant_1_1750221881",
+      "response_variation": "Variation 1"
+    },
+    "1750221882.000827": {
+      "response": "I am connecting the concepts you've presented. Does this align with your expectations?",
+      "source_processing_id": "blue_1750221881",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "You've provided substantial information to process.",
+        "I'm connecting the concepts you've presented."
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 0,
+        "concept_exploration": 1
+      },
+      "generative_id": "yellow_1750221881",
+      "timestamp": 1750221881.9998271,
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.1085674830531413,
+        "component_weights": {
+          "Red": 0.3165704704000453,
+          "Blue": 0.33604360540136624,
+          "Self": 0.3473859241985884
+        },
+        "alliances": {
+          "Blue-Yellow": 0.04272331507309347,
+          "Yellow-Red": -0.11158234941248174
+        }
+      },
+      "_intelligence_growth": 0.3765667576151529,
+      "variation": 2,
+      "generative_variant_id": "yellow_variant_2_1750221881",
+      "response_variation": "Variation 2"
+    },
+    "1750221882.0221355": {
+      "response": "I'm connecting the concepts one'sself've presented. Does this align with one'sselfr expectations?",
+      "source_processing_id": "blue_1750221881",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "You've provided substantial information to process.",
+        "I'm connecting the concepts you've presented."
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 0,
+        "concept_exploration": 1
+      },
+      "generative_id": "yellow_1750221881",
+      "timestamp": 1750221881.9998271,
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.1085674830531413,
+        "component_weights": {
+          "Red": 0.3165704704000453,
+          "Blue": 0.33604360540136624,
+          "Self": 0.3473859241985884
+        },
+        "alliances": {
+          "Blue-Yellow": 0.04272331507309347,
+          "Yellow-Red": -0.11158234941248174
+        }
+      },
+      "_intelligence_growth": 0.38337283390800103,
+      "variation": 3,
+      "generative_variant_id": "yellow_variant_3_1750221881",
+      "response_variation": "Variation 3"
+    }
+  },
+  "concepts": {},
+  "feedback_patterns": {
+    "positive": [
+      "good",
+      "correct",
+      "right",
+      "yes",
+      "perfect",
+      "excellent"
+    ],
+    "negative": [
+      "no",
+      "wrong",
+      "incorrect",
+      "not",
+      "error",
+      "bad"
+    ]
+  },
+  "knowledge_base": {
+    "verified": {},
+    "core_truths": {},
+    "fundamental": {}
+  },
+  "corrections": {
+    "flagged": {},
+    "rejected": {},
+    "purged": {}
+  },
+  "recall_counts": {},
+  "rule_expansions": {},
+  "recursive_mutations": {},
+  "expansion_tiers": {
+    "tier_1": [],
+    "tier_2": [],
+    "tier_3": []
+  },
+  "processed_excretions": 

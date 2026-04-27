@@ -191,19 +191,39 @@ export function useNanoSea() {
 
   async function forwardPoolConfig(field: string, value: any) {
     if (!status?.running) return;
-    const endpoints: Record<string, { path: string; method: string }> = {
-      donationPercent: { path: '/pool/donation', method: 'PUT' },
-      idleTraining: { path: '/pool/idle-training', method: 'PUT' },
-      permanentNode: { path: '/pool/permanent-node', method: 'POST' },
-      peerDiscovery: { path: '/discovery/opt-in', method: 'POST' },
-      sharingLevel: { path: '/discovery/opt-in', method: 'POST' },
+    const endpoints: Record<string, { path: string; method: string; payload: (v: any) => any }> = {
+      donationPercent: {
+        path: '/pool/donation',
+        method: 'PUT',
+        payload: v => ({ percent: v }),
+      },
+      idleTraining: {
+        path: '/pool/idle-training',
+        method: 'PUT',
+        payload: v => ({ enabled: v }),
+      },
+      permanentNode: {
+        path: '/pool/permanent-node',
+        method: 'POST',
+        payload: v => ({ enabled: v }),
+      },
+      peerDiscovery: {
+        path: '/discovery/opt-in',
+        method: 'POST',
+        payload: v => ({ enabled: v, sharing_level: cfgRef.current.sharingLevel || 'metadata' }),
+      },
+      sharingLevel: {
+        path: '/discovery/opt-in',
+        method: 'POST',
+        payload: v => ({ enabled: cfgRef.current.peerDiscovery, sharing_level: v }),
+      },
     };
     const ep = endpoints[field];
     if (!ep) return;
     fetchJson(`${API}${ep.path}`, {
       method: ep.method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [field]: value }),
+      body: JSON.stringify(ep.payload(value)),
     }).catch(() => {});
   }
 

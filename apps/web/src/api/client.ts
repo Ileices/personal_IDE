@@ -2,18 +2,26 @@
 // API Client - Base fetch wrapper
 // ============================================
 
-const API_BASE = '/api';
+import { API } from '../config.js';
+
+const API_BASE = API;
+
+function buildUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
 
 export async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const headers = new Headers(options?.headers || {});
+  if (options?.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const res = await fetch(buildUrl(path), {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers,
   });
 
   if (!res.ok) {
@@ -56,7 +64,7 @@ export async function apiStream(
   onError?: (error: string) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(buildUrl(path), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -106,7 +114,7 @@ export function apiStreamGet(
   onEvent: (event: any) => void,
   onError?: (error: string) => void
 ): EventSource {
-  const es = new EventSource(`${API_BASE}${path}`);
+  const es = new EventSource(buildUrl(path));
 
   es.onmessage = (e) => {
     try {

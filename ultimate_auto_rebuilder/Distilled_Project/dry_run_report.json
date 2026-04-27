@@ -1,0 +1,40 @@
+{
+  "importable_modules": [
+    "launch.py",
+    "main_launcher.py",
+    "io\\command_integration.py",
+    "io\\command_integration_launcher.py",
+    "io\\egg_command_integration.py",
+    "io\\embryonic_egg_command_integration.py",
+    "io\\excretion_management_system.py",
+    "io\\lecture_egg_integration.py",
+    "io\\system_initialization.py",
+    "tools\\absolute_existence.py",
+    "tools\\absolute_logic_lecture_enhancer.py",
+    "tools\\code_structure_manager.py",
+    "tools\\command_processor.py",
+    "tools\\dynamic_response_fix.py",
+    "tools\\sperm_ileices_Copy.py",
+    "tools\\sperm_ileices_duplicate_1.py",
+    "tools\\sperm_ileices_duplicate_2.py",
+    "train\\aios_enhanced_launcher.py",
+    "train\\aires_evolution.py",
+    "train\\aires_self_optimization.py",
+    "train\\core_ai_seed.py",
+    "train\\ml_file_generator.py",
+    "train\\ml_file_generator_2.py",
+    "ui\\Absolute_Seed.py",
+    "ui\\Absolute_Singularity.py",
+    "ui\\dynamic_context_framework.py",
+    "ui\\Firstborn_AI.py"
+  ],
+  "failed_imports": [
+    "tools\\enhanced_lineage_check.py: No module named 'lineage_verification'",
+    "train\\aios_system_integrator.py: No module named 'ml_file_generator'"
+  ],
+  "syntax_errors": [
+    "tools\\dynamic_response_fix.py: expected an indented block (<unknown>, line 219)",
+    "tools\\dynamic_response_fix.py: expected an indented block (<unknown>, line 219)"
+  ],
+  "runtime_errors": []
+}

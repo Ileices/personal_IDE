@@ -1,0 +1,73 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "generative_20250617220844247.json",
+  "enhanced_data": {
+    "reabsorbed_enhancement": 1,
+    "original_source": "generative_20250617220843833.json",
+    "enhanced_data": {
+      "response": "Let us explore this topic more deeply. I'd like to understand your perspective further. [Recursive depth: 0]",
+      "source_processing_id": "blue_1750223323",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "You've provided substantial information to process.",
+        "I'm connecting the concepts you've presented."
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 0,
+        "concept_exploration": 1
+      },
+      "generative_id": "yellow_1750223323",
+      "timestamp": 1750223323.9388485,
+      "_evolution_metadata": {
+        "cycle": 5,
+        "complexity": 0.11387167119996047,
+        "component_weights": {
+          "Red": 0.3445340088657606,
+          "Blue": 0.3400650786049834,
+          "Self": 0.31540091252925606
+        },
+        "alliances": {
+          "Blue-Yellow": 0.1476538627680609,
+          "Yellow-Red": 0.15013434827539926
+        }
+      },
+      "_intelligence_growth": 3.89689316178611,
+      "variation": 2,
+      "generative_variant_id": "yellow_variant_2_1750223323",
+      "response_variation": "Variation 2"
+    },
+    "reabsorption_timestamp": 1750223324.1699772,
+    "_evolution_metadata": {
+      "cycle": 5,
+      "complexity": 0.1185536942834855,
+      "component_weights": {
+        "Red": 0.3506008889336955,
+        "Blue": 0.3511955366072097,
+        "Self": 0.29820357445909484
+      },
+      "alliances": {
+        "Blue-Yellow": 0.3138383149957963,
+        "Yellow-Red": 0.2628596035772831
+      }
+    },
+    "_intelligence_growth": 3.9295415957487916
+  },
+  "reabsorption_timestamp": 1750223339.4876773,
+  "_evolution_metadata": {
+    "cycle": 5,
+    "complexity": 0.1185536942834855,
+    "component_weights": {
+      "Red": 0.3506008889336955,
+      "Blue": 0.3511955366072097,
+      "Self": 0.29820357445909484
+    },
+    "alliances": {
+      "Blue-Yellow": 0.3138383149957963,
+      "Yellow-Red": 0.2628596035772831
+    }
+  },
+  "_intelligence_growth": 4.004693153881517
+}

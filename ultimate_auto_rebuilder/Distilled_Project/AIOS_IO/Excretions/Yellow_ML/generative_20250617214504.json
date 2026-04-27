@@ -1,0 +1,157 @@
+{
+  "original_pattern": {
+    "response": "Could you elaborate further on your thoughts? I'd like to understand your perspective further.",
+    "source_processing_id": "blue_1750221875",
+    "response_templates": [
+      "I'm analyzing the information you've provided.",
+      "That's an interesting perspective to consider.",
+      "Let's explore this topic more deeply.",
+      "Could you elaborate further on your thoughts?"
+    ],
+    "creative_patterns": {
+      "sentiment_alignment": 0.0,
+      "information_request": 1,
+      "concept_exploration": 0
+    },
+    "generative_id": "yellow_1750221875",
+    "timestamp": 1750221875.1203809,
+    "_evolution_metadata": {
+      "cycle": 1,
+      "complexity": 0.10360504307837068,
+      "component_weights": {
+        "Red": 0.313661524811487,
+        "Blue": 0.33853130305543233,
+        "Self": 0.34780717213308066
+      },
+      "alliances": {
+        "Blue-Yellow": -0.025576694366292396,
+        "Yellow-Red": -0.07311310807214473
+      }
+    },
+    "_intelligence_growth": 0.2994092150632243,
+    "variation": 2,
+    "generative_variant_id": "yellow_variant_2_1750221875",
+    "response_variation": "Variation 2"
+  },
+  "mutations": [
+    {
+      "response": "Could you elaborate further on your thoughts? I'd like to understand your perspective further.",
+      "source_processing_id": "blue_1750221875",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "Could you elaborate further on your thoughts?"
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 1,
+        "concept_exploration": 0
+      },
+      "generative_id": "yellow_1750221875",
+      "timestamp": 1750221875.1203809,
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.313661524811487,
+          "Blue": 0.33853130305543233,
+          "Self": 0.34780717213308066
+        },
+        "alliances": {
+          "Blue-Yellow": -0.025576694366292396,
+          "Yellow-Red": -0.07311310807214473
+        }
+      },
+      "_intelligence_growth": 0.2994092150632243,
+      "variation": 2,
+      "generative_variant_id": "yellow_variant_2_1750221875",
+      "response_variation": "Variation 2",
+      "_tier1_variation": 1
+    },
+    {
+      "response": "Could you elaborate further on your thoughts? I'd like to understand your perspective further.",
+      "source_processing_id": "blue_1750221875",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "Could you elaborate further on your thoughts?"
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 1,
+        "concept_exploration": 0
+      },
+      "generative_id": "yellow_1750221875",
+      "timestamp": 1750221875.1203809,
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.313661524811487,
+          "Blue": 0.33853130305543233,
+          "Self": 0.34780717213308066
+        },
+        "alliances": {
+          "Blue-Yellow": -0.025576694366292396,
+          "Yellow-Red": -0.07311310807214473
+        }
+      },
+      "_intelligence_growth": 0.2994092150632243,
+      "variation": 2,
+      "generative_variant_id": "yellow_variant_2_1750221875",
+      "response_variation": "Variation 2",
+      "_tier1_variation": 2
+    },
+    {
+      "response": "Could you elaborate further on your thoughts? I'd like to understand your perspective further.",
+      "source_processing_id": "blue_1750221875",
+      "response_templates": [
+        "I'm analyzing the information you've provided.",
+        "That's an interesting perspective to consider.",
+        "Let's explore this topic more deeply.",
+        "Could you elaborate further on your thoughts?"
+      ],
+      "creative_patterns": {
+        "sentiment_alignment": 0.0,
+        "information_request": 1,
+        "concept_exploration": 0
+      },
+      "generative_id": "yellow_1750221875",
+      "timestamp": 1750221875.1203809,
+      "_evolution_metadata": {
+        "cycle": 1,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.313661524811487,
+          "Blue": 0.33853130305543233,
+          "Self": 0.34780717213308066
+        },
+        "alliances": {
+          "Blue-Yellow": -0.025576694366292396,
+          "Yellow-Red": -0.07311310807214473
+        }
+      },
+      "_intelligence_growth": 0.2994092150632243,
+      "variation": 2,
+      "generative_variant_id": "yellow_variant_2_1750221875",
+      "response_variation": "Variation 2",
+      "_tier1_variation": 3
+    }
+  ],
+  "_evolution_metadata": {
+    "cycle": 3,
+    "complexity": 0.1143637663094082,
+    "component_weights": {
+      "Red": 0.313661524811487,
+      "Blue": 0.33853130305543233,
+      "Self": 0.34780717213308066
+    },
+    "alliances": {
+      "Blue-Yellow": 0.020776842224899277,
+      "Yellow-Red": -0.03288837896834218
+    }
+  },
+  "_intelligence_growth": 0.5901221721895223
+}

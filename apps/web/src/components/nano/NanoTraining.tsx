@@ -9,6 +9,8 @@ interface Props {
 }
 
 export function NanoTraining({ trainingStatus, computeStatus }: Props) {
+  const fmtNum = (n: any, digits = 4) => (typeof n === 'number' ? n.toFixed(digits) : '—');
+
   return (
     <Section title="Training & Models" icon={Activity} badge={
       trainingStatus?.running
@@ -34,26 +36,66 @@ export function NanoTraining({ trainingStatus, computeStatus }: Props) {
             <span className="font-mono text-ide-accent">{trainingStatus?.total_steps ?? 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-ide-text-dim">Epochs</span>
-            <span className="font-mono">{trainingStatus?.epochs_completed ?? 0}</span>
+            <span className="text-ide-text-dim">Trained Batches</span>
+            <span className="font-mono">{trainingStatus?.trained_batches ?? 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-ide-text-dim">Pairs Collected</span>
-            <span className="font-mono">{trainingStatus?.total_pairs_collected ?? 0}</span>
+            <span className="text-ide-text-dim">Cycle</span>
+            <span className="font-mono">{trainingStatus?.cycle_phase || 'idle'} #{trainingStatus?.cycle_count ?? 0}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-ide-text-dim">Buffer Size</span>
             <span className="font-mono">{trainingStatus?.buffer_size ?? 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-ide-text-dim">Model Format</span>
-            <Badge color="purple">PyTorch .pt</Badge>
+            <span className="text-ide-text-dim">Nanos</span>
+            <span className="font-mono">{trainingStatus?.total_nanos ?? trainingStatus?.nano_count ?? 0}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-ide-text-dim">Total Params</span>
+            <span className="font-mono">{trainingStatus?.total_params ?? 0}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-ide-text-dim">Last Loss</span>
+            <span className="font-mono text-ide-accent">{fmtNum(trainingStatus?.last_loss)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-ide-text-dim">CE Loss</span>
+            <span className="font-mono">{fmtNum(trainingStatus?.last_ce_loss)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-ide-text-dim">Router Entropy</span>
+            <span className="font-mono">{fmtNum(trainingStatus?.last_router_entropy, 3)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-ide-text-dim">Checkpoints</span>
-            <span className="font-mono">{trainingStatus?.checkpoints?.total_checkpoints ?? 0}</span>
+            <span className="font-mono">{trainingStatus?.total_checkpoints ?? trainingStatus?.checkpoints?.total_checkpoints ?? 0}</span>
           </div>
         </div>
+
+        {(typeof trainingStatus?.gpu_hit_rate === 'number' || typeof trainingStatus?.cpu_hit_rate === 'number') && (
+          <div className="mt-2">
+            <div className="text-[10px] text-ide-text-dim mb-1">Memory Paging (Phase 4)</div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-ide-text-dim">GPU Hit Rate</span>
+                <span className="font-mono">{fmtNum((trainingStatus?.gpu_hit_rate ?? 0) * 100, 1)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ide-text-dim">CPU Hit Rate</span>
+                <span className="font-mono">{fmtNum((trainingStatus?.cpu_hit_rate ?? 0) * 100, 1)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ide-text-dim">Disk Hit Rate</span>
+                <span className="font-mono">{fmtNum((trainingStatus?.disk_hit_rate ?? 0) * 100, 1)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ide-text-dim">GPU/CPU Used</span>
+                <span className="font-mono">{fmtNum(trainingStatus?.gpu_used_mb ?? 0, 1)} / {fmtNum(trainingStatus?.cpu_used_mb ?? 0, 1)} MB</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Recent training sessions */}
         {trainingStatus?.recent_sessions?.length > 0 && (

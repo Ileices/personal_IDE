@@ -1,0 +1,53 @@
+{
+  "version_history": {
+    "v_20250613_021500": {
+      "id": "v_20250613_021500",
+      "description": "Test_New_Version",
+      "created": "2025-06-13T02:15:00.847305",
+      "size_bytes": 0,
+      "file_count": 0,
+      "quality_score": 0.0,
+      "complexity_score": 0.0,
+      "hash": "",
+      "metrics": {
+        "total_size": 0,
+        "file_count": 0,
+        "python_files": 0,
+        "total_lines": 0,
+        "code_lines": 0,
+        "comment_lines": 0,
+        "blank_lines": 0,
+        "function_count": 0,
+        "class_count": 0,
+        "import_count": 0,
+        "complexity_score": 0.0,
+        "quality_score": 0.0,
+        "content_hash": "",
+        "file_types": {},
+        "package_counts": {}
+      }
+    }
+  },
+  "version_metrics": {
+    "v_20250613_021500": {
+      "total_size": 0,
+      "file_count": 0,
+      "python_files": 0,
+      "total_lines": 0,
+      "code_lines": 0,
+      "comment_lines": 0,
+      "blank_lines": 0,
+      "function_count": 0,
+      "class_count": 0,
+      "import_count": 0,
+      "complexity_score": 0.0,
+      "quality_score": 0.0,
+      "content_hash": "",
+      "file_types": {},
+      "package_counts": {}
+    }
+  },
+  "current_version": "v_20250613_021500",
+  "last_updated": "2025-06-13T02:15:00.847305",
+  "total_versions": 1
+}

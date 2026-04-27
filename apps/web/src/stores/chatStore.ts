@@ -4,7 +4,7 @@
 // ============================================
 import { create } from 'zustand';
 import type { AssistantMode, ChatMessage } from '@personal-ide/shared';
-import { apiStream, apiGet } from '../api/client';
+import { apiStream, apiGet, apiPut, apiDelete } from '../api/client';
 
 /** Summary info for a conversation in the sidebar */
 export interface ConversationInfo {
@@ -134,6 +134,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 conversationId: newConvId,
                 abortController: null,
               }));
+              if (newConvId && (!conversationId || newConvId !== conversationId)) {
+                void get().loadConversations(projectId);
+              }
               break;
             }
             case 'error':
@@ -234,7 +237,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   loadConversations: async (projectId: string) => {
     try {
-      const data = await apiGet<{ conversations: any[] }>(`/chat/conversations?projectId=${projectId}`);
+      const data = await apiGet<{ conversations: any[] }>(`/chat/conversations/${projectId}`);
       const convos: ConversationInfo[] = (data.conversations || []).map((c: any) => ({
         id: c.id,
         title: c.title || c.summary || 'Untitled',
@@ -253,7 +256,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   deleteConversation: async (conversationId: string) => {
     try {
-      await apiGet(`/chat/conversations/${conversationId}/delete`);
+      await apiDelete(`/chat/conversations/${conversationId}`);
       set(s => ({
         conversations: s.conversations.filter(c => c.id !== conversationId),
         ...(s.conversationId === conversationId ? { messages: [], conversationId: null } : {}),
@@ -268,8 +271,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   renameConversation: async (conversationId: string, title: string) => {
     try {
-      // Try to rename on server — may not be supported yet
-      await apiGet(`/chat/conversations/${conversationId}/rename?title=${encodeURIComponent(title)}`);
+      await apiPut(`/chat/conversations/${conversationId}`, { title });
     } catch { /* non-critical */ }
     set(s => ({
       conversations: s.conversations.map(c =>

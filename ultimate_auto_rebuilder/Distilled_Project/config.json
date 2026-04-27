@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0-ultimate",
+  "mode": "interactive",
+  "source_folder": "ToBuild",
+  "output_folder": "rebuilt_project",
+  "enable_rby_intelligence": true,
+  "enable_recursive_expansion": true,
+  "enable_24_7_processing": false,
+  "enable_excretion_system": true,
+  "enable_version_management": true,
+  "max_parallel_processes": 8,
+  "intelligence_thresholds": {
+    "tier_1_expansion": 3,
+    "tier_2_expansion": 9,
+    "tier_3_expansion": 27
+  },
+  "rby_weights": {
+    "Red": {
+      "Blue": 0.33,
+      "Yellow": 0.33,
+      "Self": 0.34
+    },
+    "Blue": {
+      "Red": 0.33,
+      "Yellow": 0.33,
+      "Self": 0.34
+    },
+    "Yellow": {
+      "Red": 0.33,
+      "Blue": 0.33,
+      "Self": 0.34
+    }
+  }
+}

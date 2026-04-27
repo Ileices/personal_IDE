@@ -1,0 +1,35 @@
+{
+  "response": "You've provided substantial information to process. How would one'sself expand on this?",
+  "source_processing_id": "blue_1750224442",
+  "response_templates": [
+    "I'm analyzing the information you've provided.",
+    "That's an interesting perspective to consider.",
+    "Let's explore this topic more deeply.",
+    "You've provided substantial information to process.",
+    "I'm connecting the concepts you've presented."
+  ],
+  "creative_patterns": {
+    "sentiment_alignment": 0.0,
+    "information_request": 0,
+    "concept_exploration": 1
+  },
+  "generative_id": "yellow_1750224442",
+  "timestamp": 1750224442.9211557,
+  "_evolution_metadata": {
+    "cycle": 3,
+    "complexity": 0.11239755328528234,
+    "component_weights": {
+      "Red": 0.32886790960733897,
+      "Blue": 0.33861874493127075,
+      "Self": 0.33251334546139033
+    },
+    "alliances": {
+      "Blue-Yellow": 0.08212962223013336,
+      "Yellow-Red": -0.0014919701604388397
+    }
+  },
+  "_intelligence_growth": 2.0497412602128278,
+  "variation": 3,
+  "generative_variant_id": "yellow_variant_3_1750224442",
+  "response_variation": "Variation 3"
+}

@@ -525,32 +525,47 @@ class NanoSea:
 
     # ── Step 8: Trainer ────────────────────────────────────────
     async def _start_trainer(self) -> None:
-        from training.trainer import NanoTrainer
+        use_v2_swarm = self._config.get("v2_swarm", True)
 
-        self._trainer = NanoTrainer(
-            data_dir=str(ROOT_DIR / "nano_data" / "training"),
-            checkpoint_dir=str(ROOT_DIR / "checkpoints"),
-            batch_size=4,  # small for weak hardware
-            training_interval=120.0,  # train every 2 min
-        )
+        if use_v2_swarm:
+            from training.swarm_runtime import SwarmRuntime
 
-        # Register nanos for training — include all inference pipeline nanos
-        priority_nanos = [
-            # Core inference pipeline nanos
-            "TokenGeneratorNano", "EmbeddingNano", "QueryParserNano",
-            "CodeCompletionNano", "TokenizationNano", "SearchNano",
-            # Additional pipeline stage nanos
-            "QueryExpanderNano", "QueryRouterNano", "RankNano",
-            "ContextAssemblerNano", "ResponseValidatorNano", "ResponseFormatterNano",
-        ]
-        registered_count = 0
-        for nano_type in priority_nanos:
-            if nano_type in self._nanos:
-                self._trainer.register_nano(nano_type, self._nanos[nano_type])
-                registered_count += 1
+            self._trainer = SwarmRuntime(
+                batch_size=self._config.get("v2_batch_size", 8),
+                seq_len=self._config.get("v2_seq_len", 128),
+                training_interval=self._config.get("v2_training_interval", 3.0),
+                cycle_steps=self._config.get("v2_cycle_steps", 200),
+                checkpoint_every=self._config.get("v2_checkpoint_every", 200),
+            )
+            await self._trainer.start()
+            logger.info("  Trainer running (v2 swarm runtime + lifecycle loop)")
+        else:
+            from training.trainer import NanoTrainer
 
-        await self._trainer.start()
-        logger.info(f"  Trainer running ({registered_count}/{len(priority_nanos)} priority nanos registered)")
+            self._trainer = NanoTrainer(
+                data_dir=str(ROOT_DIR / "nano_data" / "training"),
+                checkpoint_dir=str(ROOT_DIR / "checkpoints"),
+                batch_size=4,  # small for weak hardware
+                training_interval=120.0,  # train every 2 min
+            )
+
+            # Register nanos for training — include all inference pipeline nanos
+            priority_nanos = [
+                # Core inference pipeline nanos
+                "TokenGeneratorNano", "EmbeddingNano", "QueryParserNano",
+                "CodeCompletionNano", "TokenizationNano", "SearchNano",
+                # Additional pipeline stage nanos
+                "QueryExpanderNano", "QueryRouterNano", "RankNano",
+                "ContextAssemblerNano", "ResponseValidatorNano", "ResponseFormatterNano",
+            ]
+            registered_count = 0
+            for nano_type in priority_nanos:
+                if nano_type in self._nanos:
+                    self._trainer.register_nano(nano_type, self._nanos[nano_type])
+                    registered_count += 1
+
+            await self._trainer.start()
+            logger.info(f"  Trainer running ({registered_count}/{len(priority_nanos)} priority nanos registered)")
 
         # Wire trainer into server (server was started before trainer)
         if self._server:
@@ -559,6 +574,9 @@ class NanoSea:
     # ── Step 11: Lifecycle Monitor ─────────────────────────────
     async def _start_lifecycle_monitor(self) -> None:
         """Background task: monitors expansion, triggers evolution, handles absularity."""
+        if self._trainer and getattr(self._trainer, "status", {}).get("trainer") == "swarm_v2":
+            logger.info("  Lifecycle monitor delegated to v2 swarm runtime")
+            return
         self._lifecycle_task = asyncio.create_task(self._lifecycle_loop())
         logger.info("  Lifecycle monitor running (evolution + absularity detection)")
 
@@ -691,6 +709,9 @@ def parse_args():
     parser.add_argument("--subnet-scan", action="store_true", help="Scan local subnet for peers")
     parser.add_argument("--auto-accept-help", action="store_true", help="Auto-accept help requests")
     parser.add_argument("--scan-paths", type=str, nargs="*", help="Paths to scan for AE seed")
+    parser.add_argument("--legacy-trainer", action="store_true", help="Use legacy NanoTrainer instead of v2 swarm runtime")
+    parser.add_argument("--v2-training-interval", type=float, default=3.0, help="v2 swarm runtime training interval seconds")
+    parser.add_argument("--v2-cycle-steps", type=int, default=200, help="v2 swarm lifecycle step interval")
     return parser.parse_args()
 
 
@@ -705,6 +726,9 @@ async def main():
         "subnet_scan": args.subnet_scan,
         "auto_accept_help": args.auto_accept_help,
         "scan_paths": args.scan_paths,
+        "v2_swarm": not args.legacy_trainer,
+        "v2_training_interval": args.v2_training_interval,
+        "v2_cycle_steps": args.v2_cycle_steps,
     }
 
     sea = NanoSea(config)

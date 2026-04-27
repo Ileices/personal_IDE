@@ -1,0 +1,421 @@
+{
+  "plan": {
+    "title": "Agent meta-architecture — full stack action plan",
+    "description": "A 5-phase production build plan for a context-window-aware agent that uses its token budget as a control plane for external automation scripts. The agent never writes final code directly — it writes scripts that write the code, runs them, and stores only compressed summaries. This lets a 512-token model build arbitrarily large codebases across many turns.",
+    "total_phases": 5,
+    "total_tasks": 22,
+    "total_files_to_create": 18,
+    "build_order": "strict — each phase must be complete before starting the next",
+    "core_principle": "The agent is a control plane, not a code writer. It generates Python automation scripts that generate the actual codebase. Each script run can produce tens of thousands of lines. The agent only ever sees compressed summaries of what was built."
+  },
+  "phases": [
+    {
+      "phase_id": 1,
+      "label": "Memory fabric",
+      "description": "Build the on-disk memory system that lets a tiny model remember everything across sessions. This is the foundation every other phase depends on.",
+      "tasks": [
+        {
+          "task_id": "1.1",
+          "name": "Create the folder structure on disk",
+          "sub": "One-time setup — run a Python script to scaffold directories",
+          "difficulty": "easy",
+          "files_to_create": ["scaffold_memory_fabric.py"],
+          "what": "You need a set of nested folders that will hold all agent memories, automation scripts, generated code, and indices. This is the physical brain of the system.",
+          "how": "Run this Python script once to create the entire directory hierarchy. After this runs, the folder structure exists and every other component has a home.",
+          "directory_layout": {
+            "memory_fabric/": {
+              "indices/": "index files that track every memory and atomic ref",
+              "domains/": {
+                "example_project/": {
+                  "user_prompts/": "UUID-named JSON files of what the user said",
+                  "agent_outputs/": "UUID-named JSON files of what the agent replied",
+                  "memory_markers/": "cross-reference pointer files"
+                }
+              },
+              "automation/": {
+                "code_generators/": "Python build scripts the agent writes",
+                "schema_templates/": "JSON blueprints for different project types"
+              },
+              "cache/": "token budget tracking files"
+            },
+            "projects/": "generated codebases land here"
+          },
+          "code": {
+            "filename": "scaffold_memory_fabric.py",
+            "language": "python",
+            "content": "import os, pathlib\n\nBASE = pathlib.Path('memory_fabric')\ndirs = [\n    'indices',\n    'domains/example_project/user_prompts',\n    'domains/example_project/agent_outputs',\n    'domains/example_project/memory_markers',\n    'automation/code_generators',\n    'automation/schema_templates',\n    'cache'\n]\nfor d in dirs:\n    (BASE / d).mkdir(parents=True, exist_ok=True)\npathlib.Path('projects').mkdir(exist_ok=True)\nprint('Memory fabric scaffold complete.')"
+          }
+        },
+        {
+          "task_id": "1.2",
+          "name": "Build the token-aware index manager",
+          "sub": "Python class that loads only memories that fit in the token budget",
+          "difficulty": "hard",
+          "files_to_create": ["memory_index_manager.py"],
+          "what": "The index manager is what lets a 512-token model selectively pull in only the memories relevant to the current task, scored by recency, frequency, and keyword overlap — so it never wastes context on irrelevant history. It also manages an overflow queue for memories that do not fit.",
+          "how": "A Python class called TokenAwareIndex reads master_index.json, scores each stored memory record, and packs the highest-scoring ones into the context budget. The rest are written to an overflow_queue.json for later cycles. Every time a memory is accessed its access_count increments, raising its future score.",
+          "key_concepts": {
+            "token_budget": "context_limit minus a reserve for actual processing",
+            "scoring": "60% keyword overlap + 25% recency decay + 15% access frequency",
+            "overflow_queue": "IDs of memories that did not fit, stored for next cycle",
+            "content_preview": "only first 80 chars of each memory is stored in index — full content lives in the file on disk"
+          },
+          "code": {
+            "filename": "memory_index_manager.py",
+            "language": "python",
+            "content": "import json, hashlib, time, pathlib\nfrom dataclasses import dataclass, field\nfrom typing import List\n\n@dataclass\nclass MemoryRecord:\n    id: str\n    content_preview: str\n    file_path: str\n    timestamp: float\n    access_count: int\n    domain: str\n    embedding_stub: List[float] = field(default_factory=list)\n\nclass TokenAwareIndex:\n    INDEX_PATH = pathlib.Path('memory_fabric/indices/master_index.json')\n    OVERFLOW_PATH = pathlib.Path('memory_fabric/indices/overflow_queue.json')\n    TOKENS_PER_CHAR = 0.25\n\n    def __init__(self, context_limit: int = 512, reserve: int = 150):\n        self.context_limit = context_limit\n        self.reserve = reserve\n        self.budget = context_limit - reserve\n        self.records: List[MemoryRecord] = self._load_index()\n\n    def _load_index(self) -> List[MemoryRecord]:\n        if not self.INDEX_PATH.exists():\n            return []\n        raw = json.loads(self.INDEX_PATH.read_text())\n        return [MemoryRecord(**r) for r in raw]\n\n    def _estimate_tokens(self, text: str) -> int:\n        return max(1, int(len(text) * self.TOKENS_PER_CHAR))\n\n    def _score(self, rec: MemoryRecord, prompt: str) -> float:\n        prompt_words = set(prompt.lower().split())\n        preview_words = set(rec.content_preview.lower().split())\n        overlap = len(prompt_words & preview_words) / max(1, len(prompt_words))\n        age_hours = (time.time() - rec.timestamp) / 3600\n        recency = 1.0 / (1.0 + age_hours * 0.01)\n        freq = min(1.0, rec.access_count * 0.1)\n        return (overlap * 0.6) + (recency * 0.25) + (freq * 0.15)\n\n    def get_relevant_memories(self, current_prompt: str) -> List[MemoryRecord]:\n        scored = sorted(\n            [(rec, self._score(rec, current_prompt)) for rec in self.records],\n            key=lambda x: x[1], reverse=True\n        )\n        selected, overflow, token_count = [], [], 0\n        for rec, score in scored:\n            cost = self._estimate_tokens(rec.content_preview)\n            if token_count + cost <= self.budget:\n                selected.append(rec)\n                rec.access_count += 1\n                token_count += cost\n            else:\n                overflow.append(rec.id)\n        self.OVERFLOW_PATH.write_text(json.dumps(overflow, indent=2))\n        self._save_index()\n        return selected\n\n    def add_memory(self, content: str, domain: str, file_path: str) -> str:\n        rid = hashlib.sha1(f'{content}{time.time()}'.encode()).hexdigest()[:12]\n        rec = MemoryRecord(\n            id=rid,\n            content_preview=content[:80],\n            file_path=file_path,\n            timestamp=time.time(),\n            access_count=0,\n            domain=domain\n        )\n        self.records.append(rec)\n        self._save_index()\n        return rid\n\n    def _save_index(self):\n        self.INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)\n        data = [vars(r) for r in self.records]\n        self.INDEX_PATH.write_text(json.dumps(data, indent=2))"
+          }
+        },
+        {
+          "task_id": "1.3",
+          "name": "Build the memory writer",
+          "sub": "Every user turn and agent turn gets persisted to disk automatically",
+          "difficulty": "easy",
+          "files_to_create": ["memory_writer.py"],
+          "what": "Every single time the user says something and the agent responds, both sides get saved to disk with a UUID filename and registered in the index. This is how the model gets permanent memory beyond its context window — the index acts as a searchable pointer system to the full content on disk.",
+          "how": "A lightweight MemoryWriter class handles atomic writes to the correct domain folder and then calls TokenAwareIndex.add_memory() to register both the user prompt and agent output in the master index.",
+          "code": {
+            "filename": "memory_writer.py",
+            "language": "python",
+            "content": "import uuid, time, json, pathlib\nfrom memory_index_manager import TokenAwareIndex\n\nclass MemoryWriter:\n    BASE = pathlib.Path('memory_fabric/domains')\n\n    def __init__(self, domain: str):\n        self.domain = domain\n        self.index = TokenAwareIndex()\n        (self.BASE / domain / 'user_prompts').mkdir(parents=True, exist_ok=True)\n        (self.BASE / domain / 'agent_outputs').mkdir(parents=True, exist_ok=True)\n\n    def save_turn(self, user_text: str, agent_text: str) -> dict:\n        turn_id = str(uuid.uuid4())\n        ts = time.time()\n\n        up = self.BASE / self.domain / 'user_prompts' / f'{turn_id}.json'\n        ao = self.BASE / self.domain / 'agent_outputs' / f'{turn_id}.json'\n\n        up.write_text(json.dumps({'id': turn_id, 'ts': ts, 'text': user_text}, indent=2))\n        ao.write_text(json.dumps({'id': turn_id, 'ts': ts, 'text': agent_text}, indent=2))\n\n        self.index.add_memory(user_text, self.domain, str(up))\n        self.index.add_memory(agent_text, self.domain, str(ao))\n\n        return {'turn_id': turn_id, 'domain': self.domain}"
+          }
+        }
+      ]
+    },
+    {
+      "phase_id": 2,
+      "label": "Atomic reference system",
+      "description": "Every piece of code the agent writes gets a unique calling card stamped into it as a comment. This lets the agent later find, group, and batch-modify specific code blocks across thousands of files without reading all of them.",
+      "tasks": [
+        {
+          "task_id": "2.1",
+          "name": "Define the atomic reference standard",
+          "sub": "The comment format stamped into every generated file",
+          "difficulty": "easy",
+          "files_to_create": ["atomic_ref_schema.json"],
+          "what": "Every function, class, and integration point in generated code gets a comment block with 4 fields: a UUID, an integration group ID, a list of expansion ports, and a list of cross-references. The agent uses these to find and edit code without needing the full file in context.",
+          "how": "Define the schema as a JSON spec. The comment syntax adapts to the target language — Python uses #, C++ and JS use //. The integration_group field is the key mechanism that lets the agent batch-modify all code sharing a group tag at once.",
+          "atomic_ref_fields": {
+            "uuid": "12-char hex unique ID for this specific block — used for precise single-block targeting",
+            "integration_group": "shared tag for blocks that work together — used for batch operations across files",
+            "expansion_ports": "named hooks that the expansion runner will later ask the agent to implement",
+            "cross_refs": "UUIDs of other atomic blocks this one depends on — used for dependency tracking",
+            "lang": "python | cpp | csharp | js | ts | rust | go",
+            "layer": "data | logic | ui | test | infra"
+          },
+          "example_injected_python": "# ATOMIC_REF::uuid=a1b2c3d4e5f6\n# INTEGRATION_GROUP::npc_behavior_system\n# EXPANSION_PORTS::combat_hook,dialogue_hook\n# CROSS_REFS::f7e8d9c0b1a2\n# LAYER::logic\ndef npc_decide_action(npc_state: dict) -> str:\n    ...",
+          "example_injected_cpp": "// ATOMIC_REF::uuid=b2c3d4e5f6a1\n// INTEGRATION_GROUP::combat_system\n// EXPANSION_PORTS::status_effects,animations\n// CROSS_REFS::none\n// LAYER::logic\nCombatResult resolve_combat(float atk, float def) { ... }",
+          "code": {
+            "filename": "atomic_ref_schema.json",
+            "language": "json",
+            "content": "{\n  \"atomic_ref_standard\": {\n    \"version\": \"1.0\",\n    \"fields\": {\n      \"uuid\": \"12-char hex unique ID for this block\",\n      \"integration_group\": \"shared tag for batch operations\",\n      \"expansion_ports\": \"comma-separated list of named hooks to implement later\",\n      \"cross_refs\": \"comma-separated UUIDs of dependencies\",\n      \"lang\": \"python | cpp | csharp | js | ts | rust | go\",\n      \"layer\": \"data | logic | ui | test | infra\"\n    },\n    \"comment_prefixes\": {\n      \"python\": \"#\",\n      \"cpp\": \"//\",\n      \"csharp\": \"//\",\n      \"js\": \"//\",\n      \"ts\": \"//\",\n      \"rust\": \"//\",\n      \"go\": \"//\"\n    },\n    \"example_python\": [\n      \"# ATOMIC_REF::uuid=a1b2c3d4e5f6\",\n      \"# INTEGRATION_GROUP::npc_behavior_system\",\n      \"# EXPANSION_PORTS::combat_hook,dialogue_hook\",\n      \"# CROSS_REFS::none\",\n      \"# LAYER::logic\"\n    ],\n    \"example_cpp\": [\n      \"// ATOMIC_REF::uuid=b2c3d4e5f6a1\",\n      \"// INTEGRATION_GROUP::combat_system\",\n      \"// EXPANSION_PORTS::status_effects,animations\",\n      \"// CROSS_REFS::none\",\n      \"// LAYER::logic\"\n    ]\n  }\n}"
+          }
+        },
+        {
+          "task_id": "2.2",
+          "name": "Build the atomic reference injector",
+          "sub": "Python module that stamps any code string with its calling card before writing to disk",
+          "difficulty": "medium",
+          "files_to_create": ["atomic_reference_system.py"],
+          "what": "Before any generated code hits disk, it passes through the injector which prepends the calling card comment block. This is what makes every line of generated code retrievable and groupable later. The registry is a JSON file that maps UUID to the full AtomicUnit record.",
+          "how": "AtomicReferenceSystem.stamp() generates a UUID, builds the header comment in the correct language syntax, prepends it to the code, saves the unit to an atomic_registry.json, and tracks group membership. pull_group_to_context() retrieves all units in a group concatenated — ready to inject into the agent's prompt. batch_replace() can modify thousands of lines across files with a single call.",
+          "code": {
+            "filename": "atomic_reference_system.py",
+            "language": "python",
+            "content": "import uuid, json, pathlib\nfrom typing import List\nfrom dataclasses import dataclass, field\n\nCOMMENT_PREFIX = {\n    'python': '#', 'cpp': '//', 'csharp': '//',\n    'js': '//', 'ts': '//', 'rust': '//', 'go': '//'\n}\n\n@dataclass\nclass AtomicUnit:\n    uuid: str\n    integration_group: str\n    expansion_ports: List[str]\n    cross_refs: List[str]\n    lang: str\n    layer: str\n    code: str\n    file_path: str = ''\n\nclass AtomicReferenceSystem:\n    REGISTRY_PATH = pathlib.Path('memory_fabric/indices/atomic_registry.json')\n\n    def __init__(self):\n        self.registry: dict[str, AtomicUnit] = self._load()\n        self.groups: dict[str, List[str]] = {}\n        for uid, unit in self.registry.items():\n            self.groups.setdefault(unit.integration_group, []).append(uid)\n\n    def _load(self) -> dict:\n        if not self.REGISTRY_PATH.exists():\n            return {}\n        raw = json.loads(self.REGISTRY_PATH.read_text())\n        return {k: AtomicUnit(**v) for k, v in raw.items()}\n\n    def _save(self):\n        self.REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)\n        self.REGISTRY_PATH.write_text(\n            json.dumps({k: vars(v) for k, v in self.registry.items()}, indent=2)\n        )\n\n    def stamp(\n        self,\n        code: str,\n        integration_group: str,\n        expansion_ports: List[str],\n        cross_refs: List[str],\n        lang: str = 'python',\n        layer: str = 'logic'\n    ) -> AtomicUnit:\n        uid = uuid.uuid4().hex[:12]\n        prefix = COMMENT_PREFIX.get(lang, '#')\n        header = (\n            f'{prefix} ATOMIC_REF::uuid={uid}\\n'\n            f'{prefix} INTEGRATION_GROUP::{integration_group}\\n'\n            f'{prefix} EXPANSION_PORTS::{\",\".join(expansion_ports) or \"none\"}\\n'\n            f'{prefix} CROSS_REFS::{\",\".join(cross_refs) or \"none\"}\\n'\n            f'{prefix} LAYER::{layer}\\n'\n        )\n        unit = AtomicUnit(\n            uuid=uid,\n            integration_group=integration_group,\n            expansion_ports=expansion_ports,\n            cross_refs=cross_refs,\n            lang=lang,\n            layer=layer,\n            code=header + code\n        )\n        self.registry[uid] = unit\n        self.groups.setdefault(integration_group, []).append(uid)\n        self._save()\n        return unit\n\n    def pull_group_to_context(self, integration_group: str) -> str:\n        uids = self.groups.get(integration_group, [])\n        return '\\n\\n'.join(\n            self.registry[uid].code for uid in uids if uid in self.registry\n        )\n\n    def batch_replace(self, integration_group: str, find: str, replace: str) -> int:\n        uids = self.groups.get(integration_group, [])\n        count = 0\n        for uid in uids:\n            if uid in self.registry:\n                unit = self.registry[uid]\n                if find in unit.code:\n                    unit.code = unit.code.replace(find, replace)\n                    count += 1\n        self._save()\n        return count"
+          }
+        },
+        {
+          "task_id": "2.3",
+          "name": "Build the context window assembler",
+          "sub": "Pulls atomic refs and memories into a single trimmed context string for the agent",
+          "difficulty": "medium",
+          "files_to_create": ["context_assembler.py"],
+          "what": "This is the bridge between the memory system and the agent. Before each agent call, the assembler gathers the most relevant memory previews and requested atomic code blocks, then trims everything to fit inside the token budget — guaranteeing the agent never blows its context limit regardless of how large the memory fabric grows.",
+          "how": "ContextAssembler.build() queries TokenAwareIndex for relevant memories, optionally pulls integration groups from AtomicReferenceSystem, and assembles a single string that fits within MAX_TOKENS minus the overhead for the system prompt and user message. The assembled string is wrapped in XML-style tags so the agent knows what is memory versus what is the current request.",
+          "code": {
+            "filename": "context_assembler.py",
+            "language": "python",
+            "content": "from memory_index_manager import TokenAwareIndex\nfrom atomic_reference_system import AtomicReferenceSystem\n\nTOKENS_PER_CHAR = 0.25\nMAX_TOKENS = 512\nSYSTEM_OVERHEAD = 80\n\nclass ContextAssembler:\n    def __init__(self, domain: str):\n        self.domain = domain\n        self.index = TokenAwareIndex(context_limit=MAX_TOKENS)\n        self.ars = AtomicReferenceSystem()\n\n    def _tok(self, text: str) -> int:\n        return max(1, int(len(text) * TOKENS_PER_CHAR))\n\n    def build(self, user_prompt: str, active_groups: list[str] = None) -> str:\n        budget = MAX_TOKENS - SYSTEM_OVERHEAD - self._tok(user_prompt)\n        parts = []\n\n        memories = self.index.get_relevant_memories(user_prompt)\n        for mem in memories:\n            preview = f'[MEM:{mem.id}] {mem.content_preview}'\n            cost = self._tok(preview)\n            if budget - cost >= 0:\n                parts.append(preview)\n                budget -= cost\n\n        if active_groups:\n            for group in active_groups:\n                group_code = self.ars.pull_group_to_context(group)\n                cost = self._tok(group_code)\n                if budget - cost >= 0:\n                    parts.append(f'[GROUP:{group}]\\n{group_code}')\n                    budget -= cost\n\n        context = '\\n'.join(parts)\n        return f'<memory>\\n{context}\\n</memory>\\n\\nUser: {user_prompt}'"
+          }
+        }
+      ]
+    },
+    {
+      "phase_id": 3,
+      "label": "Automation script engine",
+      "description": "The agent's core superpower. Instead of writing a 10,000-line game in one turn, it writes a Python automation script in one turn, then that script is run to generate the full codebase. One 512-token output. Infinite scale.",
+      "tasks": [
+        {
+          "task_id": "3.1",
+          "name": "Build the schema interrogator",
+          "sub": "Agent outputs a JSON schema of clarifying questions before building anything",
+          "difficulty": "medium",
+          "files_to_create": ["schema_interrogator.py", "memory_fabric/automation/schema_templates/game_schema.json", "memory_fabric/automation/schema_templates/software_schema.json"],
+          "what": "Before writing any code, the agent produces a JSON file with blank fields asking for project specifics — genre, mechanics, platforms, systems to include. The user (or another AI) fills it in. This prevents the agent from making wrong assumptions that invalidate the entire generated codebase. The schema also defines which automation language to use and what layers to generate.",
+          "how": "Base schema templates for game, software, and AI projects live in /automation/schema_templates/. The agent selects the closest template, adds any project-specific fields, and writes it to disk. The filled schema then drives all code generation in Phase 3.",
+          "schema_templates": {
+            "game_schema": {
+              "project_type": "game",
+              "name": "",
+              "genre": "",
+              "target_language": "cpp",
+              "automation_language": "python",
+              "description": "",
+              "player_mechanics": [],
+              "npc_systems": [],
+              "world_structure": "",
+              "inventory_system": true,
+              "combat_system": true,
+              "save_system": true,
+              "platform": "pc",
+              "layers": [
+                {"name": "data_layer", "lang": "cpp", "strategy": "generate_from_schema"},
+                {"name": "logic_layer", "lang": "cpp", "strategy": "generate_with_hooks"},
+                {"name": "render_layer", "lang": "cpp", "strategy": "generate_with_hooks"},
+                {"name": "test_harness", "lang": "python", "strategy": "generate_tests"}
+              ]
+            },
+            "software_schema": {
+              "project_type": "software",
+              "name": "",
+              "description": "",
+              "target_language": "python",
+              "automation_language": "python",
+              "api_endpoints": [],
+              "database_models": [],
+              "auth_required": true,
+              "deployment_target": "local | cloud",
+              "layers": [
+                {"name": "models", "lang": "python", "strategy": "generate_from_schema"},
+                {"name": "services", "lang": "python", "strategy": "generate_with_hooks"},
+                {"name": "api", "lang": "python", "strategy": "generate_with_hooks"},
+                {"name": "tests", "lang": "python", "strategy": "generate_tests"}
+              ]
+            }
+          },
+          "code": {
+            "filename": "schema_interrogator.py",
+            "language": "python",
+            "content": "import json, pathlib\n\nSCHEMAS_DIR = pathlib.Path('memory_fabric/automation/schema_templates')\n\nGAME_SCHEMA = {\n    'project_type': 'game', 'name': '', 'genre': '',\n    'target_language': 'cpp', 'automation_language': 'python',\n    'description': '', 'player_mechanics': [], 'npc_systems': [],\n    'world_structure': '', 'inventory_system': True,\n    'combat_system': True, 'save_system': True, 'platform': 'pc',\n    'layers': [\n        {'name': 'data_layer',   'lang': 'cpp',    'strategy': 'generate_from_schema'},\n        {'name': 'logic_layer',  'lang': 'cpp',    'strategy': 'generate_with_hooks'},\n        {'name': 'render_layer', 'lang': 'cpp',    'strategy': 'generate_with_hooks'},\n        {'name': 'test_harness', 'lang': 'python', 'strategy': 'generate_tests'}\n    ]\n}\n\nSOFTWARE_SCHEMA = {\n    'project_type': 'software', 'name': '', 'description': '',\n    'target_language': 'python', 'automation_language': 'python',\n    'api_endpoints': [], 'database_models': [], 'auth_required': True,\n    'deployment_target': 'local | cloud',\n    'layers': [\n        {'name': 'models',   'lang': 'python', 'strategy': 'generate_from_schema'},\n        {'name': 'services', 'lang': 'python', 'strategy': 'generate_with_hooks'},\n        {'name': 'api',      'lang': 'python', 'strategy': 'generate_with_hooks'},\n        {'name': 'tests',    'lang': 'python', 'strategy': 'generate_tests'}\n    ]\n}\n\nSCHEMA_MAP = {'game': GAME_SCHEMA, 'software': SOFTWARE_SCHEMA}\n\ndef save_template(project_type: str) -> pathlib.Path:\n    SCHEMAS_DIR.mkdir(parents=True, exist_ok=True)\n    schema = SCHEMA_MAP.get(project_type, SOFTWARE_SCHEMA).copy()\n    path = SCHEMAS_DIR / f'{project_type}_schema.json'\n    path.write_text(json.dumps(schema, indent=2))\n    return path\n\ndef load_filled_schema(path: str) -> dict:\n    return json.loads(pathlib.Path(path).read_text())"
+          }
+        },
+        {
+          "task_id": "3.2",
+          "name": "Build the procedural code generator",
+          "sub": "Agent uses its 512 tokens to write a Python script that generates thousands of lines",
+          "difficulty": "hard",
+          "files_to_create": ["memory_fabric/automation/code_generators/build_rpg_game.py"],
+          "what": "This is the core mechanic. The agent writes ONE Python automation script per build cycle. That script reads the filled-in project schema and procedurally generates the entire codebase — file by file, function by function — with atomic reference stamps on every block. The agent never writes the final target language code directly. It writes a Python script that writes the C++ or whatever is needed.",
+          "how": "The agent outputs a build_PROJECTNAME.py script. When you run it, it generates the full project folder with all files. Every function gets an atomic ref stamped as a comment. Every file gets a manifest entry. Integration points get EXPANSION_PORTS comments telling the expansion runner what to build next. The script is self-contained — it does not import from the agent system, it just produces files.",
+          "what_the_agent_produces_in_512_tokens": "A complete Python script that: (1) imports only stdlib, (2) defines stamp() for atomic refs, (3) defines one generate_X() function per major system, (4) writes all output to disk in a projects/ folder, (5) writes a manifest.json summarizing what was built.",
+          "code": {
+            "filename": "build_rpg_game.py",
+            "language": "python",
+            "note": "This is an EXAMPLE of what the agent outputs — not what you write. The agent produces this script as its response, then you run it.",
+            "content": "# build_rpg_game.py — generated by agent in one 512-token turn\nimport json, pathlib, uuid, time\n\nSCHEMA_PATH = 'memory_fabric/automation/schema_templates/game_schema_filled.json'\nOUTPUT_PATH = pathlib.Path('projects/rpg_game')\n\ndef stamp(code: str, group: str, ports: list, lang: str = 'cpp') -> str:\n    uid = uuid.uuid4().hex[:12]\n    pfx = '//'\n    return (\n        f'{pfx} ATOMIC_REF::uuid={uid}\\n'\n        f'{pfx} INTEGRATION_GROUP::{group}\\n'\n        f'{pfx} EXPANSION_PORTS::{\",\".join(ports)}\\n'\n        f'{pfx} LAYER::logic\\n' + code\n    )\n\ndef generate_npc_system(schema: dict) -> str:\n    npc_types = schema.get('npc_systems', ['warrior', 'merchant', 'guard'])\n    blocks = []\n    for npc in npc_types:\n        code = f\"\"\"\nstruct {npc.capitalize()}State {{\n    float health;\n    float aggression;\n    std::string current_action;\n}};\n\nstd::string {npc}_decide_action(const {npc.capitalize()}State& state) {{\n    // EXPAND_NEXT: Add behavior tree logic here\n    if (state.aggression > 0.7f) return \"attack\";\n    return \"patrol\";\n}}\n\"\"\"\n        blocks.append(stamp(code, 'npc_behavior_system', ['behavior_tree', 'dialogue'], 'cpp'))\n    return '\\n'.join(blocks)\n\ndef generate_inventory_system(schema: dict) -> str:\n    code = \"\"\"\nstruct Item { std::string id; std::string name; int quantity; float weight; };\nstruct Inventory { std::vector<Item> items; float max_weight; };\nbool add_item(Inventory& inv, const Item& item) {\n    // EXPAND_NEXT: add weight check, stack logic, event hooks\n    inv.items.push_back(item);\n    return true;\n}\n\"\"\"\n    return stamp(code, 'inventory_system', ['weight_system', 'events'], 'cpp')\n\ndef generate_combat_system(schema: dict) -> str:\n    code = \"\"\"\nstruct CombatResult { float damage_dealt; bool is_critical; std::string outcome; };\nCombatResult resolve_combat(float attacker_str, float defender_def) {\n    // EXPAND_NEXT: add status effects, crit multipliers, animation hooks\n    float dmg = std::max(0.0f, attacker_str - defender_def * 0.5f);\n    return {dmg, false, dmg > 0 ? \"hit\" : \"miss\"};\n}\n\"\"\"\n    return stamp(code, 'combat_system', ['status_effects', 'animations'], 'cpp')\n\nif __name__ == '__main__':\n    schema = json.loads(pathlib.Path(SCHEMA_PATH).read_text())\n    OUTPUT_PATH.mkdir(parents=True, exist_ok=True)\n\n    files = {\n        'src/npc/npc_system.cpp':       generate_npc_system(schema),\n        'src/inventory/inventory.cpp':  generate_inventory_system(schema),\n        'src/combat/combat.cpp':        generate_combat_system(schema),\n    }\n\n    manifest = {}\n    for rel_path, content in files.items():\n        full_path = OUTPUT_PATH / rel_path\n        full_path.parent.mkdir(parents=True, exist_ok=True)\n        full_path.write_text(content)\n        manifest[rel_path] = {'size': len(content), 'ts': time.time()}\n        print(f'Generated: {rel_path} ({len(content)} chars)')\n\n    (OUTPUT_PATH / 'manifest.json').write_text(json.dumps(manifest, indent=2))\n    print(f'Build complete. {len(files)} files generated.')"
+          }
+        },
+        {
+          "task_id": "3.3",
+          "name": "Build the script executor and result compressor",
+          "sub": "Runs generated scripts and feeds compressed summaries back to the agent",
+          "difficulty": "medium",
+          "files_to_create": ["script_executor.py"],
+          "what": "After the agent writes the automation script, ScriptExecutor runs it in a subprocess and captures output. ResultCompressor then reads the manifest and scans expansion port comments to produce a short token-efficient summary the agent can use on the next turn — knowing what was built without re-reading all the code.",
+          "how": "ScriptExecutor.run() uses subprocess with a timeout. ResultCompressor.compress() reads manifest.json and scans all generated files for EXPANSION_PORTS comments, producing a 3-line summary that fits in the agent's remaining token budget. This summary becomes the agent's working knowledge of the current project state.",
+          "code": {
+            "filename": "script_executor.py",
+            "language": "python",
+            "content": "import subprocess, json, pathlib, time\n\nclass ScriptExecutor:\n    def run(self, script_path: str, timeout: int = 120) -> dict:\n        start = time.time()\n        try:\n            result = subprocess.run(\n                ['python', script_path],\n                capture_output=True, text=True, timeout=timeout\n            )\n            return {\n                'success': result.returncode == 0,\n                'stdout': result.stdout[-2000:],\n                'stderr': result.stderr[-500:],\n                'duration_s': round(time.time() - start, 2)\n            }\n        except subprocess.TimeoutExpired:\n            return {'success': False, 'stdout': '', 'stderr': 'Timeout', 'duration_s': timeout}\n\nclass ResultCompressor:\n    TOKENS_PER_CHAR = 0.25\n\n    def compress(self, project_path: str, exec_result: dict, max_tokens: int = 80) -> str:\n        manifest_path = pathlib.Path(project_path) / 'manifest.json'\n        if manifest_path.exists():\n            manifest = json.loads(manifest_path.read_text())\n            file_count = len(manifest)\n            total_chars = sum(v.get('size', 0) for v in manifest.values())\n        else:\n            file_count, total_chars = 0, 0\n\n        expansion_points = self._scan_expansion_ports(project_path)\n\n        lines = [\n            f\"BUILD: {'OK' if exec_result['success'] else 'FAILED'}\",\n            f'Files: {file_count} | Total: {total_chars} chars',\n            f\"Next ports: {', '.join(expansion_points[:5])}\",\n        ]\n        if not exec_result['success']:\n            lines.append(f\"Error: {exec_result['stderr'][:100]}\")\n        return '\\n'.join(lines)\n\n    def _scan_expansion_ports(self, project_path: str) -> list:\n        ports = []\n        for ext in ('*.cpp', '*.py', '*.cs', '*.js', '*.ts'):\n            for f in pathlib.Path(project_path).rglob(ext):\n                for line in f.read_text(errors='ignore').splitlines():\n                    if 'EXPANSION_PORTS::' in line:\n                        raw = line.split('EXPANSION_PORTS::')[1]\n                        ports.extend(p.strip() for p in raw.split(',') if p.strip() != 'none')\n        return list(dict.fromkeys(ports))"
+          }
+        }
+      ]
+    },
+    {
+      "phase_id": 4,
+      "label": "Agent control loop",
+      "description": "Wire everything together into a single orchestration loop. The agent checks memory, picks a build strategy, writes the automation script, runs it, reads the compressed result, and iterates — all automatically.",
+      "tasks": [
+        {
+          "task_id": "4.1",
+          "name": "Build the meta-agent controller",
+          "sub": "The main loop that orchestrates every other component",
+          "difficulty": "hard",
+          "files_to_create": ["meta_agent_controller.py"],
+          "what": "MetaAgentController is the brain. Given a user request, it decides whether to ask clarifying questions (JSON schema output), generate a build script (Python script output), or produce a text reply. It maintains state between turns via the compressed build summaries and saves every turn to memory.",
+          "how": "The controller calls your LLM via the adapter interface (any model). It injects the assembled context, receives a response, then routes it by detecting whether the response is a JSON schema, a Python build script, or plain text. Build scripts get run immediately. Results get compressed and stored as the agent's working knowledge of the project.",
+          "response_routing_logic": {
+            "json_schema_detected": "save schema to disk, return file path to user to fill in",
+            "python_build_script_detected": "save script, run it, compress results, store in last_build_result",
+            "plain_text": "return directly, save to memory as normal turn"
+          },
+          "code": {
+            "filename": "meta_agent_controller.py",
+            "language": "python",
+            "content": "import json, pathlib, re\nfrom context_assembler import ContextAssembler\nfrom memory_writer import MemoryWriter\nfrom script_executor import ScriptExecutor, ResultCompressor\n\nclass MetaAgentController:\n    SCRIPTS_DIR = pathlib.Path('memory_fabric/automation/code_generators')\n    PROJECTS_DIR = pathlib.Path('projects')\n\n    def __init__(self, domain: str, llm_caller):\n        self.domain = domain\n        self.llm = llm_caller\n        self.assembler = ContextAssembler(domain)\n        self.writer = MemoryWriter(domain)\n        self.executor = ScriptExecutor()\n        self.compressor = ResultCompressor()\n        self.last_build_result: str = ''\n\n    def handle_turn(self, user_input: str, active_groups: list[str] = None) -> str:\n        assembled = self.assembler.build(user_input, active_groups or [])\n        if self.last_build_result:\n            assembled += f'\\n<last_build>\\n{self.last_build_result}\\n</last_build>'\n\n        raw_response = self.llm(assembled)\n        result = self._route_response(raw_response, user_input)\n        self.writer.save_turn(user_input, result)\n        return result\n\n    def _route_response(self, response: str, user_input: str) -> str:\n        stripped = response.strip()\n\n        if stripped.startswith('# build_') or 'if __name__' in stripped:\n            return self._handle_build_script(stripped)\n\n        try:\n            parsed = json.loads(stripped)\n            if 'project_type' in parsed:\n                schema_path = self.SCRIPTS_DIR / 'schema_in_progress.json'\n                schema_path.parent.mkdir(parents=True, exist_ok=True)\n                schema_path.write_text(json.dumps(parsed, indent=2))\n                return f'Schema saved. Fill in blank fields in:\\n{schema_path}'\n        except (json.JSONDecodeError, KeyError):\n            pass\n\n        return response\n\n    def _handle_build_script(self, script_code: str) -> str:\n        m = re.search(r'# build_(.+)\\.py', script_code)\n        project_name = m.group(1) if m else 'unnamed_project'\n\n        script_path = self.SCRIPTS_DIR / f'build_{project_name}.py'\n        script_path.parent.mkdir(parents=True, exist_ok=True)\n        script_path.write_text(script_code)\n\n        exec_result = self.executor.run(str(script_path))\n        project_path = str(self.PROJECTS_DIR / project_name)\n        self.last_build_result = self.compressor.compress(project_path, exec_result)\n\n        status = 'succeeded' if exec_result['success'] else 'failed'\n        return f'Build script executed and {status}.\\n\\n{self.last_build_result}'"
+          }
+        },
+        {
+          "task_id": "4.2",
+          "name": "Build the expansion cycle runner",
+          "sub": "Automated loop that keeps growing the codebase from expansion ports",
+          "difficulty": "hard",
+          "files_to_create": ["expansion_runner.py"],
+          "what": "After the first build, the codebase has hundreds of EXPANSION_PORTS comments. The expansion cycle feeds those port names back to the agent one integration group at a time, asking it to generate the next automation script for each. This is how a 512-token model builds arbitrarily large software across many turns — each turn targets one expansion port, produces one script, runs it, advances the project.",
+          "how": "ExpansionRunner scans the project for all EXPANSION_PORTS comments, collects unique (group, port) tuples, and processes them one at a time. For each, it pulls the relevant atomic group code into context and prompts the agent to expand that specific port. The agent writes an expansion script, which gets run, which adds more stamped code with new expansion ports — the cycle continues.",
+          "scaling_note": "Each expansion cycle uses only the tokens needed for one atomic group (typically 50-150 tokens of code) plus the expansion port name — leaving the agent plenty of budget to write the next automation script. This is how you get 50,000+ lines from a 512-token model.",
+          "code": {
+            "filename": "expansion_runner.py",
+            "language": "python",
+            "content": "import pathlib\nfrom meta_agent_controller import MetaAgentController\nfrom atomic_reference_system import AtomicReferenceSystem\n\nclass ExpansionRunner:\n    def __init__(self, controller: MetaAgentController, project_path: str):\n        self.ctrl = controller\n        self.project_path = pathlib.Path(project_path)\n        self.ars = AtomicReferenceSystem()\n\n    def get_pending_ports(self) -> list[tuple[str, str]]:\n        pending = []\n        for ext in ('*.cpp', '*.py', '*.cs', '*.js', '*.ts'):\n            for f in self.project_path.rglob(ext):\n                group = None\n                for line in f.read_text(errors='ignore').splitlines():\n                    if 'INTEGRATION_GROUP::' in line:\n                        group = line.split('INTEGRATION_GROUP::')[1].strip()\n                    if 'EXPANSION_PORTS::' in line and group:\n                        ports_raw = line.split('EXPANSION_PORTS::')[1]\n                        for port in ports_raw.split(','):\n                            port = port.strip()\n                            if port and port != 'none':\n                                pending.append((group, port))\n        return list(dict.fromkeys(pending))\n\n    def run_one_expansion(self) -> str:\n        pending = self.get_pending_ports()\n        if not pending:\n            return 'No expansion ports remaining. Codebase is fully expanded.'\n\n        group_id, port_name = pending[0]\n        group_code = self.ars.pull_group_to_context(group_id)\n\n        prompt = (\n            f\"Expand the '{port_name}' expansion port in the '{group_id}' integration group.\\n\"\n            f'Write a Python automation script that generates the implementation.\\n'\n            f'Reference code:\\n{group_code[:300]}'\n        )\n        return self.ctrl.handle_turn(prompt, active_groups=[group_id])\n\n    def run_all(self, max_cycles: int = 20) -> list[str]:\n        results = []\n        for i in range(max_cycles):\n            result = self.run_one_expansion()\n            results.append(result)\n            if 'No expansion ports' in result:\n                break\n        return results"
+          }
+        }
+      ]
+    },
+    {
+      "phase_id": 5,
+      "label": "IDE integration and scaling",
+      "description": "Connect everything to your existing IDE agent. Add multi-drive memory routing, model-swap support, and a plain-English CLI so you can drive the whole system without touching code.",
+      "tasks": [
+        {
+          "task_id": "5.1",
+          "name": "Build the drive router",
+          "sub": "Hot, warm, and cold memory tiers across multiple physical drives",
+          "difficulty": "medium",
+          "files_to_create": ["drive_router.py"],
+          "what": "The memory fabric needs to span multiple drives as you described. Recent memories stay on the fastest drive. Older memories migrate to secondary storage. Very old memories go to archival storage. The index manager queries across all three transparently — the calling code never needs to know which drive a file is on.",
+          "how": "DriveRouter wraps path resolution based on file age. When the index manager retrieves a file path, DriveRouter.resolve() checks all three tiers in order and returns the actual physical path. promote_or_demote() should be called periodically (e.g. on a daily cron or each time the index is saved) to migrate files between tiers as they age.",
+          "tier_thresholds": {
+            "hot": "last 7 days — fastest drive (NVMe, RAM disk, or fastest SSD)",
+            "warm": "7-30 days — secondary drive (slower SSD or secondary NVMe)",
+            "cold": "30+ days — archival drive (HDD, external drive, or cloud-backed storage)"
+          },
+          "code": {
+            "filename": "drive_router.py",
+            "language": "python",
+            "content": "import json, time, pathlib, shutil\n\nclass DriveRouter:\n    def __init__(self, hot_base: str, warm_base: str, cold_base: str):\n        self.tiers = {\n            'hot':  (pathlib.Path(hot_base),  7  * 86400),\n            'warm': (pathlib.Path(warm_base), 30 * 86400),\n            'cold': (pathlib.Path(cold_base), float('inf')),\n        }\n\n    def resolve(self, file_path: str) -> pathlib.Path:\n        rel = pathlib.Path(file_path).name\n        for tier, (base, _) in self.tiers.items():\n            candidate = base / rel\n            if candidate.exists():\n                return candidate\n        return pathlib.Path(file_path)\n\n    def promote_or_demote(self, file_path: str, last_access_ts: float):\n        age = time.time() - last_access_ts\n        src = self.resolve(file_path)\n        if not src.exists():\n            return\n\n        if age < self.tiers['hot'][1]:\n            target_base = self.tiers['hot'][0]\n        elif age < self.tiers['warm'][1]:\n            target_base = self.tiers['warm'][0]\n        else:\n            target_base = self.tiers['cold'][0]\n\n        dest = target_base / src.name\n        if src != dest:\n            dest.parent.mkdir(parents=True, exist_ok=True)\n            shutil.move(str(src), str(dest))\n\n    def migrate_all(self, index_records: list):\n        for rec in index_records:\n            self.promote_or_demote(rec['file_path'], rec['timestamp'])"
+          }
+        },
+        {
+          "task_id": "5.2",
+          "name": "Build the model-swap adapter",
+          "sub": "Any LLM plugs in as a drop-in replacement without changing any other code",
+          "difficulty": "easy",
+          "files_to_create": ["llm_adapter.py"],
+          "what": "Your IDE can connect to different models. The adapter pattern means you define one interface and any model — local via Ollama, remote via Anthropic API, OpenAI, or any other provider — plugs in as a drop-in. The entire rest of the system stays unchanged when you swap models.",
+          "how": "Abstract base class LLMAdapter with a single call() method. Concrete subclasses implement the actual HTTP call for each provider. Pass an adapter instance into MetaAgentController and the whole system works with whatever model is behind it.",
+          "supported_providers": ["Ollama (local)", "Anthropic API", "OpenAI API — add OpenAIAdapter following same pattern"],
+          "code": {
+            "filename": "llm_adapter.py",
+            "language": "python",
+            "content": "from abc import ABC, abstractmethod\nimport json, urllib.request\n\nclass LLMAdapter(ABC):\n    @abstractmethod\n    def call(self, prompt: str, max_tokens: int = 512) -> str: ...\n\nclass LocalOllamaAdapter(LLMAdapter):\n    def __init__(self, model: str = 'mistral', host: str = 'http://localhost:11434'):\n        self.model = model\n        self.host = host\n\n    def call(self, prompt: str, max_tokens: int = 512) -> str:\n        payload = json.dumps({\n            'model': self.model,\n            'prompt': prompt,\n            'stream': False,\n            'options': {'num_predict': max_tokens}\n        }).encode()\n        req = urllib.request.Request(\n            f'{self.host}/api/generate',\n            data=payload,\n            headers={'Content-Type': 'application/json'}\n        )\n        with urllib.request.urlopen(req, timeout=60) as r:\n            return json.loads(r.read())['response']\n\nclass AnthropicAdapter(LLMAdapter):\n    def __init__(self, api_key: str, model: str = 'claude-haiku-4-5-20251001'):\n        self.api_key = api_key\n        self.model = model\n\n    def call(self, prompt: str, max_tokens: int = 512) -> str:\n        payload = json.dumps({\n            'model': self.model,\n            'max_tokens': max_tokens,\n            'messages': [{'role': 'user', 'content': prompt}]\n        }).encode()\n        req = urllib.request.Request(\n            'https://api.anthropic.com/v1/messages',\n            data=payload,\n            headers={\n                'Content-Type': 'application/json',\n                'x-api-key': self.api_key,\n                'anthropic-version': '2023-06-01'\n            }\n        )\n        with urllib.request.urlopen(req, timeout=60) as r:\n            data = json.loads(r.read())\n        return data['content'][0]['text']\n\nclass OpenAIAdapter(LLMAdapter):\n    def __init__(self, api_key: str, model: str = 'gpt-4o-mini'):\n        self.api_key = api_key\n        self.model = model\n\n    def call(self, prompt: str, max_tokens: int = 512) -> str:\n        payload = json.dumps({\n            'model': self.model,\n            'max_tokens': max_tokens,\n            'messages': [{'role': 'user', 'content': prompt}]\n        }).encode()\n        req = urllib.request.Request(\n            'https://api.openai.com/v1/chat/completions',\n            data=payload,\n            headers={\n                'Content-Type': 'application/json',\n                'Authorization': f'Bearer {self.api_key}'\n            }\n        )\n        with urllib.request.urlopen(req, timeout=60) as r:\n            data = json.loads(r.read())\n        return data['choices'][0]['message']['content']"
+          }
+        },
+        {
+          "task_id": "5.3",
+          "name": "Build the CLI entry point",
+          "sub": "Plain English commands to drive the entire system from terminal",
+          "difficulty": "easy",
+          "files_to_create": ["agent_cli.py"],
+          "what": "A single Python script you run from terminal. You type what you want in plain English. It routes to the right component — building, expanding, querying memory, checking status — without you needing to know which class handles it. This is your primary interface to the whole system.",
+          "how": "argparse CLI with three modes: single-message mode (--message), expansion mode (--expand), and interactive REPL. Supports any model via --model and --api-key flags.",
+          "usage_examples": [
+            "python agent_cli.py --model mistral --message \"build an RPG game in C++\"",
+            "python agent_cli.py --model mistral --expand projects/rpg_game --max-cycles 20",
+            "python agent_cli.py --model claude-haiku-4-5-20251001 --api-key sk-ant-... --domain game_project",
+            "python agent_cli.py --model mistral  (no --message = interactive REPL mode)"
+          ],
+          "code": {
+            "filename": "agent_cli.py",
+            "language": "python",
+            "content": "import argparse, sys\nfrom llm_adapter import LocalOllamaAdapter, AnthropicAdapter, OpenAIAdapter\nfrom meta_agent_controller import MetaAgentController\nfrom expansion_runner import ExpansionRunner\n\ndef build_controller(model: str, api_key: str = None, domain: str = 'default') -> MetaAgentController:\n    if model.startswith('claude'):\n        adapter = AnthropicAdapter(api_key=api_key, model=model)\n    elif model.startswith('gpt'):\n        adapter = OpenAIAdapter(api_key=api_key, model=model)\n    else:\n        adapter = LocalOllamaAdapter(model=model)\n    return MetaAgentController(domain=domain, llm_caller=adapter.call)\n\ndef main():\n    parser = argparse.ArgumentParser(description='Agent meta-architecture CLI')\n    parser.add_argument('--model',      default='mistral',  help='Model name (mistral, claude-*, gpt-*)')\n    parser.add_argument('--domain',     default='default',  help='Project domain name')\n    parser.add_argument('--api-key',    default=None,       help='API key for cloud models')\n    parser.add_argument('--message',    default=None,       help='Single message and exit')\n    parser.add_argument('--expand',     default=None,       help='Project path to run expansion cycles on')\n    parser.add_argument('--max-cycles', type=int, default=10, help='Max expansion cycles (default 10)')\n    args = parser.parse_args()\n\n    ctrl = build_controller(args.model, args.api_key, args.domain)\n\n    if args.expand:\n        runner = ExpansionRunner(ctrl, args.expand)\n        results = runner.run_all(max_cycles=args.max_cycles)\n        for r in results:\n            print(r)\n        return\n\n    if args.message:\n        print(ctrl.handle_turn(args.message))\n        return\n\n    print('Agent ready. Type your message. Ctrl-C to exit.')\n    while True:\n        try:\n            user_input = input('You: ').strip()\n            if not user_input:\n                continue\n            response = ctrl.handle_turn(user_input)\n            print(f'Agent: {response}\\n')\n        except KeyboardInterrupt:\n            print('\\nExiting.')\n            sys.exit(0)\n\nif __name__ == '__main__':\n    main()"
+          }
+        },
+        {
+          "task_id": "5.4",
+          "name": "Build the system prompt template for the agent",
+          "sub": "The instruction set that tells the agent how to behave in script-generation mode",
+          "difficulty": "easy",
+          "files_to_create": ["system_prompt.txt"],
+          "what": "The agent needs a system prompt that instructs it to operate in script-generation mode — when to produce JSON schemas, when to produce Python build scripts, and how to stamp atomic references. Without this, the model will just write conversational replies instead of actionable automation.",
+          "how": "A plain text file that gets prepended to every assembled context. It instructs the model on the three response modes and the exact comment format for atomic refs.",
+          "code": {
+            "filename": "system_prompt.txt",
+            "language": "text",
+            "content": "You are a meta-agent operating in script-generation mode. You do not write final code directly. You write Python automation scripts that generate final code.\n\nYou have three valid response types:\n\n1. JSON SCHEMA — when you need clarification before building. Output ONLY a raw JSON object with blank fields for the user to fill in. Always include: project_type, name, target_language, automation_language, description, and a layers array.\n\n2. PYTHON BUILD SCRIPT — when you have enough information to build. Output ONLY a complete, runnable Python script. The script filename comment must be on line 1 in format: # build_PROJECTNAME.py. The script must: import only stdlib, define a stamp() function that prepends atomic ref comments, define one generate_X() function per system, write all output to a projects/PROJECTNAME/ folder, and write a manifest.json at the end.\n\n3. PLAIN TEXT — only for direct questions about status, memory, or architecture that do not require building.\n\nATOMIC REF FORMAT — every generated code block must begin with:\n# ATOMIC_REF::uuid=<12hexchars>\n# INTEGRATION_GROUP::<group_name>\n# EXPANSION_PORTS::<port1,port2 or none>\n# CROSS_REFS::<uuid1,uuid2 or none>\n# LAYER::<data|logic|ui|test|infra>\n\nWhen you see <memory> tags, those are your past memories. Use them to maintain continuity.\nWhen you see <last_build> tags, that is a summary of what was built last cycle. Build on top of it.\nNever explain what you are about to do. Just produce the output."
+          }
+        },
+        {
+          "task_id": "5.5",
+          "name": "Wire the system prompt into the controller",
+          "sub": "Update MetaAgentController to prepend system_prompt.txt to every LLM call",
+          "difficulty": "easy",
+          "files_to_create": [],
+          "what": "The controller needs to load the system prompt and prepend it to every assembled context before calling the LLM. This is a small edit to meta_agent_controller.py.",
+          "how": "Add a _load_system_prompt() method and prepend its content in handle_turn() before calling self.llm().",
+          "edit_to_file": "meta_agent_controller.py",
+          "code": {
+            "filename": "meta_agent_controller.py (addition)",
+            "language": "python",
+            "content": "# Add to __init__:\nself.system_prompt = self._load_system_prompt()\n\n# Add method:\ndef _load_system_prompt(self) -> str:\n    p = pathlib.Path('system_prompt.txt')\n    return p.read_text() if p.exists() else ''\n\n# Modify handle_turn — replace the self.llm(assembled) call with:\nfull_prompt = self.system_prompt + '\\n\\n' + assembled if self.system_prompt else assembled\nraw_response = self.llm(full_prompt)"
+          }
+        },
+        {
+          "task_id": "5.6",
+          "name": "Build the periodic maintenance script",
+          "sub": "Cron-runnable script that migrates memory tiers and prunes the index",
+          "difficulty": "easy",
+          "files_to_create": ["memory_maintenance.py"],
+          "what": "As the memory fabric grows, the index file will grow. The maintenance script runs periodically (daily or weekly via cron or Task Scheduler) to migrate files between hot/warm/cold tiers and prune any index records pointing to deleted files.",
+          "how": "A standalone script that loads the index, instantiates DriveRouter with your actual drive paths, calls migrate_all(), removes stale records, and saves the cleaned index. Configure HOT_PATH, WARM_PATH, COLD_PATH to your actual drive mount points.",
+          "code": {
+            "filename": "memory_maintenance.py",
+            "language": "python",
+            "content": "import json, pathlib\nfrom memory_index_manager import TokenAwareIndex\nfrom drive_router import DriveRouter\n\n# CONFIGURE THESE TO YOUR ACTUAL DRIVE PATHS\nHOT_PATH  = 'memory_fabric/hot'\nWARM_PATH = 'memory_fabric/warm'\nCOLD_PATH = 'memory_fabric/cold'\n\ndef run_maintenance():\n    index = TokenAwareIndex()\n    router = DriveRouter(HOT_PATH, WARM_PATH, COLD_PATH)\n\n    # Migrate files to correct tier based on last access\n    initial_count = len(index.records)\n    router.migrate_all([vars(r) for r in index.records])\n\n    # Prune records pointing to deleted files\n    before = len(index.records)\n    index.records = [\n        r for r in index.records\n        if router.resolve(r.file_path).exists()\n    ]\n    pruned = before - len(index.records)\n\n    index._save_index()\n    print(f'Maintenance complete.')\n    print(f'  Records before: {initial_count}')\n    print(f'  Pruned stale records: {pruned}')\n    print(f'  Records after: {len(index.records)}')\n\nif __name__ == '__main__':\n    run_maintenance()"
+          }
+        }
+      ]
+    }
+  ],
+  "file_manifest": {
+    "description": "Every file to create, in build order",
+    "files": [
+      {"order": 1,  "filename": "scaffold_memory_fabric.py",   "task": "1.1", "run_once": true},
+      {"order": 2,  "filename": "memory_index_manager.py",      "task": "1.2", "run_once": false},
+      {"order": 3,  "filename": "memory_writer.py",             "task": "1.3", "run_once": false},
+      {"order": 4,  "filename": "atomic_ref_schema.json",       "task": "2.1", "run_once": true},
+      {"order": 5,  "filename": "atomic_reference_system.py",   "task": "2.2", "run_once": false},
+      {"order": 6,  "filename": "context_assembler.py",         "task": "2.3", "run_once": false},
+      {"order": 7,  "filename": "schema_interrogator.py",       "task": "3.1", "run_once": false},
+      {"order": 8,  "filename": "script_executor.py",           "task": "3.3", "run_once": false},
+      {"order": 9,  "filename": "meta_agent_controller.py",     "task": "4.1", "run_once": false},
+      {"order": 10, "filename": "expansion_runner.py",          "task": "4.2", "run_once": false},
+      {"order": 11, "filename": "llm_adapter.py",               "task": "5.2", "run_once": false},
+      {"order": 12, "filename": "agent_cli.py",                 "task": "5.3", "run_once": false},
+      {"order": 13, "filename": "system_prompt.txt",            "task": "5.4", "run_once": false},
+      {"order": 14, "filename": "drive_router.py",              "task": "5.1", "run_once": false},
+      {"order": 15, "filename": "memory_maintenance.py",        "task": "5.6", "run_once": false}
+    ]
+  },
+  "how_it_works_end_to_end": {
+    "step_1_first_run": "Run scaffold_memory_fabric.py once to create all directories",
+    "step_2_start_cli": "Run: python agent_cli.py --model mistral",
+    "step_3_user_asks_to_build": "You type: build me an RPG game in C++",
+    "step_4_agent_asks_questions": "Agent outputs a JSON schema. Fill in the blank fields and save it.",
+    "step_5_agent_writes_build_script": "Tell the agent the schema is filled. It outputs a Python build script in one 512-token response.",
+    "step_6_script_runs": "The controller automatically runs the script. It generates thousands of lines of C++ across dozens of files.",
+    "step_7_compressed_result": "ResultCompressor produces a 3-line summary of what was built and what expansion ports remain.",
+    "step_8_agent_sees_summary": "On the next turn, the agent sees only the compressed summary — not the actual code. It writes the next expansion script.",
+    "step_9_loop": "Steps 5-8 repeat automatically via expansion_runner.py until all EXPANSION_PORTS are implemented.",
+    "step_10_memory_persists": "Every turn is saved to disk. Restart the session and the agent picks up exactly where it left off."
+  },
+  "scaling_rules": {
+    "512_token_models": "Tight compression. Memory previews: 80 chars max. Build scripts: one system per script. Max 5 expansion ports per cycle.",
+    "4k_token_models": "Relaxed compression. Can hold more memory previews. Build scripts can generate 3-5 systems at once.",
+    "32k_plus_models": "Minimal compression. Can hold full atomic group code, not just previews. Can run multiple expansion cycles in one turn.",
+    "model_swap": "Change --model flag. No other code changes needed. The adapter pattern handles the rest.",
+    "automation_language": "Always Python regardless of target language. Python can shell out to compilers, write C++/C#/Rust/JS files, and run tests.",
+    "target_language": "Any. The build scripts use Python string templates to generate C++, C#, Rust, JS, TypeScript, React, SQL, etc."
+  }
+}

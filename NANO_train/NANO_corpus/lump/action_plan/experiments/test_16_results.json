@@ -1,0 +1,140 @@
+{
+  "part1_architectures": [
+    {
+      "name": "A. Original",
+      "params": 299156,
+      "best_val_acc": 0.1875,
+      "final_val_acc": 0.1875,
+      "throughput": 6969.755107085512,
+      "time_s": 9.182532100006938,
+      "mem_mb": 1.1411895751953125
+    },
+    {
+      "name": "B. Wide-BN",
+      "params": 611924,
+      "best_val_acc": 0.19140625,
+      "final_val_acc": 0.1875,
+      "throughput": 6431.0843245256065,
+      "time_s": 9.95166550000431,
+      "mem_mb": 2.3343048095703125
+    },
+    {
+      "name": "C. ContentRouted",
+      "params": 399956,
+      "best_val_acc": 0.1484375,
+      "final_val_acc": 0.1484375,
+      "throughput": 6159.415034952556,
+      "time_s": 10.390597100020386,
+      "mem_mb": 1.5257110595703125
+    },
+    {
+      "name": "D. Pipeline",
+      "params": 255131,
+      "best_val_acc": 0.17578125,
+      "final_val_acc": 0.17578125,
+      "throughput": 9983.162771998499,
+      "time_s": 6.410794000024907,
+      "mem_mb": 0.9732475280761719
+    },
+    {
+      "name": "E. MoE",
+      "params": 304518,
+      "best_val_acc": 0.140625,
+      "final_val_acc": 0.140625,
+      "throughput": 17820.021623980687,
+      "time_s": 3.5914659000118263,
+      "mem_mb": 1.1616439819335938
+    },
+    {
+      "name": "F. MsgPassing",
+      "params": 1632856,
+      "best_val_acc": 0.19140625,
+      "final_val_acc": 0.1796875,
+      "throughput": 5922.977654112105,
+      "time_s": 10.805375900003128,
+      "mem_mb": 6.228851318359375
+    },
+    {
+      "name": "G. Combined",
+      "params": 307412,
+      "best_val_acc": 0.13671875,
+      "final_val_acc": 0.12890625,
+      "throughput": 14021.082932837528,
+      "time_s": 4.564554699987639,
+      "mem_mb": 1.1726837158203125
+    },
+    {
+      "name": "REF. Transformer",
+      "params": 111546,
+      "best_val_acc": 0.49609375,
+      "final_val_acc": 0.49609375,
+      "throughput": 10602.904334291099,
+      "time_s": 6.03608200000599,
+      "mem_mb": 0.42551422119140625
+    }
+  ],
+  "part2_scaling": [
+    {
+      "name": "N=10",
+      "params": 128324,
+      "best_val_acc": 0.16796875,
+      "final_val_acc": 0.16796875,
+      "throughput": 16409.35179226101,
+      "time_s": 3.900214999972377,
+      "mem_mb": 0.4895172119140625,
+      "n_nanos": 10
+    },
+    {
+      "name": "N=20",
+      "params": 249224,
+      "best_val_acc": 0.1953125,
+      "final_val_acc": 0.1953125,
+      "throughput": 12389.396565893872,
+      "time_s": 5.165707600011956,
+      "mem_mb": 0.950714111328125,
+      "n_nanos": 20
+    },
+    {
+      "name": "N=50",
+      "params": 611924,
+      "best_val_acc": 0.19140625,
+      "final_val_acc": 0.1875,
+      "throughput": 6671.780725589178,
+      "time_s": 9.592641399998683,
+      "mem_mb": 2.3343048095703125,
+      "n_nanos": 50
+    },
+    {
+      "name": "N=100",
+      "params": 1216424,
+      "best_val_acc": 0.1953125,
+      "final_val_acc": 0.1953125,
+      "throughput": 3602.382951551379,
+      "time_s": 17.766017900023144,
+      "mem_mb": 4.640289306640625,
+      "n_nanos": 100
+    },
+    {
+      "name": "N=200",
+      "params": 2425424,
+      "best_val_acc": 0.20703125,
+      "final_val_acc": 0.14453125,
+      "throughput": 1931.027592650815,
+      "time_s": 33.14297540002735,
+      "mem_mb": 9.25225830078125,
+      "n_nanos": 200
+    },
+    {
+      "n_nanos": 500,
+      "best_val_acc": 0,
+      "error": "CUDA out of memory. Tried to allocate 1.95 GiB. GPU 0 has a total capacity of 6.00 GiB of which 878.27 MiB is free. Of the allocated memory 2.06 GiB is allocated by PyTorch, and 1.90 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)"
+    }
+  ],
+  "part3_fit": {
+    "A_max": 0.22703125000000002,
+    "C": 0.09734160923750425,
+    "gamma": 0.27885259866796835,
+    "r2": 0.7539885129220906
+  },
+  "transformer_acc": 0.49609375
+}

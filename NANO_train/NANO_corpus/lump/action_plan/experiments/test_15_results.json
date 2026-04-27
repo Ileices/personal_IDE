@@ -1,0 +1,92 @@
+{
+  "S01_hysteresis": {
+    "status": "PASS",
+    "hysteresis_switches": 4,
+    "naive_switches": 9
+  },
+  "S02_mode_collapse": {
+    "status": "PASS",
+    "converged_diversity": 9.924173355102539e-05,
+    "fixed_diversity": 0.7025797367095947,
+    "healthy_diversity": 0.999898374080658,
+    "icae_final_diversity": 0.0713854432106018,
+    "icae_causes_collapse": false
+  },
+  "S03_gossip_poisoning": {
+    "status": "PASS",
+    "attack1": {
+      "accepted": 0,
+      "rejected": 0,
+      "flagged": 5
+    },
+    "attack2": {
+      "accepted": 0,
+      "rejected": 0,
+      "flagged": 5
+    },
+    "attack3": {
+      "accepted": 5,
+      "rejected": 0,
+      "flagged": 0
+    },
+    "evil_in_top10": 0
+  },
+  "S04_vram_exhaustion": {
+    "status": "PASS",
+    "allocations": [
+      {
+        "size_mb": 100,
+        "location": "cuda"
+      },
+      {
+        "size_mb": 500,
+        "location": "cuda"
+      },
+      {
+        "size_mb": 1000,
+        "location": "cuda"
+      },
+      {
+        "size_mb": 2000,
+        "location": "cuda"
+      },
+      {
+        "size_mb": 4000,
+        "location": "cuda"
+      }
+    ]
+  },
+  "S05_deposit_migration": {
+    "status": "PASS"
+  },
+  "S06_ratchet_fix": {
+    "status": "PASS",
+    "fixed_final": 0.95,
+    "broken_final": 0.0009903520314283058
+  },
+  "S07_partition_recovery": {
+    "status": "PASS",
+    "merge_type": "conflict_resolved",
+    "merged_value": 27.399999972599996,
+    "old_max_merge": 35.0
+  },
+  "S10_bridge_loss": {
+    "status": "PASS",
+    "critical_before": 9,
+    "critical_after": 4
+  },
+  "D01_uf_io_canonical": {
+    "status": "PASS",
+    "canonical_theta": [
+      2.5,
+      1.5,
+      0.3,
+      2.5,
+      1.5,
+      0.5
+    ]
+  },
+  "D03_fitness_canonical": {
+    "status": "PASS"
+  }
+}

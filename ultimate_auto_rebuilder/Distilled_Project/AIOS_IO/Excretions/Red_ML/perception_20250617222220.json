@@ -1,0 +1,270 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "perception_20250617222210.json",
+  "enhanced_data": {
+    "original_pattern": {
+      "word_count": 3,
+      "char_count": 18,
+      "unique_ratio": 1.0,
+      "sentiment": 0.0,
+      "vectors": {
+        "Enter": [
+          0.24,
+          0.82,
+          0.8,
+          0.05,
+          0.53
+        ],
+        "Lecture": [
+          0.25,
+          0.59,
+          0.17,
+          0.5,
+          0.1
+        ],
+        "Mode": [
+          0.44,
+          0.27,
+          0.3,
+          0.28,
+          0.45
+        ]
+      },
+      "timestamp": 1750224112.4273133,
+      "perception_id": "red_1750224112",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "STATEMENT",
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.10876316267103814,
+        "component_weights": {
+          "Blue": 0.3405730484487813,
+          "Yellow": 0.3278930606152004,
+          "Self": 0.33153389093601837
+        },
+        "alliances": {
+          "Red-Blue": 0.02400562051206967,
+          "Yellow-Red": 0.03904111786532844
+        }
+      },
+      "_intelligence_growth": 0.48727932571202615,
+      "variation": 2,
+      "perception_variant_id": "red_variant_2_1750224112"
+    },
+    "mutations": [
+      {
+        "word_count": 3,
+        "char_count": 18,
+        "unique_ratio": 1.0,
+        "sentiment": 0.0,
+        "vectors": {
+          "Enter": [
+            0.24,
+            0.82,
+            0.8,
+            0.05,
+            0.53
+          ],
+          "Lecture": [
+            0.25,
+            0.59,
+            0.17,
+            0.5,
+            0.1
+          ],
+          "Mode": [
+            0.44,
+            0.27,
+            0.3,
+            0.28,
+            0.45
+          ]
+        },
+        "timestamp": 1750224112.4273133,
+        "perception_id": "red_1750224112",
+        "is_concept": 0,
+        "is_feedback": 0,
+        "feedback_type": null,
+        "previous_responses": [],
+        "is_direct_feedback": 0,
+        "feedback_words": [],
+        "target_knowledge_key": null,
+        "direct_command": null,
+        "input_type": "STATEMENT",
+        "_evolution_metadata": {
+          "cycle": 2,
+          "complexity": 0.10876316267103814,
+          "component_weights": {
+            "Blue": 0.3405730484487813,
+            "Yellow": 0.3278930606152004,
+            "Self": 0.33153389093601837
+          },
+          "alliances": {
+            "Red-Blue": 0.02400562051206967,
+            "Yellow-Red": 0.03904111786532844
+          }
+        },
+        "_intelligence_growth": 0.48727932571202615,
+        "variation": 2,
+        "perception_variant_id": "red_variant_2_1750224112",
+        "_tier1_variation": 1,
+        "_tier2_variation": 1,
+        "_tier3_variation": 1
+      },
+      {
+        "word_count": 3,
+        "char_count": 18,
+        "unique_ratio": 1.0,
+        "sentiment": 0.0,
+        "vectors": {
+          "Enter": [
+            0.24,
+            0.82,
+            0.8,
+            0.05,
+            0.53
+          ],
+          "Lecture": [
+            0.25,
+            0.59,
+            0.17,
+            0.5,
+            0.1
+          ],
+          "Mode": [
+            0.44,
+            0.27,
+            0.3,
+            0.28,
+            0.45
+          ]
+        },
+        "timestamp": 1750224112.4273133,
+        "perception_id": "red_1750224112",
+        "is_concept": 0,
+        "is_feedback": 0,
+        "feedback_type": null,
+        "previous_responses": [],
+        "is_direct_feedback": 0,
+        "feedback_words": [],
+        "target_knowledge_key": null,
+        "direct_command": null,
+        "input_type": "STATEMENT",
+        "_evolution_metadata": {
+          "cycle": 2,
+          "complexity": 0.10876316267103814,
+          "component_weights": {
+            "Blue": 0.3405730484487813,
+            "Yellow": 0.3278930606152004,
+            "Self": 0.33153389093601837
+          },
+          "alliances": {
+            "Red-Blue": 0.02400562051206967,
+            "Yellow-Red": 0.03904111786532844
+          }
+        },
+        "_intelligence_growth": 0.48727932571202615,
+        "variation": 2,
+        "perception_variant_id": "red_variant_2_1750224112",
+        "_tier1_variation": 1,
+        "_tier2_variation": 1,
+        "_tier3_variation": 1
+      },
+      {
+        "word_count": 3,
+        "char_count": 18,
+        "unique_ratio": 1.0,
+        "sentiment": 0.0,
+        "vectors": {
+          "Enter": [
+            0.24,
+            0.82,
+            0.8,
+            0.05,
+            0.53
+          ],
+          "Lecture": [
+            0.25,
+            0.59,
+            0.17,
+            0.5,
+            0.1
+          ],
+          "Mode": [
+            0.44,
+            0.27,
+            0.3,
+            0.28,
+            0.45
+          ]
+        },
+        "timestamp": 1750224112.4273133,
+        "perception_id": "red_1750224112",
+        "is_concept": 0,
+        "is_feedback": 0,
+        "feedback_type": null,
+        "previous_responses": [],
+        "is_direct_feedback": 0,
+        "feedback_words": [],
+        "target_knowledge_key": null,
+        "direct_command": null,
+        "input_type": "STATEMENT",
+        "_evolution_metadata": {
+          "cycle": 2,
+          "complexity": 0.10876316267103814,
+          "component_weights": {
+            "Blue": 0.3405730484487813,
+            "Yellow": 0.3278930606152004,
+            "Self": 0.33153389093601837
+          },
+          "alliances": {
+            "Red-Blue": 0.02400562051206967,
+            "Yellow-Red": 0.03904111786532844
+          }
+        },
+        "_intelligence_growth": 0.48727932571202615,
+        "variation": 2,
+        "perception_variant_id": "red_variant_2_1750224112",
+        "_tier1_variation": 1,
+        "_tier2_variation": 1,
+        "_tier3_variation": 1
+      }
+    ],
+    "_evolution_metadata": {
+      "cycle": 2,
+      "complexity": 0.11239755328528234,
+      "component_weights": {
+        "Blue": 0.3405730484487813,
+        "Yellow": 0.3278930606152004,
+        "Self": 0.33153389093601837
+      },
+      "alliances": {
+        "Red-Blue": 0.13196316896166832,
+        "Yellow-Red": -0.0014919701604388397
+      }
+    },
+    "_intelligence_growth": 0.6099500774537593
+  },
+  "reabsorption_timestamp": 1750224140.51165,
+  "_evolution_metadata": {
+    "cycle": 2,
+    "complexity": 0.11239755328528234,
+    "component_weights": {
+      "Blue": 0.3405730484487813,
+      "Yellow": 0.3278930606152004,
+      "Self": 0.33153389093601837
+    },
+    "alliances": {
+      "Red-Blue": 0.13196316896166832,
+      "Yellow-Red": -0.0014919701604388397
+    }
+  },
+  "_intelligence_growth": 0.618035883366735
+}

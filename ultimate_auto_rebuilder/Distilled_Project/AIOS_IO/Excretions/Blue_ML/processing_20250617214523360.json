@@ -1,0 +1,27 @@
+{
+  "learning_phase": "TRY",
+  "try_data": {
+    "test_id": "test_1750221923",
+    "response": "You've provided substantial information to process. Does this align with your expectations?",
+    "timestamp": 1750221923.3665743,
+    "confidence": 0.5164457868140262,
+    "corrected": 0,
+    "cluster_id": "cluster_1"
+  },
+  "test_id": "test_1750221923",
+  "cluster_id": "cluster_1",
+  "_evolution_metadata": {
+    "cycle": 4,
+    "complexity": 0.1143637663094082,
+    "component_weights": {
+      "Red": 0.347687385403322,
+      "Yellow": 0.3217747754698044,
+      "Self": 0.33053783912687357
+    },
+    "alliances": {
+      "Red-Blue": -0.019090980967100345,
+      "Blue-Yellow": 0.020776842224899277
+    }
+  },
+  "_intelligence_growth": 0.7447926298237483
+}

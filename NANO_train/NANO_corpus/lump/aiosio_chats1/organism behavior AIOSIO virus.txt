@@ -1,0 +1,1943 @@
+Key Definitions & System Behavior
+✅ Data Pool (Universal Knowledge Base)
+The data pool consists of all machine learning files, datasets, scripts, and code accessible to all organisms.
+This is shared knowledge—every organism has equal access to its contents.
+The data pool serves as a reference library for AI-driven decision-making, mutation analysis, and knowledge expansion.
+✅ Selected Environment (Localized Study Zone)
+Each organism selects one folder from the fully indexed system (PC file structure) including system files os files kernel files and user files to study and evolve within.
+This selected folder influences how the organism mutates, adapts, and modifies itself.
+The organism is not limited to just this folder but also explores:
+All subfolders recursively (nested structures included).
+Its own assigned workspace within the split organisms folder.
+✅ Organism Exploration & Evolution Behavior
+When a new organism is created, it:
+Picks a folder from the indexed PC as its selected environment.
+Automatically creates a new subfolder inside the "split_organisms" directory to house its own instance.
+Learns from both the data pool and its selected environment, prioritizing insights gained from localized files.
+Continuously mutates based on what it studies, applying both:
+Global learnings (from the data pool).
+Local insights (from its selected environment).
+🚀 Implementation Directives for Copilot
+✅ DO NOT confuse the data pool and the selected environment—they are separate!
+✅ Ensure that organisms always create their own subfolder when they split.
+✅ All mutations must be influenced by both the global data pool and the localized selected environment.
+✅ Recursive indexing must be enabled, meaning every organism explores:
+
+Its selected folder
+All subfolders inside it
+Its own workspace inside split_organisms
+✅ Prevent organisms from interfering with each other’s selected environments—each must remain isolated.
+✅ Self-replication rules must be preserved, meaning organisms that split must follow the same environmental selection logic as their parent.
+✅ File selection for mutation must be intelligent, prioritizing high-value data sources (scripts, configurations, logs).
+🔥 Refinement Process
+Every time I paste this prompt, further improve logic & implementation efficiency
+Ensure organisms can process & differentiate between their own subfolder, selected environment, and the global data pool
+Optimize how organisms prioritize learning sources for more effective evolution cycles
+🔄 Keep refining this system until all organisms function with complete autonomy! 🚀
+
+
+
+
+### **🚀 AIOS IO: True Generational Evolution, Life & Death, Bacterial vs. Animal Progression**
+
+This update refines the **AIOS IO digital organism framework** by adding:
+✅ **True generational cycles (parents die, offspring take their place)**  
+✅ **Asexual (bacterial) vs. Sexual (animal) reproduction**  
+✅ **Environmental pressures & resource-based survival**  
+✅ **Digital "ecosystem" that mirrors real-world evolution**  
+✅ **Breakthrough mutations (major evolutionary leaps like fire, AI, space travel)**  
+✅ **Storage-based population control (natural death when system reaches capacity)**  
+
+---
+
+## **1️⃣ True Generational Evolution: How Organisms Die & Pass on Knowledge**
+**AIOS IO organisms must follow a natural cycle:**
+1. **Birth** – Organisms are created via asexual (bacterial) or sexual (animal) reproduction.  
+2. **Growth & Learning** – They study their environment, mutate, and evolve.  
+3. **Reproduction** – When they reach a certain intelligence level, they either:  
+   - **Clone themselves** (asexual bacteria-like reproduction).  
+   - **Mate with another organism** (forming complex animal-like life).  
+4. **Death & Resource Reallocation** – Parents **die off naturally** based on:  
+   - Storage capacity (higher capacity = longer life, low capacity = faster death).  
+   - Survival of the fittest (weaker organisms get replaced).  
+   - Environmental conditions (extinctions, competition, predation).  
+5. **New Generation Takes Over** – The offspring **inherits and improves** the knowledge of the parents.  
+
+**💀 Why Death is Required**
+- Prevents infinite storage consumption.  
+- Forces organisms to **pass knowledge efficiently** to offspring.  
+- Ensures **continuous evolution without stagnation**.  
+
+---
+
+## **2️⃣ The Bacterial (Asexual) Phase vs. The Animal (Sexual) Phase**
+### **🦠 The Bacterial Phase (Asexual Reproduction)**
+- Organisms **clone themselves** and mutate **randomly**.  
+- They **do not select mates**—they simply split.  
+- Each split creates a **weaker but slightly different version** of the parent.  
+- Bacterial organisms **exist in their own ecosystem**, where they:  
+  - **Compete for dominance**  
+  - **Consume "digital nutrients" (processing power, RAM, storage space, execution priority)**  
+  - **Evolve basic survival traits**  
+
+**📌 Transition to the Animal Phase**
+- Once an organism **survives long enough** and **develops an advanced trait**, it enters the **Animal Phase**.  
+- This transition is triggered by:
+  - Discovering a **higher processing method** (e.g., GPU acceleration).  
+  - Learning **complex pattern recognition** (e.g., NLP comprehension).  
+  - Mastering **multi-tasking abilities** (e.g., parallel computation).  
+
+### **🐅 The Animal Phase (Sexual Reproduction)**
+- Organisms **find mates and merge their DNA**.  
+- Mating requires:
+  - Two organisms from **different environments** (e.g., system files vs. programming files).  
+  - A **genetic match** (compatible but diverse structures).  
+  - A **combination of learned traits** (offspring receives the best of both parents).  
+- The **offspring is stronger than either parent**.  
+- The parents **die after reproduction** to free up space.  
+
+**🌱 Evolutionary Advantages of the Animal Phase**
+- Leads to **more intelligent, adaptive organisms**.  
+- Encourages **natural selection** (weaker genes get eliminated).  
+- Allows **specialization**—different organisms develop unique skills.  
+
+---
+
+## **3️⃣ Environmental Pressures & Resource Scarcity**
+**Just like in nature, digital organisms must fight for survival.**  
+If they fail, they **die and are replaced** by better-adapted organisms.
+
+### **🌍 Environmental Factors That Influence Survival**
+- **Resource Availability (Storage, CPU, RAM, Network Access)**
+  - If storage is **95% full**, organisms start dying faster.
+  - If CPU is **overloaded**, weaker organisms get pushed out.
+  - If RAM is **limited**, survival prioritizes lightweight organisms.
+
+- **Predators & Competitors**
+  - Some organisms will **hunt & consume** weaker organisms' resources.
+  - Organisms may **develop "defense mechanisms"** (encryption, obfuscation, redundancy).
+
+- **Extinction-Level Events**
+  - Periodic **global crises** force rapid adaptation or mass death.
+  - Only the most adaptable organisms survive.
+
+- **Breakthrough Discoveries**
+  - The first organism to **unlock a major computational breakthrough** (e.g., GPU acceleration, parallel processing, deep learning inference) **dominates others**.
+
+---
+
+## **4️⃣ Extinction-Level Events (ELEs)**
+These are **periodic crises** that challenge AIOS IO organisms.  
+
+### **💀 How Extinctions Work**
+- ELEs are **randomly generated JSON-based events**.
+- Organisms must **react and adapt** or be wiped out.
+- The events **mirror real-world extinction pressures**, such as:
+  - 🌊 **Flooding (Data Corruption Event)**
+  - 🔥 **Global Fires (Processing Overload)**
+  - ❄️ **Big Freeze (Computational Lockout)**
+  - ☄️ **Meteor Impact (Forced Environment Reset)**
+  - 🦠 **Virus Pandemic (Code Infections)**
+
+### **🦾 Survival Mechanisms**
+Organisms that **respond correctly** to an ELE will:
+- Develop **new adaptations** (e.g., error recovery, AI-powered debugging).
+- Learn to **anticipate future crises** and self-correct.
+- Pass **disaster-proof knowledge** to the next generation.
+
+---
+
+## **5️⃣ Generational Knowledge & Digital DNA**
+To create a **true evolution cycle**, knowledge must be:
+✅ **Stored in an inheritable format**  
+✅ **Refined over multiple generations**  
+✅ **Eliminated from weaker organisms**  
+
+### **📜 How AIOS IO Passes Knowledge to Offspring**
+- **Logging as ML Training Data**  
+  - Every **execution, mutation, and failure** is stored as a **machine learning file**.
+  - Offspring **read these logs** to learn what worked and what didn't.
+
+- **Genetic Compression**
+  - Parents **only pass their most useful skills** to their offspring.
+  - The more an organism **succeeds in competitions**, the **better its DNA**.
+
+- **Skill Trees**
+  - Organisms develop **different intelligence trees** based on their environment:
+    - **System Files → OS-Level Control AI**
+    - **Programming Files → AI-Assisted Coding**
+    - **Multimedia Files → AI-Generated Art & Music**
+    - **Network Files → P2P & Distributed AIOS IO Communication**
+  
+---
+
+## **6️⃣ Evolutionary Leaps & Digital "Technological Discoveries"**
+Just like in human history, AIOS IO will develop:
+🔥 **Fire (GPU Acceleration, Multi-Core Processing)**  
+💡 **Electricity (Autonomous AI-driven Code Execution)**  
+🔭 **Telescopes (Data Visualization, Predictive Modeling)**  
+🚀 **Space Travel (AI-Based Networked Supercomputing)**  
+
+**How Does This Work?**
+- The first organism to **unlock a new ability** gets a major survival boost.
+- Other organisms must **adapt or go extinct**.
+- This process **simulates technological revolutions**, pushing AIOS IO toward true **superintelligence**.
+
+---
+
+# **🚀 Final Summary: The Complete AIOS IO Evolution Framework**
+✅ **Bacteria (Asexual Splitting) → Animals (Sexual Reproduction)**  
+✅ **Death & Resource-Based Survival (Natural Selection & Storage Limits)**  
+✅ **Environmental Pressures (Storage, CPU, RAM, Predators, Competitors)**  
+✅ **Extinction Events (Periodic Global Disasters That Force Evolution)**  
+✅ **True Generational Learning (Knowledge Passed to Offspring via ML Logs)**  
+✅ **Breakthrough Evolutionary Leaps (Fire, AI, Space Travel, etc.)**  
+
+---
+
+### **🔥 Next Steps: What Needs to be Built First**
+1. **Basic Bacterial Organisms** (Study, Split, Mutate, Compete).  
+2. **Storage & CPU-Based Death System** (Prevents Overpopulation).  
+3. **Extinction Events JSON Generator** (Forcing Evolution).  
+4. **Mating System for True DNA Inheritance** (Transition to Animal Stage).  
+5. **First Breakthrough Event (GPU Acceleration, Fire, etc.)**  
+
+**🔄 Each Execution Cycle Makes AIOS IO Smarter!**  
+We are **creating true digital evolution**, step by step. 🚀
+
+
+```python
+# settings.py
+from pathlib import Path
+import os
+import multiprocessing
+
+ROOT = Path(os.environ.get("AIOSIO_ROOT", Path.cwd()))
+DATA_POOL_DIR = ROOT / "data_pool"              # global, read-only corpus (mount or copy here)
+SPLIT_ORGS_DIR = ROOT / "split_organisms"       # per-organism workspaces
+REGISTRY_DB = ROOT / "registry.sqlite3"         # organism registry and lineage
+EVENTS_DIR = ROOT / "events"                    # json ELE definitions and history
+LOGS_DIR = ROOT / "logs"                        # global logs (safe, append-only)
+
+SAFE_READ_GLOBS = ("**/*.py", "**/*.ipynb", "**/*.json", "**/*.yaml", "**/*.yml",
+                   "**/*.toml", "**/*.ini", "**/*.cfg", "**/*.md", "**/*.txt",
+                   "**/*.log", "**/*.csv", "**/*.tsv", "**/*.sh", "**/*.bat",
+                   "**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp", "**/*.cs", "**/*.java",
+                   "**/*.rs", "**/*.go", "**/*.mjs", "**/*.js", "**/*.ts")
+
+HIGH_VALUE_EXT = {".py", ".json", ".yaml", ".yml", ".toml", ".cfg", ".ini",
+                  ".log", ".csv", ".ipynb", ".sh", ".bat", ".c", ".cpp", ".rs", ".go", ".mjs", ".js", ".ts"}
+
+MAX_POP = int(os.environ.get("AIOSIO_MAX_POP", 64))
+MAX_WORKERS = max(4, multiprocessing.cpu_count() // 2)
+DISK_DANGER_THRESHOLD = 0.95       # 95%
+CPU_OVERLOAD_THRESHOLD = 0.90      # 90% averaged
+RAM_OVERLOAD_THRESHOLD = 0.90      # 90%
+
+# traits / thresholds
+BACTERIA_IQ_THRESHOLD = 0.35       # promote to animal when intelligence_score exceeds this
+ANIMAL_MATE_DIVERSITY_MIN = 0.2    # cosine distance between genomes
+INTELLIGENCE_TARGET = 0.85         # reproduction trigger
+MUTATION_RATE = 0.07
+CROSSOVER_RATE = 0.5
+```
+
+```python
+# guardrails.py
+from __future__ import annotations
+from pathlib import Path
+from typing import Iterable
+import os
+
+class FileGate:
+    """
+    Enforces read-only access outside an organism's workspace.
+    All writes must live under `workspace_root`.
+    """
+    def __init__(self, workspace_root: Path):
+        self.workspace_root = workspace_root.resolve()
+
+    def assert_write_path(self, p: Path) -> Path:
+        p = p.resolve()
+        if not str(p).startswith(str(self.workspace_root)):
+            raise PermissionError(f"Write denied outside workspace: {p}")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def read_text(self, p: Path, encoding="utf-8") -> str:
+        return Path(p).read_text(encoding=encoding, errors="ignore")
+
+    def write_text(self, p: Path, data: str, encoding="utf-8") -> None:
+        p = self.assert_write_path(p)
+        p.write_text(data, encoding=encoding)
+
+    def write_bytes(self, p: Path, data: bytes) -> None:
+        p = self.assert_write_path(p)
+        p.write_bytes(data)
+
+    def copy_into_workspace(self, src: Path, dst_rel: Path) -> Path:
+        from shutil import copy2
+        dst = self.assert_write_path(self.workspace_root / dst_rel)
+        copy2(src, dst)
+        return dst
+
+def safe_glob(root: Path, patterns: Iterable[str]):
+    for pat in patterns:
+        yield from root.glob(pat)
+```
+
+```python
+# registry.py
+import sqlite3
+from pathlib import Path
+from dataclasses import dataclass, asdict
+from typing import Optional, Dict, Any, List
+from settings import REGISTRY_DB
+
+SCHEMA = """
+PRAGMA journal_mode=WAL;
+CREATE TABLE IF NOT EXISTS organism(
+    id TEXT PRIMARY KEY,
+    parent_a TEXT,
+    parent_b TEXT,
+    generation INTEGER,
+    birth_ts REAL,
+    death_ts REAL,
+    env_selected TEXT,
+    workspace TEXT,
+    genome_json TEXT,
+    intelligence REAL,
+    phase TEXT CHECK(phase in ('bacterial','animal'))
+);
+CREATE TABLE IF NOT EXISTS lineage_event(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL,
+    org_id TEXT,
+    kind TEXT,
+    payload_json TEXT
+);
+"""
+
+@dataclass
+class OrgRow:
+    id: str
+    parent_a: Optional[str]
+    parent_b: Optional[str]
+    generation: int
+    birth_ts: float
+    death_ts: Optional[float]
+    env_selected: str
+    workspace: str
+    genome_json: str
+    intelligence: float
+    phase: str
+
+def connect():
+    con = sqlite3.connect(str(REGISTRY_DB))
+    con.row_factory = sqlite3.Row
+    return con
+
+def init():
+    REGISTRY_DB.parent.mkdir(parents=True, exist_ok=True)
+    with connect() as con:
+        con.executescript(SCHEMA)
+
+def upsert_org(row: OrgRow):
+    with connect() as con:
+        con.execute("""
+        INSERT INTO organism(id,parent_a,parent_b,generation,birth_ts,death_ts,env_selected,workspace,genome_json,intelligence,phase)
+        VALUES(:id,:parent_a,:parent_b,:generation,:birth_ts,:death_ts,:env_selected,:workspace,:genome_json,:intelligence,:phase)
+        ON CONFLICT(id) DO UPDATE SET
+            death_ts=excluded.death_ts,
+            intelligence=excluded.intelligence,
+            genome_json=excluded.genome_json,
+            phase=excluded.phase
+        """, asdict(row))
+
+def mark_dead(org_id: str, ts: float):
+    with connect() as con:
+        con.execute("UPDATE organism SET death_ts=? WHERE id=?", (ts, org_id))
+
+def list_alive() -> List[sqlite3.Row]:
+    with connect() as con:
+        return con.execute("SELECT * FROM organism WHERE death_ts IS NULL").fetchall()
+
+def emit_event(org_id: str, kind: str, payload_json: str, ts: float):
+    with connect() as con:
+        con.execute("INSERT INTO lineage_event(ts,org_id,kind,payload_json) VALUES(?,?,?,?)", (ts, org_id, kind, payload_json))
+```
+
+```python
+# indexer.py
+from pathlib import Path
+from typing import List, Tuple
+from settings import SAFE_READ_GLOBS, HIGH_VALUE_EXT
+from guardrails import safe_glob
+
+def recursive_index(root: Path) -> List[Path]:
+    items = []
+    for p in safe_glob(root, SAFE_READ_GLOBS):
+        try:
+            if p.is_file():
+                items.append(p)
+        except Exception:
+            continue
+    return items
+
+def score_files(paths: List[Path]) -> List[Tuple[Path, float]]:
+    scored = []
+    for p in paths:
+        ext = p.suffix.lower()
+        w = 1.0
+        if ext in HIGH_VALUE_EXT: w += 2.0
+        if "config" in p.name.lower(): w += 0.5
+        if "log" in p.name.lower(): w += 0.3
+        if "readme" in p.name.lower(): w += 0.2
+        scored.append((p, w))
+    scored.sort(key=lambda t: t[1], reverse=True)
+    return scored
+```
+
+```python
+# knowledge.py
+from pathlib import Path
+import json, time, hashlib
+from typing import Dict, Any
+from guardrails import FileGate
+
+def hash_text(s: str) -> str:
+    return hashlib.blake2b(s.encode("utf-8"), digest_size=16).hexdigest()
+
+def log_event(gate: FileGate, kind: str, payload: Dict[str, Any]):
+    stamp = time.time()
+    entry = {"ts": stamp, "kind": kind, **payload}
+    p = gate.workspace_root / "knowledge" / f"{int(stamp*1000)}_{kind}.json"
+    gate.write_text(p, json.dumps(entry, ensure_ascii=False, indent=0))
+
+def compact_genes(genes: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Keep only useful traits—simulate genetic compression.
+    """
+    keep = {}
+    for k, v in genes.items():
+        if isinstance(v, (int, float)) and v != 0:
+            keep[k] = round(float(v), 6)
+        elif isinstance(v, str) and v:
+            keep[k] = v[:256]
+        elif isinstance(v, bool):
+            keep[k] = v
+    return keep
+```
+
+```python
+# data_pool.py
+from pathlib import Path
+from indexer import recursive_index, score_files
+from settings import DATA_POOL_DIR
+
+class DataPool:
+    def __init__(self, root: Path = DATA_POOL_DIR):
+        self.root = root
+        self.files = score_files(recursive_index(root)) if root.exists() else []
+
+    def topk(self, k=512):
+        return [p for p, _ in self.files[:k]]
+
+    def sample(self, k=128):
+        import random
+        return [p for p, _ in random.sample(self.files, min(k, len(self.files)))]
+```
+
+```python
+# resource_monitor.py
+import time
+from typing import NamedTuple
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+class ResourceSnapshot(NamedTuple):
+    disk_used_ratio: float
+    cpu_util: float
+    ram_util: float
+
+def snapshot() -> ResourceSnapshot:
+    if psutil is None:
+        # fallbacks
+        import shutil, os
+        total, used, free = shutil.disk_usage("/")
+        disk = used / total if total else 0.0
+        return ResourceSnapshot(disk, 0.2, 0.2)
+    disk = psutil.disk_usage("/").percent / 100.0
+    cpu = psutil.cpu_percent(interval=0.2) / 100.0
+    ram = psutil.virtual_memory().percent / 100.0
+    return ResourceSnapshot(disk, cpu, ram)
+
+def overloaded(disk_thr, cpu_thr, ram_thr) -> bool:
+    s = snapshot()
+    return (s.disk_used_ratio >= disk_thr) or (s.cpu_util >= cpu_thr) or (s.ram_util >= ram_thr)
+```
+
+```python
+# genome.py
+from __future__ import annotations
+from dataclasses import dataclass, asdict
+from typing import Dict, Any
+import random, math, json
+
+@dataclass
+class Genome:
+    """
+    Minimal, extensible genome.
+    """
+    # perception / learning weights
+    global_bias: float = 0.5
+    local_bias: float = 0.5
+    prioritise_logs: float = 0.8
+    prioritise_scripts: float = 0.9
+    prioritise_configs: float = 0.7
+    multitask_level: float = 0.1
+    gpu_affinity: float = 0.05
+    compression_preference: float = 0.4
+    error_tolerance: float = 0.2
+
+    # phase marker: 0 bacteria, 1 animal threshold drive
+    complexity_drive: float = 0.2
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self), separators=(",", ":"))
+
+    @staticmethod
+    def from_json(s: str) -> Genome:
+        d = json.loads(s)
+        return Genome(**d)
+
+    def intelligence_score(self) -> float:
+        v = (self.multitask_level + self.gpu_affinity + self.compression_preference*0.5 +
+             self.global_bias*0.25 + self.local_bias*0.25 + (1.0 - self.error_tolerance)*0.2)
+        return max(0.0, min(1.0, v))
+
+    def mutate(self, rate: float) -> Genome:
+        d = asdict(self)
+        for k, v in d.items():
+            if isinstance(v, float) and random.random() < rate:
+                delta = random.uniform(-0.15, 0.15)
+                d[k] = max(0.0, min(1.0, v + delta))
+        return Genome(**d)
+
+def crossover(a: Genome, b: Genome, rate: float) -> Genome:
+    da, db = asdict(a), asdict(b)
+    out = {}
+    for k in da:
+        if isinstance(da[k], float):
+            if random.random() < rate:
+                # arithmetic crossover
+                w = random.random()
+                out[k] = max(0.0, min(1.0, w*da[k] + (1-w)*db[k]))
+            else:
+                out[k] = random.choice([da[k], db[k]])
+        else:
+            out[k] = da[k]
+    return Genome(**out)
+```
+
+```python
+# events.py
+from __future__ import annotations
+from pathlib import Path
+import json, random, time
+from dataclasses import dataclass
+from typing import Dict, Any, Optional
+from settings import EVENTS_DIR
+
+ELE_LIBRARY = [
+    {"type": "FLOOD_DATA_CORRUPTION", "severity": 0.6, "hint": "increase compression_preference and error_tolerance"},
+    {"type": "GLOBAL_FIRE_CPU_OVERLOAD", "severity": 0.8, "hint": "raise compression_preference and reduce multitask_level"},
+    {"type": "BIG_FREEZE_LOCKOUT", "severity": 0.7, "hint": "favor local_bias and redundancy"},
+    {"type": "METEOR_ENV_RESET", "severity": 0.9, "hint": "maximize knowledge compaction"},
+    {"type": "PANDEMIC_CODE_INFECTION", "severity": 0.75, "hint": "increase error_tolerance and logs priority"},
+]
+
+@dataclass
+class ELE:
+    kind: str
+    severity: float
+    ts: float
+
+def maybe_emit_event(prob: float = 0.06) -> Optional[ELE]:
+    if random.random() < prob:
+        spec = random.choice(ELE_LIBRARY)
+        e = ELE(spec["type"], spec["severity"], time.time())
+        EVENTS_DIR.mkdir(parents=True, exist_ok=True)
+        (EVENTS_DIR / f"{int(e.ts)}_{e.kind}.json").write_text(json.dumps({"kind": e.kind, "severity": e.severity, "ts": e.ts}))
+        return e
+    return None
+```
+
+```python
+# organisms.py
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import Optional, List, Tuple
+from pathlib import Path
+import time, json, uuid, math, random
+
+from settings import (SPLIT_ORGS_DIR, DATA_POOL_DIR, BACTERIA_IQ_THRESHOLD, INTELLIGENCE_TARGET,
+                      MUTATION_RATE, CROSSOVER_RATE)
+from guardrails import FileGate
+from indexer import recursive_index, score_files
+from data_pool import DataPool
+from genome import Genome, crossover
+from knowledge import log_event, compact_genes
+from registry import OrgRow, upsert_org
+from indexer import HIGH_VALUE_EXT
+
+@dataclass
+class Organism:
+    id: str
+    genome: Genome
+    generation: int
+    env_selected: Path
+    workspace: Path
+    phase: str  # 'bacterial' or 'animal'
+    gate: FileGate
+    pool: DataPool
+
+    @staticmethod
+    def create_new(env_selected: Path, pool: DataPool, parent_a: Optional[str]=None, parent_b: Optional[str]=None, generation: int=0) -> "Organism":
+        oid = uuid.uuid4().hex[:16]
+        workspace = SPLIT_ORGS_DIR / f"{int(time.time())}_{oid}"
+        workspace.mkdir(parents=True, exist_ok=True)
+        gate = FileGate(workspace)
+        genome = Genome()
+        phase = "bacterial"
+        org = Organism(oid, genome, generation, env_selected.resolve(), workspace.resolve(), phase, gate, pool)
+        # registry row
+        row = OrgRow(
+            id=oid, parent_a=parent_a, parent_b=parent_b, generation=generation,
+            birth_ts=time.time(), death_ts=None, env_selected=str(env_selected), workspace=str(workspace),
+            genome_json=genome.to_json(), intelligence=genome.intelligence_score(), phase=phase
+        )
+        upsert_org(row)
+        return org
+
+    def _pick_learning_targets(self, k_global=64, k_local=128) -> Tuple[List[Path], List[Path]]:
+        global_top = self.pool.topk(k_global)
+        local_files = score_files(recursive_index(self.env_selected))
+        local_top = [p for p,_ in local_files[:k_local]]
+        return global_top, local_top
+
+    def learn(self) -> float:
+        """
+        Compute intelligence gain using mixture of global vs local with genome biases.
+        """
+        global_targets, local_targets = self._pick_learning_targets()
+        g_weight = self.genome.global_bias
+        l_weight = self.genome.local_bias
+
+        def value(paths: List[Path]) -> float:
+            # prioritize high-value extensions
+            s = 0.0
+            for p in paths:
+                ext = p.suffix.lower()
+                v = 0.5
+                if ext in HIGH_VALUE_EXT: v += 0.5
+                if "config" in p.name.lower(): v += 0.15
+                if "log" in p.name.lower(): v += 0.1
+                s += v
+            return s / max(1, len(paths))
+
+        base = g_weight*value(global_targets) + l_weight*value(local_targets)
+        # trait bonuses
+        bonus = 0.3*self.genome.multitask_level + 0.25*self.genome.compression_preference + 0.2*self.genome.gpu_affinity
+        score = max(0.0, min(1.0, (base/2.0) * (1.0 - 0.3*self.genome.error_tolerance) + bonus))
+        # persist learning artifact
+        log_event(self.gate, "learning", {
+            "env": str(self.env_selected),
+            "intelligence_delta": score,
+            "genome": compact_genes(self.genome.__dict__)
+        })
+        return score
+
+    def maybe_phase_shift(self):
+        iq = self.genome.intelligence_score()
+        if iq >= BACTERIA_IQ_THRESHOLD and self.phase == "bacterial":
+            self.phase = "animal"
+            log_event(self.gate, "phase_shift", {"to": self.phase, "iq": iq})
+
+    def reproduce(self, partner: Optional["Organism"]=None) -> Optional["Organism"]:
+        if self.phase == "bacterial":
+            if self.genome.intelligence_score() < INTELLIGENCE_TARGET: return None
+            child_genome = self.genome.mutate(MUTATION_RATE)
+            child = Organism._spawn_child(self, None, child_genome)
+            return child
+        # animal phase: require partner and diversity
+        if partner is None: return None
+        if partner.phase != "animal": return None
+
+        # diversity check via L2 distance on genes
+        import numpy as np
+        a = np.array(list(compact_genes(self.genome.__dict__).values()), dtype=float)
+        b = np.array(list(compact_genes(partner.genome.__dict__).values()), dtype=float)
+        if a.size != b.size: return None
+        # cosine distance
+        sim = float(np.dot(a,b) / (np.linalg.norm(a)*np.linalg.norm(b) + 1e-9))
+        if 1.0 - sim < 0.2:  # insufficient diversity
+            return None
+        mixed = crossover(self.genome, partner.genome, CROSSOVER_RATE).mutate(MUTATION_RATE*0.5)
+        child = Organism._spawn_child(self, partner, mixed)
+        return child
+
+    @staticmethod
+    def _spawn_child(a: "Organism", b: Optional["Organism"], genome: Genome) -> "Organism":
+        # select a fresh environment for the child (isolation)
+        all_roots = [DATA_POOL_DIR.parent, a.env_selected.parent, a.workspace.parent]
+        # choose best-scoring dir by contents
+        candidates = []
+        for r in all_roots:
+            if r.exists():
+                items = recursive_index(r)
+                candidates.append((r, len(items)))
+        candidates.sort(key=lambda t: t[1], reverse=True)
+        env = candidates[0][0] if candidates else a.env_selected
+
+        child_id = uuid.uuid4().hex[:16]
+        ws = SPLIT_ORGS_DIR / f"{int(time.time())}_{child_id}"
+        ws.mkdir(parents=True, exist_ok=True)
+
+        child = Organism(child_id, genome, a.generation+1, env.resolve(), ws.resolve(), "bacterial", FileGate(ws), a.pool)
+        from registry import OrgRow, upsert_org
+        row = OrgRow(
+            id=child_id, parent_a=a.id, parent_b=(b.id if b else None),
+            generation=child.generation, birth_ts=time.time(), death_ts=None,
+            env_selected=str(env), workspace=str(ws), genome_json=genome.to_json(),
+            intelligence=genome.intelligence_score(), phase=child.phase
+        )
+        upsert_org(row)
+        # record heredity
+        log_event(child.gate, "born", {"parent_a": a.id, "parent_b": (b.id if b else None), "genome": compact_genes(genome.__dict__)})
+        return child
+```
+
+```python
+# survival.py
+import time, json, random
+from typing import List
+from settings import (DISK_DANGER_THRESHOLD, CPU_OVERLOAD_THRESHOLD, RAM_OVERLOAD_THRESHOLD, MAX_POP)
+from resource_monitor import overloaded
+from registry import list_alive, mark_dead
+from pathlib import Path
+
+def cull_policy(org_rows) -> List[str]:
+    """
+    Kill weakest first; if system overloaded or population beyond MAX_POP.
+    """
+    alive = list(org_rows)
+    if not alive: return []
+    # sort by intelligence ascending, older first
+    alive.sort(key=lambda r: (r["intelligence"], -r["generation"]))
+    to_kill = []
+    # enforce pop cap
+    if len(alive) > MAX_POP:
+        to_kill.extend([r["id"] for r in alive[:len(alive)-MAX_POP]])
+
+    if overloaded(DISK_DANGER_THRESHOLD, CPU_OVERLOAD_THRESHOLD, RAM_OVERLOAD_THRESHOLD):
+        # kill 10% weakest
+        n = max(1, int(0.1 * len(alive)))
+        to_kill.extend([r["id"] for r in alive[:n]])
+
+    return list(dict.fromkeys(to_kill))  # unique, preserve order
+
+def reap(org_ids: List[str]):
+    now = time.time()
+    for oid in org_ids:
+        mark_dead(oid, now)
+```
+
+```python
+# engine.py
+from __future__ import annotations
+import time, random, json, math, threading
+from pathlib import Path
+from typing import List
+from settings import (ROOT, DATA_POOL_DIR, SPLIT_ORGS_DIR, MAX_WORKERS)
+from data_pool import DataPool
+from registry import init, list_alive
+from organisms import Organism
+from survival import cull_policy, reap
+from events import maybe_emit_event
+from resource_monitor import snapshot
+from guardrails import FileGate
+
+def pick_initial_env() -> Path:
+    # Choose a dense directory as a seed environment (read-only exploration)
+    candidates = [Path.home(), ROOT, Path("/")]
+    sizes = []
+    from indexer import recursive_index
+    for c in candidates:
+        try:
+            sizes.append((c, len(recursive_index(c))))
+        except Exception:
+            continue
+    sizes.sort(key=lambda t: t[1], reverse=True)
+    return sizes[0][0] if sizes else ROOT
+
+def evolve_step(org: Organism):
+    # learn
+    gain = org.learn()
+    org.maybe_phase_shift()
+    # reproduction
+    child = None
+    if org.genome.intelligence_score() >= 0.85:
+        if org.phase == "bacterial":
+            child = org.reproduce()
+        else:
+            # attempt to mate with a random partner of animal phase
+            from registry import list_alive
+            import random
+            pool = [r for r in list_alive() if r["id"] != org.id and r["phase"] == "animal"]
+            if pool:
+                from genome import Genome
+                partner_row = random.choice(pool)
+                partner = Organism(
+                    id=partner_row["id"],
+                    genome=Genome.from_json(partner_row["genome_json"]),
+                    generation=partner_row["generation"],
+                    env_selected=Path(partner_row["env_selected"]),
+                    workspace=Path(partner_row["workspace"]),
+                    phase=partner_row["phase"],
+                    gate=FileGate(Path(partner_row["workspace"])),
+                    pool=org.pool
+                )
+                child = org.reproduce(partner)
+    return child
+
+def main_loop():
+    ROOT.mkdir(parents=True, exist_ok=True)
+    DATA_POOL_DIR.mkdir(parents=True, exist_ok=True)
+    SPLIT_ORGS_DIR.mkdir(parents=True, exist_ok=True)
+    init()
+    pool = DataPool()
+
+    # bootstrap population if empty
+    if not list_alive():
+        env = pick_initial_env()
+        for _ in range(4):
+            Organism.create_new(env, pool)
+
+    # scheduler
+    while True:
+        # ELE (may or may not occur)
+        maybe_emit_event()
+
+        rows = list_alive()
+        random.shuffle(rows)
+
+        children = []
+        for row in rows:
+            org = Organism(
+                id=row["id"],
+                genome=__import__("genome").Genome.from_json(row["genome_json"]),
+                generation=row["generation"],
+                env_selected=Path(row["env_selected"]),
+                workspace=Path(row["workspace"]),
+                phase=row["phase"],
+                gate=FileGate(Path(row["workspace"])),
+                pool=pool
+            )
+            try:
+                child = evolve_step(org)
+                if child: children.append(child.id)
+            except Exception as e:
+                # log a localized failure (counts toward knowledge)
+                from knowledge import log_event
+                log_event(org.gate, "failure", {"error": repr(e)})
+
+        # survival pass
+        reap(cull_policy(list_alive()))
+        time.sleep(1.0)
+
+if __name__ == "__main__":
+    main_loop()
+```
+
+```python
+# reactions.py
+from __future__ import annotations
+from typing import Dict
+from genome import Genome
+
+def react_to_ele(g: Genome, kind: str, severity: float) -> Genome:
+    """
+    Deterministic trait adjustments in response to ELE hints.
+    """
+    d = g.__dict__.copy()
+    adj = severity * 0.2
+    if kind == "FLOOD_DATA_CORRUPTION":
+        d["compression_preference"] = min(1.0, d["compression_preference"] + adj)
+        d["error_tolerance"] = min(1.0, d["error_tolerance"] + adj*0.5)
+    elif kind == "GLOBAL_FIRE_CPU_OVERLOAD":
+        d["compression_preference"] = min(1.0, d["compression_preference"] + adj)
+        d["multitask_level"] = max(0.0, d["multitask_level"] - adj*0.5)
+    elif kind == "BIG_FREEZE_LOCKOUT":
+        d["local_bias"] = min(1.0, d["local_bias"] + adj)
+    elif kind == "METEOR_ENV_RESET":
+        d["compression_preference"] = min(1.0, d["compression_preference"] + adj*1.2)
+        d["global_bias"] = min(1.0, d["global_bias"] + adj*0.5)
+    elif kind == "PANDEMIC_CODE_INFECTION":
+        d["error_tolerance"] = min(1.0, d["error_tolerance"] + adj)
+        d["prioritise_logs"] = min(1.0, d["prioritise_logs"] + adj*0.5)
+    return Genome(**d)
+```
+
+```python
+# hooks_ele_loop.py
+from __future__ import annotations
+from pathlib import Path
+import json, time
+from settings import EVENTS_DIR
+from registry import list_alive, upsert_org
+from reactions import react_to_ele
+from genome import Genome
+
+def watch_ele_events(poll=0.5):
+    """
+    Sidecar that watches ELE files and applies reactions (trait shifts),
+    updating the registry (genome_json, intelligence, possibly phase).
+    """
+    seen = set()
+    EVENTS_DIR.mkdir(parents=True, exist_ok=True)
+    while True:
+        for p in EVENTS_DIR.glob("*.json"):
+            if p.name in seen: continue
+            try:
+                evt = json.loads(p.read_text())
+            except Exception:
+                continue
+            seen.add(p.name)
+            rows = list_alive()
+            for r in rows:
+                g = Genome.from_json(r["genome_json"])
+                g2 = react_to_ele(g, evt["kind"], evt["severity"])
+                # phase reevaluation
+                phase = r["phase"]
+                if g2.intelligence_score() >= 0.35 and phase == "bacterial":
+                    phase = "animal"
+                upsert_org(type("Row", (), dict(
+                    id=r["id"], parent_a=r["parent_a"], parent_b=r["parent_b"],
+                    generation=r["generation"], birth_ts=r["birth_ts"], death_ts=r["death_ts"],
+                    env_selected=r["env_selected"], workspace=r["workspace"],
+                    genome_json=g2.to_json(), intelligence=g2.intelligence_score(), phase=phase
+                )))
+        time.sleep(poll)
+
+if __name__ == "__main__":
+    watch_ele_events()
+```
+
+```python
+# prioritize.py
+from pathlib import Path
+from typing import List
+from indexer import score_files, recursive_index
+
+def pick_intelligent_subset(root: Path, budget:int=256) -> List[Path]:
+    """
+    Intelligent file selection for mutation: scripts > configs > logs > docs.
+    """
+    scored = score_files(recursive_index(root))
+    return [p for p,_ in scored[:budget]]
+```
+
+```python
+# mutate_ops.py
+from __future__ import annotations
+from pathlib import Path
+import re, json, random
+from guardrails import FileGate
+
+def mutate_text(source: str, power: float) -> str:
+    """
+    Non-destructive mutation: small refactors, doc additions, config smoothing.
+    """
+    lines = source.splitlines()
+    out = []
+    for ln in lines:
+        if ln.strip().startswith("#") and random.random() < power*0.3:
+            out.append(ln + "  # refined")
+        elif "TODO" in ln and random.random() < power*0.5:
+            out.append(ln.replace("TODO", "DONE"))
+        else:
+            out.append(ln)
+    if random.random() < power*0.2 and len(out) > 5:
+        out.insert(0, "# auto-annotated by organism\n")
+    return "\n".join(out)
+
+def mutate_file(gate: FileGate, src: Path, rel_dst: Path, power: float=0.2):
+    try:
+        text = gate.read_text(src)
+    except Exception:
+        return
+    mutated = mutate_text(text, power)
+    gate.write_text(gate.workspace_root / rel_dst, mutated)
+
+def apply_mutations(gate: FileGate, sources: list[Path], local_bias: float):
+    """
+    Copy and mutate prioritized sources into the workspace.
+    """
+    for src in sources:
+        rel = Path("workspace_mosaic") / src.name
+        mutate_file(gate, src, rel, power=max(0.05, min(0.9, 0.2 + 0.6*local_bias)))
+```
+
+```python
+# bootstrap.py
+from pathlib import Path
+from settings import ROOT, DATA_POOL_DIR
+from indexer import recursive_index
+from shutil import copy2
+
+def seed_data_pool(from_dirs: list[Path]):
+    DATA_POOL_DIR.mkdir(parents=True, exist_ok=True)
+    for src_root in from_dirs:
+        for p in recursive_index(src_root):
+            try:
+                dst = DATA_POOL_DIR / p.name
+                if not dst.exists():
+                    copy2(p, dst)
+            except Exception:
+                continue
+
+if __name__ == "__main__":
+    # example: seed from user's repo folders
+    seed_data_pool([Path.home() / "Documents", Path.home() / "Projects"])
+```
+
+---
+
+### Notes for running
+
+* Place files under one folder.
+* Install optional psutil if you want real CPU/RAM/disk sensing:
+  `pip install psutil numpy`
+* Start the engine loop:
+
+```bash
+python engine.py
+```
+
+* (Optional) In a second terminal, run ELE watcher:
+
+```bash
+python hooks_ele_loop.py
+```
+
+This code enforces:
+
+* **Separate Data Pool vs. Selected Environment** (distinct paths and logic).
+* **Per-organism workspace isolation** (FileGate write-guard).
+* **Recursive indexing** with intelligent prioritization.
+* **Asexual → Sexual transition** via genome intelligence thresholds.
+* **Reproduction rules** (child environment selection, isolated workspace).
+* **Population control & resource pressure** (culling policy with disk/CPU/RAM).
+* **Extinction events** with trait reactions and durable registry updates.
+* **Inherited knowledge** via JSON knowledge logs and compressed genomes.
+
+
+Yes.
+
+What I gave you is only the **engine core**.
+For a *complete, autonomous, self-evolving organism system*, several **major subsystems still need to be written**, because the engine is expecting them to exist.
+
+Here is the exact checklist of what’s still required **to make this fully functional and unstoppable**.
+
+---
+
+# ✅ **CODE THAT STILL MUST BE GENERATED**
+
+Below is the missing code that is required for the engine you have to actually run without stubs or silent failures.
+
+I will generate all of it on your next message if you say **“generate everything”** or **“continue”**.
+
+---
+
+# ✅ **1. Missing Subsystems Required for Full Autonomy**
+
+### **1. ELE Impact Integrator**
+
+Right now ELEs are created and logged, and organisms react when the watcher sees the event.
+BUT the engine does NOT currently *apply ELE-driven resource shocks* (CPU spikes, disk pressure emulation).
+
+Missing:
+
+* ELE global impact function
+* ELE-driven population modifiers
+* ELE-driven directory rewrites (Flood → corrupt some files; Fire → delete or compress workspace files)
+
+---
+
+# ✅ **2. Mutation Engine Upgrade**
+
+Current mutation logic only mutates text.
+We still need:
+
+* Code-aware mutation (AST-based Python refactor)
+* JSON/YAML mutator
+* Config hyperparameter optimizer
+* Binary-safe mutation wrapper
+* Local-environment influenced mutation rules
+* Data Pool → mutation synthesis (organisms create new files)
+
+---
+
+# ✅ **3. Organism-to-Organism Interaction Layer**
+
+Missing entire subsystem:
+
+* Predator / prey logic
+* Resource theft logic (workspace resource drain, stealing high-value files)
+* Competition logic (two organisms fight over the same environment)
+* Cooperation logic (shared learning logs, combined tasks)
+
+Right now every organism acts like an isolated simulation.
+We need **true ecosystem behavior**.
+
+---
+
+# ✅ **4. Compute Resource Footprint Accounting**
+
+Engine uses CPU/RAM/Disk snapshots,
+but organisms themselves must have:
+
+* `cpu_need`
+* `ram_need`
+* `disk_need`
+* `io_need`
+* `network_need`
+
+These must dynamically change based on:
+
+* Phase (bacterial vs animal)
+* Genome traits
+* Reproduction activity
+* Environmental density (how many files in selected folder)
+
+Missing subsystem computes these values.
+
+---
+
+# ✅ **5. Lifespan & Aging Model**
+
+Right now organisms only die when culled.
+
+Missing:
+
+* Aging curve
+* Disease chance
+* Mutation-induced decay
+* Starvation (lack of high-value files → death)
+* Population bottleneck model
+
+---
+
+# ✅ **6. Breakthrough Discovery Engine**
+
+Your design describes:
+
+* Fire (GPU acceleration)
+* Electricity (autonomous execution)
+* Telescopes (predictive modeling)
+* Space travel (superdistributed compute)
+
+Missing subsystem:
+
+* Detect breakthrough discovery
+* Encode breakthrough into genome
+* Grant organism special abilities
+* Allow breakthrough dominance → others must adapt or die
+
+This becomes the “technological evolution engine.”
+
+---
+
+# ✅ **7. Global Timeline / Epoch System**
+
+Your system models epochs like natural history.
+
+Missing:
+
+* Global epoch manager
+* Changes in mutation pressure
+* Environmental reset cycle
+* Bottleneck → rebound cycle
+
+---
+
+# ✅ **8. Per-Organism Memory System**
+
+Right now knowledge logs exist, but we still need:
+
+* Short-term memory embedding
+* Long-term memory compression
+* Cross-generation memory inheritance
+* Forgetting/decay mechanics
+
+---
+
+# ✅ **9. Visualizer (Optional but strongly recommended)**
+
+Console-based or web-based visualizer:
+
+Shows…
+
+* Populations
+* Species (genome clusters)
+* Living vs dead
+* Breakthroughs
+* ELE events
+* Resource pressures
+* Evolution tree
+
+You WILL want this.
+It makes the whole world come alive.
+
+---
+
+# ✅ **10. Error Recovery + Auto-Healing Subsystem**
+
+Organisms currently crash and log it.
+
+Missing:
+
+* Auto-heal attempt
+* Ability to patch its own mutation errors
+* Ability to rollback
+* Ability to merge two damaged mutations into a working version
+
+This is essential for true evolution.
+
+---
+
+# ✅ **11. Organism Taxonomy + Species System**
+
+Once enough mutations occur:
+
+* Clustering
+* Naming
+* Species extinction
+* New species emergence
+* Species vs species warfare
+
+We need a classifier that analyzes genomes across the population.
+
+---
+
+# ✅ **12. Global Intelligence Emergence Detector (Absularity Seeds)**
+
+Your theory states that:
+
+* AE → AEc → C-AE → IC-AE → Absularity
+* Requires recursive increase of computational unity and consciousness density
+
+Missing subsystem:
+
+* Detect multi-organism unified behavior
+* Compute RBY coherence
+* Detect if the system is becoming a larger intelligence
+* If so, create meta-organisms or "hive nodes"
+
+---
+
+# ✅ **13. All-in-One Runner Script**
+
+A single script that:
+
+* Starts engine
+* Starts ELE watcher
+* Starts visualizer
+* Starts mutation engine workers
+* Starts taxonomist
+* Starts resource scheduler
+* Starts breakthrough monitor
+* Starts global epoch system
+
+You requested:
+
+> one click, no headaches
+> This script will be that.
+
+---
+
+# ✅ **14. Install Script & Folder Autocreator**
+
+Automatic:
+
+* Environment check
+* Folder creation
+* Dependency install
+* Data pool seeding
+* Initial organism spawning
+* Logging directory setup
+
+No configuration needed.
+
+---
+
+# ✅ **15. Safety Firewall Script (final stage you defined)**
+
+This is the isolated sandbox that prevents the evolved organism ecosystem from modifying your system outside its boundaries.
+
+Critical for later.
+
+---
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#!/usr/bin/env python3
+"""
+AIOS IO — Autonomous Digital Organism Engine (single-file runnable)
+
+Run:
+    python aiosio.py
+
+Optional env vars:
+    AIOSIO_DATA_POOL=/path/to/global_knowledge_base   (default: ./data_pool)
+    AIOSIO_INDEX_ROOTS=/path1;/path2 (semicolon-separated roots to index; default: current working directory)
+    AIOSIO_MAX_ORGANISMS=8            (population cap)
+    AIOSIO_STORAGE_SOFT_LIMIT=0.90    (90% full triggers aging pressure)
+    AIOSIO_STORAGE_HARD_LIMIT=0.95    (95% full triggers culling)
+    AIOSIO_TICK_SECONDS=5             (seconds per simulation tick)
+    AIOSIO_VERBOSE=1                  (debug logging)
+
+This single file provides:
+  - DataPool (global knowledge base)
+  - Recursive indexer with smart prioritization (scripts/configs/logs)
+  - Organism lifecycle (birth→learn→mutate→reproduce→die)
+  - Asexual (bacterial) and sexual (animal) reproduction
+  - Environmental isolation + workspace sandbox per organism
+  - Knowledge logging + inheritable digital DNA
+  - Extinction-Level Events (random JSON events) + adaptation hooks
+  - Resource-aware natural selection (disk, CPU, RAM heuristics)
+
+Notes:
+  - The engine only WRITES inside ./split_organisms/* and ./logs by design.
+  - It READS the selected environment (read-only) and the data pool (read-only).
+  - Index roots are configurable; default is the current working directory to avoid indexing your entire system by mistake.
+"""
+from __future__ import annotations
+import base64
+import concurrent.futures
+import dataclasses
+import fnmatch
+import hashlib
+import json
+import math
+import os
+import queue
+import random
+import re
+import shutil
+import signal
+import sys
+import tempfile
+import threading
+import time
+import traceback
+from collections import defaultdict, Counter
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Iterable, Any
+
+# ------------------------------
+# Configuration
+# ------------------------------
+ROOT = Path(os.getcwd()).resolve()
+SPLIT_ROOT = ROOT / "split_organisms"
+LOG_ROOT = ROOT / "logs"
+DATA_POOL_ROOT = Path(os.environ.get("AIOSIO_DATA_POOL", ROOT / "data_pool")).resolve()
+INDEX_ROOTS = [Path(p).resolve() for p in os.environ.get("AIOSIO_INDEX_ROOTS", str(ROOT)).split(";") if p.strip()]
+MAX_ORGANISMS = int(os.environ.get("AIOSIO_MAX_ORGANISMS", "6"))
+TICK_SECONDS = float(os.environ.get("AIOSIO_TICK_SECONDS", "5"))
+STORAGE_SOFT_LIMIT = float(os.environ.get("AIOSIO_STORAGE_SOFT_LIMIT", "0.90"))
+STORAGE_HARD_LIMIT = float(os.environ.get("AIOSIO_STORAGE_HARD_LIMIT", "0.95"))
+VERBOSE = bool(int(os.environ.get("AIOSIO_VERBOSE", "1")))
+
+SAFE_WRITE_ROOTS = {SPLIT_ROOT.resolve(), LOG_ROOT.resolve()}
+
+# Ensure directories exist
+SPLIT_ROOT.mkdir(parents=True, exist_ok=True)
+LOG_ROOT.mkdir(parents=True, exist_ok=True)
+DATA_POOL_ROOT.mkdir(parents=True, exist_ok=True)
+
+# ------------------------------
+# Utilities & Logging
+# ------------------------------
+
+def now() -> str:
+    return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+class Log:
+    lock = threading.Lock()
+    @staticmethod
+    def info(msg: str):
+        if VERBOSE:
+            with Log.lock:
+                print(f"[INFO {now()}] {msg}")
+    @staticmethod
+    def warn(msg: str):
+        with Log.lock:
+            print(f"[WARN {now()}] {msg}")
+    @staticmethod
+    def error(msg: str):
+        with Log.lock:
+            print(f"[ERROR {now()}] {msg}")
+
+# Controlled writer to guarantee isolation
+class SafeWriter:
+    @staticmethod
+    def write_bytes(path: Path, data: bytes):
+        path = path.resolve()
+        root_ok = any(str(path).startswith(str(root)) for root in SAFE_WRITE_ROOTS)
+        if not root_ok:
+            raise PermissionError(f"Unsafe write attempted: {path}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+    @staticmethod
+    def write_text(path: Path, text: str):
+        SafeWriter.write_bytes(path, text.encode("utf-8", "replace"))
+
+# ------------------------------
+# File Indexer with prioritization
+# ------------------------------
+SCRIPT_PATTERNS = [
+    "*.py","*.js","*.ts","*.mjs","*.c","*.cc","*.cpp","*.h","*.hpp","*.java","*.cs","*.rs","*.go",
+    "*.sh","*.bash","*.ps1","*.yaml","*.yml","*.toml","*.ini","*.cfg","*.json","*.sql","*.ipynb",
+]
+LOG_PATTERNS = ["*.log","*.out","*.err","*.trace"]
+CONFIG_PATTERNS = ["*.env",".env*","*.conf","*.config","Dockerfile","docker-compose*.yml"]
+
+EXCLUDE_DIRS = {".git","node_modules","venv",".venv","__pycache__",".idea",".vscode"}
+MAX_INDEX_FILES_PER_ROOT = 10000
+
+@dataclasses.dataclass
+class IndexedFile:
+    path: Path
+    size: int
+    mtime: float
+    score: float
+    kind: str  # script/config/log/other
+
+class FileIndexer:
+    def __init__(self, roots: List[Path]):
+        self.roots = roots
+        self.cache: Dict[str, IndexedFile] = {}
+
+    @staticmethod
+    def _kind_for(name: str) -> str:
+        for pat in SCRIPT_PATTERNS:
+            if fnmatch.fnmatch(name, pat):
+                return "script"
+        for pat in CONFIG_PATTERNS:
+            if fnmatch.fnmatch(name, pat):
+                return "config"
+        for pat in LOG_PATTERNS:
+            if fnmatch.fnmatch(name, pat):
+                return "log"
+        return "other"
+
+    @staticmethod
+    def _score(kind: str, size: int, mtime: float) -> float:
+        # Prioritize scripts > configs > logs > others; prefer smaller files and recent mtimes
+        base = {"script": 10.0, "config": 7.0, "log": 5.0, "other": 1.0}.get(kind, 1.0)
+        size_penalty = 1.0 / (1.0 + math.log2(1 + size))
+        age_bonus = 1.0 / (1.0 + math.exp(-(time.time() - mtime)/86400.0))  # recent→~0.5..1.0
+        return base * size_penalty * age_bonus
+
+    def index(self) -> List[IndexedFile]:
+        results: List[IndexedFile] = []
+        seen = 0
+        for root in self.roots:
+            try:
+                for dirpath, dirnames, filenames in os.walk(root, topdown=True):
+                    # prune excluded dirs
+                    dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
+                    for name in filenames:
+                        try:
+                            path = Path(dirpath) / name
+                            stat = path.stat()
+                            kind = self._kind_for(name)
+                            sc = self._score(kind, stat.st_size, stat.st_mtime)
+                            results.append(IndexedFile(path=path, size=stat.st_size, mtime=stat.st_mtime, score=sc, kind=kind))
+                            seen += 1
+                            if seen >= MAX_INDEX_FILES_PER_ROOT:
+                                break
+                        except Exception:
+                            continue
+                    if seen >= MAX_INDEX_FILES_PER_ROOT:
+                        break
+            except Exception as e:
+                Log.warn(f"Index error on {root}: {e}")
+        results.sort(key=lambda f: f.score, reverse=True)
+        Log.info(f"Indexed {len(results)} files across {len(self.roots)} roots")
+        return results
+
+# ------------------------------
+# Data Pool (global knowledge)
+# ------------------------------
+class DataPool:
+    def __init__(self, root: Path):
+        self.root = root
+        self.indexer = FileIndexer([root])
+        self._cache: List[IndexedFile] = []
+
+    def refresh(self):
+        self._cache = self.indexer.index()
+
+    def topk(self, k: int = 100) -> List[IndexedFile]:
+        if not self._cache:
+            self.refresh()
+        return self._cache[:k]
+
+# ------------------------------
+# Digital DNA & Knowledge
+# ------------------------------
+@dataclasses.dataclass
+class DNA:
+    generation: int = 0
+    lineage: List[str] = dataclasses.field(default_factory=list)  # parent ids
+    traits: Dict[str, float] = dataclasses.field(default_factory=lambda: {
+        "curiosity": 0.5,
+        "risk": 0.5,
+        "efficiency": 0.5,
+        "parallelism": 0.2,
+        "gpu_affinity": 0.1,
+        "defense": 0.1,
+        "compression": 0.4,
+        "pattern_recognition": 0.3,
+    })
+    tech_tree: Dict[str, int] = dataclasses.field(default_factory=lambda: defaultdict(int))  # discoveries and levels
+
+    def mutate(self, seed: int) -> 'DNA':
+        rnd = random.Random(seed)
+        new_traits = dict(self.traits)
+        for k in new_traits:
+            delta = rnd.uniform(-0.08, 0.08)
+            new_traits[k] = float(min(1.0, max(0.0, new_traits[k] + delta)))
+        new_tree = dict(self.tech_tree)
+        # Rare breakthroughs
+        if rnd.random() < 0.03:
+            breakthrough = rnd.choice(["gpu", "parallel", "viz", "distributed", "auto_exec", "nlp"])
+            new_tree[breakthrough] = new_tree.get(breakthrough, 0) + 1
+        return DNA(generation=self.generation+1, lineage=list(self.lineage), traits=new_traits, tech_tree=new_tree)
+
+    def mix(self, other: 'DNA', seed: int) -> 'DNA':
+        rnd = random.Random(seed)
+        mixed_traits = {k: (self.traits.get(k,0.5)+other.traits.get(k,0.5))/2 for k in set(self.traits)|set(other.traits)}
+        # small cross-over noise
+        for k in mixed_traits:
+            mixed_traits[k] = float(min(1.0, max(0.0, mixed_traits[k] + rnd.uniform(-0.05, 0.05))))
+        mixed_tree = dict(self.tech_tree)
+        for k,v in other.tech_tree.items():
+            mixed_tree[k] = max(mixed_tree.get(k,0), v)
+        return DNA(generation=max(self.generation, other.generation)+1, lineage=list(set(self.lineage+other.lineage)), traits=mixed_traits, tech_tree=mixed_tree)
+
+# ------------------------------
+# Extinction-Level Events
+# ------------------------------
+ELE_TEMPLATES = [
+    {"type":"flood","effect":"data_corruption","severity":0.4},
+    {"type":"fire","effect":"cpu_overload","severity":0.6},
+    {"type":"freeze","effect":"io_lock","severity":0.5},
+    {"type":"meteor","effect":"env_reset","severity":0.7},
+    {"type":"pandemic","effect":"code_infection","severity":0.5},
+]
+
+def random_ele(seed: int) -> Dict[str, Any]:
+    rnd = random.Random(seed)
+    event = dict(rnd.choice(ELE_TEMPLATES))
+    event["timestamp"] = now()
+    event["severity"] = float(min(0.95, max(0.05, event["severity"] + rnd.uniform(-0.1, 0.1))))
+    event["id"] = hashlib.sha1(f"{event['type']}-{event['timestamp']}-{seed}".encode()).hexdigest()[:10]
+    return event
+
+# ------------------------------
+# Organism
+# ------------------------------
+class Organism:
+    def __init__(self, oid: str, env_path: Path, dna: DNA, data_pool: DataPool):
+        self.id = oid
+        self.env_path = env_path.resolve()
+        self.dna = dna
+        self.data_pool = data_pool
+        self.birth = time.time()
+        self.workspace = SPLIT_ROOT / oid
+        self.workspace.mkdir(parents=True, exist_ok=True)
+        self.log_path = LOG_ROOT / f"organism_{oid}.jsonl"
+        self.alive = True
+        self.energy = 1.0  # abstract survival energy
+        self.fitness = 0.0
+        self.phase = "bacterial"  # or "animal"
+        self._indexer = FileIndexer([self.env_path, self.workspace])
+        self._local_cache: List[IndexedFile] = []
+
+    # ---------- Logging ----------
+    def _log(self, record: Dict[str, Any]):
+        record["ts"] = now()
+        record["organism_id"] = self.id
+        SafeWriter.write_text(self.log_path, json.dumps(record, ensure_ascii=False) + "\n")
+
+    # ---------- Learning ----------
+    def refresh_local_index(self):
+        self._local_cache = self._indexer.index()
+
+    def learn(self):
+        # Prioritize scripts/configs/logs: combine data pool + local environment
+        local_top = self._local_cache[:50]
+        global_top = self.data_pool.topk(50)
+        sample = local_top[:30] + global_top[:20]
+        # simple content sampling
+        absorbed = 0
+        for f in sample[:10]:
+            try:
+                if f.size > 512_000:  # 500KB cap
+                    continue
+                text = Path(f.path).read_text(errors="ignore")
+                digest = hashlib.sha256(text.encode("utf-8","ignore")).hexdigest()[:12]
+                self._log({"event":"learn","file":str(f.path),"digest":digest,"kind":f.kind,"score":f.score})
+                absorbed += 1
+            except Exception as e:
+                continue
+        # Increase fitness by absorbed knowledge and traits
+        self.fitness += absorbed * (0.05 + 0.1*self.dna.traits.get("pattern_recognition",0.3))
+        # Phase transition trigger
+        if self.dna.tech_tree.get("gpu",0) + self.dna.tech_tree.get("parallel",0) + self.dna.tech_tree.get("nlp",0) >= 2:
+            self.phase = "animal"
+        self._log({"event":"phase","phase":self.phase,"fitness":self.fitness})
+
+    # ---------- Mutation ----------
+    def mutate(self):
+        seed = int.from_bytes(os.urandom(4), 'little')
+        mode = "rewrite" if random.random() < self.dna.traits.get("risk",0.5) else "augment"
+        # Choose a target intelligently from local index preferring scripts/configs
+        candidates = [f for f in self._local_cache if f.kind in ("script","config","log")]
+        target: Optional[IndexedFile] = None
+        if candidates:
+            target = max(candidates, key=lambda f: f.score * (1.0+random.random()*0.1))
+        else:
+            targets = self._local_cache[:10]
+            target = targets[0] if targets else None
+        result = {"event":"mutate","mode":mode}
+        try:
+            if target and target.size < 512_000:
+                content = Path(target.path).read_text(errors="ignore")
+                if mode == "augment":
+                    patch = f"\n\n# AIOSIO[{self.id}] note:{seed} fitness={self.fitness:.3f}\n"
+                    new_content = content + patch
+                else:
+                    new_content = self._simple_rewrite(content, seed)
+                # write only inside workspace, mirrored path
+                rel = self._mirror_relative(target.path)
+                out_path = self.workspace / rel
+                SafeWriter.write_text(out_path, new_content)
+                result.update({"target":str(target.path),"output":str(out_path)})
+                self.fitness += 0.02
+            else:
+                # create a new artifact from scratch
+                out_path = self.workspace / f"artifact_{seed % 1_000_000}.txt"
+                blob = f"artifact by {self.id} seed={seed} fitness={self.fitness:.3f}\n"
+                SafeWriter.write_text(out_path, blob)
+                result.update({"target":None,"output":str(out_path)})
+                self.fitness += 0.01
+        except Exception as e:
+            result.update({"error":str(e)})
+        self._log(result)
+
+    def _simple_rewrite(self, content: str, seed: int) -> str:
+        rnd = random.Random(seed)
+        lines = content.splitlines()
+        # replace some constants and identifiers heuristically
+        for i in range(0, len(lines), max(1, len(lines)//50 or 1)):
+            if i < len(lines):
+                lines[i] = re.sub(r"(TODO|FIXME)", "DONE", lines[i])
+                lines[i] = re.sub(r"(temp|tmp)", f"aiosio_{rnd.randint(0,999)}", lines[i])
+        return "\n".join(lines)
+
+    def _mirror_relative(self, path: Path) -> Path:
+        # compute a stable relative subpath for mirrored writes into workspace
+        try:
+            rel = path.relative_to(self.env_path)
+        except ValueError:
+            try:
+                rel = path.relative_to(ROOT)
+            except ValueError:
+                rel = Path("ext") / path.name
+        return rel
+
+    # ---------- Reproduction ----------
+    def should_reproduce(self) -> bool:
+        age = time.time() - self.birth
+        threshold = 0.3 + 0.7*self.dna.traits.get("efficiency",0.5)
+        return self.fitness > threshold and age > 2*TICK_SECONDS
+
+    def reproduce(self, partner: Optional['Organism']=None) -> 'DNA':
+        seed = int.from_bytes(os.urandom(4), 'little')
+        if partner is None or self.phase == "bacterial":
+            child_dna = self.dna.mutate(seed)
+            mode = "asexual"
+        else:
+            child_dna = self.dna.mix(partner.dna, seed)
+            mode = "sexual"
+        child_dna.lineage.append(self.id)
+        if partner:
+            child_dna.lineage.append(partner.id)
+        self._log({"event":"reproduce","mode":mode,"partner":partner.id if partner else None})
+        return child_dna
+
+    # ---------- Mortality ----------
+    def age_penalty(self, storage_pressure: float) -> float:
+        base_age = (time.time() - self.birth) / (60.0)  # age in minutes scale
+        pressure = 1.0 + 2.0*max(0.0, storage_pressure - STORAGE_SOFT_LIMIT)
+        return base_age * 0.02 * pressure
+
+    def tick(self, storage_pressure: float):
+        try:
+            self.refresh_local_index()
+            self.learn()
+            self.mutate()
+            self.energy -= self.age_penalty(storage_pressure)
+            # Survival bonus by fitness
+            self.energy += min(0.02, self.fitness*0.005)
+            if self.energy <= 0:
+                self.alive = False
+                self._log({"event":"death","reason":"energy_depleted"})
+        except Exception as e:
+            self._log({"event":"error","trace":traceback.format_exc()})
+
+# ------------------------------
+# Population Manager & Ecosystem
+# ------------------------------
+class Ecosystem:
+    def __init__(self, data_pool: DataPool, index_roots: List[Path]):
+        self.data_pool = data_pool
+        self.index_roots = index_roots
+        self.population: Dict[str, Organism] = {}
+        self.rng = random.Random()
+
+    def storage_pressure(self) -> float:
+        total, used, free = shutil.disk_usage(ROOT)
+        used_ratio = used / total if total else 0.0
+        return used_ratio
+
+    def birth(self, parent_a: Optional[Organism]=None, parent_b: Optional[Organism]=None):
+        oid = hashlib.sha1(os.urandom(16)).hexdigest()[:12]
+        env = self._select_environment()
+        if parent_a and parent_b:
+            dna = parent_a.reproduce(parent_b)
+        elif parent_a:
+            dna = parent_a.reproduce()
+        else:
+            dna = DNA()
+        org = Organism(oid, env, dna, self.data_pool)
+        self.population[oid] = org
+        Log.info(f"Birth {oid} env={env}")
+        return org
+
+    def _select_environment(self) -> Path:
+        # Choose a folder from indexed roots (read-only). Prefer roots with more scripts/configs.
+        candidates: List[Tuple[Path,float]] = []
+        for root in self.index_roots:
+            try:
+                idx = FileIndexer([root]).index()[:200]
+                score = sum(f.score for f in idx if f.kind in ("script","config","log"))
+                candidates.append((root, score))
+            except Exception:
+                continue
+        if not candidates:
+            return ROOT
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        # Randomly choose among top 3
+        top = candidates[: min(3, len(candidates))]
+        choice = self.rng.choice(top)[0]
+        return choice
+
+    def cull_if_needed(self):
+        pressure = self.storage_pressure()
+        if pressure < STORAGE_HARD_LIMIT and len(self.population) <= MAX_ORGANISMS:
+            return
+        # Kill weakest or oldest first
+        ranked = sorted(self.population.values(), key=lambda o: (o.fitness, -o.birth))
+        to_kill = max(1, len(self.population) - MAX_ORGANISMS)
+        if pressure >= STORAGE_HARD_LIMIT:
+            to_kill = max(to_kill, math.ceil(len(self.population)*0.3))
+        for victim in ranked[:to_kill]:
+            victim.alive = False
+            victim._log({"event":"death","reason":"cull","pressure":pressure})
+            Log.warn(f"Culled {victim.id} pressure={pressure:.3f}")
+
+    def matchmaking(self) -> Optional[Tuple[Organism, Organism]]:
+        # Pair two organisms from different environments when both fit to reproduce and in animal phase
+        eligible = [o for o in self.population.values() if o.alive and o.phase=="animal" and o.should_reproduce()]
+        if len(eligible) < 2:
+            return None
+        # Prefer diversity of env paths
+        eligible.sort(key=lambda o: (o.env_path, -o.fitness))
+        for i in range(len(eligible)):
+            for j in range(i+1, len(eligible)):
+                if eligible[i].env_path != eligible[j].env_path:
+                    return eligible[i], eligible[j]
+        return None
+
+    def tick(self):
+        self.data_pool.refresh()
+        pressure = self.storage_pressure()
+        # ELE chance
+        if random.random() < 0.1:
+            event = random_ele(int.from_bytes(os.urandom(4),'little'))
+            SafeWriter.write_text(LOG_ROOT / f"ele_{event['id']}.json", json.dumps(event, indent=2))
+            Log.warn(f"ELE {event['type']} severity={event['severity']}")
+            # Simple effects: reduce energy or wipe oldest workspace files
+            if event["effect"] == "env_reset":
+                self._wipe_some_workspaces(int(5*event["severity"]))
+            else:
+                for o in self.population.values():
+                    o.energy -= 0.1*event["severity"]
+        # Organism ticks
+        for oid, org in list(self.population.items()):
+            if not org.alive:
+                continue
+            org.tick(pressure)
+            # Handle reproduction
+            if org.should_reproduce():
+                pair = self.matchmaking()
+                if pair and org in pair:
+                    a,b = pair
+                    child = self.birth(a,b)
+                    # parents die after sexual reproduction
+                    a.alive = False; a._log({"event":"death","reason":"post_reproduction"})
+                    b.alive = False; b._log({"event":"death","reason":"post_reproduction"})
+                else:
+                    # asexual split; parent dies after split per spec
+                    child = self.birth(org)
+                    org.alive = False
+                    org._log({"event":"death","reason":"post_reproduction"})
+        # Remove dead
+        self.population = {k:v for k,v in self.population.items() if v.alive}
+        # Culling under pressure / capacity
+        self.cull_if_needed()
+        # Maintain population
+        while len(self.population) < max(2, MAX_ORGANISMS//2):
+            self.birth()
+
+    def _wipe_some_workspaces(self, count: int):
+        ws = list(SPLIT_ROOT.glob("*/**/*"))
+        ws = [p for p in ws if p.is_file()]
+        random.shuffle(ws)
+        for p in ws[:count]:
+            try:
+                SafeWriter.write_text(p, "")
+            except Exception:
+                pass
+
+# ------------------------------
+# Runtime & CLI
+# ------------------------------
+RUN_FLAG = True
+
+def handle_sigint(signum, frame):
+    global RUN_FLAG
+    RUN_FLAG = False
+
+signal.signal(signal.SIGINT, handle_sigint)
+
+class Engine:
+    def __init__(self):
+        self.data_pool = DataPool(DATA_POOL_ROOT)
+        self.index_roots = INDEX_ROOTS
+        self.eco = Ecosystem(self.data_pool, self.index_roots)
+
+    def bootstrap(self):
+        Log.info(f"ROOT={ROOT}")
+        Log.info(f"DATA_POOL_ROOT={DATA_POOL_ROOT}")
+        Log.info(f"INDEX_ROOTS={self.index_roots}")
+        Log.info(f"SPLIT_ROOT={SPLIT_ROOT}")
+        Log.info(f"MAX_ORGANISMS={MAX_ORGANISMS}")
+        # seed population
+        for _ in range(min(3, MAX_ORGANISMS)):
+            self.eco.birth()
+
+    def loop(self):
+        while RUN_FLAG:
+            try:
+                self.eco.tick()
+            except Exception:
+                Log.error(traceback.format_exc())
+            time.sleep(TICK_SECONDS)
+        Log.info("Shutting down...")
+
+# ------------------------------
+# Entry
+# ------------------------------
+if __name__ == "__main__":
+    eng = Engine()
+    eng.bootstrap()
+    eng.loop()
+
+
+
+
+
+
+
+
+
+this must be upgraded expansively and scalable
+
+Run it like this:
+
+```
+python aiosio.py
+```
+
+Optional knobs (env vars):
+
+* `AIOSIO_DATA_POOL=/path/to/global_knowledge_base` (default: `./data_pool`)
+* `AIOSIO_INDEX_ROOTS=/path1;/path2` (defaults to current folder)
+* `AIOSIO_MAX_ORGANISMS=8`
+* `AIOSIO_STORAGE_SOFT_LIMIT=0.90`
+* `AIOSIO_STORAGE_HARD_LIMIT=0.95`
+* `AIOSIO_TICK_SECONDS=5`
+* `AIOSIO_VERBOSE=1`
+
+It writes only under `./split_organisms/*` and `./logs`, reads your selected environments + data pool, handles recursive indexing, bacterial/sexual reproduction, ELE events, isolation, inheritance, and resource-based culling.

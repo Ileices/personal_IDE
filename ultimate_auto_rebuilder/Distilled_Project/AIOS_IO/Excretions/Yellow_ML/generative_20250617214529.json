@@ -1,0 +1,54 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "generative_20250617214523883.json",
+  "enhanced_data": {
+    "response": "You've provided substantial information to process. Does this align with one'sselfr expectations? [Recursive depth: 0]",
+    "source_processing_id": "blue_1750221923",
+    "response_templates": [
+      "I'm analyzing the information you've provided.",
+      "That's an interesting perspective to consider.",
+      "Let's explore this topic more deeply.",
+      "You've provided substantial information to process.",
+      "I'm connecting the concepts you've presented."
+    ],
+    "creative_patterns": {
+      "sentiment_alignment": 0.0,
+      "information_request": 0,
+      "concept_exploration": 1
+    },
+    "generative_id": "yellow_1750221923",
+    "timestamp": 1750221923.3031447,
+    "_evolution_metadata": {
+      "cycle": 4,
+      "complexity": 0.1143637663094082,
+      "component_weights": {
+        "Red": 0.313661524811487,
+        "Blue": 0.33853130305543233,
+        "Self": 0.34780717213308066
+      },
+      "alliances": {
+        "Blue-Yellow": 0.020776842224899277,
+        "Yellow-Red": -0.03288837896834218
+      }
+    },
+    "_intelligence_growth": 0.7365239409952744,
+    "variation": 3,
+    "generative_variant_id": "yellow_variant_3_1750221923",
+    "response_variation": "Variation 3"
+  },
+  "reabsorption_timestamp": 1750221929.9147341,
+  "_evolution_metadata": {
+    "cycle": 4,
+    "complexity": 0.11705496789063752,
+    "component_weights": {
+      "Red": 0.31827698692480855,
+      "Blue": 0.33734268571655757,
+      "Self": 0.344380327358634
+    },
+    "alliances": {
+      "Blue-Yellow": 0.02168197577389952,
+      "Yellow-Red": 0.07782558903766447
+    }
+  },
+  "_intelligence_growth": 0.7906276476277778
+}

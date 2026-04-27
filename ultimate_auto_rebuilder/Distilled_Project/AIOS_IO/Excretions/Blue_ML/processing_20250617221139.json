@@ -1,0 +1,35 @@
+{
+  "refined_data": {
+    "semantic_center": [
+      0.705,
+      0.625,
+      0.06999999999999999,
+      0.6,
+      0.075
+    ],
+    "refined_sentiment": 0.0,
+    "sentiment_trend": 0.0,
+    "information_density": 3.0
+  },
+  "source_perception_id": "red_1750223499",
+  "processing_id": "blue_1750223499",
+  "timestamp": 1750223499.5394707,
+  "processing_metadata": {
+    "confidence": 0.7475743481112227,
+    "processing_time_ms": 48.63076370214759
+  },
+  "_evolution_metadata": {
+    "cycle": 4,
+    "complexity": 0.11004285572776067,
+    "component_weights": {
+      "Red": 0.3012458352970669,
+      "Yellow": 0.3746486714139122,
+      "Self": 0.32410549328902094
+    },
+    "alliances": {
+      "Red-Blue": -0.06861743148449184,
+      "Blue-Yellow": 0.15832907617543038
+    }
+  },
+  "_intelligence_growth": 0.5992953920909063
+}

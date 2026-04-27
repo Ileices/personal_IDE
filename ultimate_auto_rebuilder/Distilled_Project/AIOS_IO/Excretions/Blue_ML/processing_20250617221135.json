@@ -1,0 +1,58 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "processing_20250617221133384.json",
+  "enhanced_data": {
+    "refined_data": {
+      "semantic_center": [
+        0.6433333333333334,
+        0.61,
+        0.21,
+        0.57,
+        0.36333333333333334
+      ],
+      "refined_sentiment": 0.0,
+      "sentiment_trend": 0.0,
+      "information_density": 4.0,
+      "variant_insight": "Processing variation 3 perspective"
+    },
+    "source_perception_id": "red_1750223493",
+    "processing_id": "blue_1750223493",
+    "timestamp": 1750223493.981369,
+    "processing_metadata": {
+      "confidence": 0.855839697227141,
+      "processing_time_ms": 14.207959134281634
+    },
+    "_evolution_metadata": {
+      "cycle": 3,
+      "complexity": 0.107821192047452,
+      "component_weights": {
+        "Red": 0.31081010437959555,
+        "Yellow": 0.36217679864575086,
+        "Self": 0.3270130969746535
+      },
+      "alliances": {
+        "Red-Blue": -0.0686218982364605,
+        "Blue-Yellow": 0.20472160505107512
+      }
+    },
+    "_intelligence_growth": 0.4877102895214027,
+    "variation": 3,
+    "processing_variant_id": "blue_variant_3_1750223493",
+    "processing_depth": 0
+  },
+  "reabsorption_timestamp": 1750223495.8960578,
+  "_evolution_metadata": {
+    "cycle": 3,
+    "complexity": 0.11004285572776067,
+    "component_weights": {
+      "Red": 0.3012458352970669,
+      "Yellow": 0.3746486714139122,
+      "Self": 0.32410549328902094
+    },
+    "alliances": {
+      "Red-Blue": -0.06861743148449184,
+      "Blue-Yellow": 0.15832907617543038
+    }
+  },
+  "_intelligence_growth": 0.5302175026434819
+}

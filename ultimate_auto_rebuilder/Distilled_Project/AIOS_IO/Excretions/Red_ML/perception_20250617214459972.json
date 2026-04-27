@@ -1,0 +1,73 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "perception_20250617214457.json",
+  "enhanced_data": {
+    "word_count": 3,
+    "char_count": 18,
+    "unique_ratio": 1.0,
+    "sentiment": 0.0,
+    "vectors": {
+      "enter": [
+        0.33,
+        0.64,
+        0.39,
+        0.61,
+        0.19
+      ],
+      "lecture": [
+        0.91,
+        0.3,
+        0.45,
+        0.94,
+        0.59
+      ],
+      "mode": [
+        0.1,
+        0.25,
+        0.34,
+        0.7,
+        0.1
+      ]
+    },
+    "timestamp": 1750221897.125121,
+    "perception_id": "red_1750221897",
+    "is_concept": 0,
+    "is_feedback": 0,
+    "feedback_type": null,
+    "previous_responses": [],
+    "is_direct_feedback": 0,
+    "feedback_words": [],
+    "target_knowledge_key": null,
+    "direct_command": null,
+    "input_type": "STATEMENT",
+    "_evolution_metadata": {
+      "cycle": 3,
+      "complexity": 0.1111195851621116,
+      "component_weights": {
+        "Blue": 0.3561795832395261,
+        "Yellow": 0.30688279097066873,
+        "Self": 0.33693762578980524
+      },
+      "alliances": {
+        "Red-Blue": 0.05773053332708842,
+        "Yellow-Red": -0.018314081721187828
+      }
+    },
+    "_intelligence_growth": 0.47771010009753756
+  },
+  "reabsorption_timestamp": 1750221899.4023323,
+  "_evolution_metadata": {
+    "cycle": 3,
+    "complexity": 0.1143637663094082,
+    "component_weights": {
+      "Blue": 0.35612158233370633,
+      "Yellow": 0.30518026053458647,
+      "Self": 0.33869815713170726
+    },
+    "alliances": {
+      "Red-Blue": -0.019090980967100345,
+      "Yellow-Red": -0.03288837896834218
+    }
+  },
+  "_intelligence_growth": 0.54340009288566
+}

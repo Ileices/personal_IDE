@@ -5,9 +5,21 @@
 // ============================================
 import { create } from 'zustand';
 import type { AgentState, AgentStep, StructuredAgentOutput } from '@personal-ide/shared';
-import { apiPost, apiGet, apiStreamGet } from '../api/client';
+import { apiPost, apiStreamGet } from '../api/client';
+import { API } from '../config.js';
 
 export type VerbosityLevel = 'minimal' | 'detailed' | 'full';
+
+function buildAgentWsUrl(): string {
+  const base = /^https?:\/\//i.test(API)
+    ? API
+    : `${window.location.origin}${API.startsWith('/') ? API : `/${API}`}`;
+
+  const url = new URL(base);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/agent/ws`;
+  return url.toString();
+}
 
 interface AgentEvent {
   type: string;
@@ -284,8 +296,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
     function connectViaWS() {
       try {
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.hostname}:3001/api/agent/ws`;
+        const wsUrl = buildAgentWsUrl();
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {

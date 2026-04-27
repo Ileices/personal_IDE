@@ -1,0 +1,38 @@
+{
+  "refined_data": {
+    "semantic_center": [
+      0.7933333333333333,
+      0.3566666666666667,
+      0.7133333333333333,
+      0.30333333333333334,
+      0.6
+    ],
+    "refined_sentiment": 0.0,
+    "sentiment_trend": 0.0,
+    "information_density": 4.0,
+    "variant_insight": "Processing variation 3 perspective"
+  },
+  "source_perception_id": "red_1750222952",
+  "processing_id": "blue_1750222952",
+  "timestamp": 1750222952.5500715,
+  "processing_metadata": {
+    "confidence": 0.806433789484495,
+    "processing_time_ms": 16.209416644051323
+  },
+  "_evolution_metadata": {
+    "cycle": 3,
+    "complexity": 0.11140769919002491,
+    "component_weights": {
+      "Red": 0.3260032414430342,
+      "Yellow": 0.3384782969367725,
+      "Self": 0.3355184616201932
+    },
+    "alliances": {
+      "Red-Blue": 0.01829844283555779,
+      "Blue-Yellow": 0.13216470770987093
+    }
+  },
+  "_intelligence_growth": 1.8775963207179651,
+  "variation": 3,
+  "processing_variant_id": "blue_variant_3_1750222952"
+}

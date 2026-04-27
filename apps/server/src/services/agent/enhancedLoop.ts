@@ -368,6 +368,13 @@ export class EnhancedAgentLoop {
       !this.abortController.signal.aborted
     ) {
       try {
+        while ((this.state as string) === 'paused' && !this.abortController.signal.aborted) {
+          await this.delay(200);
+        }
+        if (this.abortController.signal.aborted || (this.state as string) === 'complete' || (this.state as string) === 'error') {
+          break;
+        }
+
         this.currentIteration++;
 
         // Get LLM Client

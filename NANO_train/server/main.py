@@ -218,7 +218,10 @@ class NanoServer:
         @app.get("/v1/training/status")
         async def training_status():
             if self._trainer:
-                status = self._trainer.status
+                status = self._trainer.status if hasattr(self._trainer, "status") else {
+                    "running": False,
+                    "status": "unknown",
+                }
                 status["nano_count"] = len(self._sea) if self._sea else 0
                 return status
             return {
@@ -233,20 +236,28 @@ class NanoServer:
             """Feed an observation (query/response pair) to the trainer."""
             body = await request.json()
             if self._trainer:
-                self._trainer.add_observation(
-                    query=body.get("query", ""),
-                    response=body.get("response", ""),
-                    source=body.get("source", "api"),
-                    quality=body.get("quality", 0.8),
-                )
-                return {"success": True, "buffer_size": len(self._trainer._buffer)}
+                if hasattr(self._trainer, "add_observation"):
+                    self._trainer.add_observation(
+                        query=body.get("query", ""),
+                        response=body.get("response", ""),
+                        source=body.get("source", "api"),
+                        quality=body.get("quality", 0.8),
+                    )
+                    status = self._trainer.status if hasattr(self._trainer, "status") else {}
+                    return {
+                        "success": True,
+                        "buffer_size": status.get("buffer_size", 0),
+                    }
+                return {"success": False, "error": "Trainer does not support observation"}
             return {"success": False, "error": "Trainer not initialized"}
 
         @app.get("/v1/training/checkpoints")
         async def training_checkpoints():
             """Get info about all saved model checkpoints."""
             if self._trainer:
-                return self._trainer.get_checkpoint_info()
+                if hasattr(self._trainer, "get_checkpoint_info"):
+                    return self._trainer.get_checkpoint_info()
+                return {"checkpoint_dir": "", "nanos": {}, "total_checkpoints": 0}
             return {"checkpoint_dir": "", "nanos": {}, "total_checkpoints": 0}
 
         # ── Global Pool endpoints ──────────────────────────────
@@ -482,6 +493,14 @@ class NanoServer:
                 logger.warning(f"Pipeline inference failed: {e}")
 
         # Try individual nano inference as fallback
+        if self._trainer and hasattr(self._trainer, "generate_text"):
+            try:
+                generated = self._trainer.generate_text(query, max_new_tokens=80)
+                if generated and len(generated.strip()) > 5:
+                    return generated
+            except Exception as e:
+                logger.warning(f"Swarm runtime generation failed: {e}")
+
         if self._sea:
             try:
                 # Try code completion nano directly

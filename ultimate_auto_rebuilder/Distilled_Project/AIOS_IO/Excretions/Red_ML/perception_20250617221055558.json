@@ -1,0 +1,41 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "perception_20250617220844.json",
+  "enhanced_data": {
+    "error_perception": {
+      "error_type": "TypeError",
+      "error_message": "Object of type set is not JSON serializable",
+      "timestamp": 1750223324.694173,
+      "context": "chat_loop_execution"
+    },
+    "_evolution_metadata": {
+      "cycle": 5,
+      "complexity": 0.1185536942834855,
+      "component_weights": {
+        "Blue": 0.3165030381740085,
+        "Yellow": 0.36868983631871827,
+        "Self": 0.31480712550727336
+      },
+      "alliances": {
+        "Red-Blue": 0.10891130644721247,
+        "Yellow-Red": 0.2628596035772831
+      }
+    },
+    "_intelligence_growth": 3.942447364075331
+  },
+  "reabsorption_timestamp": 1750223455.5235822,
+  "_evolution_metadata": {
+    "cycle": 0,
+    "complexity": 0.10286992361109981,
+    "component_weights": {
+      "Blue": 0.32676832639080666,
+      "Yellow": 0.33674404876233405,
+      "Self": 0.33648762484685935
+    },
+    "alliances": {
+      "Red-Blue": 0.0017924811778183979,
+      "Yellow-Red": 0.10259100557713194
+    }
+  },
+  "_intelligence_growth": 0.11085256486363082
+}

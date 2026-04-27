@@ -1,0 +1,173 @@
+{
+  "test": "test_23_heterogeneous_experts",
+  "date": "2026-04-03 21:52:06",
+  "config": {
+    "n_layers": 3,
+    "n_experts": 8,
+    "d_model": 64,
+    "top_k": 2,
+    "train_steps": 3000,
+    "target_ff_sum": 680
+  },
+  "allocations": {
+    "uniform": [
+      85,
+      85,
+      85,
+      85,
+      85,
+      85,
+      85,
+      85
+    ],
+    "random": [
+      91,
+      57,
+      52,
+      52,
+      182,
+      109,
+      43,
+      94
+    ],
+    "rby_guided": [
+      93,
+      68,
+      83,
+      106,
+      73,
+      94,
+      101,
+      62
+    ],
+    "gradient": [
+      156,
+      131,
+      108,
+      92,
+      69,
+      54,
+      38,
+      32
+    ]
+  },
+  "results": [
+    {
+      "name": "Uniform (std router)",
+      "params": 333625,
+      "expert_params": 264696,
+      "ff_dims": [
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85
+      ],
+      "ff_dim_std": 0.0,
+      "test_ppl": 7.12639219817185,
+      "test_acc": 0.4109903971354167,
+      "test_bpc": 2.8331718838062367,
+      "test_loss": 1.9638051033020019,
+      "time_s": 151.43118596076965,
+      "peak_vram_mb": 414.19970703125
+    },
+    {
+      "name": "Hetero-Random (std)",
+      "params": 333625,
+      "expert_params": 264696,
+      "ff_dims": [
+        91,
+        57,
+        52,
+        52,
+        182,
+        109,
+        43,
+        94
+      ],
+      "ff_dim_std": 43.05229378325852,
+      "test_ppl": 7.289309087200193,
+      "test_acc": 0.40787353515625,
+      "test_bpc": 2.865782076046327,
+      "test_loss": 1.9864087661107381,
+      "time_s": 229.20721459388733,
+      "peak_vram_mb": 419.2197265625
+    },
+    {
+      "name": "Hetero-Gradient (std)",
+      "params": 333625,
+      "expert_params": 264696,
+      "ff_dims": [
+        156,
+        131,
+        108,
+        92,
+        69,
+        54,
+        38,
+        32
+      ],
+      "ff_dim_std": 41.78815621680382,
+      "test_ppl": 7.20384018390675,
+      "test_acc": 0.40929768880208334,
+      "test_bpc": 2.848766175630266,
+      "test_loss": 1.9746142427126567,
+      "time_s": 242.65762519836426,
+      "peak_vram_mb": 424.40087890625
+    },
+    {
+      "name": "Hetero-RBY (chromatic)",
+      "params": 334753,
+      "expert_params": 265008,
+      "ff_dims": [
+        93,
+        68,
+        83,
+        106,
+        73,
+        94,
+        101,
+        62
+      ],
+      "ff_dim_std": 15.033296378372908,
+      "test_ppl": 7.228387391283461,
+      "test_acc": 0.4116129557291667,
+      "test_bpc": 2.8536738266932464,
+      "test_loss": 1.9780159672101338,
+      "time_s": 260.00198197364807,
+      "peak_vram_mb": 433.54150390625
+    },
+    {
+      "name": "Uniform (chromatic)",
+      "params": 334753,
+      "expert_params": 265008,
+      "ff_dims": [
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85
+      ],
+      "ff_dim_std": 0.0,
+      "test_ppl": 7.2334790483985945,
+      "test_acc": 0.41206461588541665,
+      "test_bpc": 2.854689699548118,
+      "test_loss": 1.9787201166152955,
+      "time_s": 182.48132061958313,
+      "peak_vram_mb": 430.79443359375
+    }
+  ],
+  "ranking": [
+    "Uniform (std router)",
+    "Hetero-Gradient (std)",
+    "Hetero-RBY (chromatic)",
+    "Uniform (chromatic)",
+    "Hetero-Random (std)"
+  ]
+}

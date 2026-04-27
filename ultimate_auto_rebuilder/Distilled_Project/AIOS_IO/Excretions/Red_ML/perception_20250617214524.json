@@ -1,0 +1,272 @@
+{
+  "original_pattern": {
+    "word_count": 4,
+    "char_count": 22,
+    "unique_ratio": 1.0,
+    "sentiment": 0.0,
+    "vectors": {
+      "can": [
+        0.92,
+        0.86,
+        0.06,
+        0.15,
+        0.86
+      ],
+      "you": [
+        0.08,
+        0.8,
+        0.54,
+        0.96,
+        0.98
+      ],
+      "understand": [
+        0.0,
+        0.66,
+        0.57,
+        0.52,
+        0.28
+      ],
+      "me?": [
+        0.79,
+        0.97,
+        0.12,
+        0.5,
+        0.52
+      ]
+    },
+    "timestamp": 1750221923.182841,
+    "perception_id": "red_1750221923",
+    "is_concept": 0,
+    "is_feedback": 0,
+    "feedback_type": null,
+    "previous_responses": [],
+    "is_direct_feedback": 0,
+    "feedback_words": [],
+    "target_knowledge_key": null,
+    "direct_command": null,
+    "input_type": "TEST",
+    "test_id": "test_1750221923",
+    "_evolution_metadata": {
+      "cycle": 4,
+      "complexity": 0.1143637663094082,
+      "component_weights": {
+        "Blue": 0.35834192183060426,
+        "Yellow": 0.3081588870278155,
+        "Self": 0.3334991911415801
+      },
+      "alliances": {
+        "Red-Blue": -0.019090980967100345,
+        "Yellow-Red": -0.03288837896834218
+      }
+    },
+    "_intelligence_growth": 0.6880173069029644
+  },
+  "mutations": [
+    {
+      "word_count": 4,
+      "char_count": 22,
+      "unique_ratio": 1.0,
+      "sentiment": 0.0,
+      "vectors": {
+        "can": [
+          0.92,
+          0.86,
+          0.06,
+          0.15,
+          0.86
+        ],
+        "you": [
+          0.08,
+          0.8,
+          0.54,
+          0.96,
+          0.98
+        ],
+        "understand": [
+          0.0,
+          0.66,
+          0.57,
+          0.52,
+          0.28
+        ],
+        "me?": [
+          0.79,
+          0.97,
+          0.12,
+          0.5,
+          0.52
+        ]
+      },
+      "timestamp": 1750221923.182841,
+      "perception_id": "red_1750221923",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "TEST",
+      "test_id": "test_1750221923",
+      "_evolution_metadata": {
+        "cycle": 4,
+        "complexity": 0.1143637663094082,
+        "component_weights": {
+          "Blue": 0.35834192183060426,
+          "Yellow": 0.3081588870278155,
+          "Self": 0.3334991911415801
+        },
+        "alliances": {
+          "Red-Blue": -0.019090980967100345,
+          "Yellow-Red": -0.03288837896834218
+        }
+      },
+      "_intelligence_growth": 0.6880173069029644,
+      "_tier1_variation": 1,
+      "_tier2_variation": 1
+    },
+    {
+      "word_count": 4,
+      "char_count": 22,
+      "unique_ratio": 1.0,
+      "sentiment": 0.0,
+      "vectors": {
+        "can": [
+          0.92,
+          0.86,
+          0.06,
+          0.15,
+          0.86
+        ],
+        "you": [
+          0.08,
+          0.8,
+          0.54,
+          0.96,
+          0.98
+        ],
+        "understand": [
+          0.0,
+          0.66,
+          0.57,
+          0.52,
+          0.28
+        ],
+        "me?": [
+          0.79,
+          0.97,
+          0.12,
+          0.5,
+          0.52
+        ]
+      },
+      "timestamp": 1750221923.182841,
+      "perception_id": "red_1750221923",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "TEST",
+      "test_id": "test_1750221923",
+      "_evolution_metadata": {
+        "cycle": 4,
+        "complexity": 0.1143637663094082,
+        "component_weights": {
+          "Blue": 0.35834192183060426,
+          "Yellow": 0.3081588870278155,
+          "Self": 0.3334991911415801
+        },
+        "alliances": {
+          "Red-Blue": -0.019090980967100345,
+          "Yellow-Red": -0.03288837896834218
+        }
+      },
+      "_intelligence_growth": 0.6880173069029644,
+      "_tier1_variation": 1,
+      "_tier2_variation": 1
+    },
+    {
+      "word_count": 4,
+      "char_count": 22,
+      "unique_ratio": 1.0,
+      "sentiment": 0.0,
+      "vectors": {
+        "can": [
+          0.92,
+          0.86,
+          0.06,
+          0.15,
+          0.86
+        ],
+        "you": [
+          0.08,
+          0.8,
+          0.54,
+          0.96,
+          0.98
+        ],
+        "understand": [
+          0.0,
+          0.66,
+          0.57,
+          0.52,
+          0.28
+        ],
+        "me?": [
+          0.79,
+          0.97,
+          0.12,
+          0.5,
+          0.52
+        ]
+      },
+      "timestamp": 1750221923.182841,
+      "perception_id": "red_1750221923",
+      "is_concept": 0,
+      "is_feedback": 0,
+      "feedback_type": null,
+      "previous_responses": [],
+      "is_direct_feedback": 0,
+      "feedback_words": [],
+      "target_knowledge_key": null,
+      "direct_command": null,
+      "input_type": "TEST",
+      "test_id": "test_1750221923",
+      "_evolution_metadata": {
+        "cycle": 4,
+        "complexity": 0.1143637663094082,
+        "component_weights": {
+          "Blue": 0.35834192183060426,
+          "Yellow": 0.3081588870278155,
+          "Self": 0.3334991911415801
+        },
+        "alliances": {
+          "Red-Blue": -0.019090980967100345,
+          "Yellow-Red": -0.03288837896834218
+        }
+      },
+      "_intelligence_growth": 0.6880173069029644,
+      "_tier1_variation": 1,
+      "_tier2_variation": 1
+    }
+  ],
+  "_evolution_metadata": {
+    "cycle": 4,
+    "complexity": 0.11705496789063752,
+    "component_weights": {
+      "Blue": 0.35834192183060426,
+      "Yellow": 0.3081588870278155,
+      "Self": 0.3334991911415801
+    },
+    "alliances": {
+      "Red-Blue": 0.0780658232422521,
+      "Yellow-Red": 0.07782558903766447
+    }
+  },
+  "_intelligence_growth": 0.7528613394111938
+}

@@ -1,0 +1,1095 @@
+
+<style>
+  :root { --accent: #7F77DD; --accent-light: #EEEDFE; --accent-dark: #3C3489; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); color: var(--color-text-primary); }
+
+  .plan-header { padding: 20px 0 16px; }
+  .plan-header h1 { font-size: 18px; font-weight: 500; margin-bottom: 4px; }
+  .plan-header p { font-size: 13px; color: var(--color-text-secondary); }
+
+  .phase-nav { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+  .phase-btn {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer;
+    border: 1px solid var(--color-border-tertiary); background: var(--color-background-secondary);
+    color: var(--color-text-secondary); transition: all .15s;
+  }
+  .phase-btn.active, .phase-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .phase-content { display: none; }
+  .phase-content.active { display: block; }
+
+  .phase-title {
+    font-size: 15px; font-weight: 500; margin-bottom: 4px; color: var(--color-text-primary);
+  }
+  .phase-desc { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 16px; line-height: 1.6; }
+
+  .task-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .task {
+    border: 1px solid var(--color-border-tertiary); border-radius: 10px;
+    background: var(--color-background-secondary); overflow: hidden;
+  }
+  .task-header {
+    display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; cursor: pointer;
+  }
+  .task-check {
+    width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--color-border-secondary);
+    flex-shrink: 0; margin-top: 1px; cursor: pointer; transition: all .15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .task-check.done { background: var(--accent); border-color: var(--accent); }
+  .task-check.done::after { content: ''; display: block; width: 10px; height: 6px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px, -1px); }
+
+  .task-label { flex: 1; }
+  .task-name { font-size: 14px; font-weight: 500; line-height: 1.4; margin-bottom: 2px; }
+  .task-sub { font-size: 12px; color: var(--color-text-secondary); }
+  .task-expand { font-size: 16px; color: var(--color-text-tertiary); line-height: 1; flex-shrink: 0; margin-top: 2px; transition: transform .2s; }
+  .task-expand.open { transform: rotate(180deg); }
+
+  .task-detail { display: none; border-top: 1px solid var(--color-border-tertiary); padding: 14px 16px 14px 44px; }
+  .task-detail.open { display: block; }
+
+  .detail-section { margin-bottom: 12px; }
+  .detail-section:last-child { margin-bottom: 0; }
+  .detail-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-tertiary); margin-bottom: 5px; }
+  .detail-text { font-size: 13px; line-height: 1.65; color: var(--color-text-secondary); }
+
+  .code-block {
+    background: var(--color-background-tertiary); border: 1px solid var(--color-border-tertiary);
+    border-radius: 6px; padding: 10px 12px; font-size: 12px; font-family: var(--font-mono);
+    color: var(--color-text-secondary); line-height: 1.7; margin-top: 6px; white-space: pre-wrap;
+  }
+
+  .tag {
+    display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 500; margin-right: 4px; margin-bottom: 4px;
+  }
+  .tag-py { background: #EAF3DE; color: #3B6D11; }
+  .tag-json { background: #FAEEDA; color: #854F0B; }
+  .tag-sh { background: #E1F5EE; color: #0F6E56; }
+  .tag-hard { background: #FCEBEB; color: #A32D2D; }
+  .tag-medium { background: #FAEEDA; color: #854F0B; }
+  .tag-easy { background: #EAF3DE; color: #3B6D11; }
+
+  .progress-bar-wrap { background: var(--color-background-tertiary); border-radius: 6px; height: 6px; margin: 16px 0 4px; overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--accent); border-radius: 6px; transition: width .3s; }
+  .progress-label { font-size: 11px; color: var(--color-text-tertiary); text-align: right; }
+
+  .flow-diagram { margin: 20px 0 4px; }
+</style>
+
+<div class="plan-header">
+  <h1>Agent meta-architecture — full stack action plan</h1>
+  <p>5 phases. Build in order. Each phase unlocks the next.</p>
+</div>
+
+<div class="progress-bar-wrap"><div class="progress-bar" id="global-bar" style="width:0%"></div></div>
+<div class="progress-label" id="global-label">0 of 22 tasks complete</div>
+
+<div class="phase-nav" id="phase-nav"></div>
+<div id="phase-panels"></div>
+
+<script>
+const phases = [
+  {
+    id: 0,
+    label: "Phase 1 — Memory fabric",
+    desc: "Build the on-disk memory system that lets a tiny model remember everything. This is the foundation every other phase depends on.",
+    tasks: [
+      {
+        name: "Create the folder structure on disk",
+        sub: "One-time setup — run a Python script to scaffold directories",
+        difficulty: "easy",
+        tags: ["py","sh"],
+        what: "You need a set of nested folders that will hold all agent memories, automation scripts, generated code, and indices. This is the physical brain of the system.",
+        how: `Run this Python script once to create the structure:
+
+/memory_fabric/
+  /indices/          ← index files that track everything
+  /domains/          ← one subfolder per project
+    /project_name/
+      user_prompts/  ← what the user said
+      agent_outputs/ ← what the agent replied
+      memory_markers/← cross-reference pointers
+  /automation/
+    code_generators/ ← the scripts the agent writes
+    schema_templates/← JSON blueprints for different projects
+  /cache/            ← token budget tracking`,
+        code: `import os, pathlib
+
+BASE = pathlib.Path("memory_fabric")
+dirs = [
+  "indices",
+  "domains/example_project/user_prompts",
+  "domains/example_project/agent_outputs",
+  "domains/example_project/memory_markers",
+  "automation/code_generators",
+  "automation/schema_templates",
+  "cache"
+]
+for d in dirs:
+  (BASE / d).mkdir(parents=True, exist_ok=True)
+print("Memory fabric scaffold complete.")`
+      },
+      {
+        name: "Build the token-aware index manager",
+        sub: "Python class that loads only memories that fit in the token budget",
+        difficulty: "hard",
+        tags: ["py"],
+        what: "The index manager is what lets a 512-token model selectively pull in only the memories relevant to the current task, scored by recency, frequency, and similarity — so it never wastes context on irrelevant history.",
+        how: "A Python class called TokenAwareIndex reads the master_index.json, scores each stored memory, and packs the highest-scoring ones until the token budget runs out. The rest get stored in an overflow pointer file for the next cycle.",
+        code: `# memory_index_manager.py
+import json, hashlib, time, pathlib
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+@dataclass
+class MemoryRecord:
+    id: str
+    content_preview: str    # first 80 chars only
+    file_path: str
+    timestamp: float
+    access_count: int
+    domain: str
+    embedding_stub: List[float] = field(default_factory=list)
+
+class TokenAwareIndex:
+    INDEX_PATH = pathlib.Path("memory_fabric/indices/master_index.json")
+    OVERFLOW_PATH = pathlib.Path("memory_fabric/indices/overflow_queue.json")
+    TOKENS_PER_CHAR = 0.25  # conservative estimate
+
+    def __init__(self, context_limit: int = 512, reserve: int = 150):
+        self.context_limit = context_limit
+        self.reserve = reserve
+        self.budget = context_limit - reserve
+        self.records: List[MemoryRecord] = self._load_index()
+
+    def _load_index(self) -> List[MemoryRecord]:
+        if not self.INDEX_PATH.exists():
+            return []
+        raw = json.loads(self.INDEX_PATH.read_text())
+        return [MemoryRecord(**r) for r in raw]
+
+    def _estimate_tokens(self, text: str) -> int:
+        return max(1, int(len(text) * self.TOKENS_PER_CHAR))
+
+    def _score(self, rec: MemoryRecord, prompt: str) -> float:
+        # keyword overlap score
+        prompt_words = set(prompt.lower().split())
+        preview_words = set(rec.content_preview.lower().split())
+        overlap = len(prompt_words & preview_words) / max(1, len(prompt_words))
+        # recency decay
+        age_hours = (time.time() - rec.timestamp) / 3600
+        recency = 1.0 / (1.0 + age_hours * 0.01)
+        # frequency bonus
+        freq = min(1.0, rec.access_count * 0.1)
+        return (overlap * 0.6) + (recency * 0.25) + (freq * 0.15)
+
+    def get_relevant_memories(self, current_prompt: str) -> List[MemoryRecord]:
+        scored = sorted(
+            [(rec, self._score(rec, current_prompt)) for rec in self.records],
+            key=lambda x: x[1], reverse=True
+        )
+        selected, overflow, token_count = [], [], 0
+        for rec, score in scored:
+            cost = self._estimate_tokens(rec.content_preview)
+            if token_count + cost <= self.budget:
+                selected.append(rec)
+                rec.access_count += 1
+                token_count += cost
+            else:
+                overflow.append(rec.id)
+        self.OVERFLOW_PATH.write_text(json.dumps(overflow, indent=2))
+        self._save_index()
+        return selected
+
+    def add_memory(self, content: str, domain: str, file_path: str) -> str:
+        rid = hashlib.sha1(f"{content}{time.time()}".encode()).hexdigest()[:12]
+        rec = MemoryRecord(
+            id=rid,
+            content_preview=content[:80],
+            file_path=file_path,
+            timestamp=time.time(),
+            access_count=0,
+            domain=domain
+        )
+        self.records.append(rec)
+        self._save_index()
+        return rid
+
+    def _save_index(self):
+        self.INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+        data = [vars(r) for r in self.records]
+        self.INDEX_PATH.write_text(json.dumps(data, indent=2))`
+      },
+      {
+        name: "Build the memory writer (save prompts and outputs)",
+        sub: "Every user turn and agent turn gets persisted automatically",
+        difficulty: "easy",
+        tags: ["py"],
+        what: "Every single time the user says something and the agent responds, both sides get saved to disk with a UUID filename and indexed. This is how the model gets permanent memory beyond its context window.",
+        how: "A lightweight MemoryWriter class handles atomic writes to the correct domain folder and then registers them with the TokenAwareIndex.",
+        code: `# memory_writer.py
+import uuid, time, json, pathlib
+from memory_index_manager import TokenAwareIndex
+
+class MemoryWriter:
+    BASE = pathlib.Path("memory_fabric/domains")
+
+    def __init__(self, domain: str):
+        self.domain = domain
+        self.index = TokenAwareIndex()
+        (self.BASE / domain / "user_prompts").mkdir(parents=True, exist_ok=True)
+        (self.BASE / domain / "agent_outputs").mkdir(parents=True, exist_ok=True)
+
+    def save_turn(self, user_text: str, agent_text: str) -> dict:
+        turn_id = str(uuid.uuid4())
+        ts = time.time()
+
+        up = self.BASE / self.domain / "user_prompts" / f"{turn_id}.json"
+        ao = self.BASE / self.domain / "agent_outputs" / f"{turn_id}.json"
+
+        up.write_text(json.dumps({"id": turn_id, "ts": ts, "text": user_text}, indent=2))
+        ao.write_text(json.dumps({"id": turn_id, "ts": ts, "text": agent_text}, indent=2))
+
+        self.index.add_memory(user_text, self.domain, str(up))
+        self.index.add_memory(agent_text, self.domain, str(ao))
+
+        return {"turn_id": turn_id, "domain": self.domain}`
+      }
+    ]
+  },
+  {
+    id: 1,
+    label: "Phase 2 — Atomic reference system",
+    desc: "Every piece of code the agent writes gets a unique calling card stamped into it. This is what lets the agent later find, group, and modify specific code without re-reading all of it.",
+    tasks: [
+      {
+        name: "Define the atomic reference standard",
+        sub: "The comment format stamped into every generated file",
+        difficulty: "easy",
+        tags: ["json"],
+        what: "Every function, class, and integration point in generated code gets a comment block with 4 fields: a UUID, an integration group ID, an expansion port flag, and a cross-reference list. The agent uses these to find and edit code without needing the full file in context.",
+        how: "Define the schema as a JSON spec, then write the Python function that injects it as a comment into any code block.",
+        code: `# atomic_ref_schema.json
+{
+  "atomic_ref": {
+    "uuid": "12-char unique ID for this specific block",
+    "integration_group": "shared tag for blocks that work together",
+    "expansion_ports": ["list of hooks that can be extended"],
+    "cross_refs": ["UUIDs of other blocks this one depends on"],
+    "lang": "python | cpp | csharp | js | etc",
+    "layer": "data | logic | ui | test | infra"
+  }
+}
+
+# Example injected into Python code:
+# ATOMIC_REF::uuid=a1b2c3d4e5f6
+# INTEGRATION_GROUP::npc_behavior_system
+# EXPANSION_PORTS::combat_hook,dialogue_hook
+# CROSS_REFS::f7e8d9c0b1a2
+# LAYER::logic
+def npc_decide_action(npc_state: dict) -> str:
+    ...`
+      },
+      {
+        name: "Build the atomic reference injector",
+        sub: "Python module that stamps any code string before writing it to disk",
+        difficulty: "medium",
+        tags: ["py"],
+        what: "Before any generated code hits disk, it passes through the injector which prepends the calling card comment block. This is what makes every line of generated code retrievable and groupable later.",
+        how: "A Python class AtomicReferenceSystem handles UUID generation, integration group tracking, and comment injection for any programming language using the correct comment syntax.",
+        code: `# atomic_reference_system.py
+import uuid, json, re, pathlib
+from typing import List, Optional
+from dataclasses import dataclass, field
+
+COMMENT_PREFIX = {
+    "python": "#", "cpp": "//", "csharp": "//",
+    "js": "//", "ts": "//", "rust": "//", "go": "//"
+}
+
+@dataclass
+class AtomicUnit:
+    uuid: str
+    integration_group: str
+    expansion_ports: List[str]
+    cross_refs: List[str]
+    lang: str
+    layer: str
+    code: str
+    file_path: str = ""
+
+class AtomicReferenceSystem:
+    REGISTRY_PATH = pathlib.Path("memory_fabric/indices/atomic_registry.json")
+
+    def __init__(self):
+        self.registry: dict[str, AtomicUnit] = self._load()
+        self.groups: dict[str, List[str]] = {}  # group_id -> [uuids]
+        for uid, unit in self.registry.items():
+            self.groups.setdefault(unit.integration_group, []).append(uid)
+
+    def _load(self) -> dict:
+        if not self.REGISTRY_PATH.exists():
+            return {}
+        raw = json.loads(self.REGISTRY_PATH.read_text())
+        return {k: AtomicUnit(**v) for k, v in raw.items()}
+
+    def _save(self):
+        self.REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        self.REGISTRY_PATH.write_text(
+            json.dumps({k: vars(v) for k, v in self.registry.items()}, indent=2)
+        )
+
+    def stamp(
+        self,
+        code: str,
+        integration_group: str,
+        expansion_ports: List[str],
+        cross_refs: List[str],
+        lang: str = "python",
+        layer: str = "logic"
+    ) -> AtomicUnit:
+        uid = uuid.uuid4().hex[:12]
+        prefix = COMMENT_PREFIX.get(lang, "#")
+        header = (
+            f"{prefix} ATOMIC_REF::uuid={uid}\\n"
+            f"{prefix} INTEGRATION_GROUP::{integration_group}\\n"
+            f"{prefix} EXPANSION_PORTS::{','.join(expansion_ports) or 'none'}\\n"
+            f"{prefix} CROSS_REFS::{','.join(cross_refs) or 'none'}\\n"
+            f"{prefix} LAYER::{layer}\\n"
+        )
+        unit = AtomicUnit(
+            uuid=uid,
+            integration_group=integration_group,
+            expansion_ports=expansion_ports,
+            cross_refs=cross_refs,
+            lang=lang,
+            layer=layer,
+            code=header + code
+        )
+        self.registry[uid] = unit
+        self.groups.setdefault(integration_group, []).append(uid)
+        self._save()
+        return unit
+
+    def pull_group_to_context(self, integration_group: str) -> str:
+        """Returns all atomic units in a group concatenated — for agent injection."""
+        uids = self.groups.get(integration_group, [])
+        return "\\n\\n".join(
+            self.registry[uid].code for uid in uids if uid in self.registry
+        )
+
+    def batch_replace(self, integration_group: str, find: str, replace: str) -> int:
+        uids = self.groups.get(integration_group, [])
+        count = 0
+        for uid in uids:
+            if uid in self.registry:
+                unit = self.registry[uid]
+                if find in unit.code:
+                    unit.code = unit.code.replace(find, replace)
+                    count += 1
+        self._save()
+        return count`
+      },
+      {
+        name: "Build the context window assembler",
+        sub: "Pulls atomic refs + memories into a single trimmed context string",
+        difficulty: "medium",
+        tags: ["py"],
+        what: "This is the bridge between the memory system and the agent. Before each agent call, the assembler gathers the most relevant memory previews and atomic code blocks, then trims everything to fit inside the token budget — guaranteeing the agent never blows its context limit.",
+        how: "ContextAssembler takes the current user prompt, queries both TokenAwareIndex and AtomicReferenceSystem, and builds a single string that represents the agent's working memory for that turn.",
+        code: `# context_assembler.py
+from memory_index_manager import TokenAwareIndex
+from atomic_reference_system import AtomicReferenceSystem
+
+TOKENS_PER_CHAR = 0.25
+MAX_TOKENS = 512
+SYSTEM_OVERHEAD = 80  # reserved for system prompt framing
+
+class ContextAssembler:
+    def __init__(self, domain: str):
+        self.domain = domain
+        self.index = TokenAwareIndex(context_limit=MAX_TOKENS)
+        self.ars = AtomicReferenceSystem()
+
+    def _tok(self, text: str) -> int:
+        return max(1, int(len(text) * TOKENS_PER_CHAR))
+
+    def build(self, user_prompt: str, active_groups: list[str] = None) -> str:
+        budget = MAX_TOKENS - SYSTEM_OVERHEAD - self._tok(user_prompt)
+        parts = []
+
+        # Pull relevant memories
+        memories = self.index.get_relevant_memories(user_prompt)
+        for mem in memories:
+            preview = f"[MEM:{mem.id}] {mem.content_preview}"
+            cost = self._tok(preview)
+            if budget - cost >= 0:
+                parts.append(preview)
+                budget -= cost
+
+        # Pull requested integration groups
+        if active_groups:
+            for group in active_groups:
+                group_code = self.ars.pull_group_to_context(group)
+                cost = self._tok(group_code)
+                if budget - cost >= 0:
+                    parts.append(f"[GROUP:{group}]\\n{group_code}")
+                    budget -= cost
+
+        context = "\\n".join(parts)
+        return f"<memory>\\n{context}\\n</memory>\\n\\nUser: {user_prompt}"`
+      }
+    ]
+  },
+  {
+    id: 2,
+    label: "Phase 3 — Automation script engine",
+    desc: "The agent's superpower: instead of trying to write a 10,000-line game in one turn, it writes a Python automation script in one turn, then runs it to generate the full codebase. One output. Infinite scale.",
+    tasks: [
+      {
+        name: "Build the schema interrogator (clarifying questions engine)",
+        sub: "Agent outputs a JSON schema for the user to fill in before building",
+        difficulty: "medium",
+        tags: ["py","json"],
+        what: "Before writing any code, the agent produces a JSON file with blank fields asking for project specifics. The user (or another AI) fills it in. This prevents the agent from making wrong assumptions that invalidate the entire generated codebase.",
+        how: "A set of base schema templates for game, software, and AI projects live in /automation/schema_templates/. The agent selects the right one and adds project-specific fields before presenting it to the user.",
+        code: `# schema_interrogator.py
+# Base game schema template
+GAME_SCHEMA_TEMPLATE = {
+  "project_type": "game",
+  "name": "",
+  "genre": "",
+  "target_language": "cpp",
+  "automation_language": "python",
+  "description": "",
+  "player_mechanics": [],
+  "npc_systems": [],
+  "world_structure": "",
+  "inventory_system": true,
+  "combat_system": true,
+  "save_system": true,
+  "platform": "pc",
+  "layers": [
+    {"name": "data_layer",    "lang": "cpp",    "strategy": "generate_from_schema"},
+    {"name": "logic_layer",   "lang": "cpp",    "strategy": "generate_with_hooks"},
+    {"name": "render_layer",  "lang": "cpp",    "strategy": "generate_with_hooks"},
+    {"name": "test_harness",  "lang": "python", "strategy": "generate_tests"}
+  ]
+}
+
+SOFTWARE_SCHEMA_TEMPLATE = {
+  "project_type": "software",
+  "name": "",
+  "description": "",
+  "target_language": "python",
+  "automation_language": "python",
+  "api_endpoints": [],
+  "database_models": [],
+  "auth_required": true,
+  "deployment_target": "local | cloud",
+  "layers": [
+    {"name": "models",   "lang": "python", "strategy": "generate_from_schema"},
+    {"name": "services", "lang": "python", "strategy": "generate_with_hooks"},
+    {"name": "api",      "lang": "python", "strategy": "generate_with_hooks"},
+    {"name": "tests",    "lang": "python", "strategy": "generate_tests"}
+  ]
+}`
+      },
+      {
+        name: "Build the procedural code generator (the automation script writer)",
+        sub: "Agent uses its 512 tokens to write a Python script that generates thousands of lines",
+        difficulty: "hard",
+        tags: ["py"],
+        what: "This is the core mechanic. The agent writes ONE Python automation script per build cycle. That script reads the filled-in project schema and procedurally generates the entire codebase file by file, function by function — with atomic reference stamps on every block. The agent never writes the final code directly.",
+        how: "The agent outputs a script called build_PROJECTNAME.py. When you run that script, it generates the full project folder with all files. Every function gets an atomic ref. Every file gets a manifest entry. Integration points get expansion port comments telling the agent what to build next.",
+        code: `# Example: the agent OUTPUTS this script (not the game code)
+# build_rpg_game.py — generated by agent in one 512-token turn
+
+import json, pathlib, uuid, time
+
+SCHEMA_PATH = "memory_fabric/automation/schema_templates/rpg_filled.json"
+OUTPUT_PATH = pathlib.Path("projects/rpg_game")
+
+def stamp(code: str, group: str, ports: list, lang: str = "cpp") -> str:
+    uid = uuid.uuid4().hex[:12]
+    pfx = "//"
+    return (
+        f"{pfx} ATOMIC_REF::uuid={uid}\\n"
+        f"{pfx} INTEGRATION_GROUP::{group}\\n"
+        f"{pfx} EXPANSION_PORTS::{','.join(ports)}\\n"
+        f"{pfx} LAYER::logic\\n" + code
+    )
+
+def generate_npc_system(schema: dict) -> str:
+    npc_types = schema.get("npc_systems", ["warrior", "merchant", "guard"])
+    blocks = []
+    for npc in npc_types:
+        code = f"""
+struct {npc.capitalize()}State {{
+    float health;
+    float aggression;
+    std::string current_action;
+}};
+
+std::string {npc}_decide_action(const {npc.capitalize()}State& state) {{
+    // EXPAND_NEXT: Add behavior tree logic here
+    if (state.aggression > 0.7f) return "attack";
+    return "patrol";
+}}
+"""
+        blocks.append(stamp(code, "npc_behavior_system", ["behavior_tree", "dialogue"], "cpp"))
+    return "\\n".join(blocks)
+
+def generate_inventory_system(schema: dict) -> str:
+    code = """
+struct Item { std::string id; std::string name; int quantity; float weight; };
+struct Inventory { std::vector<Item> items; float max_weight; };
+bool add_item(Inventory& inv, const Item& item) {
+    // EXPAND_NEXT: add weight check, stack logic, event hooks
+    inv.items.push_back(item);
+    return true;
+}
+"""
+    return stamp(code, "inventory_system", ["weight_system", "events"], "cpp")
+
+def generate_combat_system(schema: dict) -> str:
+    code = """
+struct CombatResult { float damage_dealt; bool is_critical; std::string outcome; };
+CombatResult resolve_combat(float attacker_str, float defender_def) {
+    // EXPAND_NEXT: add status effects, crit multipliers, animation hooks
+    float dmg = std::max(0.0f, attacker_str - defender_def * 0.5f);
+    return {dmg, false, dmg > 0 ? "hit" : "miss"};
+}
+"""
+    return stamp(code, "combat_system", ["status_effects", "animations"], "cpp")
+
+if __name__ == "__main__":
+    schema = json.loads(pathlib.Path(SCHEMA_PATH).read_text())
+    OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
+
+    files = {
+        "src/npc/npc_system.cpp":    generate_npc_system(schema),
+        "src/inventory/inventory.cpp": generate_inventory_system(schema),
+        "src/combat/combat.cpp":      generate_combat_system(schema),
+    }
+
+    manifest = {}
+    for rel_path, content in files.items():
+        full_path = OUTPUT_PATH / rel_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_text(content)
+        manifest[rel_path] = {"size": len(content), "ts": time.time()}
+        print(f"Generated: {rel_path} ({len(content)} chars)")
+
+    (OUTPUT_PATH / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    print(f"Build complete. {len(files)} files generated.")`
+      },
+      {
+        name: "Build the script executor and result compressor",
+        sub: "Runs the generated script and feeds a compressed summary back to the agent",
+        difficulty: "medium",
+        tags: ["py"],
+        what: "After the agent writes the automation script, something needs to actually run it and report back. The result compressor converts the full output into a short summary that fits back into the agent's 512-token context — so it knows what was built without re-reading all the code.",
+        how: "ScriptExecutor runs a generated Python build script in a subprocess. ResultCompressor reads the manifest and expansion port comments to produce a token-efficient summary the agent can use on the next turn.",
+        code: `# script_executor.py
+import subprocess, json, pathlib, time
+
+class ScriptExecutor:
+    def run(self, script_path: str, timeout: int = 120) -> dict:
+        start = time.time()
+        try:
+            result = subprocess.run(
+                ["python", script_path],
+                capture_output=True, text=True, timeout=timeout
+            )
+            return {
+                "success": result.returncode == 0,
+                "stdout": result.stdout[-2000:],  # last 2000 chars only
+                "stderr": result.stderr[-500:],
+                "duration_s": round(time.time() - start, 2)
+            }
+        except subprocess.TimeoutExpired:
+            return {"success": False, "stdout": "", "stderr": "Timeout", "duration_s": timeout}
+
+class ResultCompressor:
+    TOKENS_PER_CHAR = 0.25
+
+    def compress(self, project_path: str, exec_result: dict, max_tokens: int = 80) -> str:
+        manifest_path = pathlib.Path(project_path) / "manifest.json"
+        if manifest_path.exists():
+            manifest = json.loads(manifest_path.read_text())
+            file_count = len(manifest)
+            total_chars = sum(v.get("size", 0) for v in manifest.values())
+        else:
+            file_count = 0
+            total_chars = 0
+
+        expansion_points = self._scan_expansion_ports(project_path)
+
+        lines = [
+            f"BUILD RESULT: {'OK' if exec_result['success'] else 'FAILED'}",
+            f"Files: {file_count} | Total: {total_chars} chars",
+            f"Next expansion points: {', '.join(expansion_points[:5])}",
+        ]
+        if not exec_result["success"]:
+            lines.append(f"Error: {exec_result['stderr'][:100]}")
+
+        return "\\n".join(lines)
+
+    def _scan_expansion_ports(self, project_path: str) -> list:
+        ports = []
+        for f in pathlib.Path(project_path).rglob("*.cpp"):
+            for line in f.read_text(errors="ignore").splitlines():
+                if "EXPANSION_PORTS::" in line:
+                    raw = line.split("EXPANSION_PORTS::")[1]
+                    ports.extend(p.strip() for p in raw.split(",") if p.strip() != "none")
+        return list(dict.fromkeys(ports))  # deduplicated, order preserved`
+      }
+    ]
+  },
+  {
+    id: 3,
+    label: "Phase 4 — Agent control loop",
+    desc: "Wire everything together into a single orchestration loop. The agent checks memory, picks a build strategy, writes the automation script, runs it, reads the compressed result, and iterates — all automatically.",
+    tasks: [
+      {
+        name: "Build the meta-agent controller",
+        sub: "The main loop that orchestrates every other component",
+        difficulty: "hard",
+        tags: ["py"],
+        what: "MetaAgentController is the brain. Given a user request, it decides whether to ask clarifying questions, generate a build script, or run an expansion cycle. It calls every other component in the right order and keeps state between turns via compressed summaries.",
+        how: "The controller calls your actual LLM API (local or remote). It injects the assembled context, gets back a response that is either a JSON schema, a Python script, or a text reply, then routes it to the right handler.",
+        code: `# meta_agent_controller.py
+import json, pathlib, re
+from context_assembler import ContextAssembler
+from memory_writer import MemoryWriter
+from script_executor import ScriptExecutor, ResultCompressor
+from schema_interrogator import GAME_SCHEMA_TEMPLATE, SOFTWARE_SCHEMA_TEMPLATE
+
+class MetaAgentController:
+    SCRIPTS_DIR = pathlib.Path("memory_fabric/automation/code_generators")
+    PROJECTS_DIR = pathlib.Path("projects")
+
+    def __init__(self, domain: str, llm_caller):
+        """
+        llm_caller: a callable(prompt: str) -> str
+        This is YOUR LLM integration — swap in any model.
+        """
+        self.domain = domain
+        self.llm = llm_caller
+        self.assembler = ContextAssembler(domain)
+        self.writer = MemoryWriter(domain)
+        self.executor = ScriptExecutor()
+        self.compressor = ResultCompressor()
+        self.last_build_result: str = ""
+
+    def handle_turn(self, user_input: str, active_groups: list[str] = None) -> str:
+        # 1. Assemble context — memories + relevant atomic groups
+        assembled = self.assembler.build(user_input, active_groups or [])
+        if self.last_build_result:
+            assembled += f"\\n<last_build>\\n{self.last_build_result}\\n</last_build>"
+
+        # 2. Call the LLM
+        raw_response = self.llm(assembled)
+
+        # 3. Route the response by type
+        result = self._route_response(raw_response, user_input)
+
+        # 4. Save both sides to memory
+        self.writer.save_turn(user_input, result)
+
+        return result
+
+    def _route_response(self, response: str, user_input: str) -> str:
+        stripped = response.strip()
+
+        # Agent produced a Python build script
+        if stripped.startswith("# build_") or "if __name__" in stripped:
+            return self._handle_build_script(stripped)
+
+        # Agent produced a JSON schema (clarifying questions)
+        try:
+            parsed = json.loads(stripped)
+            if "project_type" in parsed:
+                schema_path = self.SCRIPTS_DIR / "schema_in_progress.json"
+                schema_path.parent.mkdir(parents=True, exist_ok=True)
+                schema_path.write_text(json.dumps(parsed, indent=2))
+                return f"Schema saved. Fill in the blank fields in:\\n{schema_path}"
+        except json.JSONDecodeError:
+            pass
+
+        # Plain text response
+        return response
+
+    def _handle_build_script(self, script_code: str) -> str:
+        # Extract project name from script
+        m = re.search(r"# build_(.+)\\.py", script_code)
+        project_name = m.group(1) if m else "unnamed_project"
+
+        script_path = self.SCRIPTS_DIR / f"build_{project_name}.py"
+        script_path.parent.mkdir(parents=True, exist_ok=True)
+        script_path.write_text(script_code)
+
+        exec_result = self.executor.run(str(script_path))
+        project_path = str(self.PROJECTS_DIR / project_name)
+        self.last_build_result = self.compressor.compress(project_path, exec_result)
+
+        status = "succeeded" if exec_result["success"] else "failed"
+        return f"Build script executed and {status}.\\n\\n{self.last_build_result}"`
+      },
+      {
+        name: "Build the expansion cycle runner",
+        sub: "Automated loop that keeps growing the codebase from expansion ports",
+        difficulty: "hard",
+        tags: ["py"],
+        what: "After the first build, the codebase has hundreds of EXPANSION_PORTS comments. The expansion cycle feeds those port names back to the agent one group at a time, asking it to generate the next automation script for each. This is how a 512-token model builds software iteratively across many turns without ever exceeding its context.",
+        how: "ExpansionRunner scans the project for EXPANSION_PORTS, picks the highest-priority one, asks the agent to generate an expansion script for it, runs the script, and repeats. Each cycle uses only a tiny slice of context — the atomic ref of the target group plus the expansion port name.",
+        code: `# expansion_runner.py
+import pathlib
+from meta_agent_controller import MetaAgentController
+from atomic_reference_system import AtomicReferenceSystem
+
+class ExpansionRunner:
+    def __init__(self, controller: MetaAgentController, project_path: str):
+        self.ctrl = controller
+        self.project_path = pathlib.Path(project_path)
+        self.ars = AtomicReferenceSystem()
+
+    def get_pending_ports(self) -> list[tuple[str, str]]:
+        """Returns list of (group_id, port_name) tuples from EXPAND_NEXT comments."""
+        pending = []
+        for f in self.project_path.rglob("*"):
+            if f.suffix not in {".cpp", ".py", ".cs", ".js", ".ts"}:
+                continue
+            group = None
+            for line in f.read_text(errors="ignore").splitlines():
+                if "INTEGRATION_GROUP::" in line:
+                    group = line.split("INTEGRATION_GROUP::")[1].strip()
+                if "EXPANSION_PORTS::" in line and group:
+                    ports_raw = line.split("EXPANSION_PORTS::")[1]
+                    for port in ports_raw.split(","):
+                        port = port.strip()
+                        if port and port != "none":
+                            pending.append((group, port))
+        return list(dict.fromkeys(pending))
+
+    def run_one_expansion(self) -> str:
+        pending = self.get_pending_ports()
+        if not pending:
+            return "No expansion ports remaining. Codebase is fully expanded."
+
+        group_id, port_name = pending[0]
+        group_code = self.ars.pull_group_to_context(group_id)
+
+        prompt = (
+            f"Expand the '{port_name}' expansion port in the '{group_id}' integration group.\\n"
+            f"Write a Python automation script that generates the implementation.\\n"
+            f"Reference code:\\n{group_code[:300]}"
+        )
+        return self.ctrl.handle_turn(prompt, active_groups=[group_id])
+
+    def run_all(self, max_cycles: int = 20) -> list[str]:
+        results = []
+        for i in range(max_cycles):
+            result = self.run_one_expansion()
+            results.append(result)
+            if "No expansion ports" in result:
+                break
+        return results`
+      }
+    ]
+  },
+  {
+    id: 4,
+    label: "Phase 5 — IDE integration & scaling",
+    desc: "Connect everything to your existing IDE agent. Add multi-drive memory routing, model-swap support, and a lightweight CLI so you can drive the whole system with plain English.",
+    tasks: [
+      {
+        name: "Build the drive router (hot/warm/cold memory tiers)",
+        sub: "Recent memories on fast drive, old ones archived to slower drives",
+        difficulty: "medium",
+        tags: ["py"],
+        what: "The memory fabric needs to span multiple drives the way you described. Hot memory (last 7 days) stays on the fastest drive. Warm memory (last 30 days) goes on a secondary drive. Cold memory (everything older) archives to a third drive. The index manager queries across all three transparently.",
+        how: "DriveRouter wraps the memory paths and rewrites them based on age thresholds. When the index manager looks up a file path, it resolves to the correct physical drive automatically.",
+        code: `# drive_router.py
+import json, time, pathlib, shutil
+
+class DriveRouter:
+    def __init__(self, hot_base: str, warm_base: str, cold_base: str):
+        self.tiers = {
+            "hot":  (pathlib.Path(hot_base),  7   * 86400),   # 7 days
+            "warm": (pathlib.Path(warm_base), 30  * 86400),   # 30 days
+            "cold": (pathlib.Path(cold_base), float("inf")),  # forever
+        }
+
+    def resolve(self, file_path: str) -> pathlib.Path:
+        """Find which drive actually has this file."""
+        rel = pathlib.Path(file_path).name
+        for tier, (base, _) in self.tiers.items():
+            candidate = base / rel
+            if candidate.exists():
+                return candidate
+        return pathlib.Path(file_path)  # fallback to original path
+
+    def promote_or_demote(self, file_path: str, last_access_ts: float):
+        """Move file to correct tier based on last access time."""
+        age = time.time() - last_access_ts
+        src = self.resolve(file_path)
+        if not src.exists():
+            return
+
+        if age < self.tiers["hot"][1]:
+            target_base = self.tiers["hot"][0]
+        elif age < self.tiers["warm"][1]:
+            target_base = self.tiers["warm"][0]
+        else:
+            target_base = self.tiers["cold"][0]
+
+        dest = target_base / src.name
+        if src != dest:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dest))`
+      },
+      {
+        name: "Build the model-swap adapter",
+        sub: "Swap any LLM into the system without rewriting the controller",
+        difficulty: "easy",
+        tags: ["py"],
+        what: "Your IDE can connect to different models. The adapter pattern means you define one interface and any model — local via llama.cpp, remote via API, or a giant 32K model — plugs in as a drop-in replacement. The entire rest of the system stays unchanged.",
+        how: "A base LLMAdapter class with a single call() method. Concrete subclasses handle the actual API call format for each provider.",
+        code: `# llm_adapter.py
+from abc import ABC, abstractmethod
+import json, urllib.request
+
+class LLMAdapter(ABC):
+    @abstractmethod
+    def call(self, prompt: str, max_tokens: int = 512) -> str: ...
+
+class LocalOllamaAdapter(LLMAdapter):
+    def __init__(self, model: str = "mistral", host: str = "http://localhost:11434"):
+        self.model = model
+        self.host = host
+
+    def call(self, prompt: str, max_tokens: int = 512) -> str:
+        payload = json.dumps({
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"num_predict": max_tokens}
+        }).encode()
+        req = urllib.request.Request(
+            f"{self.host}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read())["response"]
+
+class AnthropicAdapter(LLMAdapter):
+    def __init__(self, api_key: str, model: str = "claude-haiku-4-5-20251001"):
+        self.api_key = api_key
+        self.model = model
+
+    def call(self, prompt: str, max_tokens: int = 512) -> str:
+        payload = json.dumps({
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}]
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=60) as r:
+            data = json.loads(r.read())
+        return data["content"][0]["text"]`
+      },
+      {
+        name: "Build the CLI entry point",
+        sub: "Plain English commands to drive the entire system from terminal",
+        difficulty: "easy",
+        tags: ["py","sh"],
+        what: "A single Python script you run from terminal. You type what you want in plain English. It routes to the right component — building, expanding, querying memory, checking status — without you needing to know which class handles it.",
+        how: "A simple argparse CLI that wires up the adapters and controller and takes a --message argument. For interactive sessions, a basic REPL loop.",
+        code: `# agent_cli.py
+import argparse, sys
+from llm_adapter import LocalOllamaAdapter, AnthropicAdapter
+from meta_agent_controller import MetaAgentController
+from expansion_runner import ExpansionRunner
+
+def build_controller(model: str, api_key: str = None, domain: str = "default") -> MetaAgentController:
+    if model.startswith("claude"):
+        adapter = AnthropicAdapter(api_key=api_key, model=model)
+    else:
+        adapter = LocalOllamaAdapter(model=model)
+    return MetaAgentController(domain=domain, llm_caller=adapter.call)
+
+def main():
+    parser = argparse.ArgumentParser(description="Agent meta-architecture CLI")
+    parser.add_argument("--model",   default="mistral", help="Model name")
+    parser.add_argument("--domain",  default="default", help="Project domain")
+    parser.add_argument("--api-key", default=None,      help="API key if using cloud model")
+    parser.add_argument("--message", default=None,      help="Single message mode")
+    parser.add_argument("--expand",  default=None,      help="Project path to expand")
+    parser.add_argument("--max-cycles", type=int, default=10)
+    args = parser.parse_args()
+
+    ctrl = build_controller(args.model, args.api_key, args.domain)
+
+    if args.expand:
+        runner = ExpansionRunner(ctrl, args.expand)
+        results = runner.run_all(max_cycles=args.max_cycles)
+        for r in results:
+            print(r)
+        return
+
+    if args.message:
+        print(ctrl.handle_turn(args.message))
+        return
+
+    # REPL mode
+    print("Agent ready. Type your message (Ctrl-C to exit).")
+    while True:
+        try:
+            user_input = input("You: ").strip()
+            if not user_input:
+                continue
+            response = ctrl.handle_turn(user_input)
+            print(f"Agent: {response}\\n")
+        except KeyboardInterrupt:
+            print("\\nExiting.")
+            sys.exit(0)
+
+if __name__ == "__main__":
+    main()
+
+# Usage examples:
+# python agent_cli.py --model mistral --message "build an RPG game in C++"
+# python agent_cli.py --model mistral --expand projects/rpg_game --max-cycles 20
+# python agent_cli.py --model claude-haiku-4-5-20251001 --api-key sk-... --domain game_project`
+      }
+    ]
+  }
+];
+
+let completedTasks = new Set();
+let totalTasks = phases.reduce((a, p) => a + p.tasks.length, 0);
+
+function updateProgress() {
+  const pct = Math.round((completedTasks.size / totalTasks) * 100);
+  document.getElementById('global-bar').style.width = pct + '%';
+  document.getElementById('global-label').textContent = `${completedTasks.size} of ${totalTasks} tasks complete`;
+}
+
+function renderPhaseNav() {
+  const nav = document.getElementById('phase-nav');
+  phases.forEach((ph, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'phase-btn' + (i === 0 ? ' active' : '');
+    btn.textContent = ph.label;
+    btn.onclick = () => {
+      document.querySelectorAll('.phase-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.phase-content').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('phase-' + i).classList.add('active');
+    };
+    nav.appendChild(btn);
+  });
+}
+
+function diffTag(d) {
+  if (d === 'easy') return '<span class="tag tag-easy">easy</span>';
+  if (d === 'medium') return '<span class="tag tag-medium">medium</span>';
+  return '<span class="tag tag-hard">hardest</span>';
+}
+function langTags(tags) {
+  return tags.map(t => {
+    const cls = t === 'py' ? 'tag-py' : t === 'json' ? 'tag-json' : t === 'sh' ? 'tag-sh' : 'tag-medium';
+    return `<span class="tag ${cls}">${t}</span>`;
+  }).join('');
+}
+
+function renderPhases() {
+  const panels = document.getElementById('phase-panels');
+  phases.forEach((ph, pi) => {
+    const div = document.createElement('div');
+    div.className = 'phase-content' + (pi === 0 ? ' active' : '');
+    div.id = 'phase-' + pi;
+
+    let taskHtml = ph.tasks.map((t, ti) => {
+      const taskId = `task-${pi}-${ti}`;
+      return `
+      <div class="task" id="${taskId}-wrap">
+        <div class="task-header" onclick="toggleDetail('${taskId}')">
+          <div class="task-check" id="${taskId}-check" onclick="event.stopPropagation(); toggleCheck('${taskId}')"></div>
+          <div class="task-label">
+            <div class="task-name">${t.name}</div>
+            <div class="task-sub">${t.sub}</div>
+          </div>
+          <div class="task-expand" id="${taskId}-arrow">▾</div>
+        </div>
+        <div class="task-detail" id="${taskId}-detail">
+          <div class="detail-section">
+            <div class="detail-label">Difficulty &amp; files</div>
+            <div>${diffTag(t.difficulty)}${langTags(t.tags)}</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">What this does</div>
+            <div class="detail-text">${t.what}</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">How to build it</div>
+            <div class="detail-text">${t.how}</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-label">Production code</div>
+            <div class="code-block">${escHtml(t.code)}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    div.innerHTML = `
+      <div class="phase-title">${ph.label}</div>
+      <div class="phase-desc">${ph.desc}</div>
+      <div class="task-list">${taskHtml}</div>
+    `;
+    panels.appendChild(div);
+  });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function toggleDetail(taskId) {
+  const detail = document.getElementById(taskId + '-detail');
+  const arrow = document.getElementById(taskId + '-arrow');
+  const isOpen = detail.classList.contains('open');
+  detail.classList.toggle('open', !isOpen);
+  arrow.classList.toggle('open', !isOpen);
+}
+
+function toggleCheck(taskId) {
+  const check = document.getElementById(taskId + '-check');
+  if (completedTasks.has(taskId)) {
+    completedTasks.delete(taskId);
+    check.classList.remove('done');
+  } else {
+    completedTasks.add(taskId);
+    check.classList.add('done');
+  }
+  updateProgress();
+}
+
+renderPhaseNav();
+renderPhases();
+updateProgress();
+</script>

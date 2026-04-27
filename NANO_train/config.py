@@ -1,6 +1,7 @@
 """
-Sea of Nanos — Global Configuration
+Sea of Nanos — Global Configuration (v2)
 Hardware profiles, mesh settings, training params, storage paths.
+Supersedes all prior configs. Aligned with NANO_SEA_V2_BUILD_SPEC.md.
 """
 import os
 import platform
@@ -13,51 +14,80 @@ from pathlib import Path
 # ─── Base Paths ─────────────────────────────────────────────
 NANO_ROOT = Path(__file__).parent
 CORE_DIR = NANO_ROOT / "core"
-NANOS_DIR = NANO_ROOT / "nanos"
 DATA_DIR = NANO_ROOT / "data"
 MODELS_DIR = NANO_ROOT / "models"
 LOGS_DIR = NANO_ROOT / "logs"
 SCHEMAS_DIR = NANO_ROOT / "NANO_corpus" / "schemas"
 CHECKPOINT_DIR = NANO_ROOT / "checkpoints"
+DEPOSIT_DIR = NANO_ROOT / "deposits"
 GLYPH_DIR = NANO_ROOT / "glyphs"
 AE_DEPOSIT_DIR = NANO_ROOT / "ae_deposits"
+TOKENIZER_DIR = CHECKPOINT_DIR / "tokenizer"
 
-for d in [DATA_DIR, MODELS_DIR, LOGS_DIR, CHECKPOINT_DIR, GLYPH_DIR, AE_DEPOSIT_DIR]:
+for d in [DATA_DIR, MODELS_DIR, LOGS_DIR, CHECKPOINT_DIR, DEPOSIT_DIR,
+          GLYPH_DIR, AE_DEPOSIT_DIR, TOKENIZER_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
+
+# ═══════════════════════════════════════════════════════════════
+# NANO SEA v2 — MODEL HYPERPARAMETERS
+# Proven optimal via 30 validated experiments on 1660-Dually.
+# ═══════════════════════════════════════════════════════════════
+
+# ─── Model Dimensions ───────────────────────────────────────
+D_MODEL = 256             # Vector size all nanos share
+VOCAB_SIZE = 8192         # BPE tokenizer vocabulary
+MAX_SEQ_LEN = 512         # Context window
+N_HEADS = 4               # Attention heads per swarm layer
+N_LAYERS = 3              # Number of swarm layers (proven optimal at small scale)
+
+# ─── Nano Configuration ─────────────────────────────────────
+DEFAULT_HIDDEN_DIM = 128  # Default FFN hidden dim per nano (~65K params each)
+MIN_HIDDEN_DIM = 32       # Smallest possible nano (~16K params)
+MAX_HIDDEN_DIM = 512      # Largest possible nano (~260K params)
+DEFAULT_NANOS_PER_LAYER = 8  # Starting pool size per layer
+
+# ─── Routing ────────────────────────────────────────────────
+DEFAULT_TOP_K = 8         # Max nanos activated per token per layer
+SOFT_K = True             # Use soft differentiable k (proven in test_30v3)
+EFF_LAMBDA = 0.01         # Efficiency loss weight (penalizes activating too many)
+CHROMATIC_CANDIDATES = 50 # ChromaticIndex returns this many candidates
+
+# ─── Lifecycle ──────────────────────────────────────────────
+FITNESS_DEATH_THRESHOLD = 0.2       # Nanos below this fitness die
+FITNESS_CHECKPOINT_THRESHOLD = 0.5  # Only save nanos above this
+COSMIC_CYCLE_STEPS = 5000           # Steps per cosmic cycle before absularity check
+COMPRESSION_SURVIVAL_RATE = 0.5     # Half the nanos survive compression
+ABSULARITY_WINDOW = 100             # Steps to check for loss plateau
+ABSULARITY_THRESHOLD = 0.05         # Min loss change to NOT be a plateau
+
+# ─── Memory Paging (for v2 NanoMemoryManager) ──────────────
+GPU_NANO_BUDGET_MB = 4000    # Max VRAM for nano pool (leave room for activations)
+CPU_NANO_BUDGET_MB = 32000   # Max RAM for warm nanos
+PREFETCH_BATCH = 50          # Prefetch this many nanos per batch
+
+# ─── Training ───────────────────────────────────────────────
+LEARNING_RATE = 1e-3
+BATCH_SIZE = 32
+SEQ_LEN = 256                # Training sequence length
+GRAD_CLIP = 1.0              # Gradient clipping norm
+MIDWIFE_INTERVAL_SEC = 60    # Midwife generates data every 60 seconds
+MIDWIFE_TASKS_PER_ROUND = 5  # Examples per midwife round
 
 # ─── RBY Seed Constants (from corpus) ──────────────────────
 RBY_BASE_SEED = (0.707, 0.500, 0.793)  # Pre-normalization
 AE_EQUALS_C_EQUALS_1 = True  # r + b + y must always = 1.0
 
+# ─── Legacy Constants (retained for AE/storage modules) ─────
+STORAGE_COMPRESSION_THRESHOLD = 0.85
+STORAGE_CRITICAL_THRESHOLD = 0.90
+DECAY_LAMBDA = 0.01
+REINFORCEMENT_ALPHA = 0.1
 
-# ─── Lifecycle Constants ────────────────────────────────────
-ABSULARITY_EPSILON = 0.01      # dV/dt threshold for Λ detection
-ABSULARITY_ETA = 0.05          # LP-MD threshold
-STORAGE_COMPRESSION_THRESHOLD = 0.85  # 85% triggers compression
-STORAGE_CRITICAL_THRESHOLD = 0.90     # 90% forces immediate pruning
-DECAY_LAMBDA = 0.01            # Exponential decay rate
-REINFORCEMENT_ALPHA = 0.1      # Learning rate for importance reinforcement
-IC_AE_MAX_DEPTH = 10           # Maximum recursion depth for IC-AE infection
-IC_AE_MAX_CHILDREN = 1000      # Max child sandboxes per parent
-
-
-# ─── Fitness Weights ────────────────────────────────────────
-FITNESS_ALPHA = 0.30   # Performance weight
-FITNESS_BETA = 0.25    # Efficiency weight
-FITNESS_GAMMA = 0.15   # Inverse size weight
-FITNESS_DELTA = 0.20   # Usage frequency weight
-FITNESS_EPSILON = 0.10 # Novelty weight
-
-
-# ─── Nano Architecture Defaults ─────────────────────────────
-DEFAULT_HIDDEN_SIZE = 64
-DEFAULT_INPUT_SIZE = 128
-DEFAULT_OUTPUT_SIZE = 64
-MAX_NANO_PARAMS = 50_000   # Must fit in L1/L2 cache
-MIN_NANO_PARAMS = 256
-TRAINING_TIMEOUT_SECONDS = 120  # Max seconds per nano training cycle
-
+# ─── Fitness Weights (v2: contribution×0.5 + utilization×0.3 + efficiency×0.2) ──
+FITNESS_CONTRIBUTION_WEIGHT = 0.5
+FITNESS_UTILIZATION_WEIGHT = 0.3
+FITNESS_EFFICIENCY_WEIGHT = 0.2
 
 # ─── Server Configuration ───────────────────────────────────
 NANO_SERVER_HOST = "0.0.0.0"

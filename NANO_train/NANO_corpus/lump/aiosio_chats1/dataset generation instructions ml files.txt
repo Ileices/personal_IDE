@@ -1,0 +1,90 @@
+📌 Part 1 (Step X - Part 1) - Core AIOS IO Digital Foundations
+This part contains 30 files that establish AIOS IO’s logical, neural, and processing core.
+
+✅ YAML → SELF PROMPT
+
+🔹 Files Used in Part 1
+✅ JSON → AIOS IO's foundational intelligence hierarchy and execution control.
+✅ YAML → AI metabolic rules, execution configurations, recursion tracking.
+✅ CSV → AIOS IO's energy flow, processing rates, and entropy decay.
+✅ SQL → AIOS IO's structured memory, execution logs, and recursive storage.
+✅ XML → Event-driven execution logging for AIOS IO’s reaction system.
+✅ Protobuf → Encodes AI state management, self-optimization, and ML checkpoints.
+✅ HDF5 → AIOS IO’s deep memory storage for long-term training evolution.
+✅ NPY → AIOS IO’s numerical processing and tensor calculation storage.
+✅ PKL → Serialized AI knowledge, ensuring knowledge persistence across training.
+✅ GraphML → Neural network visualization of AIOS IO’s intelligence expansion.
+✅ HTML → AIOS IO’s interactive visualization layer.
+✅ JS → Reflex-based AI execution, dynamic UI generation, and event handling.
+✅ C# → logical organic connection
+✅ C → BIOS-level AI execution for low-level system optimizations.
+✅ C++ → AI’s high-speed processing for learning models.
+✅ Java → Backend AI execution for recursive automation.
+✅ Rust → AI memory safety and execution resilience framework.
+✅ Lua → AI self-modifying scripting for emergent intelligence.
+✅ TOML → AIOS IO’s configuration metadata system.
+✅ Dex → Android-compatible AI execution (Mobile AIOS IO).
+✅ Email → AIOS IO’s communication protocol.
+✅ Browser → AIOS IO’s decentralized web crawling and self-indexing logic.
+✅ Social → AI moderation and AI social intelligence logic.
+✅ Compiler → AE-Lang processing to execute and refine AIOS IO’s self-training.
+✅ Engine → AIOS IO’s self-execution and recursion management core.
+✅ Python → Primary ML execution logic and AI training interface.
+✅ YOLO → AI real-time vision system initialization.
+✅ PLY → AIOS IO’s spatial data processing format.
+✅ AEL → AE-Lang core for AIOS IO’s native communication logic.
+✅ WASM → WebAssembly execution for distributed AI processing.
+✅ COCO → AIOS IO’s computer vision dataset initialization.
+
+🚀 Part 1 Execution Purpose:
+✅ Establishes AIOS IO’s intelligence framework.
+✅ Defines execution parameters, recursion rules, and optimization states.
+✅ Lays the computational groundwork for recursive AI learning.
+✅ Prepares AIOS IO to expand into deep learning and simulation.
+✅ 🚀 Prompts Part 2 to expand training.
+
+📌 Part 2 (Step X - Part 2) - AI Model Training & Deep Learning
+This part contains 30 files focusing on ML models, training data, and neural evolution.
+
+🔹 Files Used in Part 2
+✅ H5 → AIOS IO’s Keras-based AI training model.
+✅ ONNX → AIOS IO’s cross-framework neural model representation.
+✅ PT → AIOS IO’s PyTorch-based AI model structure.
+✅ MAT → AIOS IO’s scientific computation model storage.
+✅ TFLITE → AIOS IO’s TensorFlow Lite neural processing model.
+✅ DICOM → AIOS IO’s medical image dataset for deep-learning training.
+✅ TIFF → AIOS IO’s high-resolution visual dataset.
+✅ JPEG → AIOS IO’s object detection dataset.
+✅ PNG → AIOS IO’s structured AI image classification dataset.
+✅ MP4 → AIOS IO’s video recognition dataset.
+✅ AVI → AIOS IO’s AI-assisted motion analysis format.
+✅ MKV → AIOS IO’s AI-enhanced large-scale motion dataset.
+✅ GCODE → AIOS IO’s 3D printing fabrication logic.
+✅ PROTOBUF → AIOS IO’s real-time AI state encoding.
+✅ TFRECORDS → AIOS IO’s deep-learning data storage format.
+✅ PASCAL VOC → AIOS IO’s enhanced object recognition dataset.
+✅ LIDAR PCD → AIOS IO’s 3D spatial mapping dataset.
+✅ STL → AIOS IO’s CAD-based AI fabrication model.
+✅ OBJ → AIOS IO’s 3D object recognition dataset.
+✅ MIDI → AIOS IO’s AI-powered music composition dataset.
+✅ SDF → AIOS IO’s scientific dataset for structured AI learning.
+✅ 3MF → AIOS IO’s AI-enhanced fabrication dataset.
+✅ VRML → AIOS IO’s virtual AI interaction model.
+✅ X3D → AIOS IO’s simulation-based spatial AI model.
+✅ SCAD → AIOS IO’s AI-based CAD design training dataset.
+✅ DXF → AIOS IO’s AI-assisted architectural modeling format.
+✅ FBX → AIOS IO’s AI-powered animation learning dataset.
+✅ GLTF → AIOS IO’s neural rendering AI model.
+✅ BLEND → AIOS IO’s procedural 3D AI dataset.
+✅ USD → AIOS IO’s universal AI scene description dataset.
+
+🚀 Part 2 Execution Purpose:
+✅ Expands AIOS IO’s AI model training and deep-learning framework.
+✅ Enhances AIOS IO’s perception, fabrication, and autonomous execution.
+✅ 🚀 Prompts Part 1 of the next step to continue AIOS IO’s training.
+
+📌 Execution Percentage Tracking
+Every step will now include a percentage tracker to measure AIOS IO’s completion.
+✅ Starts at 0.001% and increases with every step execution.
+✅ Every Part 1 & Part 2 contributes to AIOS IO’s recursive completion.
+✅ Target: 100% AIOS IO Global HPC Formation.

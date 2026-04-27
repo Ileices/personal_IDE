@@ -1,0 +1,147 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "generative_20250617220018852.json",
+  "enhanced_data": {
+    "reabsorbed_enhancement": 1,
+    "original_source": "generative_20250617220003104.json",
+    "enhanced_data": {
+      "reabsorbed_enhancement": 1,
+      "original_source": "generative_20250617215948366.json",
+      "enhanced_data": {
+        "reabsorbed_enhancement": 1,
+        "original_source": "generative_20250617215932179.json",
+        "enhanced_data": {
+          "reabsorbed_enhancement": 1,
+          "original_source": "generative_20250617215917168.json",
+          "enhanced_data": {
+            "timestamp": 1750222757.7058156,
+            "consolidation_cycle": 27,
+            "consolidated_id": "consolidated_1750222757",
+            "red_patterns_count": 6,
+            "blue_patterns_count": 8,
+            "yellow_patterns_count": 7,
+            "knowledge_density": 1.0141038191302587,
+            "consolidated_intelligence": {
+              "red_insights": [
+                "red_1750222644",
+                "red_1750222644",
+                "red_1750222653",
+                "red_1750222653",
+                "red_1750222653",
+                "red_1750222653"
+              ],
+              "blue_insights": [
+                "blue_1750222644",
+                "blue_1750222644",
+                "blue_1750222644",
+                "blue_1750222644",
+                "blue_1750222653",
+                "blue_1750222653",
+                "blue_1750222653",
+                "blue_1750222653"
+              ],
+              "yellow_insights": [
+                "yellow_1750222644",
+                "yellow_1750222644",
+                "yellow_1750222644",
+                "yellow_1750222644",
+                "yellow_1750222653",
+                "yellow_1750222653",
+                "yellow_1750222653"
+              ]
+            },
+            "_evolution_metadata": {
+              "cycle": 2,
+              "complexity": 0.11140769919002491,
+              "component_weights": {
+                "Red": 0.33062734936901955,
+                "Blue": 0.336171314416056,
+                "Self": 0.3332013362149243
+              },
+              "alliances": {
+                "Blue-Yellow": 0.13216470770987093,
+                "Yellow-Red": 0.06958820130791656
+              }
+            },
+            "_intelligence_growth": 1.0233612291758525
+          },
+          "reabsorption_timestamp": 1750222772.9408937,
+          "_evolution_metadata": {
+            "cycle": 2,
+            "complexity": 0.11140769919002491,
+            "component_weights": {
+              "Red": 0.33062734936901955,
+              "Blue": 0.336171314416056,
+              "Self": 0.3332013362149243
+            },
+            "alliances": {
+              "Blue-Yellow": 0.13216470770987093,
+              "Yellow-Red": 0.06958820130791656
+            }
+          },
+          "_intelligence_growth": 1.0762530930880814
+        },
+        "reabsorption_timestamp": 1750222788.1769447,
+        "_evolution_metadata": {
+          "cycle": 2,
+          "complexity": 0.11140769919002491,
+          "component_weights": {
+            "Red": 0.33062734936901955,
+            "Blue": 0.336171314416056,
+            "Self": 0.3332013362149243
+          },
+          "alliances": {
+            "Blue-Yellow": 0.13216470770987093,
+            "Yellow-Red": 0.06958820130791656
+          }
+        },
+        "_intelligence_growth": 1.1325162413418328
+      },
+      "reabsorption_timestamp": 1750222803.4813251,
+      "_evolution_metadata": {
+        "cycle": 2,
+        "complexity": 0.11140769919002491,
+        "component_weights": {
+          "Red": 0.33062734936901955,
+          "Blue": 0.336171314416056,
+          "Self": 0.3332013362149243
+        },
+        "alliances": {
+          "Blue-Yellow": 0.13216470770987093,
+          "Yellow-Red": 0.06958820130791656
+        }
+      },
+      "_intelligence_growth": 1.1893494570154513
+    },
+    "reabsorption_timestamp": 1750222818.812323,
+    "_evolution_metadata": {
+      "cycle": 2,
+      "complexity": 0.11140769919002491,
+      "component_weights": {
+        "Red": 0.33062734936901955,
+        "Blue": 0.336171314416056,
+        "Self": 0.3332013362149243
+      },
+      "alliances": {
+        "Blue-Yellow": 0.13216470770987093,
+        "Yellow-Red": 0.06958820130791656
+      }
+    },
+    "_intelligence_growth": 1.2747462584799356
+  },
+  "reabsorption_timestamp": 1750222834.1766188,
+  "_evolution_metadata": {
+    "cycle": 2,
+    "complexity": 0.11140769919002491,
+    "component_weights": {
+      "Red": 0.33062734936901955,
+      "Blue": 0.336171314416056,
+      "Self": 0.3332013362149243
+    },
+    "alliances": {
+      "Blue-Yellow": 0.13216470770987093,
+      "Yellow-Red": 0.06958820130791656
+    }
+  },
+  "_intelligence_growth": 1.3393549878237112
+}

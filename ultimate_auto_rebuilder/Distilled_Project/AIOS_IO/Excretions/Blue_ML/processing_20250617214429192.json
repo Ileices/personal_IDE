@@ -1,0 +1,123 @@
+{
+  "reabsorbed_enhancement": 1,
+  "original_source": "processing_20250617214413174.json",
+  "enhanced_data": {
+    "reabsorbed_enhancement": 1,
+    "original_source": "processing_20250617214358.json",
+    "enhanced_data": {
+      "reabsorbed_enhancement": 1,
+      "original_source": "processing_20250617214343.json",
+      "enhanced_data": {
+        "reabsorbed_enhancement": 1,
+        "original_source": "processing_20250617214328.json",
+        "enhanced_data": {
+          "reabsorbed_enhancement": 1,
+          "original_source": "processing_20250617214313.json",
+          "enhanced_data": {
+            "timestamp": 1750221793.4689846,
+            "consolidation_cycle": 27,
+            "consolidated_id": "consolidated_1750221793",
+            "red_patterns_count": 0,
+            "blue_patterns_count": 0,
+            "yellow_patterns_count": 0,
+            "knowledge_density": 0.1,
+            "consolidated_intelligence": {
+              "red_insights": [],
+              "blue_insights": [],
+              "yellow_insights": []
+            },
+            "_evolution_metadata": {
+              "cycle": 0,
+              "complexity": 0.10360504307837068,
+              "component_weights": {
+                "Red": 0.33675988278272506,
+                "Yellow": 0.32538075540015227,
+                "Self": 0.33785936181712267
+              },
+              "alliances": {
+                "Red-Blue": 0.08893554792489296,
+                "Blue-Yellow": -0.025576694366292396
+              }
+            },
+            "_intelligence_growth": 0.10962013730795783
+          },
+          "reabsorption_timestamp": 1750221808.5681677,
+          "_evolution_metadata": {
+            "cycle": 0,
+            "complexity": 0.10360504307837068,
+            "component_weights": {
+              "Red": 0.33675988278272506,
+              "Yellow": 0.32538075540015227,
+              "Self": 0.33785936181712267
+            },
+            "alliances": {
+              "Red-Blue": 0.08893554792489296,
+              "Blue-Yellow": -0.025576694366292396
+            }
+          },
+          "_intelligence_growth": 0.12158593396399014
+        },
+        "reabsorption_timestamp": 1750221823.6462922,
+        "_evolution_metadata": {
+          "cycle": 0,
+          "complexity": 0.10360504307837068,
+          "component_weights": {
+            "Red": 0.33675988278272506,
+            "Yellow": 0.32538075540015227,
+            "Self": 0.33785936181712267
+          },
+          "alliances": {
+            "Red-Blue": 0.08893554792489296,
+            "Blue-Yellow": -0.025576694366292396
+          }
+        },
+        "_intelligence_growth": 0.14233040291128837
+      },
+      "reabsorption_timestamp": 1750221838.749599,
+      "_evolution_metadata": {
+        "cycle": 0,
+        "complexity": 0.10360504307837068,
+        "component_weights": {
+          "Red": 0.33675988278272506,
+          "Yellow": 0.32538075540015227,
+          "Self": 0.33785936181712267
+        },
+        "alliances": {
+          "Red-Blue": 0.08893554792489296,
+          "Blue-Yellow": -0.025576694366292396
+        }
+      },
+      "_intelligence_growth": 0.15742985425449707
+    },
+    "reabsorption_timestamp": 1750221853.9232903,
+    "_evolution_metadata": {
+      "cycle": 0,
+      "complexity": 0.10360504307837068,
+      "component_weights": {
+        "Red": 0.33675988278272506,
+        "Yellow": 0.32538075540015227,
+        "Self": 0.33785936181712267
+      },
+      "alliances": {
+        "Red-Blue": 0.08893554792489296,
+        "Blue-Yellow": -0.025576694366292396
+      }
+    },
+    "_intelligence_growth": 0.20559252208560166
+  },
+  "reabsorption_timestamp": 1750221869.0667489,
+  "_evolution_metadata": {
+    "cycle": 0,
+    "complexity": 0.10360504307837068,
+    "component_weights": {
+      "Red": 0.33675988278272506,
+      "Yellow": 0.32538075540015227,
+      "Self": 0.33785936181712267
+    },
+    "alliances": {
+      "Red-Blue": 0.08893554792489296,
+      "Blue-Yellow": -0.025576694366292396
+    }
+  },
+  "_intelligence_growth": 0.2335445666099385
+}
