@@ -51,6 +51,14 @@ export async function streamChatResponse(
   };
 
   try {
+    // Emit immediately so clients can bind conversation/message IDs without
+    // waiting for upstream model stream initialization.
+    sendEvent({
+      type: 'message_start',
+      messageId: options?.messageId || '',
+      conversationId: options?.conversationId || '',
+    });
+
     const modelParams = buildModelParams(model, {
       temperature: options?.temperature,
       maxTokens: options?.maxTokens,
@@ -64,12 +72,6 @@ export async function streamChatResponse(
     }, { signal: options?.signal ?? AbortSignal.timeout(10 * 60_000) });
 
     let fullContent = '';
-
-    sendEvent({
-      type: 'message_start',
-      messageId: options?.messageId || '',
-      conversationId: options?.conversationId || '',
-    });
 
     for await (const chunk of stream) {
       // Check for abort
