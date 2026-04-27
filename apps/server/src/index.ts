@@ -30,6 +30,8 @@ import csrfPlugin from './plugins/csrf.js';
 import { validationPlugin } from './plugins/validation.js';
 import { registerGracefulShutdown } from './plugins/gracefulShutdown.js';
 
+const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
 async function main() {
   // Initialize the database
   const db = initDatabase(appConfig.db.path);
@@ -55,7 +57,7 @@ async function main() {
         'http://localhost:5173',
         'http://localhost:3000',
       ];
-      if (!origin || allowed.includes(origin)) {
+      if (!origin || allowed.includes(origin) || LOCAL_DEV_ORIGIN_RE.test(origin)) {
         cb(null, true);
       } else {
         cb(null, false);

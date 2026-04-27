@@ -56,6 +56,12 @@ export function TopBar() {
       const data = await res.json();
       if (data.models?.length > 0) {
         setDynamicModels(data.models);
+
+        // Auto-fallback when current model is unavailable (common in guest mode).
+        const modelIds = new Set<string>(data.models.map((m: DynamicModel) => m.id));
+        if (!modelIds.has(selectedModel)) {
+          setModel(data.models[0].id);
+        }
       }
       // Surface errors so user knows which providers failed
       if (data.errors?.length > 0) {

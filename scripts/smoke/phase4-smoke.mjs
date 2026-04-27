@@ -1,8 +1,45 @@
 #!/usr/bin/env node
 
-const BASE_URL = (process.env.PHASE4_BASE_URL || 'http://127.0.0.1:3001').replace(/\/+$/, '');
-const ORIGIN = process.env.PHASE4_ORIGIN || 'http://localhost:5173';
-const MODEL = process.env.PHASE4_MODEL || 'ollama/llama3.2';
+function parseCliOptions(argv) {
+  const options = {};
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (!arg.startsWith('--')) {
+      continue;
+    }
+
+    const trimmed = arg.slice(2);
+    const equalsIndex = trimmed.indexOf('=');
+
+    if (equalsIndex >= 0) {
+      const key = trimmed.slice(0, equalsIndex);
+      const value = trimmed.slice(equalsIndex + 1);
+      options[key] = value;
+      continue;
+    }
+
+    const next = argv[i + 1];
+    if (next && !next.startsWith('--')) {
+      options[trimmed] = next;
+      i += 1;
+    } else {
+      options[trimmed] = 'true';
+    }
+  }
+
+  return options;
+}
+
+const cliOptions = parseCliOptions(process.argv.slice(2));
+
+const baseUrlOption = cliOptions.baseUrl || cliOptions['base-url'];
+const originOption = cliOptions.origin;
+const modelOption = cliOptions.model;
+
+const BASE_URL = (baseUrlOption || process.env.PHASE4_BASE_URL || 'http://127.0.0.1:3001').replace(/\/+$/, '');
+const ORIGIN = originOption || process.env.PHASE4_ORIGIN || 'http://localhost:5173';
+const MODEL = modelOption || process.env.PHASE4_MODEL || 'ollama/llama3.2';
 
 const requestHeaders = {
   Origin: ORIGIN,
@@ -188,6 +225,10 @@ async function sendChat(projectId, message) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function hasHttpResponse(result) {
+  return typeof result?.status === 'number' && result.status > 0;
 }
 
 function pick(result, keys) {
@@ -441,7 +482,7 @@ report.details.ollama = {
   },
 };
 
-report.checks.ollamaRoutes = ollamaDiagnose.status !== 404 && allModels.status !== 404;
+report.checks.ollamaRoutes = ollamaDiagnose.ok && allModels.ok && hasAnyOllamaModel;
 
 logStep('nano routes');
 const nanoStatus = await request('GET', '/api/nano/status');
@@ -476,10 +517,13 @@ report.details.nano = {
 };
 
 report.checks.nanoPayloadRoutes =
+  hasHttpResponse(nanoDonation) &&
   nanoDonation.status !== 404 &&
   nanoDonation.status !== 415 &&
+  hasHttpResponse(nanoIdleTraining) &&
   nanoIdleTraining.status !== 404 &&
   nanoIdleTraining.status !== 415 &&
+  hasHttpResponse(nanoOptIn) &&
   nanoOptIn.status !== 404 &&
   nanoOptIn.status !== 415;
 

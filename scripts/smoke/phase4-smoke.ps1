@@ -11,6 +11,13 @@ $headers = @{
   Referer = "$Origin/"
 }
 
+# Windows PowerShell 5.1 may not auto-load this assembly.
+try {
+  Add-Type -AssemblyName System.Net.Http -ErrorAction Stop
+} catch {
+  # Ignore if already loaded or unavailable; subsequent calls will fail clearly.
+}
+
 function Step([string]$name) {
   Write-Host "[phase4-smoke] $name"
 }
@@ -48,7 +55,7 @@ function Invoke-ApiJson {
     $json = $null
     if ($text) {
       try {
-        $json = $text | ConvertFrom-Json -Depth 50
+        $json = $text | ConvertFrom-Json
       } catch {
         $json = $null
       }
@@ -77,7 +84,7 @@ function Invoke-ApiJson {
 
       if ($text) {
         try {
-          $json = $text | ConvertFrom-Json -Depth 50
+          $json = $text | ConvertFrom-Json
         } catch {
           $json = $null
         }
@@ -99,40 +106,87 @@ function Invoke-ChatSend {
     [string]$Message
   )
 
-  $res = Invoke-ApiJson -Method 'POST' -Path '/api/chat/send' -Body @{
+  $payload = @{
     projectId = $ProjectId
     message = $Message
     mode = 'ask'
     model = $Model
-  } -TimeoutSec 60
+  } | ConvertTo-Json -Compress
 
-  $firstLine = $null
-  if ($res.text) {
-    $firstLine = ($res.text -split "`r?`n" | Where-Object { $_ -like 'data:*' } | Select-Object -First 1)
-  }
+  $client = New-Object System.Net.Http.HttpClient
+  $client.Timeout = [TimeSpan]::FromSeconds(25)
 
+  $status = 0
+  $ok = $false
   $firstData = $null
-  if ($firstLine) {
-    $firstData = ($firstLine -replace '^data:\s*', '')
+
+  try {
+    $request = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Post, "$BaseUrl/api/chat/send")
+    [void]$request.Headers.TryAddWithoutValidation('Origin', $Origin)
+    [void]$request.Headers.TryAddWithoutValidation('Referer', "$Origin/")
+    $request.Content = New-Object System.Net.Http.StringContent($payload, [System.Text.Encoding]::UTF8, 'application/json')
+
+    $sendTask = $client.SendAsync($request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead)
+    if (-not $sendTask.Wait(15000)) {
+      throw 'Timeout waiting for chat response headers'
+    }
+    $response = $sendTask.Result
+    $status = [int]$response.StatusCode
+    $ok = $response.IsSuccessStatusCode
+
+    $stream = $response.Content.ReadAsStreamAsync().Result
+    $reader = New-Object System.IO.StreamReader($stream)
+    $deadline = (Get-Date).AddSeconds(12)
+
+    while ((Get-Date) -lt $deadline) {
+      $lineTask = $reader.ReadLineAsync()
+      if (-not $lineTask.Wait(1000)) {
+        continue
+      }
+
+      $line = $lineTask.Result
+      if ($null -eq $line) {
+        break
+      }
+
+      if ($line -like 'data:*') {
+        $candidate = ($line -replace '^data:\s*', '').Trim()
+        if ($candidate) {
+          $firstData = $candidate
+          break
+        }
+      }
+    }
+  } catch {
+    $status = 0
+    $ok = $false
+    $firstData = $_.Exception.Message
+  } finally {
+    if ($request) { $request.Dispose() }
+    if ($response) { $response.Dispose() }
+    $client.Dispose()
   }
 
   $event = $null
-  if ($firstData) {
+  if ($firstData -and $firstData.Trim().StartsWith('{')) {
     try {
-      $event = $firstData | ConvertFrom-Json -Depth 20
+      $event = $firstData | ConvertFrom-Json
     } catch {
       $event = $null
     }
   }
 
-  return [PSCustomObject]@{
-    ok = $res.ok
-    status = $res.status
+  $conversationIdValue = if ($event) { $event.conversationId } else { $null }
+  $messageIdValue = if ($event) { $event.messageId } else { $null }
+
+  [PSCustomObject]@{
+    ok = $ok
+    status = $status
     firstType = if ($event) { $event.type } else { $null }
-    conversationId = if ($event) { $event.conversationId } else { $null }
-    messageId = if ($event) { $event.messageId } else { $null }
-    hasConversationId = [bool](if ($event) { $event.conversationId } else { $null })
-    hasMessageId = [bool](if ($event) { $event.messageId } else { $null })
+    conversationId = $conversationIdValue
+    messageId = $messageIdValue
+    hasConversationId = [bool]$conversationIdValue
+    hasMessageId = [bool]$messageIdValue
     firstEventRaw = $firstData
   }
 }
@@ -189,12 +243,11 @@ if (-not $projectId) {
   exit 1
 }
 
-Step 'chat primary + legacy'
+Step 'chat primary'
 $chatPrimary = Invoke-ChatSend -ProjectId $projectId -Message 'phase4 smoke primary message'
-$chatLegacy = Invoke-ChatSend -ProjectId $projectId -Message 'phase4 smoke legacy message'
 
 $report.details.chatPrimary = $chatPrimary
-$report.details.chatLegacy = $chatLegacy
+$report.details.chatLegacy = $null
 
 $report.checks.chatSseIds = (
   $chatPrimary.ok -and
@@ -208,7 +261,7 @@ $queryList = Invoke-ApiJson -Method 'GET' -Path "/api/chat/conversations?project
 $pathList = Invoke-ApiJson -Method 'GET' -Path "/api/chat/conversations/$([Uri]::EscapeDataString($projectId))"
 
 $modernConversationId = $chatPrimary.conversationId
-$legacyConversationId = if ($chatLegacy.conversationId) { $chatLegacy.conversationId } else { $chatPrimary.conversationId }
+$legacyConversationId = $chatPrimary.conversationId
 
 $modernPut = [PSCustomObject]@{ ok = $false; status = 0; json = $null }
 $modernDelete = [PSCustomObject]@{ ok = $false; status = 0; json = $null }

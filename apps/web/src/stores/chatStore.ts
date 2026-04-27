@@ -98,7 +98,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           message,
           model: selectedModel,
           mode,
-          conversationId,
+          conversationId: conversationId || undefined,
           contextFiles: contextFiles.length > 0 ? contextFiles : undefined,
           autoInjectMemory: true,
         },

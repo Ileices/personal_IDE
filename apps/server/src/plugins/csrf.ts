@@ -17,6 +17,7 @@ interface CSRFOptions {
 }
 
 const DEFAULT_UNSAFE = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
 
 /**
  * CSRF guard plugin.
@@ -32,6 +33,11 @@ async function csrfPlugin(app: FastifyInstance, opts: CSRFOptions): Promise<void
   const unsafeMethods = opts.unsafeMethods || DEFAULT_UNSAFE;
   const exemptPaths = new Set(opts.exemptPaths || []);
   const allowedSet = new Set(opts.allowedOrigins.map(o => o.replace(/\/+$/, '')));
+
+  const isAllowedOrigin = (origin: string): boolean => {
+    const cleanOrigin = origin.replace(/\/+$/, '');
+    return allowedSet.has(cleanOrigin) || LOCAL_DEV_ORIGIN_RE.test(cleanOrigin);
+  };
 
   // Also allow same-origin requests (no Origin header, from server-side or curl)
   // and requests with a valid Referer from allowed origins.
@@ -49,7 +55,7 @@ async function csrfPlugin(app: FastifyInstance, opts: CSRFOptions): Promise<void
     // If Origin header is present, it must match
     if (origin) {
       const cleanOrigin = origin.replace(/\/+$/, '');
-      if (allowedSet.has(cleanOrigin)) return;
+      if (isAllowedOrigin(cleanOrigin)) return;
       // Reject
       return reply.status(403).send({
         error: 'CSRF validation failed',
@@ -61,7 +67,7 @@ async function csrfPlugin(app: FastifyInstance, opts: CSRFOptions): Promise<void
     if (referer) {
       try {
         const refOrigin = new URL(referer).origin;
-        if (allowedSet.has(refOrigin)) return;
+        if (isAllowedOrigin(refOrigin)) return;
       } catch { /* invalid referer URL */ }
       return reply.status(403).send({
         error: 'CSRF validation failed',
