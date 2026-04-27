@@ -41,6 +41,23 @@ export interface RunSetupResult {
 
 type EmitFn = (event: any) => void;
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race<T>([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 /**
  * Resolve the actual context window for a model.
  * For catalog models (GitHub), uses the known maxInputTokens.
@@ -55,6 +72,8 @@ export async function resolveModelContextWindow(
   configContextWindow: number | undefined,
   emit: EmitFn,
 ): Promise<number> {
+  const DISCOVERY_TIMEOUT_MS = 5000;
+
   // 1. Check if the model is in our known catalog
   const catalogModel = getModel(model);
   if (catalogModel) {
@@ -72,7 +91,11 @@ export async function resolveModelContextWindow(
     try {
       const client = getClientFromDb(db, provider);
       if (client) {
-        const models = await fetchProviderModels(client, provider);
+        const models = await withTimeout(
+          fetchProviderModels(client, provider),
+          DISCOVERY_TIMEOUT_MS,
+          `Context discovery timed out after ${DISCOVERY_TIMEOUT_MS}ms`,
+        );
         const match = models.find(m => m.id === model || m.providerId === model);
         if (match && match.contextWindow) {
           emit({ type: 'info', message: `Dynamic context discovery: ${model} → ${match.contextWindow} tokens` });
