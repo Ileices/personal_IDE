@@ -47,6 +47,7 @@ const modelOption = cliOptions.model;
 const requestTimeoutOption = cliOptions.requestTimeoutMs || cliOptions['request-timeout-ms'] || process.env.PHASE4_REQUEST_TIMEOUT_MS;
 const chatTimeoutOption = cliOptions.chatTimeoutMs || cliOptions['chat-timeout-ms'] || process.env.PHASE4_CHAT_TIMEOUT_MS;
 const startTimeoutOption = cliOptions.startTimeoutMs || cliOptions['start-timeout-ms'] || process.env.PHASE4_START_TIMEOUT_MS;
+const chatAttemptsOption = cliOptions.chatAttempts || cliOptions['chat-attempts'] || process.env.PHASE4_CHAT_ATTEMPTS;
 const firstEventTimeoutOption =
   cliOptions.firstEventTimeoutMs ||
   cliOptions['first-event-timeout-ms'] ||
@@ -58,6 +59,7 @@ const MODEL = modelOption || process.env.PHASE4_MODEL || 'ollama/qwen2.5-coder:7
 const REQUEST_TIMEOUT_MS = parsePositiveInt(requestTimeoutOption, 30000);
 const CHAT_TIMEOUT_MS = parsePositiveInt(chatTimeoutOption, 120000);
 const START_TIMEOUT_MS = parsePositiveInt(startTimeoutOption, 180000);
+const CHAT_ATTEMPTS = Math.max(1, Math.min(5, parsePositiveInt(chatAttemptsOption, 2)));
 const FIRST_EVENT_TIMEOUT_MS = parsePositiveInt(firstEventTimeoutOption, 60000);
 
 const requestHeaders = {
@@ -248,6 +250,23 @@ async function sendChat(projectId, message) {
   }
 }
 
+async function sendChatWithRetry(projectId, message, attempts = CHAT_ATTEMPTS) {
+  let last = null;
+
+  for (let i = 0; i < attempts; i += 1) {
+    last = await sendChat(projectId, message);
+    if (last.ok && last.hasConversationId && last.hasMessageId) {
+      return last;
+    }
+
+    if (i < attempts - 1) {
+      await delay(1500);
+    }
+  }
+
+  return last;
+}
+
 function hasHttpResponse(result) {
   return typeof result?.status === 'number' && result.status > 0;
 }
@@ -268,6 +287,7 @@ const report = {
     requestMs: REQUEST_TIMEOUT_MS,
     chatMs: CHAT_TIMEOUT_MS,
     startMs: START_TIMEOUT_MS,
+    chatAttempts: CHAT_ATTEMPTS,
     firstEventMs: FIRST_EVENT_TIMEOUT_MS,
   },
   projectId: null,
@@ -319,7 +339,7 @@ if (!projectId) {
 report.checks.projectCreate = true;
 
 logStep('chat primary + legacy');
-const chatPrimary = await sendChat(projectId, 'phase4 smoke primary message');
+const chatPrimary = await sendChatWithRetry(projectId, 'phase4 smoke primary message');
 const chatLegacy = {
   skipped: true,
   reason: 'Legacy route checks reuse the primary conversation ID.',
