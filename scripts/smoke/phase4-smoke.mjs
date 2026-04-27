@@ -46,6 +46,7 @@ const originOption = cliOptions.origin;
 const modelOption = cliOptions.model;
 const requestTimeoutOption = cliOptions.requestTimeoutMs || cliOptions['request-timeout-ms'] || process.env.PHASE4_REQUEST_TIMEOUT_MS;
 const chatTimeoutOption = cliOptions.chatTimeoutMs || cliOptions['chat-timeout-ms'] || process.env.PHASE4_CHAT_TIMEOUT_MS;
+const startTimeoutOption = cliOptions.startTimeoutMs || cliOptions['start-timeout-ms'] || process.env.PHASE4_START_TIMEOUT_MS;
 const firstEventTimeoutOption =
   cliOptions.firstEventTimeoutMs ||
   cliOptions['first-event-timeout-ms'] ||
@@ -56,6 +57,7 @@ const ORIGIN = originOption || process.env.PHASE4_ORIGIN || 'http://localhost:51
 const MODEL = modelOption || process.env.PHASE4_MODEL || 'ollama/qwen2.5-coder:7b';
 const REQUEST_TIMEOUT_MS = parsePositiveInt(requestTimeoutOption, 30000);
 const CHAT_TIMEOUT_MS = parsePositiveInt(chatTimeoutOption, 120000);
+const START_TIMEOUT_MS = parsePositiveInt(startTimeoutOption, 180000);
 const FIRST_EVENT_TIMEOUT_MS = parsePositiveInt(firstEventTimeoutOption, 60000);
 
 const requestHeaders = {
@@ -109,6 +111,29 @@ async function request(method, path, body, timeoutMs = REQUEST_TIMEOUT_MS) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function requestWithRetry(method, path, body, options = {}) {
+  const attempts = options.attempts ?? 1;
+  const delayMs = options.delayMs ?? 0;
+  const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
+
+  let lastResult = null;
+  for (let i = 0; i < attempts; i += 1) {
+    lastResult = await request(method, path, body, timeoutMs);
+    if (lastResult?.status > 0) {
+      return lastResult;
+    }
+    if (i < attempts - 1 && delayMs > 0) {
+      await delay(delayMs);
+    }
+  }
+
+  return lastResult;
 }
 
 async function sendChat(projectId, message) {
@@ -242,6 +267,7 @@ const report = {
   timeouts: {
     requestMs: REQUEST_TIMEOUT_MS,
     chatMs: CHAT_TIMEOUT_MS,
+    startMs: START_TIMEOUT_MS,
     firstEventMs: FIRST_EVENT_TIMEOUT_MS,
   },
   projectId: null,
@@ -379,7 +405,7 @@ const agentStart = await request('POST', '/api/agent/start', {
   model: MODEL,
   maxIterations: 1,
   stepDelayMs: 0,
-});
+}, START_TIMEOUT_MS);
 const agentStatus = await request('GET', '/api/agent/status');
 const agentPause = await request('POST', '/api/agent/pause', {});
 const agentResume = await request('POST', '/api/agent/resume', {});
@@ -430,11 +456,11 @@ const fleetStart = await request('POST', '/api/fleet/start', {
   agentCount: 2,
   maxIterationsPerAgent: 1,
   continuousMode: false,
-});
-const fleetStatus = await request('GET', '/api/fleet/status');
-const fleetPause = await request('POST', '/api/fleet/pause', {});
-const fleetResume = await request('POST', '/api/fleet/resume', {});
-const fleetStop = await request('POST', '/api/fleet/stop', {});
+}, START_TIMEOUT_MS);
+const fleetStatus = await requestWithRetry('GET', '/api/fleet/status', undefined, { attempts: 4, delayMs: 2000 });
+const fleetPause = await requestWithRetry('POST', '/api/fleet/pause', {}, { attempts: 3, delayMs: 2000 });
+const fleetResume = await requestWithRetry('POST', '/api/fleet/resume', {}, { attempts: 3, delayMs: 2000 });
+const fleetStop = await requestWithRetry('POST', '/api/fleet/stop', {}, { attempts: 3, delayMs: 1000 });
 
 report.details.fleet = {
   start: {
