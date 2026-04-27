@@ -155,6 +155,11 @@ export async function initializeRun(
     emit({ type: 'info', message: 'Could not detect project stack' });
   }
 
+  if (!config.analyzeCodebase) {
+    emit({ type: 'info', message: 'Fast-start mode: skipping deep codebase analysis and indexing.' });
+    return result;
+  }
+
   // ── Codebase Analysis ──
   if (config.analyzeCodebase) {
     try {

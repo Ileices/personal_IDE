@@ -82,7 +82,7 @@ export async function agentRoutes(app: FastifyInstance) {
       checkpointEvery: body.checkpointEvery ?? 5,
       autoFixErrors: body.autoFixErrors ?? true,
       autoRunTests: body.autoRunTests ?? true,
-      analyzeCodebase: body.analyzeCodebase ?? true,
+      analyzeCodebase: body.analyzeCodebase ?? false,
     };
 
     activeAgent = new EnhancedAgentLoop(db, config);

@@ -661,7 +661,7 @@ export class AgentFleet {
       checkpointEvery: 10,
       autoFixErrors: subtask.role === 'debugger' || subtask.role === 'implementer',
       autoRunTests: subtask.role === 'tester' || subtask.role === 'debugger',
-      analyzeCodebase: true,
+      analyzeCodebase: false,
     };
   }
 
