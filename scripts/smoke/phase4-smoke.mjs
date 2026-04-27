@@ -33,13 +33,30 @@ function parseCliOptions(argv) {
 
 const cliOptions = parseCliOptions(process.argv.slice(2));
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.floor(parsed);
+}
+
 const baseUrlOption = cliOptions.baseUrl || cliOptions['base-url'];
 const originOption = cliOptions.origin;
 const modelOption = cliOptions.model;
+const requestTimeoutOption = cliOptions.requestTimeoutMs || cliOptions['request-timeout-ms'] || process.env.PHASE4_REQUEST_TIMEOUT_MS;
+const chatTimeoutOption = cliOptions.chatTimeoutMs || cliOptions['chat-timeout-ms'] || process.env.PHASE4_CHAT_TIMEOUT_MS;
+const firstEventTimeoutOption =
+  cliOptions.firstEventTimeoutMs ||
+  cliOptions['first-event-timeout-ms'] ||
+  process.env.PHASE4_FIRST_EVENT_TIMEOUT_MS;
 
 const BASE_URL = (baseUrlOption || process.env.PHASE4_BASE_URL || 'http://127.0.0.1:3001').replace(/\/+$/, '');
 const ORIGIN = originOption || process.env.PHASE4_ORIGIN || 'http://localhost:5173';
 const MODEL = modelOption || process.env.PHASE4_MODEL || 'ollama/llama3.2';
+const REQUEST_TIMEOUT_MS = parsePositiveInt(requestTimeoutOption, 10000);
+const CHAT_TIMEOUT_MS = parsePositiveInt(chatTimeoutOption, 30000);
+const FIRST_EVENT_TIMEOUT_MS = parsePositiveInt(firstEventTimeoutOption, 10000);
 
 const requestHeaders = {
   Origin: ORIGIN,
@@ -50,28 +67,7 @@ function logStep(step) {
   console.error(`[phase4-smoke] ${step}`);
 }
 
-function extractFirstSseEvent(content) {
-  const lines = content.split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.startsWith('data:')) {
-      continue;
-    }
-
-    const raw = line.slice(5).trim();
-    if (!raw) {
-      continue;
-    }
-
-    try {
-      return { parsed: JSON.parse(raw), raw };
-    } catch {
-      return { parsed: null, raw };
-    }
-  }
-  return { parsed: null, raw: null };
-}
-
-async function request(method, path, body, timeoutMs = 15000) {
+async function request(method, path, body, timeoutMs = REQUEST_TIMEOUT_MS) {
   const headers = { ...requestHeaders };
   const init = { method, headers };
 
@@ -118,7 +114,7 @@ async function request(method, path, body, timeoutMs = 15000) {
 async function sendChat(projectId, message) {
   const url = `${BASE_URL}/api/chat/send`;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
+  const timeout = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
 
   try {
     const res = await fetch(url, {
@@ -158,7 +154,7 @@ async function sendChat(projectId, message) {
     let firstEventRaw = null;
     let parsed = null;
 
-    const firstEventDeadlineMs = 15000;
+    const firstEventDeadlineMs = FIRST_EVENT_TIMEOUT_MS;
     const firstEventUntil = Date.now() + firstEventDeadlineMs;
 
     while (Date.now() < firstEventUntil) {
@@ -243,6 +239,11 @@ const report = {
   runAt: new Date().toISOString(),
   baseUrl: BASE_URL,
   model: MODEL,
+  timeouts: {
+    requestMs: REQUEST_TIMEOUT_MS,
+    chatMs: CHAT_TIMEOUT_MS,
+    firstEventMs: FIRST_EVENT_TIMEOUT_MS,
+  },
   projectId: null,
   checks: {},
   details: {},
