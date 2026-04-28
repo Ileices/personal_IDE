@@ -242,13 +242,28 @@ export function searchFiles(
 }
 
 /** List all file paths in a project (for codebase overview) */
-export function listAllFiles(projectRoot: string): string[] {
+export function listAllFiles(
+  projectRoot: string,
+  options?: { maxFiles?: number; maxMs?: number }
+): string[] {
   const files: string[] = [];
+  const startedAt = Date.now();
+  const maxFiles = options?.maxFiles && options.maxFiles > 0 ? options.maxFiles : Number.POSITIVE_INFINITY;
+  const maxMs = options?.maxMs && options.maxMs > 0 ? options.maxMs : Number.POSITIVE_INFINITY;
+
+  function shouldStop(): boolean {
+    if (files.length >= maxFiles) return true;
+    if (Date.now() - startedAt >= maxMs) return true;
+    return false;
+  }
 
   function walk(dirPath: string) {
+    if (shouldStop()) return;
+
     try {
       const entries = readdirSync(dirPath, { withFileTypes: true });
       for (const entry of entries) {
+        if (shouldStop()) break;
         if (IGNORED_DIRS.has(entry.name) && entry.isDirectory()) continue;
         if (IGNORED_FILES.has(entry.name)) continue;
         const fullPath = join(dirPath, entry.name);

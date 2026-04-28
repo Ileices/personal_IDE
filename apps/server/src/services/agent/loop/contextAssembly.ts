@@ -12,6 +12,38 @@ import type { CodebaseAnalyzer } from '../../analysis/codebase.js';
 import type { CodeIndexer } from '../codeIndexer.js';
 import type { HierarchicalCodeIndex } from '../indexer/hierarchicalIndex.js';
 
+const FILE_LIST_CACHE_TTL_MS = 20_000;
+const FILE_LIST_SCAN_MAX_FILES = 400;
+const FILE_LIST_SCAN_MAX_MS = 250;
+
+const fileListCache = new Map<string, { at: number; fileList: string }>();
+
+function getCachedFileList(projectRoot: string): string {
+  const now = Date.now();
+  const cached = fileListCache.get(projectRoot);
+  if (cached && (now - cached.at) < FILE_LIST_CACHE_TTL_MS) {
+    return cached.fileList;
+  }
+
+  let fileList = '';
+  try {
+    const allFiles = listAllFiles(projectRoot, {
+      maxFiles: FILE_LIST_SCAN_MAX_FILES,
+      maxMs: FILE_LIST_SCAN_MAX_MS,
+    });
+
+    fileList = allFiles.join('\n');
+    if (allFiles.length >= FILE_LIST_SCAN_MAX_FILES) {
+      fileList += '\n... file list truncated for responsiveness';
+    }
+  } catch {
+    fileList = '';
+  }
+
+  fileListCache.set(projectRoot, { at: now, fileList });
+  return fileList;
+}
+
 export interface ContextConfig {
   projectRoot: string;
   projectId: string;
@@ -133,14 +165,7 @@ export function assembleContext(
   ];
 
   // File list
-  let fileList = '';
-  try {
-    const allFiles = listAllFiles(config.projectRoot);
-    fileList = allFiles.slice(0, 200).join('\n');
-    if (allFiles.length > 200) {
-      fileList += '\n... and ' + (allFiles.length - 200) + ' more files';
-    }
-  } catch { /* ignore */ }
+  const fileList = getCachedFileList(config.projectRoot);
 
   if (fileList) {
     messages.push({ role: 'system', content: 'PROJECT FILES:\n' + fileList });
