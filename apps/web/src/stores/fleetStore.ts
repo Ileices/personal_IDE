@@ -6,11 +6,26 @@ import { create } from 'zustand';
 import { apiPost, apiGet, apiStreamGet } from '../api/client';
 
 export type AgentRole = 'lead' | 'implementer' | 'debugger' | 'tester' | 'reviewer' | 'documenter';
+export type FleetExecutionMode = 'local' | 'cloud' | 'hybrid';
+
+export interface FleetCapacitySnapshot {
+  maxAgents: number;
+  cpuCount: number;
+  totalMemoryGB: number;
+  freeMemoryGB: number;
+  gpuCount: number;
+  recommendedLocalAgents?: number;
+  recommendedHybridAgents?: number;
+}
 
 export interface FleetAgentInfo {
   id: string;
   role: AgentRole;
   task: string;
+  model?: string;
+  provider?: string;
+  placement?: 'local' | 'cloud';
+  assignmentSource?: string;
   status: string;
   iterations: number;
   filesChanged: number;
@@ -38,12 +53,17 @@ interface FleetStore {
   totalTokensUsed: number;
   maxAgents: number;
   selectedAgentCount: number;
+  capacity: FleetCapacitySnapshot | null;
   eventSource: EventSource | null;
 
   // Fleet settings
   fleetContinuousMode: boolean;
   fleetCooldownMs: number;
   fleetBypassRateLimits: boolean;
+  executionMode: FleetExecutionMode;
+  localModelPool: string[];
+  cloudModelPool: string[];
+  roleModelOverrides: Partial<Record<AgentRole, string>>;
 
   // Actions
   startFleet: (projectId: string, task: string, model: string) => Promise<void>;
@@ -55,10 +75,15 @@ interface FleetStore {
   resumeAgent: (agentId: string) => Promise<void>;
   stopAgent: (agentId: string) => Promise<void>;
   fetchMaxAgents: () => Promise<void>;
+  fetchFleetCapacity: () => Promise<void>;
   setSelectedAgentCount: (count: number) => void;
   setFleetContinuousMode: (val: boolean) => void;
   setFleetCooldownMs: (val: number) => void;
   setFleetBypassRateLimits: (val: boolean) => void;
+  setExecutionMode: (mode: FleetExecutionMode) => void;
+  setLocalModelPool: (models: string[]) => void;
+  setCloudModelPool: (models: string[]) => void;
+  setRoleModelOverride: (role: AgentRole, model: string | null) => void;
   connectFleetEvents: () => void;
   disconnectFleetEvents: () => void;
   clearFleetEvents: () => void;
@@ -75,15 +100,29 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
   totalTokensUsed: 0,
   maxAgents: 4,
   selectedAgentCount: 3,
+  capacity: null,
   eventSource: null,
   fleetContinuousMode: true,
   fleetCooldownMs: 5000,
   fleetBypassRateLimits: true,
+  executionMode: 'hybrid',
+  localModelPool: [],
+  cloudModelPool: [],
+  roleModelOverrides: {},
 
   startFleet: async (projectId, task, model) => {
-    const { selectedAgentCount, fleetContinuousMode, fleetCooldownMs, fleetBypassRateLimits } = get();
+    const {
+      selectedAgentCount,
+      fleetContinuousMode,
+      fleetCooldownMs,
+      fleetBypassRateLimits,
+      executionMode,
+      localModelPool,
+      cloudModelPool,
+      roleModelOverrides,
+    } = get();
 
-    const res = await apiPost('/fleet/start', {
+    const payload: Record<string, any> = {
       projectId,
       task,
       model,
@@ -92,7 +131,14 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
       cooldownMs: fleetCooldownMs,
       bypassRateLimits: fleetBypassRateLimits,
       enableSmartChunking: true,
-    }) as any;
+      executionMode,
+    };
+
+    if (localModelPool.length > 0) payload.localModelPool = localModelPool;
+    if (cloudModelPool.length > 0) payload.cloudModelPool = cloudModelPool;
+    if (Object.keys(roleModelOverrides).length > 0) payload.roleModelOverrides = roleModelOverrides;
+
+    const res = await apiPost('/fleet/start', payload) as any;
 
     set({
       isFleetRunning: true,
@@ -142,21 +188,47 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
 
   fetchMaxAgents: async () => {
     try {
-      const res = await apiGet('/fleet/max-agents') as any;
+      await get().fetchFleetCapacity();
+    } catch { /* ignore */ }
+  },
+
+  fetchFleetCapacity: async () => {
+    try {
+      const res = await apiGet('/fleet/capacity') as FleetCapacitySnapshot;
       if (res?.maxAgents) {
-        set({ maxAgents: res.maxAgents });
-        // Default to detected max
+        set({ capacity: res, maxAgents: res.maxAgents });
         if (get().selectedAgentCount > res.maxAgents) {
           set({ selectedAgentCount: res.maxAgents });
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      // Backward-compatible fallback when capacity endpoint is unavailable
+      const res = await apiGet('/fleet/max-agents') as FleetCapacitySnapshot;
+      if (res?.maxAgents) {
+        set({ capacity: res, maxAgents: res.maxAgents });
+        if (get().selectedAgentCount > res.maxAgents) {
+          set({ selectedAgentCount: res.maxAgents });
+        }
+      }
+    }
   },
 
   setSelectedAgentCount: (count) => set({ selectedAgentCount: count }),
   setFleetContinuousMode: (val) => set({ fleetContinuousMode: val }),
   setFleetCooldownMs: (val) => set({ fleetCooldownMs: val }),
   setFleetBypassRateLimits: (val) => set({ fleetBypassRateLimits: val }),
+  setExecutionMode: (mode) => set({ executionMode: mode }),
+  setLocalModelPool: (models) => set({ localModelPool: models }),
+  setCloudModelPool: (models) => set({ cloudModelPool: models }),
+  setRoleModelOverride: (role, model) => set((s) => {
+    const next = { ...s.roleModelOverrides };
+    if (!model?.trim()) {
+      delete next[role];
+    } else {
+      next[role] = model.trim();
+    }
+    return { roleModelOverrides: next };
+  }),
 
   connectFleetEvents: () => {
     get().disconnectFleetEvents();
@@ -190,6 +262,10 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
                 id: event.agentId,
                 role: event.role,
                 task: event.task || '',
+                model: event.model,
+                provider: event.provider,
+                placement: event.placement,
+                assignmentSource: event.assignmentSource,
                 status: 'running',
                 iterations: 0,
                 filesChanged: 0,

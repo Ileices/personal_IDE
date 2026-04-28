@@ -8,13 +8,14 @@
 import { v4 as uuid } from 'uuid';
 import type Database from 'better-sqlite3';
 import type { ProviderType } from '@personal-ide/shared';
-import { getModel } from '@personal-ide/shared';
+import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
 import { appConfig } from '../../config.js';
 import { EnhancedAgentLoop } from './enhancedLoop.js';
 import { listAllFiles } from '../filesystem/index.js';
 import { readFile } from '../filesystem/index.js';
 import { CodebaseAnalyzer } from '../analysis/codebase.js';
 import os from 'os';
+import { execSync } from 'child_process';
 
 // ── Types ──
 
@@ -26,11 +27,36 @@ export type AgentRole =
   | 'reviewer'        // Reviews code quality, security, patterns
   | 'documenter';     // Writes docs, improves logging, comments
 
+export type FleetExecutionMode = 'local' | 'cloud' | 'hybrid';
+
+const LOCAL_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio', 'nano'];
+const LOCAL_FIRST_ROLES: AgentRole[] = ['implementer', 'debugger', 'tester'];
+
+export interface GpuDeviceInfo {
+  index: number;
+  name: string;
+  totalMemoryGB: number;
+}
+
+export interface FleetCapacity {
+  maxAgents: number;
+  recommendedLocalAgents: number;
+  recommendedHybridAgents: number;
+  cpuCount: number;
+  totalMemoryGB: number;
+  freeMemoryGB: number;
+  gpuCount: number;
+  gpus: GpuDeviceInfo[];
+}
+
 export interface FleetAgent {
   id: string;
   role: AgentRole;
   loop: EnhancedAgentLoop;
   task: string;
+  model: string;
+  provider: ProviderType;
+  placement: 'local' | 'cloud';
   assignedFiles: string[];          // File paths this agent "owns"
   status: 'starting' | 'running' | 'paused' | 'complete' | 'error';
   startedAt: string;
@@ -51,6 +77,10 @@ export interface FleetConfig {
   cooldownMs: number;
   bypassRateLimits: boolean;
   enableSmartChunking: boolean;
+  executionMode: FleetExecutionMode;
+  localModelPool: string[];
+  cloudModelPool: string[];
+  roleModelOverrides?: Partial<Record<AgentRole, string>>;
   contextWindow?: number;
   maxIterationsPerAgent?: number;
   enableSubAgents?: boolean;       // Allow agents to spawn sub-agents
@@ -60,11 +90,15 @@ export interface FleetStatus {
   fleetId: string;
   state: 'idle' | 'decomposing' | 'running' | 'complete' | 'error';
   masterTask: string;
+  executionMode: FleetExecutionMode;
   agentCount: number;
   agents: {
     id: string;
     role: AgentRole;
     task: string;
+    model: string;
+    provider: ProviderType;
+    placement: 'local' | 'cloud';
     status: string;
     iterations: number;
     filesChanged: number;
@@ -90,6 +124,13 @@ interface SubTask {
   priority: number;
   dependencies: AgentRole[];
   filePatterns: string[];
+}
+
+interface FleetModelAssignment {
+  model: string;
+  provider: ProviderType;
+  placement: 'local' | 'cloud';
+  source: 'role-override' | 'local-pool' | 'cloud-pool' | 'default';
 }
 
 type FleetEventCallback = (event: any) => void;
@@ -179,9 +220,10 @@ export class AgentFleet {
       this.state = 'running';
       const agentPromises: Promise<void>[] = [];
 
-      for (const subtask of this.decomposition.subtasks) {
+      for (const [index, subtask] of this.decomposition.subtasks.entries()) {
         const agentId = uuid();
-        const agentConfig = this.buildAgentConfig(subtask);
+        const assignment = this.selectModelAssignment(subtask.role, index);
+        const agentConfig = this.buildAgentConfig(subtask, assignment);
         const loop = new EnhancedAgentLoop(this.db, agentConfig);
 
         const agent: FleetAgent = {
@@ -189,6 +231,9 @@ export class AgentFleet {
           role: subtask.role,
           loop,
           task: subtask.task,
+          model: assignment.model,
+          provider: assignment.provider,
+          placement: assignment.placement,
           assignedFiles: subtask.filePatterns,
           status: 'starting',
           startedAt: new Date().toISOString(),
@@ -213,6 +258,10 @@ export class AgentFleet {
           type: 'agent_spawned',
           agentId,
           role: subtask.role,
+          model: assignment.model,
+          provider: assignment.provider,
+          placement: assignment.placement,
+          assignmentSource: assignment.source,
           task: subtask.task.slice(0, 200),
           fileCount: subtask.filePatterns.length,
         });
@@ -248,7 +297,7 @@ export class AgentFleet {
         // to allow each agent’s first request to complete before the next agent starts.
         // Cloud providers still need staggering to avoid 429 rate-limit stampede —
         // all agents firing at once triggers per-minute request caps.
-        const isLocal = ['ollama', 'lmstudio', 'nano'].includes(this.config.provider);
+        const isLocal = assignment.placement === 'local';
         const staggerMs = isLocal ? 15000 : 3000;
         await new Promise(resolve => setTimeout(resolve, staggerMs));
       }
@@ -341,11 +390,15 @@ export class AgentFleet {
       fleetId: this.fleetId,
       state: this.state,
       masterTask: this.config.masterTask,
+      executionMode: this.config.executionMode,
       agentCount: agents.length,
       agents: agents.map(a => ({
         id: a.id,
         role: a.role,
         task: a.task.slice(0, 300),
+        model: a.model,
+        provider: a.provider,
+        placement: a.placement,
         status: a.status,
         iterations: a.iterations,
         filesChanged: a.filesChanged,
@@ -361,13 +414,39 @@ export class AgentFleet {
   }
 
   static detectMaxAgents(): number {
+    return this.detectCapacity().maxAgents;
+  }
+
+  static detectCapacity(): FleetCapacity {
     const cpuCount = os.cpus().length;
     const totalMemGB = os.totalmem() / (1024 ** 3);
-    // Each agent uses ~200MB heap + LLM call overhead
-    // Conservative: 1 agent per 2 cores, max by memory/2GB each
+    const freeMemGB = os.freemem() / (1024 ** 3);
+    const gpus = this.detectGpuDevices();
+
+    // Each agent roughly needs 2 CPU cores and ~2 GB free memory.
     const byCpu = Math.max(1, Math.floor(cpuCount / 2));
     const byMem = Math.max(1, Math.floor(totalMemGB / 2));
-    return Math.min(byCpu, byMem, 8); // hard cap at 8
+    const gpuBudget = gpus.length > 0 ? Math.max(2, gpus.length * 3) : 8;
+    const maxAgents = Math.min(byCpu, byMem, gpuBudget, 16);
+
+    const recommendedLocalAgents = gpus.length > 0
+      ? Math.max(1, Math.min(maxAgents, gpus.length * 2))
+      : Math.max(1, Math.min(maxAgents, Math.floor(byCpu / 2)));
+    const recommendedHybridAgents = Math.max(
+      recommendedLocalAgents,
+      Math.min(maxAgents, recommendedLocalAgents + 2)
+    );
+
+    return {
+      maxAgents,
+      recommendedLocalAgents,
+      recommendedHybridAgents,
+      cpuCount,
+      totalMemoryGB: Math.round(totalMemGB * 10) / 10,
+      freeMemoryGB: Math.round(freeMemGB * 10) / 10,
+      gpuCount: gpus.length,
+      gpus,
+    };
   }
 
   // ── Private Helpers ──
@@ -638,9 +717,9 @@ export class AgentFleet {
     return map;
   }
 
-  private buildAgentConfig(subtask: SubTask): any {
-    const modelDef = getModel(this.config.model);
-    const isLocal = ['ollama', 'lmstudio', 'nano'].includes(this.config.provider || '');
+  private buildAgentConfig(subtask: SubTask, assignment: FleetModelAssignment): any {
+    const modelDef = getModel(assignment.model);
+    const isLocal = assignment.placement === 'local';
     // Local models process requests sequentially — each agent must wait for others.
     // Step delay = 10s per agent to prevent queue saturation and timeout cascades.
     const stepDelay = isLocal ? Math.max(10000, 10000 * this.config.agentCount) : 3000;
@@ -650,19 +729,139 @@ export class AgentFleet {
       maxTokensPerStep: 4096,
       autoApproveChanges: true,
       autoAnswerQuestions: true,
-      model: this.config.model,
+      model: assignment.model,
       projectRoot: this.config.projectRoot,
       continuousMode: this.config.continuousMode,
       cooldownMs: this.config.cooldownMs,
-      bypassRateLimits: this.config.bypassRateLimits,
+      bypassRateLimits: isLocal ? true : this.config.bypassRateLimits,
       enableSmartChunking: this.config.enableSmartChunking,
-      provider: this.config.provider,
-      contextWindow: this.config.contextWindow || modelDef?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
+      provider: assignment.provider,
+      contextWindow: this.config.contextWindow ?? modelDef?.maxInputTokens ?? appConfig.contextDefaults.unknownModelContext,
       checkpointEvery: 10,
       autoFixErrors: subtask.role === 'debugger' || subtask.role === 'implementer',
       autoRunTests: subtask.role === 'tester' || subtask.role === 'debugger',
       analyzeCodebase: false,
     };
+  }
+
+  private selectModelAssignment(role: AgentRole, agentIndex: number): FleetModelAssignment {
+    const roleOverride = this.config.roleModelOverrides?.[role]?.trim();
+    if (roleOverride) {
+      const provider = this.resolveProvider(roleOverride, this.config.provider);
+      return {
+        model: roleOverride,
+        provider,
+        placement: this.isLocalProvider(provider) ? 'local' : 'cloud',
+        source: 'role-override',
+      };
+    }
+
+    const localPool = this.normalizeModelPool(this.config.localModelPool);
+    const cloudPool = this.normalizeModelPool(this.config.cloudModelPool);
+    const defaultProvider = this.resolveProvider(this.config.model, this.config.provider);
+
+    if (this.isLocalProvider(defaultProvider) && !localPool.includes(this.config.model)) {
+      localPool.unshift(this.config.model);
+    }
+    if (!this.isLocalProvider(defaultProvider) && !cloudPool.includes(this.config.model)) {
+      cloudPool.unshift(this.config.model);
+    }
+
+    const localModel = this.pickRoundRobin(localPool, agentIndex);
+    const cloudModel = this.pickRoundRobin(cloudPool, agentIndex);
+
+    let selectedModel = this.config.model;
+    let source: FleetModelAssignment['source'] = 'default';
+
+    if (this.config.executionMode === 'local') {
+      if (localModel) {
+        selectedModel = localModel;
+        source = 'local-pool';
+      }
+    } else if (this.config.executionMode === 'cloud') {
+      if (cloudModel) {
+        selectedModel = cloudModel;
+        source = 'cloud-pool';
+      }
+    } else {
+      const localFirst = LOCAL_FIRST_ROLES.includes(role);
+      if (localFirst && localModel) {
+        selectedModel = localModel;
+        source = 'local-pool';
+      } else if (!localFirst && cloudModel) {
+        selectedModel = cloudModel;
+        source = 'cloud-pool';
+      } else if (localModel) {
+        selectedModel = localModel;
+        source = 'local-pool';
+      } else if (cloudModel) {
+        selectedModel = cloudModel;
+        source = 'cloud-pool';
+      }
+    }
+
+    const provider = this.resolveProvider(selectedModel, this.config.provider);
+    return {
+      model: selectedModel,
+      provider,
+      placement: this.isLocalProvider(provider) ? 'local' : 'cloud',
+      source,
+    };
+  }
+
+  private normalizeModelPool(pool: string[] | undefined): string[] {
+    if (!pool?.length) return [];
+
+    const seen = new Set<string>();
+    const cleaned: string[] = [];
+    for (const model of pool) {
+      const trimmed = model.trim();
+      if (!trimmed || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      cleaned.push(trimmed);
+    }
+    return cleaned;
+  }
+
+  private pickRoundRobin(pool: string[], agentIndex: number): string | null {
+    if (!pool.length) return null;
+    return pool[agentIndex % pool.length];
+  }
+
+  private resolveProvider(model: string, fallback: ProviderType): ProviderType {
+    return (extractProviderFromModelId(model) as ProviderType) || fallback;
+  }
+
+  private isLocalProvider(provider: ProviderType): boolean {
+    return LOCAL_PROVIDERS.includes(provider);
+  }
+
+  private static detectGpuDevices(): GpuDeviceInfo[] {
+    try {
+      const raw = execSync(
+        'nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader,nounits',
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500, windowsHide: true }
+      );
+
+      return raw
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map((line): GpuDeviceInfo | null => {
+          const [indexRaw, nameRaw, memRaw] = line.split(',').map(x => x.trim());
+          const index = Number(indexRaw);
+          const memMb = Number(memRaw);
+          if (!Number.isFinite(index) || !nameRaw || !Number.isFinite(memMb)) return null;
+          return {
+            index,
+            name: nameRaw,
+            totalMemoryGB: Math.round((memMb / 1024) * 10) / 10,
+          };
+        })
+        .filter((gpu): gpu is GpuDeviceInfo => Boolean(gpu));
+    } catch {
+      return [];
+    }
   }
 
   private getTotalIterations(): number {

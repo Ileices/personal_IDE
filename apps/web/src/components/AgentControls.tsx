@@ -64,7 +64,11 @@ export function AgentControls() {
   const {
     isFleetRunning, fleetState, agents: fleetAgents, events: fleetEvents,
     totalIterations, totalFilesChanged, totalTokensUsed,
-    maxAgents, selectedAgentCount,
+    maxAgents, selectedAgentCount, capacity,
+    executionMode, setExecutionMode,
+    localModelPool, setLocalModelPool,
+    cloudModelPool, setCloudModelPool,
+    roleModelOverrides, setRoleModelOverride,
     startFleet, stopFleet, pauseFleet, resumeFleet,
     sendFleetMessage: sendFleetMsg,
     pauseAgent: pauseFleetAgent, resumeAgent: resumeFleetAgent, stopAgent: stopFleetAgent,
@@ -198,6 +202,15 @@ export function AgentControls() {
           selectedAgentCount={selectedAgentCount}
           setSelectedAgentCount={setSelectedAgentCount}
           maxAgents={maxAgents}
+          capacity={capacity}
+          executionMode={executionMode}
+          setExecutionMode={setExecutionMode}
+          localModelPool={localModelPool}
+          setLocalModelPool={setLocalModelPool}
+          cloudModelPool={cloudModelPool}
+          setCloudModelPool={setCloudModelPool}
+          roleModelOverrides={roleModelOverrides}
+          setRoleModelOverride={setRoleModelOverride}
           continuousMode={continuousMode}
           setContinuousMode={setContinuousMode}
           bypassRateLimits={bypassRateLimits}

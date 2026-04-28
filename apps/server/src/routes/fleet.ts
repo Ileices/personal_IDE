@@ -3,13 +3,61 @@
 // Start/stop/monitor a fleet of parallel agents
 // ============================================
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { AgentFleet, type FleetConfig } from '../services/agent/fleet.js';
+import { AgentFleet, type FleetConfig, type FleetExecutionMode, type AgentRole } from '../services/agent/fleet.js';
 import type { ProviderType } from '@personal-ide/shared';
-import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
+import { getModel, extractProviderFromModelId, PROVIDERS } from '@personal-ide/shared';
 import { appConfig } from '../config.js';
 import { MemoryService } from '../services/memory/index.js';
 
 let activeFleet: AgentFleet | null = null;
+
+const LOCAL_PROVIDER_SET = new Set<ProviderType>(['ollama', 'lmstudio', 'nano']);
+const FLEET_ROLES: AgentRole[] = ['lead', 'implementer', 'debugger', 'tester', 'reviewer', 'documenter'];
+
+function normalizeModelPool(pool?: string[]): string[] {
+  if (!pool?.length) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const model of pool) {
+    const trimmed = model.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function normalizeRoleOverrides(
+  input?: Record<string, string>
+): Partial<Record<AgentRole, string>> | undefined {
+  if (!input) return undefined;
+
+  const out: Partial<Record<AgentRole, string>> = {};
+  const validRoles = new Set(FLEET_ROLES);
+  for (const [role, model] of Object.entries(input)) {
+    if (!validRoles.has(role as AgentRole)) continue;
+    const trimmed = model.trim();
+    if (!trimmed) continue;
+    out[role as AgentRole] = trimmed;
+  }
+
+  return Object.keys(out).length ? out : undefined;
+}
+
+function inferExecutionMode(
+  requested: FleetExecutionMode | undefined,
+  defaultProvider: ProviderType,
+  localModelPool: string[],
+  cloudModelPool: string[]
+): FleetExecutionMode {
+  if (requested) return requested;
+
+  const defaultIsLocal = LOCAL_PROVIDER_SET.has(defaultProvider);
+  const hasLocal = localModelPool.length > 0 || defaultIsLocal;
+  const hasCloud = cloudModelPool.length > 0 || !defaultIsLocal;
+  if (hasLocal && hasCloud) return 'hybrid';
+  return hasLocal ? 'local' : 'cloud';
+}
 
 export async function fleetRoutes(app: FastifyInstance) {
   const db = (app as any).db;
@@ -31,6 +79,10 @@ export async function fleetRoutes(app: FastifyInstance) {
       bypassRateLimits?: boolean;
       enableSmartChunking?: boolean;
       provider?: ProviderType;
+      executionMode?: FleetExecutionMode;
+      localModelPool?: string[];
+      cloudModelPool?: string[];
+      roleModelOverrides?: Record<string, string>;
       contextWindow?: number;
       maxIterationsPerAgent?: number;
       enableSubAgents?: boolean;
@@ -48,9 +100,14 @@ export async function fleetRoutes(app: FastifyInstance) {
     const modelStr = body.model || 'openai/gpt-4.1';
     // Detect provider from model
     const provider: ProviderType = body.provider || (extractProviderFromModelId(modelStr) as ProviderType);
+    const localModelPool = normalizeModelPool(body.localModelPool);
+    const cloudModelPool = normalizeModelPool(body.cloudModelPool);
+    const roleModelOverrides = normalizeRoleOverrides(body.roleModelOverrides);
+    const executionMode = inferExecutionMode(body.executionMode, provider, localModelPool, cloudModelPool);
 
     // Auto-detect max agents if not specified
-    const maxAgents = AgentFleet.detectMaxAgents();
+    const capacity = AgentFleet.detectCapacity();
+    const maxAgents = capacity.maxAgents;
     const requestedAgents = body.agentCount || maxAgents;
     const agentCount = Math.min(requestedAgents, maxAgents);
 
@@ -65,6 +122,10 @@ export async function fleetRoutes(app: FastifyInstance) {
       cooldownMs: body.cooldownMs ?? 5000,
       bypassRateLimits: body.bypassRateLimits ?? (provider === 'ollama'),
       enableSmartChunking: body.enableSmartChunking ?? true,
+      executionMode,
+      localModelPool,
+      cloudModelPool,
+      roleModelOverrides,
       contextWindow: body.contextWindow || getModel(modelStr)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
       maxIterationsPerAgent: body.maxIterationsPerAgent,
       enableSubAgents: body.enableSubAgents ?? false,
@@ -81,6 +142,7 @@ export async function fleetRoutes(app: FastifyInstance) {
       success: true,
       fleetId: activeFleet.getStatus().fleetId,
       agentCount,
+      executionMode,
       maxDetected: maxAgents,
       status: activeFleet.getStatus(),
     };
@@ -123,13 +185,46 @@ export async function fleetRoutes(app: FastifyInstance) {
 
   // --- GET /api/fleet/max-agents — Detect max agents for this machine ---
   app.get('/max-agents', async () => {
-    const maxAgents = AgentFleet.detectMaxAgents();
-    const os = await import('os');
+    const capacity = AgentFleet.detectCapacity();
     return {
-      maxAgents,
-      cpuCount: os.cpus().length,
-      totalMemoryGB: Math.round(os.totalmem() / (1024 ** 3)),
-      freeMemoryGB: Math.round(os.freemem() / (1024 ** 3)),
+      maxAgents: capacity.maxAgents,
+      cpuCount: capacity.cpuCount,
+      totalMemoryGB: Math.round(capacity.totalMemoryGB),
+      freeMemoryGB: Math.round(capacity.freeMemoryGB),
+      gpuCount: capacity.gpuCount,
+      recommendedLocalAgents: capacity.recommendedLocalAgents,
+      recommendedHybridAgents: capacity.recommendedHybridAgents,
+    };
+  });
+
+  // --- GET /api/fleet/capacity — Full capacity and provider readiness snapshot ---
+  app.get('/capacity', async () => {
+    const capacity = AgentFleet.detectCapacity();
+
+    const enabledRows = db
+      .prepare('SELECT provider_id, enabled, api_key_encrypted FROM provider_configs WHERE enabled = 1')
+      .all() as Array<{ provider_id: string; enabled: number; api_key_encrypted: string | null }>;
+    const enabledProviders = new Set(enabledRows.map(r => r.provider_id));
+
+    const authRow = db.prepare('SELECT id FROM auth_tokens WHERE is_active = 1 LIMIT 1').get() as { id?: string } | undefined;
+    if (authRow?.id) enabledProviders.add('github');
+
+    const localProviders = PROVIDERS.filter(p => p.isLocal).map(p => p.id);
+    const cloudProviders = PROVIDERS.filter(p => !p.isLocal).map(p => p.id);
+    const configuredLocalProviders = localProviders.filter(p => enabledProviders.has(p));
+    const configuredCloudProviders = cloudProviders.filter(p => enabledProviders.has(p));
+
+    return {
+      ...capacity,
+      executionModes: {
+        local: configuredLocalProviders.length > 0,
+        cloud: configuredCloudProviders.length > 0,
+        hybrid: configuredLocalProviders.length > 0 && configuredCloudProviders.length > 0,
+      },
+      configuredProviders: {
+        local: configuredLocalProviders,
+        cloud: configuredCloudProviders,
+      },
     };
   });
 

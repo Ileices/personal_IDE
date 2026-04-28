@@ -2,16 +2,48 @@
 // Agent Settings Panel — Configuration toggles and sliders
 // Enhanced with model preset selector and fallback chain display
 // ============================================
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Infinity, ShieldOff, Puzzle, Timer, Clock,
   Users, Cpu, Layers, Zap, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import {
   MODEL_PRESETS, getPresetModels, estimateDailyCapacity, getModelCooldown,
-  type ModelPreset, type AgentTaskType,
 } from '@personal-ide/shared';
-import type { VerbosityLevel } from '../../stores/agentStore';
+import type {
+  AgentRole,
+  FleetCapacitySnapshot,
+  FleetExecutionMode,
+} from '../../stores/fleetStore';
+
+const FLEET_ROLES: AgentRole[] = ['lead', 'implementer', 'debugger', 'tester', 'reviewer', 'documenter'];
+
+const ROLE_LABELS: Record<AgentRole, string> = {
+  lead: 'Lead',
+  implementer: 'Implementer',
+  debugger: 'Debugger',
+  tester: 'Tester',
+  reviewer: 'Reviewer',
+  documenter: 'Documenter',
+};
+
+function parseModelPool(text: string): string[] {
+  return text
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function buildRoleOverrideDrafts(overrides: Partial<Record<AgentRole, string>>): Record<AgentRole, string> {
+  return {
+    lead: overrides.lead || '',
+    implementer: overrides.implementer || '',
+    debugger: overrides.debugger || '',
+    tester: overrides.tester || '',
+    reviewer: overrides.reviewer || '',
+    documenter: overrides.documenter || '',
+  };
+}
 
 interface AgentSettingsProps {
   // State
@@ -20,6 +52,15 @@ interface AgentSettingsProps {
   selectedAgentCount: number;
   setSelectedAgentCount: (v: number) => void;
   maxAgents: number;
+  capacity: FleetCapacitySnapshot | null;
+  executionMode: FleetExecutionMode;
+  setExecutionMode: (v: FleetExecutionMode) => void;
+  localModelPool: string[];
+  setLocalModelPool: (v: string[]) => void;
+  cloudModelPool: string[];
+  setCloudModelPool: (v: string[]) => void;
+  roleModelOverrides: Partial<Record<AgentRole, string>>;
+  setRoleModelOverride: (role: AgentRole, model: string | null) => void;
   continuousMode: boolean;
   setContinuousMode: (v: boolean) => void;
   bypassRateLimits: boolean;
@@ -61,6 +102,10 @@ interface AgentSettingsProps {
 
 export function AgentSettings({
   fleetMode, setFleetMode, selectedAgentCount, setSelectedAgentCount, maxAgents,
+  capacity, executionMode, setExecutionMode,
+  localModelPool, setLocalModelPool,
+  cloudModelPool, setCloudModelPool,
+  roleModelOverrides, setRoleModelOverride,
   continuousMode, setContinuousMode, bypassRateLimits, setBypassRateLimits,
   enableSmartChunking, setEnableSmartChunking, cooldownMs, setCooldownMs,
   maxIterations, setMaxIterations, stepDelayMs, setStepDelay,
@@ -70,7 +115,38 @@ export function AgentSettings({
   isRunning, isFleetRunning,
 }: AgentSettingsProps) {
   const [showFallbackChain, setShowFallbackChain] = useState(false);
+  const [localPoolInput, setLocalPoolInput] = useState(localModelPool.join(', '));
+  const [cloudPoolInput, setCloudPoolInput] = useState(cloudModelPool.join(', '));
+  const [showRoleOverrides, setShowRoleOverrides] = useState(false);
+  const [roleOverrideDrafts, setRoleOverrideDrafts] = useState<Record<AgentRole, string>>(
+    buildRoleOverrideDrafts(roleModelOverrides)
+  );
   const selectedPreset = MODEL_PRESETS.find(p => p.id === selectedPresetId) || MODEL_PRESETS[0];
+
+  useEffect(() => {
+    setLocalPoolInput(localModelPool.join(', '));
+  }, [localModelPool]);
+
+  useEffect(() => {
+    setCloudPoolInput(cloudModelPool.join(', '));
+  }, [cloudModelPool]);
+
+  useEffect(() => {
+    setRoleOverrideDrafts(buildRoleOverrideDrafts(roleModelOverrides));
+  }, [roleModelOverrides]);
+
+  const applyLocalPool = () => {
+    setLocalModelPool(parseModelPool(localPoolInput));
+  };
+
+  const applyCloudPool = () => {
+    setCloudModelPool(parseModelPool(cloudPoolInput));
+  };
+
+  const applyRoleOverride = (role: AgentRole) => {
+    const raw = roleOverrideDrafts[role]?.trim() || '';
+    setRoleModelOverride(role, raw || null);
+  };
 
   return (
     <div className="p-3 border-b border-ide-border bg-ide-bg/50 space-y-2 max-h-[45vh] overflow-y-auto flex-shrink-0">
@@ -144,17 +220,124 @@ export function AgentSettings({
 
       {/* Agent Count (fleet only) */}
       {fleetMode && (
-        <div className="flex items-center justify-between">
-          <label htmlFor="agent-count" className="text-xs text-ide-text-dim flex items-center gap-1">
-            <Cpu className="w-3 h-3 text-cyan-400" /> Agents ({selectedAgentCount})
-          </label>
-          <div className="flex items-center gap-1">
-            <input id="agent-count" name="agent-count" type="range"
-              value={selectedAgentCount} onChange={e => setSelectedAgentCount(parseInt(e.target.value))}
-              min={2} max={maxAgents} step={1} className="w-20" disabled={isFleetRunning} />
-            <span className="text-[10px] text-ide-text-dim w-10">{selectedAgentCount}/{maxAgents}</span>
+        <>
+          <div className="flex items-center justify-between">
+            <label htmlFor="agent-count" className="text-xs text-ide-text-dim flex items-center gap-1">
+              <Cpu className="w-3 h-3 text-cyan-400" /> Agents ({selectedAgentCount})
+            </label>
+            <div className="flex items-center gap-1">
+              <input id="agent-count" name="agent-count" type="range"
+                value={selectedAgentCount} onChange={e => setSelectedAgentCount(parseInt(e.target.value))}
+                min={2} max={maxAgents} step={1} className="w-20" disabled={isFleetRunning} />
+              <span className="text-[10px] text-ide-text-dim w-10">{selectedAgentCount}/{maxAgents}</span>
+            </div>
           </div>
-        </div>
+
+          <div className="rounded border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1.5">
+            <div className="text-[10px] text-cyan-200 font-medium uppercase tracking-wide">Fleet Placement</div>
+
+            {capacity && (
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[9px]">
+                <span className="text-ide-text-dim">CPU / RAM / GPU</span>
+                <span className="text-right text-ide-text">
+                  {capacity.cpuCount} / {capacity.totalMemoryGB}GB / {capacity.gpuCount}
+                </span>
+                <span className="text-ide-text-dim">Recommended</span>
+                <span className="text-right text-ide-text">
+                  local {capacity.recommendedLocalAgents || '-'} , hybrid {capacity.recommendedHybridAgents || '-'}
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <label htmlFor="fleet-execution-mode" className="text-xs text-ide-text-dim">Execution Mode</label>
+              <select
+                id="fleet-execution-mode"
+                value={executionMode}
+                onChange={e => setExecutionMode(e.target.value as FleetExecutionMode)}
+                disabled={isFleetRunning}
+                className="w-28 bg-ide-bg border border-ide-border rounded px-2 py-0.5 text-xs text-ide-text focus:outline-none focus:border-cyan-400 disabled:opacity-50"
+              >
+                <option value="local">Local</option>
+                <option value="cloud">Cloud</option>
+                <option value="hybrid">Hybrid</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="fleet-local-model-pool" className="text-[10px] text-ide-text-dim">Local model pool (comma-separated)</label>
+              <input
+                id="fleet-local-model-pool"
+                value={localPoolInput}
+                onChange={e => setLocalPoolInput(e.target.value)}
+                onBlur={applyLocalPool}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    applyLocalPool();
+                  }
+                }}
+                disabled={isFleetRunning}
+                placeholder="ollama/qwen2.5-coder, nano/local-coder"
+                className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-[11px] text-ide-text focus:outline-none focus:border-cyan-400 disabled:opacity-50"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="fleet-cloud-model-pool" className="text-[10px] text-ide-text-dim">Cloud model pool (comma-separated)</label>
+              <input
+                id="fleet-cloud-model-pool"
+                value={cloudPoolInput}
+                onChange={e => setCloudPoolInput(e.target.value)}
+                onBlur={applyCloudPool}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    applyCloudPool();
+                  }
+                }}
+                disabled={isFleetRunning}
+                placeholder="openai/gpt-4.1-mini, groq/llama-3.3-70b-versatile"
+                className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-[11px] text-ide-text focus:outline-none focus:border-cyan-400 disabled:opacity-50"
+              />
+            </div>
+
+            <button
+              onClick={() => setShowRoleOverrides(v => !v)}
+              className="flex items-center gap-1 text-[10px] text-ide-text-dim hover:text-cyan-300"
+            >
+              {showRoleOverrides ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              Role model overrides
+            </button>
+
+            {showRoleOverrides && (
+              <div className="space-y-1">
+                {FLEET_ROLES.map(role => (
+                  <div key={role} className="flex items-center gap-2">
+                    <label htmlFor={`fleet-role-${role}`} className="text-[10px] text-ide-text-dim w-20 shrink-0">
+                      {ROLE_LABELS[role]}
+                    </label>
+                    <input
+                      id={`fleet-role-${role}`}
+                      value={roleOverrideDrafts[role]}
+                      onChange={e => setRoleOverrideDrafts(s => ({ ...s, [role]: e.target.value }))}
+                      onBlur={() => applyRoleOverride(role)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applyRoleOverride(role);
+                        }
+                      }}
+                      disabled={isFleetRunning}
+                      placeholder="provider/model-id"
+                      className="flex-1 bg-ide-bg border border-ide-border rounded px-2 py-1 text-[11px] text-ide-text focus:outline-none focus:border-cyan-400 disabled:opacity-50"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       <div className="border-t border-ide-border/50 my-1" />
