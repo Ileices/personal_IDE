@@ -1,5 +1,7 @@
 // ============================================
 // Chat Routes - SSE streaming chat endpoint
+// Includes: failsafe model fallback, systemPrompt override,
+//           projectId fallback for God Factory mode
 // ============================================
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ChatRequest, ProviderType } from '@personal-ide/shared';
@@ -13,6 +15,26 @@ import { MemoryService } from '../services/memory/index.js';
 import { SYSTEM_PROMPTS, parseStructuredOutput } from '../services/modes/prompts.js';
 import { readFile } from '../services/filesystem/index.js';
 import { appConfig } from '../config.js';
+
+/** Get an LLM client for a model ID, returns null if not configured */
+function getClientForModel(db: any, modelId: string): import('openai').default | null {
+  const provider = extractProviderFromModelId(modelId) as ProviderType;
+  return provider === 'github' ? getGitHubClient(db) : getProviderClient(db, provider);
+}
+
+/** Determine if an error is a retryable fallback condition (rate limit, auth, unavailable) */
+function isFallbackError(err: any): boolean {
+  const msg = String(err?.message || err || '').toLowerCase();
+  const status = err?.status || err?.statusCode || 0;
+  return (
+    status === 429 || status === 401 || status === 403 ||
+    status === 503 || status === 502 || status === 500 ||
+    msg.includes('rate limit') || msg.includes('quota') ||
+    msg.includes('unauthorized') || msg.includes('insufficient_quota') ||
+    msg.includes('model_not_found') || msg.includes('overloaded') ||
+    msg.includes('unavailable') || msg.includes('timeout')
+  );
+}
 
 export async function chatRoutes(app: FastifyInstance) {
   const db = (app as any).db;
@@ -35,9 +57,25 @@ export async function chatRoutes(app: FastifyInstance) {
     const provider = extractProviderFromModelId(body.model) as ProviderType;
 
     // Get LLM client for the detected provider
-    const client = provider === 'github' ? getGitHubClient(db) : getProviderClient(db, provider);
+    const client = getClientForModel(db, body.model);
     if (!client) {
-      return reply.status(401).send({ error: provider === 'github' ? 'Not authenticated. Please log in with your GitHub PAT.' : `Provider '${provider}' is not configured. Set it up in Settings.` });
+      // If primary fails, try fallbacks before returning 401
+      const fallbacks = body.fallbackModels || [];
+      let fbClient = null;
+      let fbModel = '';
+      for (const fb of fallbacks) {
+        const c = getClientForModel(db, fb);
+        if (c) { fbClient = c; fbModel = fb; break; }
+      }
+      if (!fbClient) {
+        return reply.status(401).send({
+          error: provider === 'github'
+            ? 'Not authenticated. Please log in with your GitHub PAT.'
+            : `Provider '${provider}' is not configured. Add your API key in Provider Settings.`,
+        });
+      }
+      // Rewrite body to use the first available fallback
+      body.model = fbModel;
     }
 
     // ── Per-user rate limit (IP + optional user ID) ──
@@ -117,61 +155,130 @@ export async function chatRoutes(app: FastifyInstance) {
       messages.push({ role: msg.role, content: msg.content });
     }
 
-    // Stream the response
-    rateLimiter.recordStart(body.model);
-    const modelDef = getModel(body.model);
+    // Stream the response — with automatic fallback chain on failure
+    // Build the ordered list of models to try: primary first, then fallbacks
+    const modelsToTry = [body.model, ...(body.fallbackModels || []).filter(m => m !== body.model)];
+    let lastError: any = null;
+    let usedModel = body.model;
 
-    await streamChatResponse(client, body.model, messages, reply, {
-      maxTokens: modelDef?.maxOutputTokens || 4096,
-      temperature: body.mode === 'agent' ? 0.3 : 0.7,
-      conversationId,
-      messageId: userMessageId,
-      onDone: (fullContent, usage) => {
-        rateLimiter.recordEnd(body.model);
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const modelId = modelsToTry[i];
+      const modelClient = getClientForModel(db, modelId);
+      if (!modelClient) continue; // provider not configured — skip
 
-        // Track upstream 429s for abuse detection
-        if (usage && (usage as any).statusCode === 429) {
-          userRateLimiter.recordUpstream429(clientIp, userKey);
+      // Skip rate-limited models
+      const canProceed = rateLimiter.canRequest(modelId);
+      if (!canProceed.allowed) continue;
+
+      usedModel = modelId;
+      const modelDef = getModel(modelId);
+
+      try {
+        rateLimiter.recordStart(modelId);
+
+        // If we fell back to a different model, notify the client via SSE
+        if (i > 0 && !reply.raw.writableEnded) {
+          if (!reply.raw.headersSent) {
+            reply.raw.writeHead(200, {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              Connection: 'keep-alive',
+              'X-Accel-Buffering': 'no',
+            });
+          }
+          reply.raw.write(`data: ${JSON.stringify({
+            type: 'model_fallback',
+            from: modelsToTry[i - 1],
+            to: modelId,
+            reason: String(lastError?.message || 'previous model unavailable'),
+          })}\n\n`);
         }
 
-        // Save assistant message
-        const structured = parseStructuredOutput(fullContent);
-        memory.addMessage(conversationId!, 'assistant', fullContent, body.model, body.mode, structured);
+        await streamChatResponse(modelClient, modelId, messages, reply, {
+          maxTokens: modelDef?.maxOutputTokens || 4096,
+          temperature: body.mode === 'agent' ? 0.3 : 0.7,
+          conversationId,
+          messageId: userMessageId,
+          onDone: (fullContent, usage) => {
+            rateLimiter.recordEnd(modelId);
 
-        // Auto-save summary if structured output found
-        if (structured?.summary) {
-          memory.addNote(body.projectId, {
-            projectId: body.projectId,
-            source: 'auto_summary',
-            category: body.mode,
-            title: `${body.mode}: ${structured.summary.slice(0, 100)}`,
-            content: structured.summary,
-            tags: [body.mode, body.model],
-            relatedFiles: structured.filesChanged?.map((f: any) => f.path) || [],
-            importance: 50,
-            conversationId,
-          });
+            // Track upstream 429s for abuse detection
+            if (usage && (usage as any).statusCode === 429) {
+              userRateLimiter.recordUpstream429(clientIp, userKey);
+            }
+
+            // Save assistant message (use actual model used, not body.model)
+            const structured = parseStructuredOutput(fullContent);
+            memory.addMessage(conversationId!, 'assistant', fullContent, modelId, body.mode, structured);
+
+            // Auto-save summary if structured output found
+            if (structured?.summary) {
+              memory.addNote(body.projectId, {
+                projectId: body.projectId,
+                source: 'auto_summary',
+                category: body.mode,
+                title: `${body.mode}: ${structured.summary.slice(0, 100)}`,
+                content: structured.summary,
+                tags: [body.mode, modelId],
+                relatedFiles: structured.filesChanged?.map((f: any) => f.path) || [],
+                importance: 50,
+                conversationId,
+              });
+            }
+
+            // ── Bird-feed observation to Nano trainer (fire-and-forget) ──
+            try {
+              const nanoRow = db.prepare(
+                "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
+              ).get() as any;
+              const nanoBaseUrl = (nanoRow?.base_url || appConfig.services.nanoSeaUrl).replace(/\/v1\/?$/, '');
+              fetch(nanoBaseUrl + '/v1/training/observe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  query: body.message.slice(0, 4000),
+                  response: fullContent.slice(0, 8000),
+                  source: 'chat',
+                  quality: structured?.confidence ? structured.confidence / 100 : 0.7,
+                }),
+              }).catch(() => {}); // nano may not be running
+            } catch { /* non-critical */ }
+          },
+        });
+
+        // Success — stop trying fallbacks
+        break;
+
+      } catch (err: any) {
+        lastError = err;
+        rateLimiter.recordEnd(modelId);
+
+        const isFallbackable = isFallbackError(err);
+        if (!isFallbackable || i === modelsToTry.length - 1) {
+          // Not retryable OR no more fallbacks — surface the error
+          if (!reply.raw.writableEnded) {
+            if (!reply.raw.headersSent) {
+              reply.raw.writeHead(500, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+            }
+            reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: err.message || 'Model error' })}\n\n`);
+            reply.raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+            reply.raw.end();
+          }
+          return;
         }
+        // Continue to next fallback
+      }
+    }
 
-        // ── Bird-feed observation to Nano trainer (fire-and-forget) ──
-        try {
-          const nanoRow = db.prepare(
-            "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
-          ).get() as any;
-          const nanoBaseUrl = (nanoRow?.base_url || appConfig.services.nanoSeaUrl).replace(/\/v1\/?$/, '');
-          fetch(nanoBaseUrl + '/v1/training/observe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: body.message.slice(0, 4000),
-              response: fullContent.slice(0, 8000),
-              source: 'chat',
-              quality: structured?.confidence ? structured.confidence / 100 : 0.7,
-            }),
-          }).catch(() => {}); // nano may not be running
-        } catch { /* non-critical */ }
-      },
-    });
+    // If we exhausted all models without streaming anything
+    if (!reply.raw.writableEnded) {
+      if (!reply.raw.headersSent) {
+        reply.raw.writeHead(503, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+      }
+      reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: `All models unavailable. Tried: ${modelsToTry.slice(0, 3).join(', ')}` })}\n\n`);
+      reply.raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      reply.raw.end();
+    }
   });
 
   // --- GET /api/chat/conversations/:projectId ---

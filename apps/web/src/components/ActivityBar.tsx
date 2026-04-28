@@ -7,7 +7,7 @@ import React from 'react';
 import {
   FolderOpen, MessageSquare, Bot, Globe, Network,
   Waves, Database, Bird, Clock, Settings, GitBranch,
-  ShieldCheck, Zap, HelpCircle, BarChart2, Sparkles, Fingerprint,
+  ShieldCheck, Zap, HelpCircle, BarChart2, Sparkles, Fingerprint, Cpu,
 } from 'lucide-react';
 
 export type ActivityView =
@@ -26,6 +26,7 @@ export type ActivityView =
   | 'strategy'
   | 'rates'
   | 'blame'
+  | 'local-models'
   | 'help';
 
 interface ActivityBarProps {
@@ -59,6 +60,7 @@ export function ActivityBar({ active, onChange, fleetBadge, nanoBadge }: Activit
     { id: 'strategy',    icon: Zap,            label: 'Model Strategy & Fallbacks' },
     { id: 'rates',       icon: BarChart2,      label: 'Rate Limits & Usage' },
     { id: 'blame',       icon: Fingerprint,    label: 'BLAME — Model Quality Tracking' },
+    { id: 'local-models', icon: Cpu,             label: 'Local Model Catalog (Ollama)' },
   ];
 
   const bottomItems: NavItem[] = [

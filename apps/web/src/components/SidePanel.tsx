@@ -20,6 +20,9 @@ import { TheGodFactory } from './TheGodFactory';
 import { ModelStrategyPanel } from './ModelStrategyPanel';
 import { BlamePanel } from './BlamePanel';
 import { HelpPanel } from './HelpPanel';
+import { LocalModelCatalog } from './LocalModelCatalog';
+import { ProviderSetupWizard } from './wizards/ProviderSetupWizard';
+import { ModelStrategyWizard } from './wizards/ModelStrategyWizard';
 
 interface SidePanelProps {
   view: ActivityView;
@@ -73,6 +76,7 @@ export function SidePanel({ view, width, onClose, onNewProject }: SidePanelProps
       {view === 'strategy' && <StrategyView />}
       {view === 'rates' && <RatesView />}
       {view === 'blame' && <BlameView />}
+      {view === 'local-models' && <LocalModelCatalogView />}
       {view === 'help' && <HelpView />}
     </div>
   );
@@ -236,6 +240,7 @@ function PreviewSidebarView() {
 // ── Providers ────────────────────────────────────
 function ProvidersSidebarView() {
   const [show, setShow] = useState(false);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PanelHeader title="Providers & Settings" />
@@ -244,13 +249,20 @@ function ProvidersSidebarView() {
           Configure AI providers: GitHub Copilot, Ollama (local models), Nano Sea, and more.
         </p>
         <button
-          onClick={() => setShow(true)}
+          onClick={() => setShowSetupWizard(true)}
           className="w-full py-2 text-sm bg-ide-accent/20 text-ide-accent rounded hover:bg-ide-accent/30 transition-colors"
         >
-          Open Provider Settings
+          + Add New Provider (Wizard)
+        </button>
+        <button
+          onClick={() => setShow(true)}
+          className="w-full py-2 text-sm border border-ide-border rounded text-ide-text-dim hover:text-ide-text hover:border-ide-accent/40 transition-colors"
+        >
+          Open All Provider Settings
         </button>
       </div>
       {show && <ProviderSettings onClose={() => setShow(false)} />}
+      {showSetupWizard && <ProviderSetupWizard onClose={() => setShowSetupWizard(false)} />}
     </div>
   );
 }
@@ -266,12 +278,22 @@ function StudioView() {
 
 // ── Model Strategy ────────────────────────────────
 function StrategyView() {
+  const [showWizard, setShowWizard] = useState(false);
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PanelHeader title="Model Strategy & Fallbacks" />
+      <div className="flex-shrink-0 p-3 border-b border-ide-border">
+        <button
+          onClick={() => setShowWizard(true)}
+          className="w-full py-2 text-sm bg-ide-accent/20 text-ide-accent rounded hover:bg-ide-accent/30 transition-colors"
+        >
+          Open Strategy Wizard
+        </button>
+      </div>
       <div className="flex-1 overflow-y-auto">
         <ModelStrategyPanel />
       </div>
+      {showWizard && <ModelStrategyWizard onClose={() => setShowWizard(false)} />}
     </div>
   );
 }
@@ -293,6 +315,15 @@ function BlameView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <BlamePanel />
+    </div>
+  );
+}
+
+// ── Local Model Catalog ─────────────────────────────
+function LocalModelCatalogView() {
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <LocalModelCatalog />
     </div>
   );
 }

@@ -14,6 +14,7 @@
 // ============================================
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { MODELS, type ModelDefinition } from '@personal-ide/shared';
+import { useModelStore } from '../stores/modelStore';
 import {
   Search, ChevronDown, ChevronUp, Check, Plus, Trash2,
   Zap, Brain, Cpu, Globe, Code2, BookOpen, X, CheckSquare,
@@ -91,9 +92,13 @@ export function ModelDropdown({
   className?: string;
   disabled?: boolean;
 }) {
+  const { allModels, isLoading, fetchModels } = useModelStore();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+
+  // Trigger model fetch when dropdown opens
+  useEffect(() => { if (open) fetchModels(); }, [open, fetchModels]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,17 +110,17 @@ export function ModelDropdown({
   }, [open]);
 
   const filtered = useMemo(() => {
-    if (!search) return MODELS;
+    if (!search) return allModels;
     const q = search.toLowerCase();
-    return MODELS.filter(m =>
+    return allModels.filter(m =>
       m.id.toLowerCase().includes(q) ||
       m.name.toLowerCase().includes(q) ||
       m.publisher.toLowerCase().includes(q)
     );
-  }, [search]);
+  }, [search, allModels]);
 
   const groups = useMemo(() => groupByProvider(filtered), [filtered]);
-  const selected = MODELS.find(m => m.id === value);
+  const selected = allModels.find(m => m.id === value);
 
   return (
     <div ref={ref} className={`relative ${className}`}>
@@ -148,7 +153,7 @@ export function ModelDropdown({
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={`Search ${MODELS.length} models…`}
+                placeholder={`Search ${allModels.length} models${isLoading ? ' (loading…)' : ''}…`}
                 className="w-full pl-6 pr-2 py-1 bg-ide-bg border border-ide-border rounded text-xs focus:outline-none focus:border-ide-accent"
               />
             </div>
@@ -208,19 +213,22 @@ export function ModelPoolEditor({
   disabled?: boolean;
   showBulkActions?: boolean;
 }) {
+  const { allModels, fetchModels } = useModelStore();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [filterFree, setFilterFree] = useState(false);
 
+  useEffect(() => { if (pickerOpen) fetchModels(); }, [pickerOpen, fetchModels]);
+
   const filtered = useMemo(() => {
-    let list = MODELS;
+    let list = allModels;
     if (filterFree) list = list.filter(isFreeModel);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(m => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q));
     }
     return list;
-  }, [search, filterFree]);
+  }, [search, filterFree, allModels]);
 
   const groups = useMemo(() => groupByProvider(filtered), [filtered]);
 
@@ -247,13 +255,13 @@ export function ModelPoolEditor({
   };
 
   const addAllFree = () => {
-    const freeIds = MODELS.filter(isFreeModel).map(m => m.id);
+    const freeIds = allModels.filter(isFreeModel).map(m => m.id);
     const combined = [...models, ...freeIds.filter(id => !models.includes(id))];
     onChange(combined);
   };
 
   const addAll = () => {
-    const allIds = MODELS.map(m => m.id);
+    const allIds = allModels.map(m => m.id);
     const combined = [...models, ...allIds.filter(id => !models.includes(id))];
     onChange(combined);
   };
@@ -281,7 +289,7 @@ export function ModelPoolEditor({
           </div>
         )}
         {models.map((id, idx) => {
-          const def = MODELS.find(m => m.id === id);
+          const def = allModels.find(m => m.id === id);
           const provider = id.split('/')[0];
           return (
             <div key={id} className="flex items-center gap-1.5 px-2 py-1 bg-ide-bg border border-ide-border rounded group">
@@ -326,7 +334,7 @@ export function ModelPoolEditor({
             onClick={addAll}
             className="flex items-center gap-1 text-[10px] px-2 py-1 bg-blue-500/10 text-blue-400 rounded hover:bg-blue-500/20 transition-colors"
           >
-            <LayoutList className="w-3 h-3" /> All {MODELS.length}
+            <LayoutList className="w-3 h-3" /> All {allModels.length}
           </button>
           <button
             onClick={clearAll}
@@ -347,7 +355,7 @@ export function ModelPoolEditor({
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={`Search ${MODELS.length} models…`}
+                placeholder={`Search ${allModels.length} models…`}
                 className="w-full pl-6 pr-2 py-1 bg-ide-bg border border-ide-border rounded text-xs focus:outline-none focus:border-ide-accent"
               />
             </div>

@@ -202,4 +202,114 @@ export async function providersRoutes(app: FastifyInstance): Promise<void> {
     db.prepare('DELETE FROM provider_configs WHERE provider_id = ?').run(id);
     return { success: true };
   });
+
+  // ─── Ollama Management Endpoints ───────────────────────────────────────────
+
+  /** GET /api/providers/ollama/models — list installed Ollama models */
+  app.get('/ollama/models', async (_req, reply) => {
+    try {
+      const ollamaBaseUrl = (() => {
+        const row = db.prepare("SELECT base_url FROM provider_configs WHERE provider_id = 'ollama'").get() as any;
+        return (row?.base_url || appConfig.services.ollamaUrl).replace(/\/v1\/?$/, '');
+      })();
+      const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) return reply.status(res.status).send({ error: 'Ollama not responding' });
+      const data = await res.json();
+      return {
+        models: (data.models || []).map((m: any) => ({
+          name: m.name,
+          size: m.size,
+          modifiedAt: m.modified_at,
+          digest: m.digest?.slice(0, 12),
+        })),
+      };
+    } catch (err: any) {
+      return reply.status(503).send({ error: `Ollama unavailable: ${err.message}` });
+    }
+  });
+
+  /** POST /api/providers/ollama/pull — pull/download a model (streams progress) */
+  app.post<{ Body: { model: string } }>('/ollama/pull', async (request, reply) => {
+    const { model } = request.body;
+    if (!model || typeof model !== 'string' || model.trim().length === 0) {
+      return reply.status(400).send({ error: 'model name is required' });
+    }
+    // Sanitize: only allow alphanumeric, colon, hyphen, dot, underscore, slash
+    if (!/^[a-zA-Z0-9:.\-_/]+$/.test(model)) {
+      return reply.status(400).send({ error: 'Invalid model name' });
+    }
+
+    const ollamaBaseUrl = (() => {
+      const row = db.prepare("SELECT base_url FROM provider_configs WHERE provider_id = 'ollama'").get() as any;
+      return (row?.base_url || appConfig.services.ollamaUrl).replace(/\/v1\/?$/, '');
+    })();
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'application/x-ndjson',
+      'Transfer-Encoding': 'chunked',
+      'Cache-Control': 'no-cache',
+    });
+
+    try {
+      const ollamaRes = await fetch(`${ollamaBaseUrl}/api/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: model, stream: true }),
+        signal: AbortSignal.timeout(30 * 60_000), // 30 min for large models
+      });
+
+      if (!ollamaRes.ok) {
+        const body = await ollamaRes.text();
+        reply.raw.write(JSON.stringify({ error: body || 'Pull failed' }) + '\n');
+        reply.raw.end();
+        return;
+      }
+
+      const reader = ollamaRes.body?.getReader();
+      const decoder = new TextDecoder();
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          reply.raw.write(decoder.decode(value, { stream: true }));
+        }
+      }
+    } catch (err: any) {
+      reply.raw.write(JSON.stringify({ error: err.message }) + '\n');
+    }
+
+    reply.raw.end();
+  });
+
+  /** DELETE /api/providers/ollama/delete — delete a locally installed model */
+  app.delete<{ Body: { model: string } }>('/ollama/delete', async (request, reply) => {
+    const { model } = request.body;
+    if (!model || typeof model !== 'string') {
+      return reply.status(400).send({ error: 'model name is required' });
+    }
+    if (!/^[a-zA-Z0-9:.\-_/]+$/.test(model)) {
+      return reply.status(400).send({ error: 'Invalid model name' });
+    }
+
+    const ollamaBaseUrl = (() => {
+      const row = db.prepare("SELECT base_url FROM provider_configs WHERE provider_id = 'ollama'").get() as any;
+      return (row?.base_url || appConfig.services.ollamaUrl).replace(/\/v1\/?$/, '');
+    })();
+
+    try {
+      const res = await fetch(`${ollamaBaseUrl}/api/delete`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: model }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Delete failed' }));
+        return reply.status(400).send({ error: err.error || 'Delete failed' });
+      }
+      return { success: true };
+    } catch (err: any) {
+      return reply.status(503).send({ error: `Ollama unavailable: ${err.message}` });
+    }
+  });
 }

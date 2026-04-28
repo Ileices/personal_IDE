@@ -60,6 +60,13 @@ export interface ChatRequest {
   systemPrompt?: string;
   /** Override the session title */
   sessionTitle?: string;
+  /**
+   * Ordered list of fallback model IDs to try if the primary model fails
+   * (rate limit, auth error, network error, etc.). The server will try each
+   * in order and emit a 'model_fallback' SSE event so the UI can show which
+   * model is being used.
+   */
+  fallbackModels?: string[];
 }
 
 /** SSE event types for chat streaming */
@@ -69,6 +76,7 @@ export type ChatStreamEvent =
   | { type: 'content_done'; fullContent: string }
   | { type: 'structured_output'; data: StructuredAgentOutput }
   | { type: 'error'; error: string }
+  | { type: 'model_fallback'; from: string; to: string; reason: string }
   | { type: 'done'; usage?: TokenUsage };
 
 /** Token usage stats */

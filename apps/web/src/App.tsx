@@ -17,6 +17,7 @@ import { TerminalPanel } from './components/TerminalPanel';
 import { PanelErrorBoundary } from './components/PanelErrorBoundary';
 import { SetupWizard } from './components/wizards/SetupWizard';
 import { NewProjectWizard } from './components/wizards/NewProjectWizard';
+import { FirstRunWizard, useFirstRunWizard } from './components/wizards/FirstRunWizard';
 import { TheGodFactory } from './components/TheGodFactory';
 import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { API_BASE } from './config.js';
@@ -46,6 +47,7 @@ export default function App() {
   const fleetBadge = fleetAgents.filter(a => a.status === 'running').length || undefined;
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
+  const { showWizard: showFirstRun, setShowWizard: setShowFirstRun, completeFirstRun } = useFirstRunWizard();
 
   useEffect(() => { checkAuth().then(() => loadProjects()); }, []);
 
@@ -119,6 +121,7 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-ide-bg text-ide-text overflow-hidden select-none">
       {showSetupWizard && <SetupWizard onComplete={() => setShowSetupWizard(false)} />}
+      {showFirstRun && <FirstRunWizard onClose={completeFirstRun} />}
       {showNewProject && (
         <NewProjectWizard
           onClose={() => setShowNewProject(false)}
