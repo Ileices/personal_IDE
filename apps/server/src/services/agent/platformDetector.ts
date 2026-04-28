@@ -9,6 +9,9 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
+const PLATFORM_CACHE_TTL_MS = 10 * 60_000;
+let platformCache: { at: number; info: PlatformInfo } | null = null;
+
 export interface PlatformInfo {
   /** The OS the IDE server is running on */
   hostOS: 'windows' | 'macos' | 'linux' | 'android' | 'ios' | 'unknown';
@@ -36,7 +39,7 @@ export interface PlatformInfo {
 function tryCommand(cmd: string): string | null {
   try {
     const result = execSync(cmd, {
-      timeout: 10_000, // 10 seconds — CLI version checks are instant
+      timeout: 1_200,
       stdio: ['pipe', 'pipe', 'pipe'],
       encoding: 'utf-8',
     }).trim();
@@ -48,6 +51,10 @@ function tryCommand(cmd: string): string | null {
 
 /** Detect the full platform environment */
 export function detectPlatform(): PlatformInfo {
+  if (platformCache && (Date.now() - platformCache.at) < PLATFORM_CACHE_TTL_MS) {
+    return platformCache.info;
+  }
+
   const rawPlatform = os.platform();
   const arch = os.arch();
   const release = os.release();
@@ -131,9 +138,9 @@ export function detectPlatform(): PlatformInfo {
     docker: 'docker --version',
     'docker-compose': 'docker compose version',
     git: 'git --version',
-    vite: 'npx vite --version',
-    webpack: 'npx webpack --version',
-    electron: 'npx electron --version',
+    vite: 'vite --version',
+    webpack: 'webpack --version',
+    electron: 'electron --version',
     tauri: 'cargo tauri --version',
   };
   for (const [name, cmd] of Object.entries(toolChecks)) {
@@ -143,7 +150,7 @@ export function detectPlatform(): PlatformInfo {
   // Determine cross-platform strategy based on environment
   const crossPlatformStrategy = buildCrossPlatformStrategy(hostOS, runtimes, buildTools);
 
-  return {
+  const info: PlatformInfo = {
     hostOS,
     platform: rawPlatform,
     arch,
@@ -154,6 +161,44 @@ export function detectPlatform(): PlatformInfo {
     shell,
     pathSeparator: path.sep,
     crossPlatformStrategy,
+  };
+
+  platformCache = { at: Date.now(), info };
+  return info;
+}
+
+/**
+ * Fast platform detection for latency-sensitive paths.
+ * Avoids shelling out to dozens of CLIs.
+ */
+export function detectPlatformQuick(): PlatformInfo {
+  const rawPlatform = os.platform();
+  const arch = os.arch();
+  const release = os.release();
+
+  let hostOS: PlatformInfo['hostOS'] = 'unknown';
+  if (rawPlatform === 'win32') hostOS = 'windows';
+  else if (rawPlatform === 'darwin') hostOS = 'macos';
+  else if (rawPlatform === 'linux') {
+    hostOS = (process.env.ANDROID_ROOT || process.env.PREFIX?.includes('com.termux')) ? 'android' : 'linux';
+  }
+
+  let shell = process.env.SHELL || process.env.COMSPEC || 'unknown';
+  if (hostOS === 'windows') {
+    shell = process.env.PSModulePath ? 'powershell' : (process.env.COMSPEC || 'cmd.exe');
+  }
+
+  return {
+    hostOS,
+    platform: rawPlatform,
+    arch,
+    release,
+    packageManagers: [],
+    runtimes: {},
+    buildTools: [],
+    shell,
+    pathSeparator: path.sep,
+    crossPlatformStrategy: buildCrossPlatformStrategy(hostOS, {}, []),
   };
 }
 

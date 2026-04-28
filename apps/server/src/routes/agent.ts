@@ -79,7 +79,7 @@ export async function agentRoutes(app: FastifyInstance) {
       // Enhanced options
       provider,
       contextWindow: body.contextWindow || getModel(modelStr)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
-      checkpointEvery: body.checkpointEvery ?? 5,
+      checkpointEvery: body.checkpointEvery ?? 0,
       autoFixErrors: body.autoFixErrors ?? true,
       autoRunTests: body.autoRunTests ?? true,
       analyzeCodebase: body.analyzeCodebase ?? false,

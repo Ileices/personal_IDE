@@ -177,7 +177,161 @@ export const PROVIDERS: ProviderConfig[] = [
     notes: 'Free tier available. Sign up at cloud.cerebras.ai for an API key. OpenAI-compatible API. ~3000 tokens/second.',
     enabled: false,
   },
-];
+  // — Anthropic —
+  {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    description: 'Claude Opus 4.7, Sonnet 4.6, Haiku 4.5. World-class reasoning and coding. 1M context.',
+    baseURL: 'https://api.anthropic.com/v1',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: false,
+    setupUrl: 'https://console.anthropic.com/settings/keys',
+    notes: 'OpenAI-compatible mode via interoperability beta. $5/1M for Opus, $3/1M for Sonnet, $1/1M for Haiku.',
+    enabled: false,
+  },
+
+  // — OpenAI Direct —
+  {
+    id: 'openai-direct',
+    name: 'OpenAI (Direct)',
+    description: 'Direct access to OpenAI GPT-4o, GPT-4.1, o3 series. Pay-per-token.',
+    baseURL: 'https://api.openai.com/v1',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: false,
+    setupUrl: 'https://platform.openai.com/api-keys',
+    notes: 'Use if GitHub Models has rate limit issues. Direct OpenAI billing.',
+    enabled: false,
+  },
+
+  // — DeepSeek Direct —
+  {
+    id: 'deepseek-direct',
+    name: 'DeepSeek API',
+    description: 'DeepSeek V4 Flash and Pro. Thinking mode enabled. 1M context. Very affordable pricing.',
+    baseURL: 'https://api.deepseek.com',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: false,
+    setupUrl: 'https://platform.deepseek.com/api_keys',
+    notes: 'V4 Flash (deepseek-chat): $0.14/1M input. V4 Pro (deepseek-reasoner): $1.74/1M. OpenAI-compatible.',
+    enabled: false,
+  },
+
+  // — Qwen / DashScope —
+  {
+    id: 'qwen',
+    name: 'Alibaba Qwen (DashScope)',
+    description: 'Qwen-Max, Qwen-Plus, Qwen-Turbo. Strong multilingual models with large context.',
+    baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: false,
+    setupUrl: 'https://dashscope.console.aliyun.com/apiKey',
+    notes: 'OpenAI-compatible API. Qwen3-32B also available via Groq for free.',
+    enabled: false,
+  },
+
+  // — ZhipuAI (GLM-4-Flash is FREE) —
+  {
+    id: 'zhipuai',
+    name: 'ZhipuAI (GLM)',
+    description: 'GLM-4 and GLM-4-Flash models. GLM-4-Flash is completely free with 128K context.',
+    baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: true,
+    setupUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+    noSignupUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+    notes: 'GLM-4-Flash is FREE with 128K context. Sign up at bigmodel.cn for API key.',
+    enabled: false,
+  },
+
+  // — Moonshot AI —
+  {
+    id: 'moonshot',
+    name: 'Moonshot AI (Kimi)',
+    description: 'Kimi models with extremely long context windows (128K-1M). Strong at document tasks.',
+    baseURL: 'https://api.moonshot.cn/v1',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: false,
+    setupUrl: 'https://platform.moonshot.cn/console/api-keys',
+    notes: 'OpenAI-compatible. Moonshot-v1-128k and moonshot-v1-1m available.',
+    enabled: false,
+  },
+
+  // — MiniMax —
+  {
+    id: 'minimax',
+    name: 'MiniMax',
+    description: 'MiniMax MoE models. Strong at Chinese and multilingual tasks.',
+    baseURL: 'https://api.minimax.chat/v1',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: false,
+    setupUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
+    notes: 'OpenAI-compatible endpoint available.',
+    enabled: false,
+  },
+
+  // — xAI —
+  {
+    id: 'xai',
+    name: 'xAI (Grok)',
+    description: 'Grok 3 and Grok 3 Mini. Real-time knowledge via X/Twitter data.',
+    baseURL: 'https://api.x.ai/v1',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: false,
+    setupUrl: 'https://console.x.ai/',
+    notes: 'OpenAI-compatible API. Also accessible via GitHub Models.',
+    enabled: false,
+  },
+
+  // — Perplexity —
+  {
+    id: 'perplexity',
+    name: 'Perplexity AI',
+    description: 'Sonar models with real-time web search. Best for up-to-date information.',
+    baseURL: 'https://api.perplexity.ai',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: false,
+    setupUrl: 'https://www.perplexity.ai/settings/api',
+    notes: 'OpenAI-compatible. Great for research and current events queries.',
+    enabled: false,
+  },
+
+  // — Fireworks AI —
+  {
+    id: 'fireworks',
+    name: 'Fireworks AI',
+    description: 'Fast open-source model hosting. Llama, Mixtral, DeepSeek, Code Llama. $1 free credit.',
+    baseURL: 'https://api.fireworks.ai/inference/v1',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: true,
+    setupUrl: 'https://fireworks.ai/account/api-keys',
+    notes: '$1 free credit on signup. Fast inference for open models. OpenAI-compatible.',
+    enabled: false,
+  },
+
+  // — SiliconFlow (many free open models) —
+  {
+    id: 'siliconflow',
+    name: 'SiliconFlow',
+    description: 'Free tier for open-source models: Qwen2.5-72B, DeepSeek-V3, and many more.',
+    baseURL: 'https://api.siliconflow.cn/v1',
+    requiresApiKey: true,
+    isLocal: false,
+    isFree: true,
+    setupUrl: 'https://cloud.siliconflow.cn/account/ak',
+    noSignupUrl: 'https://cloud.siliconflow.cn/account/ak',
+    notes: 'Many open-source models are FREE with generous rate limits. Chinese-based provider.',
+    enabled: false,
+  },];
 
 /** Get enabled providers */
 export function getEnabledProviders(): ProviderConfig[] {

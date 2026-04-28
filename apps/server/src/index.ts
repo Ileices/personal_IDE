@@ -26,6 +26,8 @@ import { fleetRoutes } from './routes/fleet.js';
 import { openclawRoutes } from './routes/openclaw.js';
 import { terminalRoutes } from './routes/terminal.js';
 import { healthRoutes } from './routes/health.js';
+import { codeRoutes } from './routes/code.js';
+import { corpusRoutes } from './routes/corpus.js';
 import csrfPlugin from './plugins/csrf.js';
 import { validationPlugin } from './plugins/validation.js';
 import { registerGracefulShutdown } from './plugins/gracefulShutdown.js';
@@ -107,6 +109,10 @@ async function main() {
   await app.register(fleetRoutes, { prefix: '/api/fleet' });
   await app.register(openclawRoutes, { prefix: '/api/openclaw' });
   await app.register(terminalRoutes, { prefix: '/api/terminal' });
+
+  // Code intelligence + corpus endpoints
+  await app.register(codeRoutes, { prefix: '/api/code' });
+  await app.register(corpusRoutes, { prefix: '/api/corpus' });
 
   // Health — rich diagnostic endpoint (replaces inline handler)
   await app.register(healthRoutes);

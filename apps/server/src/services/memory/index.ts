@@ -2,6 +2,7 @@
 // Memory Service - Project memory management
 // ============================================
 import { v4 as uuid } from 'uuid';
+import { mkdirSync } from 'fs';
 import type Database from 'better-sqlite3';
 import type { Project, MemoryNote, MemorySearchQuery, FileSummary, QuestionLogEntry } from '@personal-ide/shared';
 
@@ -16,6 +17,9 @@ export class MemoryService {
     this.db.prepare(
       'INSERT INTO projects (id, name, description, root_path, created_at, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).run(id, name, description, rootPath, now, now);
+
+    // Ensure project directory exists on disk so agent terminals can start
+    try { mkdirSync(rootPath, { recursive: true }); } catch { /* already exists or invalid path */ }
 
     return this.getProject(id)!;
   }

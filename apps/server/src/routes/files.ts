@@ -2,7 +2,9 @@
 // Files Routes - Filesystem REST API
 // ============================================
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync, cpSync, statSync } from 'fs';
+import { join } from 'path';
+import { execSync } from 'child_process';
 import * as fs from '../services/filesystem/index.js';
 
 export async function filesRoutes(app: FastifyInstance) {
@@ -104,5 +106,66 @@ export async function filesRoutes(app: FastifyInstance) {
 
     const files = fs.listAllFiles(root);
     return { files, count: files.length };
+  });
+
+  // --- POST /api/files/reveal --- Reveal file in OS file explorer ---
+  app.post('/reveal', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { path: filePath } = req.body as { path: string };
+    if (!filePath) return reply.status(400).send({ error: 'path required' });
+
+    const platform = process.platform;
+    try {
+      if (platform === 'win32') {
+        // Use /select to highlight the file in Explorer
+        execSync(`explorer /select,"${filePath.replace(/\//g, '\\')}"`, { timeout: 5000 });
+      } else if (platform === 'darwin') {
+        execSync(`open -R "${filePath}"`, { timeout: 5000 });
+      } else {
+        // Linux: open parent directory with xdg-open
+        const parentDir = filePath.substring(0, filePath.lastIndexOf('/')) || '/';
+        execSync(`xdg-open "${parentDir}"`, { timeout: 5000 });
+      }
+      return { ok: true };
+    } catch (err: any) {
+      // Best effort — don't error out to client
+      return { ok: false, error: err.message };
+    }
+  });
+
+  // --- POST /api/files/backup --- Timestamped backup of project root ---
+  app.post('/backup', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { projectRoot } = req.body as { projectRoot?: string };
+    if (!projectRoot) return reply.status(400).send({ error: 'projectRoot required' });
+    if (!existsSync(projectRoot)) return reply.status(404).send({ error: 'projectRoot not found' });
+
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+      const backupsDir = join(projectRoot, '.backups');
+      const backupPath = join(backupsDir, `backup_${timestamp}`);
+      mkdirSync(backupsDir, { recursive: true });
+      // Only copy files tracked by git if possible; fall back to full copy
+      try {
+        const files = execSync('git ls-files --cached --others --exclude-standard', {
+          cwd: projectRoot, timeout: 5000, encoding: 'utf8',
+        }).trim().split('\n').filter(Boolean);
+        mkdirSync(backupPath, { recursive: true });
+        for (const f of files.slice(0, 2000)) {
+          const src = join(projectRoot, f);
+          const dest = join(backupPath, f);
+          if (!existsSync(src)) continue;
+          const stat = statSync(src);
+          if (stat.isFile() && stat.size < 5 * 1024 * 1024) {
+            mkdirSync(join(backupPath, f.split('/').slice(0, -1).join('/')), { recursive: true });
+            cpSync(src, dest);
+          }
+        }
+      } catch {
+        // git not available or failed — skip backup gracefully
+        return { backupPath: null, skipped: true, reason: 'git not available' };
+      }
+      return { backupPath, timestamp };
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
   });
 }

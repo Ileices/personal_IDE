@@ -15,6 +15,7 @@ import type {
   FleetCapacitySnapshot,
   FleetExecutionMode,
 } from '../../stores/fleetStore';
+import { ModelPoolEditor, RoleModelPicker, FLEET_ROLE_LABELS } from '../UniversalModelPicker';
 
 const FLEET_ROLES: AgentRole[] = ['lead', 'implementer', 'debugger', 'tester', 'reviewer', 'documenter'];
 
@@ -115,37 +116,11 @@ export function AgentSettings({
   isRunning, isFleetRunning,
 }: AgentSettingsProps) {
   const [showFallbackChain, setShowFallbackChain] = useState(false);
-  const [localPoolInput, setLocalPoolInput] = useState(localModelPool.join(', '));
-  const [cloudPoolInput, setCloudPoolInput] = useState(cloudModelPool.join(', '));
   const [showRoleOverrides, setShowRoleOverrides] = useState(false);
-  const [roleOverrideDrafts, setRoleOverrideDrafts] = useState<Record<AgentRole, string>>(
-    buildRoleOverrideDrafts(roleModelOverrides)
-  );
   const selectedPreset = MODEL_PRESETS.find(p => p.id === selectedPresetId) || MODEL_PRESETS[0];
 
-  useEffect(() => {
-    setLocalPoolInput(localModelPool.join(', '));
-  }, [localModelPool]);
-
-  useEffect(() => {
-    setCloudPoolInput(cloudModelPool.join(', '));
-  }, [cloudModelPool]);
-
-  useEffect(() => {
-    setRoleOverrideDrafts(buildRoleOverrideDrafts(roleModelOverrides));
-  }, [roleModelOverrides]);
-
-  const applyLocalPool = () => {
-    setLocalModelPool(parseModelPool(localPoolInput));
-  };
-
-  const applyCloudPool = () => {
-    setCloudModelPool(parseModelPool(cloudPoolInput));
-  };
-
-  const applyRoleOverride = (role: AgentRole) => {
-    const raw = roleOverrideDrafts[role]?.trim() || '';
-    setRoleModelOverride(role, raw || null);
+  const applyRoleOverride = (role: AgentRole, model: string) => {
+    setRoleModelOverride(role, model || null);
   };
 
   return (
@@ -264,43 +239,21 @@ export function AgentSettings({
               </select>
             </div>
 
-            <div className="space-y-1">
-              <label htmlFor="fleet-local-model-pool" className="text-[10px] text-ide-text-dim">Local model pool (comma-separated)</label>
-              <input
-                id="fleet-local-model-pool"
-                value={localPoolInput}
-                onChange={e => setLocalPoolInput(e.target.value)}
-                onBlur={applyLocalPool}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    applyLocalPool();
-                  }
-                }}
-                disabled={isFleetRunning}
-                placeholder="ollama/qwen2.5-coder, nano/local-coder"
-                className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-[11px] text-ide-text focus:outline-none focus:border-cyan-400 disabled:opacity-50"
-              />
-            </div>
+            <ModelPoolEditor
+              title="Local Model Pool"
+              description="Ollama, Nano, and other on-device models"
+              models={localModelPool}
+              onChange={setLocalModelPool}
+              disabled={isFleetRunning}
+            />
 
-            <div className="space-y-1">
-              <label htmlFor="fleet-cloud-model-pool" className="text-[10px] text-ide-text-dim">Cloud model pool (comma-separated)</label>
-              <input
-                id="fleet-cloud-model-pool"
-                value={cloudPoolInput}
-                onChange={e => setCloudPoolInput(e.target.value)}
-                onBlur={applyCloudPool}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    applyCloudPool();
-                  }
-                }}
-                disabled={isFleetRunning}
-                placeholder="openai/gpt-4.1-mini, groq/llama-3.3-70b-versatile"
-                className="w-full bg-ide-bg border border-ide-border rounded px-2 py-1 text-[11px] text-ide-text focus:outline-none focus:border-cyan-400 disabled:opacity-50"
-              />
-            </div>
+            <ModelPoolEditor
+              title="Cloud Model Pool"
+              description="OpenAI, Groq, Gemini, Anthropic, etc."
+              models={cloudModelPool}
+              onChange={setCloudModelPool}
+              disabled={isFleetRunning}
+            />
 
             <button
               onClick={() => setShowRoleOverrides(v => !v)}
@@ -311,28 +264,15 @@ export function AgentSettings({
             </button>
 
             {showRoleOverrides && (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {FLEET_ROLES.map(role => (
-                  <div key={role} className="flex items-center gap-2">
-                    <label htmlFor={`fleet-role-${role}`} className="text-[10px] text-ide-text-dim w-20 shrink-0">
-                      {ROLE_LABELS[role]}
-                    </label>
-                    <input
-                      id={`fleet-role-${role}`}
-                      value={roleOverrideDrafts[role]}
-                      onChange={e => setRoleOverrideDrafts(s => ({ ...s, [role]: e.target.value }))}
-                      onBlur={() => applyRoleOverride(role)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          applyRoleOverride(role);
-                        }
-                      }}
-                      disabled={isFleetRunning}
-                      placeholder="provider/model-id"
-                      className="flex-1 bg-ide-bg border border-ide-border rounded px-2 py-1 text-[11px] text-ide-text focus:outline-none focus:border-cyan-400 disabled:opacity-50"
-                    />
-                  </div>
+                  <RoleModelPicker
+                    key={role}
+                    role={role}
+                    value={roleModelOverrides[role] || ''}
+                    onChange={(model) => applyRoleOverride(role as AgentRole, model)}
+                    disabled={isFleetRunning}
+                  />
                 ))}
               </div>
             )}

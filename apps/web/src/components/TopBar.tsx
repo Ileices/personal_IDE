@@ -31,7 +31,11 @@ interface DynamicModel {
   isFree?: boolean;
 }
 
-export function TopBar() {
+interface TopBarProps {
+  onNewProject?: () => void;
+}
+
+export function TopBar({ onNewProject }: TopBarProps) {
   const { user, logout } = useAuthStore();
   const { mode, setMode, selectedModel, setModel } = useChatStore();
   const { activeProject } = useProjectStore();
@@ -109,6 +113,15 @@ export function TopBar() {
           <span className="text-xs text-ide-text-dim bg-ide-bg px-2 py-0.5 rounded">
             {activeProject.name}
           </span>
+        )}
+        {onNewProject && (
+          <button
+            onClick={onNewProject}
+            className="text-xs text-ide-text-dim hover:text-ide-accent px-1.5 py-0.5 rounded hover:bg-ide-accent/10 transition-colors"
+            title="New Project"
+          >
+            + New
+          </button>
         )}
       </div>
 

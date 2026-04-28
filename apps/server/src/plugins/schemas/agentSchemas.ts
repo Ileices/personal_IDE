@@ -16,7 +16,7 @@ export const agentSchemas: Record<string, z.ZodType> = {
     enableSmartChunking: z.boolean().optional(),
     provider: providerType,
     contextWindow: z.number().int().positive().optional(),
-    checkpointEvery: z.number().int().min(1).optional(),
+    checkpointEvery: z.number().int().min(0).optional(),
     autoFixErrors: z.boolean().optional(),
     autoRunTests: z.boolean().optional(),
     analyzeCodebase: z.boolean().optional(),

@@ -8,7 +8,8 @@ import * as path from 'path';
 export class LogWriter {
   private logDir: string;
   private currentLogFile: string;
-  private writeStream: fs.WriteStream | null = null;
+  private pendingLines: string[] = [];
+  private flushScheduled = false;
 
   constructor(projectRoot: string) {
     this.logDir = path.join(projectRoot, '.ide-logs');
@@ -38,21 +39,14 @@ export class LogWriter {
     };
 
     const line = JSON.stringify(entry) + '\n';
-
-    try {
-      fs.appendFileSync(this.currentLogFile, line);
-    } catch {
-      // If log write fails, don't crash the agent
-    }
+    this.enqueueLine(line);
   }
 
   /** Write a human-readable summary line */
   logSummary(message: string): void {
     const timestamp = new Date().toISOString();
     const line = `[${timestamp}] ${message}\n`;
-    try {
-      fs.appendFileSync(this.currentLogFile, line);
-    } catch { /* non-critical */ }
+    this.enqueueLine(line);
   }
 
   /** Write the full LLM prompt and response for debugging */
@@ -76,8 +70,39 @@ export class LogWriter {
       `llm-call-${data.iteration}-${Date.now()}.json`
     );
     try {
-      fs.writeFileSync(detailFile, JSON.stringify(data, null, 2));
+      fs.writeFile(detailFile, JSON.stringify(data, null, 2), () => {});
     } catch { /* non-critical */ }
+  }
+
+  private enqueueLine(line: string): void {
+    this.pendingLines.push(line);
+    // Prevent unbounded memory growth if disk is unavailable.
+    if (this.pendingLines.length > 5000) {
+      this.pendingLines.splice(0, this.pendingLines.length - 5000);
+    }
+    this.scheduleFlush();
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushScheduled) return;
+    this.flushScheduled = true;
+    setImmediate(() => this.flushPending());
+  }
+
+  private flushPending(): void {
+    this.flushScheduled = false;
+    if (this.pendingLines.length === 0) return;
+
+    const payload = this.pendingLines.join('');
+    this.pendingLines = [];
+
+    fs.appendFile(this.currentLogFile, payload, () => {
+      // Best effort only — logging must never affect agent execution.
+    });
+
+    if (this.pendingLines.length > 0) {
+      this.scheduleFlush();
+    }
   }
 
   /** Get the path to the current log file */
@@ -110,9 +135,14 @@ export class LogWriter {
   }
 
   close(): void {
-    if (this.writeStream) {
-      this.writeStream.end();
-      this.writeStream = null;
+    if (this.pendingLines.length > 0) {
+      try {
+        const payload = this.pendingLines.join('');
+        this.pendingLines = [];
+        fs.appendFileSync(this.currentLogFile, payload);
+      } catch {
+        // Best effort flush.
+      }
     }
   }
 }

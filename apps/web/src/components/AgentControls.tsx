@@ -4,7 +4,7 @@
 // verbosity modes, expandable entries,
 // copy feed, message queue during runs
 // ============================================
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAgentStore, type VerbosityLevel } from '../stores/agentStore';
 import { useFleetStore, type FleetAgentInfo } from '../stores/fleetStore';
 import { useProjectStore } from '../stores/projectStore';
@@ -14,11 +14,17 @@ import {
   AlertCircle, CheckCircle, Loader2, MessageSquare, Bot,
   Infinity, Zap, Puzzle, Timer, ShieldOff, Copy, Check,
   ChevronDown, ChevronRight, Send, Eye, EyeOff, Filter,
-  Users, UserPlus, Cpu, BookOpen, ArrowRightLeft
+  Users, UserPlus, Cpu, BookOpen, ArrowRightLeft, History, X, Trash2,
 } from 'lucide-react';
 import { MEGA_PROMPTS, type MegaPrompt } from '../data/megaPrompts';
 import { AgentSettings } from './agent/AgentSettings';
 import { AgentEventFeed } from './agent/AgentEventFeed';
+
+// Prompt history persistence
+const AGENT_HIST_KEY = 'agent_loop_prompt_history';
+interface AgentHistoryItem { id: string; prompt: string; usedAt: string; timesUsed: number; }
+const loadAgentHistory  = (): AgentHistoryItem[] => { try { return JSON.parse(localStorage.getItem(AGENT_HIST_KEY) || '[]'); } catch { return []; } };
+const saveAgentHistory  = (v: AgentHistoryItem[]) => { try { localStorage.setItem(AGENT_HIST_KEY, JSON.stringify(v.slice(0, 200))); } catch {} };
 
 export function AgentControls() {
   const {
@@ -38,6 +44,9 @@ export function AgentControls() {
   const { selectedModel } = useChatStore();
   const [task, setTask] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [promptHistory, setPromptHistory] = useState<AgentHistoryItem[]>(loadAgentHistory);
+  const [histSearch, setHistSearch] = useState('');
   const [queueInput, setQueueInput] = useState('');
   const [queuePriority, setQueuePriority] = useState<'normal' | 'high'>('normal');
   const [copiedFeed, setCopiedFeed] = useState(false);
@@ -90,11 +99,21 @@ export function AgentControls() {
 
   const handleStart = () => {
     if (!task.trim() || !activeProject) return;
+    const trimmed = task.trim();
+    // Save to prompt history
+    setPromptHistory(prev => {
+      const existing = prev.find(h => h.prompt === trimmed);
+      const updated = existing
+        ? prev.map(h => h.prompt === trimmed ? { ...h, timesUsed: h.timesUsed + 1, usedAt: new Date().toISOString() } : h)
+        : [{ id: Date.now().toString(), prompt: trimmed, usedAt: new Date().toISOString(), timesUsed: 1 }, ...prev];
+      saveAgentHistory(updated);
+      return updated;
+    });
     if (fleetMode) {
-      startFleet(activeProject.id, task.trim(), selectedModel);
+      startFleet(activeProject.id, trimmed, selectedModel);
       setTask('');
     } else {
-      startAgent(activeProject.id, task.trim(), selectedModel);
+      startAgent(activeProject.id, trimmed, selectedModel);
       setTask('');
     }
   };
@@ -170,7 +189,14 @@ export function AgentControls() {
             </span>
           )}
           <button
-            onClick={() => setShowSettings(!showSettings)}
+            onClick={() => { setShowHistory(!showHistory); setShowSettings(false); }}
+            className={`p-1 rounded transition-colors ${showHistory ? 'text-purple-400' : 'text-ide-text-dim hover:text-ide-text'}`}
+            title="Prompt history"
+          >
+            <History className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => { setShowSettings(!showSettings); setShowHistory(false); }}
             className="p-1 text-ide-text-dim hover:text-ide-text rounded"
           >
             <Settings className="w-3.5 h-3.5" />
@@ -234,6 +260,57 @@ export function AgentControls() {
           isRunning={isRunning}
           isFleetRunning={isFleetRunning}
         />
+      )}
+      {/* Prompt History Drawer */}
+      {showHistory && (
+        <div className="border-b border-ide-border bg-ide-bg/50 flex flex-col max-h-60 overflow-hidden flex-shrink-0">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-ide-border/50">
+            <span className="text-[10px] font-semibold text-ide-text">Prompt History</span>
+            <button onClick={() => setShowHistory(false)}><X className="w-3 h-3 text-ide-text-dim hover:text-ide-text" /></button>
+          </div>
+          <div className="px-2 py-1">
+            <input value={histSearch} onChange={e => setHistSearch(e.target.value)} placeholder="Search history…"
+              className="w-full bg-ide-bg border border-ide-border rounded px-2 py-0.5 text-[11px] focus:outline-none focus:border-ide-accent" />
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {promptHistory.filter(h => !histSearch || h.prompt.toLowerCase().includes(histSearch.toLowerCase())).length === 0 && (
+              <div className="px-3 py-3 text-[10px] text-ide-text-dim text-center">No history yet — start the agent to record prompts</div>
+            )}
+            {promptHistory
+              .filter(h => !histSearch || h.prompt.toLowerCase().includes(histSearch.toLowerCase()))
+              .map(h => (
+              <div key={h.id} className="flex items-start gap-1.5 px-2 py-1.5 border-b border-ide-border/30 group hover:bg-ide-bg/30">
+                <div className="flex-1 min-w-0">
+                  <button onClick={() => { setTask(h.prompt); setShowHistory(false); }}
+                    className="w-full text-left text-[11px] text-ide-text line-clamp-2">{h.prompt}</button>
+                  <span className="text-[9px] text-ide-text-dim">×{h.timesUsed} · {new Date(h.usedAt).toLocaleDateString()}</span>
+                </div>
+                <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
+                  <button onClick={() => { setTask(h.prompt); setShowHistory(false); }}
+                    title="Load prompt" className="p-1 bg-ide-accent/15 text-ide-accent rounded hover:bg-ide-accent/25">
+                    <Play className="w-2.5 h-2.5" />
+                  </button>
+                  <button onClick={() => {
+                    setPromptHistory(prev => { const u = prev.filter(x => x.id !== h.id); saveAgentHistory(u); return u; });
+                  }} className="p-1 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20">
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="p-2 border-t border-ide-border/50">
+            <button
+              onClick={() => {
+                const top = promptHistory.slice(0, 15).map(h => h.prompt).join('\n- ');
+                if (top) { setTask(`Create a comprehensive improvement plan combining these past tasks:\n- ${top}`); setShowHistory(false); }
+              }}
+              className="w-full text-[10px] py-1 bg-purple-500/10 text-purple-400 rounded hover:bg-purple-500/20 flex items-center justify-center gap-1"
+            >
+              <Zap className="w-3 h-3" /> Generate Mega-Prompt from History
+            </button>
+          </div>
+        </div>
       )}
       {/* Task Input + Controls */}
       {!isRunning && !isFleetRunning && (

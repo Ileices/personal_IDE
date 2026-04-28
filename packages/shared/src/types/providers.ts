@@ -3,7 +3,11 @@
 // ============================================
 
 /** Supported LLM providers */
-export type ProviderType = 'github' | 'ollama' | 'groq' | 'huggingface' | 'cohere' | 'mistral' | 'gemini' | 'together' | 'openrouter' | 'lmstudio' | 'nano' | 'cerebras';
+export type ProviderType = 
+  | 'github' | 'ollama' | 'groq' | 'huggingface' | 'cohere' | 'mistral'
+  | 'gemini' | 'together' | 'openrouter' | 'lmstudio' | 'nano' | 'cerebras'
+  | 'anthropic' | 'openai-direct' | 'deepseek-direct' | 'qwen' | 'zhipuai'
+  | 'moonshot' | 'minimax' | 'xai' | 'perplexity' | 'fireworks' | 'siliconflow';
 
 /** Provider configuration */
 export interface ProviderConfig {

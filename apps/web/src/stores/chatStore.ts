@@ -64,7 +64,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setContextFiles: (files) => set({ contextFiles: files }),
 
   sendMessage: async (projectId: string, message: string) => {
-    const { conversationId, selectedModel, mode, contextFiles } = get();
+    const { conversationId, selectedModel, mode } = get();
+    let { contextFiles } = get();
+
+    // Auto-inject file context from project tree if none explicitly set
+    if (contextFiles.length === 0 && projectId) {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:3001'}/api/files/tree?projectId=${projectId}`);
+        if (res.ok) {
+          const tree = await res.json();
+          // Collect top-level and immediate children (non-recursive, limit 30 files)
+          const files: string[] = [];
+          const walk = (nodes: any[], depth = 0) => {
+            for (const node of nodes) {
+              if (node.type === 'file') files.push(node.path);
+              else if (node.type === 'directory' && depth < 2 && node.children) walk(node.children, depth + 1);
+              if (files.length >= 30) break;
+            }
+          };
+          if (Array.isArray(tree)) walk(tree);
+          else if (tree.children) walk(tree.children);
+          if (files.length > 0) contextFiles = files;
+        }
+      } catch { /* non-critical, proceed without context */ }
+    }
 
     // Add user message to UI immediately
     const userMsg: ChatMessage = {

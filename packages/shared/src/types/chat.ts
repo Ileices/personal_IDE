@@ -56,6 +56,10 @@ export interface ChatRequest {
   contextMemoryIds?: string[];
   /** Whether to auto-inject relevant memory */
   autoInjectMemory?: boolean;
+  /** Override the default system prompt for this request */
+  systemPrompt?: string;
+  /** Override the session title */
+  sessionTitle?: string;
 }
 
 /** SSE event types for chat streaming */

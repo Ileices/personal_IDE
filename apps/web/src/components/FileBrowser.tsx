@@ -1,33 +1,111 @@
-// ============================================
+﻿// ============================================
 // File Browser - Tree view sidebar
 // ============================================
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useFileStore } from '../stores/fileStore';
 import { useProjectStore } from '../stores/projectStore';
 import type { FileNode } from '@personal-ide/shared';
 import {
-  ChevronRight, ChevronDown, File, Folder, FolderOpen,
+  ChevronRight, ChevronDown, Folder, FolderOpen,
   RefreshCw, Search
 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+
 const EXT_ICONS: Record<string, string> = {
   '.ts': '🔷', '.tsx': '⚛️', '.js': '🟨', '.jsx': '⚛️',
-  '.py': '🐍', '.json': '📋', '.md': '📝', '.css': '🎨',
-  '.html': '🌐', '.sql': '🗃️', '.yaml': '📄', '.yml': '📄',
-  '.env': '🔐', '.sh': '🐚', '.rs': '🦀', '.go': '🐹',
+  '.py': '🐍', '.json': '📋', '.md': '📝', '.yaml': '📄', '.yml': '📄',
+  '.env': '🔒', '.rs': '🦀', '.go': '🐹',
 };
 
-function FileTreeNode({ node, depth, rootPath }: { node: FileNode; depth: number; rootPath: string }) {
+// ---- Right-click Context Menu ----
+interface ContextMenuState {
+  x: number;
+  y: number;
+  node: FileNode;
+  rootPath: string;
+}
+
+function ContextMenu({ state, onClose }: { state: ContextMenuState; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { node, rootPath } = state;
+  const fullPath = (rootPath + '/' + node.path).replace(/\\/g, '/').replace(/\/\//g, '/');
+  const relativePath = node.path;
+  const fileName = node.name;
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text).catch(() => {});
+    onClose();
+  };
+
+  const revealInExplorer = async () => {
+    try {
+      await fetch(`${API_BASE}/api/files/reveal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: fullPath }),
+      });
+    } catch { /* best effort */ }
+    onClose();
+  };
+
+  type MenuItem =
+    | { label: string; action: () => void; separator?: false }
+    | { separator: true; label?: never; action?: never };
+
+  const menuItems: MenuItem[] = [
+    { label: 'Reveal in Explorer', action: revealInExplorer },
+    { separator: true },
+    { label: 'Copy File Name', action: () => copy(fileName) },
+    { label: 'Copy Relative Path', action: () => copy(relativePath) },
+    { label: 'Copy Absolute Path', action: () => copy(fullPath) },
+  ];
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-50 bg-ide-sidebar border border-ide-border rounded shadow-xl py-1 min-w-[180px] text-xs"
+      style={{ left: state.x, top: state.y }}
+    >
+      {menuItems.map((item, i) =>
+        item.separator ? (
+          <div key={i} className="border-t border-ide-border my-1" />
+        ) : (
+          <button
+            key={i}
+            onClick={item.action}
+            className="w-full text-left px-3 py-1.5 hover:bg-ide-accent/20 hover:text-ide-accent transition-colors"
+          >
+            {item.label}
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
+// ---- File Tree Node ----
+function FileTreeNode({ node, depth, rootPath, onContextMenu }: {
+  node: FileNode;
+  depth: number;
+  rootPath: string;
+  onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
+}) {
   const [isOpen, setIsOpen] = useState(depth < 2);
   const { openFile } = useFileStore();
   const isDir = node.type === 'directory';
 
   const handleClick = () => {
-    if (isDir) {
-      setIsOpen(!isOpen);
-    } else {
-      openFile(rootPath, node.path);
-    }
+    if (isDir) setIsOpen(!isOpen);
+    else openFile(rootPath, node.path);
   };
 
   const icon = isDir
@@ -38,6 +116,7 @@ function FileTreeNode({ node, depth, rootPath }: { node: FileNode; depth: number
     <div>
       <button
         onClick={handleClick}
+        onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, node); }}
         className="w-full flex items-center gap-1.5 px-2 py-1 hover:bg-ide-bg/50 text-left text-xs group"
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
@@ -55,11 +134,10 @@ function FileTreeNode({ node, depth, rootPath }: { node: FileNode; depth: number
           </span>
         )}
       </button>
-
       {isDir && isOpen && node.children && (
         <div>
           {node.children.map(child => (
-            <FileTreeNode key={child.path} node={child} depth={depth + 1} rootPath={rootPath} />
+            <FileTreeNode key={child.path} node={child} depth={depth + 1} rootPath={rootPath} onContextMenu={onContextMenu} />
           ))}
         </div>
       )}
@@ -67,16 +145,25 @@ function FileTreeNode({ node, depth, rootPath }: { node: FileNode; depth: number
   );
 }
 
+// ---- Main FileBrowser Component ----
 export function FileBrowser() {
   const { fileTree, isLoading, loadFileTree, searchInFiles, searchResults } = useFileStore();
   const { activeProject } = useProjectStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   const handleSearch = () => {
     if (searchQuery.trim() && activeProject) {
       searchInFiles(activeProject.rootPath, searchQuery);
     }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, node: FileNode) => {
+    if (!activeProject) return;
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 160);
+    setContextMenu({ x, y, node, rootPath: activeProject.rootPath });
   };
 
   if (!activeProject) {
@@ -142,14 +229,24 @@ export function FileBrowser() {
 
       {/* Tree */}
       <div className="flex-1 overflow-y-auto">
-        {fileTree ? (
-          <FileTreeNode node={fileTree} depth={0} rootPath={activeProject.rootPath} />
-        ) : (
-          <div className="p-3 text-xs text-ide-text-dim text-center">
-            {isLoading ? 'Loading...' : 'No files loaded'}
-          </div>
+        {(fileTree?.children ?? []).map(node => (
+          <FileTreeNode
+            key={node.path}
+            node={node}
+            depth={0}
+            rootPath={activeProject.rootPath}
+            onContextMenu={handleContextMenu}
+          />
+        ))}
+        {(!fileTree?.children || fileTree.children.length === 0) && !isLoading && (
+          <div className="p-3 text-xs text-ide-text-dim text-center">No files found</div>
         )}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu state={contextMenu} onClose={() => setContextMenu(null)} />
+      )}
     </div>
   );
 }

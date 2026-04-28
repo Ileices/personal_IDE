@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // Preview Routes — App testing & execution
 // 
 // Allows the agent (and user) to:
@@ -508,5 +508,78 @@ export async function previewRoutes(app: FastifyInstance) {
         error: err.message,
       };
     }
+  });
+
+  // -- Smart Start -- auto-detect project type and start dev server --
+  app.post<{ Body: { projectRoot: string; port?: number } }>('/smart-start', async (request, reply) => {
+    const { projectRoot, port = 5173 } = request.body;
+    if (!projectRoot) return reply.status(400).send({ error: 'projectRoot is required' });
+    if (!fs.existsSync(projectRoot)) return reply.status(400).send({ error: `Project directory not found: ${projectRoot}` });
+
+    // Detect project type
+    let command: string;
+    let detectedType: string;
+
+    const pkgPath = path.join(projectRoot, 'package.json');
+    const cargoPath = path.join(projectRoot, 'Cargo.toml');
+    const pyPath = path.join(projectRoot, 'main.py');
+    const requirementsPath = path.join(projectRoot, 'requirements.txt');
+    const goPath = path.join(projectRoot, 'go.mod');
+
+    if (fs.existsSync(pkgPath)) {
+      let scripts: Record<string, string> = {};
+      try { scripts = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).scripts || {}; } catch {}
+      if (scripts.dev) { command = 'npm run dev'; detectedType = 'Node.js/Vite (dev)'; }
+      else if (scripts.start) { command = 'npm start'; detectedType = 'Node.js (start)'; }
+      else if (scripts.serve) { command = 'npm run serve'; detectedType = 'Node.js (serve)'; }
+      else { command = 'npm run dev'; detectedType = 'Node.js'; }
+    } else if (fs.existsSync(cargoPath)) {
+      command = 'cargo run'; detectedType = 'Rust';
+    } else if (fs.existsSync(goPath)) {
+      command = 'go run .'; detectedType = 'Go';
+    } else if (fs.existsSync(pyPath)) {
+      const content = fs.readFileSync(pyPath, 'utf-8');
+      if (content.includes('fastapi') || content.includes('uvicorn')) {
+        command = `uvicorn main:app --reload --port ${port}`; detectedType = 'Python/FastAPI';
+      } else if (content.includes('flask')) {
+        command = 'python main.py'; detectedType = 'Python/Flask';
+      } else {
+        command = 'python main.py'; detectedType = 'Python';
+      }
+    } else if (fs.existsSync(requirementsPath)) {
+      command = `python -m uvicorn main:app --reload --port ${port}`; detectedType = 'Python';
+    } else {
+      return reply.status(400).send({ error: 'Could not detect project type. No package.json, Cargo.toml, go.mod, or main.py found.' });
+    }
+
+    // Kill any existing server on the port
+    killTrackedServer(port);
+
+    // Start the server process
+    const proc = spawn(isWindows ? 'cmd' : 'sh', isWindows ? ['/c', command] : ['-c', command], {
+      cwd: projectRoot,
+      stdio: 'pipe',
+      detached: !isWindows,
+      env: { ...process.env, PORT: String(port), VITE_PORT: String(port) },
+    });
+
+    if (!proc.pid) return reply.status(500).send({ error: 'Failed to start process', command, detectedType });
+
+    activeServers.set(port, { pid: proc.pid, proc, command, port, startedAt: new Date().toISOString() });
+
+    // Poll for server to come up (up to 8s)
+    for (let i = 0; i < 16; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      if (proc.exitCode !== null) {
+        activeServers.delete(port);
+        return reply.status(500).send({ error: `Process exited (code=${proc.exitCode})`, command, detectedType });
+      }
+      try {
+        await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(1000) });
+        return { ok: true, url: `http://localhost:${port}`, port, command, detectedType };
+      } catch { /* still starting */ }
+    }
+
+    return { ok: true, url: `http://localhost:${port}`, port, command, detectedType, note: 'Server starting — may take a moment' };
   });
 }

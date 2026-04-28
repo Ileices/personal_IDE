@@ -20,6 +20,22 @@ export function createProviderClient(
   const isLocal = ['ollama', 'lmstudio', 'nano'].includes(provider);
   const timeoutMs = isLocal ? 10 * 60_000 : 5 * 60_000; // 10min local, 5min cloud
 
+  // Anthropic requires special interoperability headers for OpenAI-compatible mode
+  if (provider === 'anthropic') {
+    return new OpenAI({
+      baseURL,
+      apiKey: apiKey || 'placeholder',
+      dangerouslyAllowBrowser: false,
+      timeout: timeoutMs,
+      maxRetries: 1,
+      defaultHeaders: {
+        'x-api-key': apiKey || '',
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'interoperability-2025-04-14',
+      },
+    });
+  }
+
   return new OpenAI({
     baseURL,
     apiKey: apiKey || 'ollama',  // Ollama/LMStudio don't need real keys

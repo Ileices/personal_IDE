@@ -17,7 +17,7 @@ import { ChunkingPipeline } from '../llm/chunkingPipeline.js';
 import { completeChatResponse } from '../llm/streaming.js';
 import { rateLimiter } from '../llm/rateLimiter.js';
 import { MemoryService } from '../memory/index.js';
-import { parseStructuredOutput, parseFileChanges } from '../modes/prompts.js';
+import { parseStructuredOutput, parseFileChanges, parseShellCommandsFromFreeText } from '../modes/prompts.js';
 import { buildAgentSystemPrompt } from '../modes/agentPrompts.js';
 import { writeFile, readFile, listAllFiles } from '../filesystem/index.js';
 import { detectProjectStack, runAllLintChecks, runTests, formatErrorsForLLM, formatTestsForLLM } from '../errors/detector.js';
@@ -342,12 +342,16 @@ export class EnhancedAgentLoop {
     this.totalCodeFiles = setup.totalCodeFiles;
     let codebaseOverview = setup.codebaseOverview;
 
-    try {
-      this.checkpoint.initGit(this.config.projectRoot);
-      this.checkpoint.createCheckpoint(this.config.projectRoot, projectId, this.runId, 0, 'Agent start: ' + initialTask.slice(0, 100));
-      this.emit({ type: 'info', message: 'Initial checkpoint created' });
-    } catch (err: any) {
-      this.emit({ type: 'info', message: 'Checkpoint init: ' + err.message });
+    if ((this.config.checkpointEvery || 0) > 0) {
+      try {
+        this.checkpoint.initGit(this.config.projectRoot);
+        this.checkpoint.createCheckpoint(this.config.projectRoot, projectId, this.runId, 0, 'Agent start: ' + initialTask.slice(0, 100));
+        this.emit({ type: 'info', message: 'Initial checkpoint created' });
+      } catch (err: any) {
+        this.emit({ type: 'info', message: 'Checkpoint init: ' + err.message });
+      }
+    } else {
+      this.emit({ type: 'info', message: 'Checkpointing disabled (checkpointEvery=0)' });
     }
 
     // ── Main Loop ──
@@ -754,11 +758,14 @@ export class EnhancedAgentLoop {
         } catch { /* non-critical */ }
 
         // ── Execute Agent Commands via ToolExecutor ──
-        if (structured?.commands && structured.commands.length > 0) {
+        const commandsToRun = structured?.commands && structured.commands.length > 0
+          ? structured.commands
+          : parseShellCommandsFromFreeText(content); // fallback: freeform code blocks (local models)
+        if (commandsToRun.length > 0) {
           try {
-            this.emit({ type: 'info', message: 'Executing ' + structured.commands.length + ' agent command(s)...' });
+            this.emit({ type: 'info', message: 'Executing ' + commandsToRun.length + ' agent command(s)...' });
             const { results, formattedForLLM } = await this.toolExecutor.executeCommands(
-              structured.commands,
+              commandsToRun,
               (e: any) => this.emit(e),
             );
             if (formattedForLLM) {

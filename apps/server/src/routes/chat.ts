@@ -22,9 +22,13 @@ export async function chatRoutes(app: FastifyInstance) {
   app.post('/send', async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as ChatRequest;
 
-    // Validate
-    if (!body.message || !body.model || !body.mode || !body.projectId) {
-      return reply.status(400).send({ error: 'Missing required fields: message, model, mode, projectId' });
+    // Validate — projectId can be 'default' when no project is active (God Factory mode)
+    if (!body.message || !body.model || !body.mode) {
+      return reply.status(400).send({ error: 'Missing required fields: message, model, mode' });
+    }
+    // Use 'default' as fallback projectId for God Factory / non-project sessions
+    if (!body.projectId) {
+      body.projectId = 'default';
     }
 
     // Detect provider from model string
@@ -82,7 +86,8 @@ export async function chatRoutes(app: FastifyInstance) {
 
     // Build system prompt based on mode
     const systemPromptFn = SYSTEM_PROMPTS[body.mode] || SYSTEM_PROMPTS.ask;
-    const systemPrompt = systemPromptFn(memoryContext);
+    // Allow caller to override system prompt (used by The God Factory)
+    const systemPrompt = body.systemPrompt || systemPromptFn(memoryContext);
 
     // Build messages array
     const messages: any[] = [

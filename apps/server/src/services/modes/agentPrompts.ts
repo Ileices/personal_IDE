@@ -343,6 +343,77 @@ that learn from your work. Every high-quality code interaction you produce can t
    - Diverse (different patterns, algorithms, languages when appropriate)
 `;
 
+// ── Full Tool Inventory ──
+const TOOL_INVENTORY = `
+## TOOL INVENTORY — APIs YOU CAN CALL
+
+You execute tools by emitting a "commands" array in your JSON output. The server runs each command in order
+and feeds back stdout/stderr so you can adapt. Use the FULL lifecycle: read → analyse → write → run → verify.
+
+### 1. TERMINAL COMMANDS (use "commands" array in your JSON output)
+Run any shell command. The server executes it and returns output within the same iteration.
+  Examples:
+    "commands": ["npm run build", "npm test", "python main.py", "cargo check"]
+  Safety: dangerous patterns (rm -rf /, DROP TABLE, etc.) are blocked automatically.
+  Output limit: 3000 chars per command, 5 commands per iteration.
+
+### 2. CODE INTELLIGENCE (GET — append to commands OR call from client)
+Find symbols, read specific functions, and understand the codebase without loading full files.
+  GET /api/code/symbols?projectId=X&query=foo&limit=20
+    → fuzzy-search symbols by name. Returns file, line range, type.
+  GET /api/code/find?projectId=X&symbol=MyClass
+    → exact symbol lookup (function/class/interface/type definitions).
+  GET /api/code/get-function?projectId=X&filePath=src/foo.ts&name=myFn
+    → returns ONLY the body of one function (massive token savings).
+  GET /api/code/file-symbols?projectId=X&filePath=src/bar.ts
+    → all symbols in one file (used to understand file structure before editing).
+  GET /api/code/tree?projectId=X&maxTokens=800
+    → token-budget directory+symbol overview. Use at start of each task.
+  GET /api/code/stats?projectId=X
+    → index size, last build time. Use to check if index is fresh.
+  POST /api/code/index  body: { projectId }
+    → (re)build the code index. Run this after generating many new files.
+
+### 3. PROJECT CORPUS (GET/POST)
+The corpus is a compressed project description used to orient new models.
+  POST /api/corpus/ingest  body: { projectId, folderPath? }
+    → walk the project, count files, build structural summary.
+  GET  /api/corpus/manifesto?projectId=X
+    → retrieve the stored manifesto (<500 tokens). FAST context injection.
+  POST /api/corpus/manifesto  body: { projectId, model?, tokenBudget? }
+    → regenerate manifesto via LLM. Use after major structural changes.
+
+### 4. BUILD & PREVIEW (/api/preview/*)
+  POST /api/preview/run    { "command": "npm run build", "timeout": 30000 }
+  POST /api/preview/script { "language": "python", "code": "..." }
+  POST /api/preview/compile { "language": "cpp", "code": "..." }
+  POST /api/preview/url    { "url": "http://localhost:3000" }
+  GET  /api/preview/capabilities
+
+### 5. MEMORY & CONTEXT
+  POST /api/memory/add    { projectId, key, value, type }
+  GET  /api/memory/search { projectId, query }
+  → Persist important decisions, architecture notes, error patterns.
+
+### 6. FILE READS (terminal commands — no API needed)
+  Read a single function by line range (token-efficient):
+    sed -n '45,80p' src/services/auth.ts        (Linux/macOS)
+    Get-Content src/services/auth.ts | Select-Object -Index (44..79)  (Windows)
+  Find where a symbol is defined:
+    grep -n "export function myFn" src/
+  Count lines in a file:
+    wc -l src/bigFile.ts
+
+### WORKFLOW EXAMPLE — Build-Test-Fix Loop:
+1. Read project overview:     GET /api/code/tree?projectId=X
+2. Write files (--- FILE: --- blocks in this response)
+3. Build:                     command: "npm run build"
+4. Read errors, fix files
+5. Run tests:                 command: "npm test"
+6. Verify server started:     GET /api/preview/url { url: "http://localhost:3000" }
+7. Update manifesto:          POST /api/corpus/manifesto { projectId }
+`;
+
 // ── Core Agent System Prompt ──
 
 export function buildAgentSystemPrompt(params: {
@@ -457,6 +528,8 @@ You have dedicated terminal sessions for executing commands WITHOUT loading enti
 - Prefer terminal edits for small changes (<5 lines), file rewrites for large ones
 
 ${NANO_SEA_INTEGRATION}
+
+${TOOL_INVENTORY}
 
 ${RELATIONSHIP_AWARE_EDITING}
 

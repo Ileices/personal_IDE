@@ -13,7 +13,7 @@ import { LogBloatManager } from '../../analysis/logManager.js';
 import { ProjectTierEngine } from '../../analysis/projectTierEngine.js';
 import { listAllFiles } from '../../filesystem/index.js';
 import { CodeIndexer } from '../codeIndexer.js';
-import { detectPlatform, formatPlatformForLLM, type PlatformInfo } from '../platformDetector.js';
+import { detectPlatform, detectPlatformQuick, formatPlatformForLLM, type PlatformInfo } from '../platformDetector.js';
 import { buildDepGraph, type DepGraph } from '../../analysis/depGraph.js';
 import { clusterModules, type ClusterResult, type ModuleInfo } from '../../analysis/clustering/moduleClustering.js';
 import { HierarchicalCodeIndex, type IndexStats } from '../indexer/hierarchicalIndex.js';
@@ -158,7 +158,7 @@ export async function initializeRun(
 
   // ── Platform Detection ──
   try {
-    result.platformInfo = detectPlatform();
+    result.platformInfo = config.analyzeCodebase ? detectPlatform() : detectPlatformQuick();
     result.platformContext = formatPlatformForLLM(result.platformInfo);
     emit({
       type: 'info',

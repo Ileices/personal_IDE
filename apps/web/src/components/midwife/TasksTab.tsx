@@ -5,6 +5,8 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Zap, ToggleLeft, ToggleRight } from 'lucide-react';
 import type { MidwifeTaskType, TaskModelAssignment } from '../../stores/midwifeStore';
+import { ModelDropdown, ModelPoolEditor } from '../UniversalModelPicker';
+import { MODELS } from '@personal-ide/shared';
 
 interface TasksTabProps {
   tasks: TaskModelAssignment[];
@@ -20,8 +22,8 @@ export function TasksTab({
   tasks, allModels, expandedTask, setExpandedTask, onToggle, onModelChange, onCooldownChange,
 }: TasksTabProps) {
   const [showBulk, setShowBulk] = useState(false);
-  const [bulkModel, setBulkModel] = useState(allModels[1]?.id || allModels[0]?.id || '');
-  const [bulkFallback, setBulkFallback] = useState(allModels[2]?.id || allModels[0]?.id || '');
+  const [bulkModel, setBulkModel] = useState(MODELS[0]?.id || '');
+  const [bulkFallback, setBulkFallback] = useState(MODELS[1]?.id || '');
   const [bulkCooldown, setBulkCooldown] = useState(10000);
 
   const applyBulkModels = () => {
@@ -76,34 +78,16 @@ export function TasksTab({
             </div>
 
             {/* Bulk Model Selection */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] text-ide-text-dim w-20">Primary:</span>
-              <select
-                value={bulkModel}
-                onChange={e => setBulkModel(e.target.value)}
-                className="flex-1 text-xs bg-ide-bg border border-ide-border rounded px-2 py-1 text-ide-text min-w-[180px]"
-              >
-                {allModels.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] text-ide-text-dim w-20">Fallback:</span>
-              <select
-                value={bulkFallback}
-                onChange={e => setBulkFallback(e.target.value)}
-                className="flex-1 text-xs bg-ide-bg border border-ide-border rounded px-2 py-1 text-ide-text min-w-[180px]"
-              >
-                {allModels.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
+            <div className="space-y-2">
+              <span className="text-[10px] text-ide-text-dim">Primary Model (bulk):</span>
+              <ModelDropdown value={bulkModel} onChange={setBulkModel} placeholder="Select primary…" />
+              <span className="text-[10px] text-ide-text-dim">Fallback Model (bulk):</span>
+              <ModelDropdown value={bulkFallback} onChange={setBulkFallback} placeholder="Select fallback…" />
               <button
                 onClick={applyBulkModels}
-                className="px-2 py-1 text-[10px] bg-ide-accent/20 text-ide-accent hover:bg-ide-accent/30 rounded"
+                className="w-full px-2 py-1 text-[10px] bg-ide-accent/20 text-ide-accent hover:bg-ide-accent/30 rounded"
               >
-                Apply Models to All
+                Apply Models to All Tasks
               </button>
             </div>
 
@@ -161,44 +145,14 @@ export function TasksTab({
             {/* Task Details */}
             {isExpanded && (
               <div className="px-3 py-3 border-t border-ide-border bg-ide-bg/30 space-y-3">
-                {/* Model Selection */}
-                <div>
-                  <label className="text-[10px] text-ide-text-dim block mb-1">Assigned Models (first = primary, rest = fallbacks)</label>
-                  <div className="space-y-1">
-                    {task.assignedModels.map((modelId, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <span className="text-[10px] text-ide-text-dim w-4">{idx === 0 ? '★' : `#${idx + 1}`}</span>
-                        <select
-                          value={modelId}
-                          onChange={e => {
-                            const newModels = [...task.assignedModels];
-                            newModels[idx] = e.target.value;
-                            onModelChange(task.taskType, newModels);
-                          }}
-                          className="flex-1 text-xs bg-ide-bg border border-ide-border rounded px-2 py-1 text-ide-text"
-                        >
-                          {allModels.map(m => (
-                            <option key={m.id} value={m.id}>{m.name} ({m.publisher})</option>
-                          ))}
-                        </select>
-                        {task.assignedModels.length > 1 && (
-                          <button
-                            onClick={() => onModelChange(task.taskType, task.assignedModels.filter((_, i) => i !== idx))}
-                            className="text-red-400 hover:text-red-300 text-xs"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => onModelChange(task.taskType, [...task.assignedModels, allModels[0]?.id || ''])}
-                      className="text-[10px] text-ide-accent hover:text-ide-accent/80 mt-1"
-                    >
-                      + Add fallback model
-                    </button>
-                  </div>
-                </div>
+                {/* Model Selection — full universal picker */}
+                <ModelPoolEditor
+                  title="Assigned Models"
+                  description="First = primary, rest = fallbacks. Rotates on rate limit."
+                  models={task.assignedModels}
+                  onChange={(models) => onModelChange(task.taskType, models)}
+                  showBulkActions
+                />
 
                 {/* Cooldown */}
                 <div>

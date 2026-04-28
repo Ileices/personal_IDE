@@ -182,3 +182,24 @@ export function parseFileChanges(content: string): Array<{ path: string; content
 
   return changes;
 }
+
+/**
+ * Extract shell commands from freeform LLM text (no structured JSON).
+ * Looks for ```bash / ```sh / ```shell / ```powershell blocks.
+ * Used as a fallback for local/small models that can't produce structured JSON.
+ */
+export function parseShellCommandsFromFreeText(content: string): Array<{ command: string; purpose: string }> {
+  const commands: Array<{ command: string; purpose: string }> = [];
+  const blockRe = /```(?:bash|sh|shell|powershell|cmd|zsh)\n([\s\S]*?)```/gi;
+  let match;
+  while ((match = blockRe.exec(content)) !== null) {
+    const lines = match[1]
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#') && !l.startsWith('//'));
+    for (const line of lines.slice(0, 3)) { // max 3 commands per block
+      commands.push({ command: line, purpose: 'extracted from freeform response' });
+    }
+  }
+  return commands.slice(0, 5); // cap at 5 total
+}

@@ -737,7 +737,7 @@ export class AgentFleet {
       enableSmartChunking: this.config.enableSmartChunking,
       provider: assignment.provider,
       contextWindow: this.config.contextWindow ?? modelDef?.maxInputTokens ?? appConfig.contextDefaults.unknownModelContext,
-      checkpointEvery: 10,
+      checkpointEvery: 0,
       autoFixErrors: subtask.role === 'debugger' || subtask.role === 'implementer',
       autoRunTests: subtask.role === 'tester' || subtask.role === 'debugger',
       analyzeCodebase: false,
