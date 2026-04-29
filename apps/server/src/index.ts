@@ -28,6 +28,7 @@ import { terminalRoutes } from './routes/terminal.js';
 import { healthRoutes } from './routes/health.js';
 import { codeRoutes } from './routes/code.js';
 import { corpusRoutes } from './routes/corpus.js';
+import { codebaseRoutes } from './routes/codebase.js';
 import csrfPlugin from './plugins/csrf.js';
 import { validationPlugin } from './plugins/validation.js';
 import { registerGracefulShutdown } from './plugins/gracefulShutdown.js';
@@ -113,6 +114,9 @@ async function main() {
   // Code intelligence + corpus endpoints
   await app.register(codeRoutes, { prefix: '/api/code' });
   await app.register(corpusRoutes, { prefix: '/api/corpus' });
+
+  // God Factory — IDE self-modification API (codebase read/search/write/exec)
+  await app.register(codebaseRoutes, { prefix: '/api/codebase' });
 
   // Health — rich diagnostic endpoint (replaces inline handler)
   await app.register(healthRoutes);

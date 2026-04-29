@@ -14,6 +14,8 @@ import {
   AlertTriangle, Loader2, FolderOpen, Archive, Zap, X,
   Youtube, MessageSquare, DollarSign, ChevronDown, ChevronRight,
   Play, Star, Settings, Plus, Sparkles,
+  Wrench, Shield, CheckCircle, XCircle, Terminal, FileCode,
+  Eye, ChevronUp, ToggleLeft, ToggleRight, BookOpen, Search,
 } from 'lucide-react';
 import { useProjectStore } from '../stores/projectStore';
 import { useChatStore } from '../stores/chatStore';
@@ -25,13 +27,33 @@ import { MODELS } from '@personal-ide/shared';
 
 interface GodMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   timestamp: string;
   model?: string;
   tokenCount?: number;
   backupPath?: string;
   status?: 'streaming' | 'done' | 'error';
+  // Tool-specific
+  toolName?: string;
+  toolParams?: Record<string, unknown>;
+  toolStatus?: 'running' | 'done' | 'approved' | 'rejected';
+}
+
+interface ToolCall {
+  tool: string;
+  params: Record<string, unknown>;
+}
+
+interface ApprovalDetails {
+  type: 'patch' | 'write' | 'exec';
+  path?: string;
+  diff?: string;
+  command?: string;
+  explanation?: string;
+  isNew?: boolean;
+  oldString?: string;
+  newString?: string;
 }
 
 interface PromptHistoryItem {
@@ -40,6 +62,68 @@ interface PromptHistoryItem {
   usedAt: string;
   timesUsed: number;
   lastModel?: string;
+}
+
+// ─── Tool constants ───────────────────────────────────────────────────────────
+
+const MAX_TOOL_ITERATIONS = 10;
+
+const TOOL_DEFINITIONS_PROMPT = `
+## God Factory Codebase Tools
+
+You are operating as an autonomous coding agent with FULL ACCESS to the Personal IDE codebase.
+You can read, search, and modify source files, and run build/lint commands.
+
+To call a tool, output a fenced code block with language \`tool_call\` containing valid JSON:
+
+\`\`\`tool_call
+{"tool": "read_file", "params": {"path": "apps/web/src/App.tsx", "startLine": 1, "endLine": 50}}
+\`\`\`
+
+### Available Tools
+
+| Tool | Description | Params |
+|------|-------------|--------|
+| list_files | Browse the file tree | \`path?\` (subdir), \`depth?\` (default 4) |
+| read_file | Read file content | \`path\` (required), \`startLine?\`, \`endLine?\` |
+| search_code | Grep search codebase | \`query\` (required), \`maxResults?\` |
+| get_docs | Read documentation | \`section?\` (e.g. "architecture", "llm") |
+| patch_file | Replace a string in a file (requires user approval) | \`path\`, \`oldString\`, \`newString\` |
+| write_file | Write/create a whole file (requires user approval) | \`path\`, \`content\` |
+| run_command | Run a terminal command (requires user approval) | \`command\`, \`explanation\`, \`cwd?\` |
+
+### Tool Rules
+- Use ONE tool call per response turn
+- Always READ a file before patching it (ensures oldString matches exactly)
+- For patch_file: include 3+ lines of unchanged context around the target text
+- patch_file oldString must match EXACTLY ONCE — add more context if needed
+- Dangerous commands (rm -rf, format, shutdown, etc.) are automatically blocked
+- Maximum ${MAX_TOOL_ITERATIONS} tool calls per session
+- After finishing, provide a clear summary of all changes made
+`.trim();
+
+function extractToolCall(text: string): ToolCall | null {
+  const match = text.match(/```tool_call\s*\n([\s\S]*?)\n```/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (typeof parsed.tool !== 'string') return null;
+    return parsed as ToolCall;
+  } catch { return null; }
+}
+
+function formatToolSummary(call: ToolCall): string {
+  const p = call.params;
+  switch (call.tool) {
+    case 'list_files':   return `list_files(${p.path || '.'})`;
+    case 'read_file':    return `read_file(${p.path}${p.startLine ? `:${p.startLine}-${p.endLine || '?'}` : ''})`;
+    case 'search_code':  return `search_code("${p.query}")`;
+    case 'get_docs':     return `get_docs(${p.section || 'index'})`;
+    case 'patch_file':   return `patch_file(${p.path})`;
+    case 'write_file':   return `write_file(${p.path})`;
+    case 'run_command':  return `run_command(${String(p.command).slice(0, 60)})`;
+    default:             return `${call.tool}(${JSON.stringify(p).slice(0, 60)})`;
+  }
 }
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -120,6 +204,12 @@ export function TheGodFactory() {
   const [copied, setCopied]               = useState<string | null>(null);
   const [showModelPicker, setShowModelPicker] = useState(false);
 
+  // Tool-calling state
+  const [toolsEnabled, setToolsEnabled]           = useState(true);
+  const [toolIterationCount, setToolIterationCount] = useState(0);
+  const [pendingApproval, setPendingApproval]     = useState<ApprovalDetails | null>(null);
+  const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
+
   const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
@@ -142,6 +232,173 @@ export function TheGodFactory() {
     });
   }, []);
 
+  // ── Approval helper (promise-based modal) ─────────────────────────────────
+  const requestApproval = useCallback((details: ApprovalDetails): Promise<boolean> => {
+    return new Promise((resolve) => {
+      approvalResolveRef.current = resolve;
+      setPendingApproval(details);
+    });
+  }, []);
+
+  const handleApprovalDecision = (approved: boolean) => {
+    approvalResolveRef.current?.(approved);
+    approvalResolveRef.current = null;
+    setPendingApproval(null);
+  };
+
+  // ── Tool execution ────────────────────────────────────────────────────────
+  const executeToolCall = useCallback(async (call: ToolCall): Promise<string> => {
+    const { tool, params } = call;
+    try {
+      switch (tool) {
+        case 'list_files': {
+          const qp = new URLSearchParams();
+          if (params.path) qp.set('path', String(params.path));
+          if (params.depth) qp.set('depth', String(params.depth));
+          const res = await fetch(`${API_BASE}/api/codebase/tree?${qp}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          function flatNode(node: { name: string; type: string; children?: unknown[] }, ind = 0): string {
+            const pfx = '  '.repeat(ind) + (node.type === 'directory' ? '📁 ' : '   ');
+            let out = `${pfx}${node.name}\n`;
+            if (node.children) for (const c of node.children as typeof node[]) out += flatNode(c, ind + 1);
+            return out;
+          }
+          return flatNode(data.tree).slice(0, 8000);
+        }
+        case 'read_file': {
+          const qp = new URLSearchParams({ path: String(params.path) });
+          if (params.startLine) qp.set('start', String(params.startLine));
+          if (params.endLine)   qp.set('end',   String(params.endLine));
+          const res = await fetch(`${API_BASE}/api/codebase/read?${qp}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return `// ${params.path} (lines ${params.startLine || 1}–${params.endLine || data.totalLines})\n${data.content}`;
+        }
+        case 'search_code': {
+          const qp = new URLSearchParams({ q: String(params.query) });
+          if (params.maxResults) qp.set('maxResults', String(params.maxResults));
+          const res = await fetch(`${API_BASE}/api/codebase/search?${qp}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          if (!data.results?.length) return 'No results found.';
+          const lines = (data.results as Array<{ file: string; line: number; text: string }>)
+            .slice(0, 30).map(r => `${r.file}:${r.line}: ${r.text.trim()}`);
+          return `Found ${data.count} result(s):\n${lines.join('\n')}`;
+        }
+        case 'get_docs': {
+          const qp = new URLSearchParams();
+          if (params.section) qp.set('section', String(params.section));
+          const res = await fetch(`${API_BASE}/api/codebase/docs?${qp}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          if (data.sections) return `Available docs:\n${(data.sections as string[]).join('\n')}\n\nUse get_docs with a section name to read it.`;
+          return String(data.content || '').slice(0, 8000);
+        }
+        case 'patch_file': {
+          const prevRes = await fetch(`${API_BASE}/api/codebase/patch`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: params.path, oldString: params.oldString, newString: params.newString, approved: false }),
+          });
+          const preview = await prevRes.json();
+          if (preview.error) return `Error: ${preview.error}`;
+          const approved = await requestApproval({ type: 'patch', path: String(params.path), diff: preview.diff, oldString: String(params.oldString), newString: String(params.newString) });
+          if (!approved) return `User rejected patch to ${params.path}.`;
+          const applyRes = await fetch(`${API_BASE}/api/codebase/patch`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: params.path, oldString: params.oldString, newString: params.newString, approved: true }),
+          });
+          const result = await applyRes.json();
+          return result.success ? `Successfully patched ${params.path}. Backup: ${params.path}.bak` : `Error: ${result.error}`;
+        }
+        case 'write_file': {
+          const prevRes = await fetch(`${API_BASE}/api/codebase/write`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: params.path, content: params.content, approved: false }),
+          });
+          const preview = await prevRes.json();
+          if (preview.error) return `Error: ${preview.error}`;
+          const approved = await requestApproval({ type: 'write', path: String(params.path), diff: preview.diff, isNew: preview.isNew });
+          if (!approved) return `User rejected write to ${params.path}.`;
+          const applyRes = await fetch(`${API_BASE}/api/codebase/write`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: params.path, content: params.content, approved: true }),
+          });
+          const result = await applyRes.json();
+          return result.success ? `${result.isNew ? 'Created' : 'Updated'} ${params.path} (${result.linesWritten} lines).` : `Error: ${result.error}`;
+        }
+        case 'run_command': {
+          const approved = await requestApproval({ type: 'exec', command: String(params.command), explanation: String(params.explanation || '') });
+          if (!approved) return `User rejected: ${params.command}`;
+          const res = await fetch(`${API_BASE}/api/codebase/exec`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: params.command, explanation: params.explanation, cwd: params.cwd, approved: true }),
+          });
+          const result = await res.json();
+          return result.success
+            ? `Command succeeded:\n${result.output || '(no output)'}`
+            : `Command failed (exit ${result.exitCode}):\n${result.output || result.error}`;
+        }
+        default:
+          return `Unknown tool: ${tool}. Available: list_files, read_file, search_code, get_docs, patch_file, write_file, run_command`;
+      }
+    } catch (err: any) {
+      return `Tool error (${tool}): ${err.message}`;
+    }
+  }, [requestApproval]);
+
+  // ── Single SSE streaming turn ─────────────────────────────────────────────
+  const streamTurn = useCallback(async (
+    prompt: string,
+    systemContext: string,
+    abortCtrl: AbortController,
+  ): Promise<{ content: string; msgId: string }> => {
+    const msgId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    setMessages(prev => [...prev, {
+      id: msgId, role: 'assistant', content: '', timestamp: new Date().toISOString(),
+      model: localModel, status: 'streaming',
+    }]);
+    const res = await fetch(`${API_BASE}/api/chat/send`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      signal: abortCtrl.signal,
+      body: JSON.stringify({ message: prompt, model: localModel, mode: 'agent', projectId: activeProject?.id || 'default', systemPrompt: systemContext, autoInjectMemory: false }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'error', content: `Error: ${errData.error}` } : m));
+      throw new Error(errData.error || `Server error ${res.status}`);
+    }
+    if (!res.body) throw new Error('No response body');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullContent = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') break;
+        try {
+          const ev = JSON.parse(data);
+          if (ev.type === 'content_delta' && ev.delta) {
+            fullContent += ev.delta;
+            setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: fullContent } : m));
+          } else if (ev.type === 'content_done') {
+            fullContent = ev.fullContent || fullContent;
+          } else if (ev.type === 'done') {
+            setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', tokenCount: ev.usage?.totalTokens } : m));
+          } else if (ev.type === 'error') {
+            throw new Error(ev.error);
+          }
+        } catch { /* skip malformed */ }
+      }
+    }
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', content: fullContent || m.content } : m));
+    return { content: fullContent, msgId };
+  }, [localModel, activeProject]);
+
   const takeBackup = async (): Promise<string | null> => {
     if (!autoBackup || !activeProject?.rootPath) return null;
     try {
@@ -162,121 +419,101 @@ export function TheGodFactory() {
     setInput('');
     addToHistory(trimmed, localModel);
 
-    const userMsg: GodMessage = {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      content: trimmed,
-      timestamp: new Date().toISOString(),
-      status: 'done',
-    };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev => [...prev, {
+      id: `u-${Date.now()}`, role: 'user', content: trimmed,
+      timestamp: new Date().toISOString(), status: 'done',
+    }]);
 
-    // Auto-backup for destructive operations
-    let backupPath: string | null = null;
+    // Auto-backup for destructive prompts
     if (/\b(write|edit|delete|remove|replace|refactor|rename|create|overwrite|rewrite)\b/i.test(trimmed)) {
       setBackupStatus('Backing up…');
-      backupPath = await takeBackup();
-      setBackupStatus(backupPath ? `Backed up` : null);
-      setTimeout(() => setBackupStatus(null), 4000);
+      takeBackup().then(p => { setBackupStatus(p ? 'Backed up' : null); setTimeout(() => setBackupStatus(null), 4000); });
     }
 
-    const assistantMsgId = `a-${Date.now()}`;
-    const assistantMsg: GodMessage = {
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date().toISOString(),
-      model: localModel,
-      status: 'streaming',
-      backupPath: backupPath || undefined,
-    };
-    setMessages(prev => [...prev, assistantMsg]);
     setIsStreaming(true);
-
+    setToolIterationCount(0);
     const abort = new AbortController();
     abortRef.current = abort;
 
-    try {
-      const systemContext = [
+    const buildSystemCtx = (toolHistory: Array<{ role: string; content: string }>) => {
+      const lines = [
         `You are The God Factory — a Principal Software Architect AI integrated into Personal IDE.`,
-        `You have full access to the codebase, terminal, filesystem, and the web.`,
-        `You build, fix, enhance, and ship software autonomously.`,
-        `Active project: ${activeProject?.name || 'No project selected'} at ${activeProject?.rootPath || 'N/A'}`,
+        `You have full access to the codebase, terminal, filesystem, and documentation.`,
+        `Active project: ${activeProject?.name || 'Personal IDE (self-improvement mode)'}`,
         selectedFiles.length > 0 ? `Context files: ${selectedFiles.join(', ')}` : '',
-        `Model: ${localModel}`,
-        `Date: ${new Date().toISOString().slice(0, 10)}`,
-        ``,
-        `When editing code: show the complete change, explain what changed and why.`,
-        `Be direct, specific, and actionable. No apologies or unnecessary caveats.`,
-        `Use all available tools to actually DO things, not just describe them.`,
+        `Model: ${localModel}  Date: ${new Date().toISOString().slice(0, 10)}`,
+        `Be direct and actionable. Show complete changes. Explain what changed and why.`,
+        toolsEnabled ? `\n${TOOL_DEFINITIONS_PROMPT}` : '',
       ].filter(Boolean).join('\n');
+      if (toolHistory.length === 0) return lines;
+      const histStr = toolHistory.map(m => `[${m.role.toUpperCase()}]: ${m.content.slice(0, 2000)}`).join('\n\n');
+      return `${lines}\n\n## Current Tool Loop History\n${histStr}`;
+    };
 
-      const payload = {
-        message: trimmed,
-        model: localModel,
-        mode: 'agent' as const,
-        projectId: activeProject?.id || 'default',
-        contextFiles: selectedFiles.length > 0 ? selectedFiles : undefined,
-        systemPrompt: systemContext,
-        autoInjectMemory: true,
-      };
+    try {
+      const { content: firstContent } = await streamTurn(trimmed, buildSystemCtx([]), abort);
 
-      const res = await fetch(`${API_BASE}/api/chat/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: abort.signal,
-        body: JSON.stringify(payload),
-      });
+      if (!toolsEnabled || abort.signal.aborted) { setIsStreaming(false); abortRef.current = null; return; }
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        throw new Error(errData.error || `Server error ${res.status}`);
-      }
+      const toolHistory: Array<{ role: string; content: string }> = [];
+      let currentContent = firstContent;
+      let iteration = 0;
 
-      if (!res.body) throw new Error('No response body');
+      while (iteration < MAX_TOOL_ITERATIONS && !abort.signal.aborted) {
+        const toolCall = extractToolCall(currentContent);
+        if (!toolCall) break;
 
-      const reader  = res.body.getReader();
-      const decoder = new TextDecoder();
-      let fullContent = '';
+        iteration++;
+        setToolIterationCount(iteration);
+        toolHistory.push({ role: 'assistant', content: currentContent });
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') break;
-          try {
-            const ev = JSON.parse(data);
-            if (ev.type === 'content_delta' && ev.delta) {
-              fullContent += ev.delta;
-              setMessages(prev => prev.map(m =>
-                m.id === assistantMsgId ? { ...m, content: fullContent } : m
-              ));
-            } else if (ev.type === 'content_done') {
-              fullContent = ev.fullContent || fullContent;
-            } else if (ev.type === 'done') {
-              setMessages(prev => prev.map(m =>
-                m.id === assistantMsgId ? { ...m, status: 'done', tokenCount: ev.usage?.totalTokens, content: fullContent || m.content } : m
-              ));
-            } else if (ev.type === 'error') {
-              throw new Error(ev.error);
-            }
-          } catch (parseErr) { /* skip malformed */ }
+        const toolBubbleId = `tool-${Date.now()}-${iteration}`;
+        setMessages(prev => [...prev, {
+          id: toolBubbleId, role: 'tool', content: '', timestamp: new Date().toISOString(),
+          toolName: toolCall.tool, toolParams: toolCall.params,
+          toolStatus: 'running', status: 'streaming',
+        }]);
+
+        let toolResult: string;
+        let bubbleStatus: GodMessage['toolStatus'] = 'done';
+        try {
+          toolResult = await executeToolCall(toolCall);
+          if (toolResult.startsWith('User rejected')) bubbleStatus = 'rejected';
+        } catch (e: any) {
+          toolResult = `Tool execution failed: ${e.message}`;
         }
+
+        setMessages(prev => prev.map(m => m.id === toolBubbleId
+          ? { ...m, content: toolResult, toolStatus: bubbleStatus, status: 'done' } : m));
+
+        toolHistory.push({ role: 'user', content: `[TOOL RESULT for ${formatToolSummary(toolCall)}]:\n${toolResult}` });
+
+        const nextPrompt = `[TOOL RESULT for ${formatToolSummary(toolCall)}]:\n${toolResult.slice(0, 6000)}\n\nContinue. Use another tool if needed, or provide your final response.`;
+        const { content: nextContent } = await streamTurn(nextPrompt, buildSystemCtx(toolHistory), abort);
+        currentContent = nextContent;
       }
 
-      setMessages(prev => prev.map(m =>
-        m.id === assistantMsgId ? { ...m, status: 'done', content: fullContent || m.content } : m
-      ));
+      if (iteration >= MAX_TOOL_ITERATIONS) {
+        setMessages(prev => [...prev, {
+          id: `sys-${Date.now()}`, role: 'tool',
+          content: `[Tool loop limit reached (${MAX_TOOL_ITERATIONS} iterations). Stopping tool calls.]`,
+          timestamp: new Date().toISOString(), toolName: 'system', toolStatus: 'done', status: 'done',
+        }]);
+      }
     } catch (err: any) {
-      const errMsg = err.name === 'AbortError' ? '_[Stopped by user]_' : `**Error:** ${err.message}`;
-      setMessages(prev => prev.map(m =>
-        m.id === assistantMsgId ? { ...m, status: err.name === 'AbortError' ? 'done' : 'error', content: m.content + (m.content ? '\n\n' : '') + errMsg } : m
-      ));
+      if (err.name !== 'AbortError') {
+        const errMsg = `**Error:** ${err.message}`;
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === 'assistant' && last.status === 'streaming') {
+            return prev.map(m => m.id === last.id ? { ...m, status: 'error' as const, content: (m.content || '') + '\n\n' + errMsg } : m);
+          }
+          return [...prev, { id: `err-${Date.now()}`, role: 'assistant', content: errMsg, timestamp: new Date().toISOString(), status: 'error' as const }];
+        });
+      }
     } finally {
       setIsStreaming(false);
+      setToolIterationCount(0);
       abortRef.current = null;
     }
   };
@@ -298,6 +535,14 @@ export function TheGodFactory() {
 
   return (
     <div className="flex h-full overflow-hidden bg-ide-bg">
+      {/* Approval Modal */}
+      {pendingApproval && (
+        <ApprovalModal
+          details={pendingApproval}
+          onApprove={() => handleApprovalDecision(true)}
+          onReject={() => handleApprovalDecision(false)}
+        />
+      )}
       {/* ── Prompt History Sidebar ── */}
       {showHistory && (
         <div className="w-72 flex-shrink-0 bg-ide-panel border-r border-ide-border flex flex-col">
@@ -366,12 +611,28 @@ export function TheGodFactory() {
             {activeProject && <span className="text-xs text-ide-text-dim">· {activeProject.name}</span>}
           </div>
           <div className="flex items-center gap-1.5">
+            {/* Tool iteration counter */}
+            {toolIterationCount > 0 && (
+              <span className="text-[10px] text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Wrench className="w-2.5 h-2.5 animate-pulse" />
+                Tool loop: {toolIterationCount}/{MAX_TOOL_ITERATIONS}
+              </span>
+            )}
             {/* Backup status */}
             {backupStatus && (
               <span className="text-[10px] text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full flex items-center gap-1">
                 <Archive className="w-2.5 h-2.5" /> {backupStatus}
               </span>
             )}
+            {/* Tools toggle */}
+            <button
+              onClick={() => setToolsEnabled(v => !v)}
+              title={toolsEnabled ? 'Agent tools ON — click to disable' : 'Agent tools OFF — click to enable'}
+              className={`text-[10px] px-2 py-1 rounded border transition-colors flex items-center gap-1 ${toolsEnabled ? 'border-purple-500/40 text-purple-400 bg-purple-500/10' : 'border-ide-border text-ide-text-dim'}`}
+            >
+              {toolsEnabled ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
+              {toolsEnabled ? 'Tools ON' : 'Tools OFF'}
+            </button>
             {/* Auto-backup toggle */}
             <button
               onClick={() => setAutoBackup(v => !v)}
@@ -436,14 +697,16 @@ export function TheGodFactory() {
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {messages.length === 0 && <WelcomeScreen onSend={sendMessage} />}
           {messages.map(msg => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              copied={copied === msg.id}
-              onCopy={() => copyMsg(msg.content, msg.id)}
-            />
+            msg.role === 'tool'
+              ? <ToolBubble key={msg.id} message={msg} />
+              : <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  copied={copied === msg.id}
+                  onCopy={() => copyMsg(msg.content, msg.id)}
+                />
           ))}
-          {isStreaming && (
+          {isStreaming && toolIterationCount === 0 && (
             <div className="flex items-center gap-2 text-xs text-ide-text-dim">
               <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
               <span>Thinking…</span>
@@ -464,13 +727,21 @@ export function TheGodFactory() {
               ))}
             </div>
           )}
+          {toolsEnabled && (
+            <div className="flex items-center gap-2 mb-2 text-[10px] text-purple-400/70">
+              <Wrench className="w-3 h-3" />
+              <span>Agent mode: reads, searches, edits files and runs commands — writes/execs require your approval</span>
+            </div>
+          )}
           <div className="flex gap-2 items-end">
             <textarea
               ref={inputRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder="Tell The God Factory what to build, fix, or enhance… (Enter sends, Shift+Enter = newline)"
+              placeholder={toolsEnabled
+                ? "Tell The God Factory what to build, fix, or enhance… it will use tools autonomously (Enter sends)"
+                : "Tell The God Factory what to build, fix, or enhance… (Enter sends, Shift+Enter = newline)"}
               className="flex-1 bg-ide-bg border border-ide-border rounded-lg px-3 py-2.5 text-sm text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-purple-500/50 transition-colors min-h-[60px] max-h-[200px]"
               rows={2}
             />
@@ -496,16 +767,140 @@ export function TheGodFactory() {
 
 // ─── Welcome Screen ───────────────────────────────────────────────────────────
 
+function ApprovalModal({ details, onApprove, onReject }: {
+  details: ApprovalDetails;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const [showFull, setShowFull] = useState(false);
+  const isExec = details.type === 'exec';
+  const isWrite = details.type === 'write';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-ide-panel border border-ide-border rounded-xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[80vh] overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-ide-border bg-ide-bg/50 rounded-t-xl flex-shrink-0">
+          <Shield className="w-5 h-5 text-yellow-400" />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-ide-text">
+              {isExec ? 'Approve Command Execution' : isWrite ? `Approve File ${details.isNew ? 'Creation' : 'Overwrite'}` : 'Approve File Patch'}
+            </h3>
+            {details.path && <p className="text-[11px] text-ide-text-dim mt-0.5">{details.path}</p>}
+          </div>
+          <button onClick={onReject} className="text-ide-text-dim hover:text-ide-text"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {isExec ? (
+            <div className="space-y-3">
+              <div>
+                <p className="text-[11px] text-ide-text-dim mb-1">Command to execute:</p>
+                <div className="bg-ide-bg border border-ide-border rounded-lg p-3 font-mono text-sm text-green-300">
+                  {details.command}
+                </div>
+              </div>
+              {details.explanation && (
+                <div>
+                  <p className="text-[11px] text-ide-text-dim mb-1">Purpose:</p>
+                  <p className="text-sm text-ide-text bg-ide-bg/50 rounded p-2">{details.explanation}</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-[11px] text-yellow-400">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                This command will run in the IDE root directory. Dangerous commands are automatically blocked.
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {details.diff && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-ide-text-dim">Diff preview:</p>
+                    <button onClick={() => setShowFull(v => !v)} className="text-[10px] text-ide-accent hover:text-ide-accent/80 flex items-center gap-1">
+                      <Eye className="w-3 h-3" />
+                      {showFull ? 'Collapse' : 'Show full diff'}
+                    </button>
+                  </div>
+                  <pre className={`text-[11px] font-mono bg-ide-bg border border-ide-border rounded-lg p-3 overflow-x-auto whitespace-pre-wrap ${showFull ? '' : 'max-h-64 overflow-y-auto'}`}>
+                    {details.diff.split('\n').map((line, i) => {
+                      const cls = line.startsWith('+') && !line.startsWith('+++')
+                        ? 'text-green-400'
+                        : line.startsWith('-') && !line.startsWith('---')
+                        ? 'text-red-400'
+                        : line.startsWith('@@')
+                        ? 'text-blue-400'
+                        : 'text-ide-text-dim';
+                      return <span key={i} className={`block ${cls}`}>{line || ' '}</span>;
+                    })}
+                  </pre>
+                </>
+              )}
+              {!details.diff && <div className="text-sm text-ide-text-dim p-3 bg-ide-bg/50 rounded">{details.isNew ? 'Creating new file.' : 'Modifying existing file.'}</div>}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-4 py-3 border-t border-ide-border flex-shrink-0">
+          <button onClick={onReject} className="flex items-center gap-2 px-4 py-2 text-sm bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors">
+            <XCircle className="w-4 h-4" /> Reject
+          </button>
+          <button onClick={onApprove} className="flex items-center gap-2 px-4 py-2 text-sm bg-green-500/80 text-white rounded-lg hover:bg-green-500 transition-colors font-medium">
+            <CheckCircle className="w-4 h-4" /> Approve & Apply
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToolBubble({ message: msg }: { message: GodMessage }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = msg.content.length > 400;
+  const preview = isLong && !expanded ? msg.content.slice(0, 400) + '...' : msg.content;
+  const icon = msg.toolName === 'run_command' ? <Terminal className="w-3 h-3" />
+    : msg.toolName?.includes('file') ? <FileCode className="w-3 h-3" />
+    : msg.toolName === 'search_code' ? <Search className="w-3 h-3" />
+    : msg.toolName === 'get_docs' ? <BookOpen className="w-3 h-3" />
+    : <Wrench className="w-3 h-3" />;
+
+  const statusColor = msg.toolStatus === 'rejected' ? 'text-red-400 bg-red-500/10 border-red-500/20'
+    : msg.toolStatus === 'running' ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
+    : 'text-purple-400 bg-purple-500/10 border-purple-500/20';
+
+  return (
+    <div className="flex gap-3 ml-10">
+      <div className={`flex-1 border rounded-lg px-3 py-2 text-[11px] font-mono max-w-[90%] ${statusColor}`}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="flex items-center gap-1.5 font-semibold">
+            {icon}
+            {msg.toolName ? formatToolSummary({ tool: msg.toolName, params: msg.toolParams || {} }) : 'tool result'}
+          </span>
+          <div className="flex items-center gap-2">
+            {msg.toolStatus === 'running' && <Loader2 className="w-3 h-3 animate-spin" />}
+            {msg.toolStatus === 'rejected' && <span className="text-red-400">rejected</span>}
+            {isLong && (
+              <button onClick={() => setExpanded(v => !v)} className="opacity-60 hover:opacity-100">
+                {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            )}
+          </div>
+        </div>
+        <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed">{preview}</pre>
+      </div>
+    </div>
+  );
+}
+
 function WelcomeScreen({ onSend }: { onSend: (msg: string) => void }) {
   const starters = [
-    { label: '🔍 Analyze & Prioritize', prompt: 'Analyze the entire Personal IDE codebase. Find what is incomplete, has bugs, or is built but not wired into the GUI. Give me a prioritized action plan to make this a shippable product.' },
-    { label: '🔧 Fix All TS Errors', prompt: 'Find and fix all TypeScript compilation errors in the web app and server. Run pnpm tsc --noEmit and fix everything that fails.' },
-    { label: '🤖 Audit Agent Pipeline', prompt: 'Audit the full agent pipeline end-to-end: 24/7 loop, fleet mode, rate limiting, fallback chains. Why does it stall? Fix all issues and make it production-ready.' },
-    { label: '🔌 Wire All Features', prompt: 'Review all components in apps/web/src. Find everything built but not accessible in the GUI. Wire all of it in with proper navigation and controls.' },
-    { label: '📊 Research Free Models', prompt: 'Research the current best free AI models from Groq, Cerebras, Gemini, SiliconFlow, ZhipuAI, Fireworks, DeepSeek as of today. Add all of them to the model registry with correct API IDs.' },
-    { label: '⚡ Hardware Benchmark', prompt: 'Detect all hardware on this machine (CPU, GPU, RAM, storage). Recommend which local AI models (Ollama, llama.cpp) are appropriate for this hardware profile. Configure the IDE accordingly.' },
-    { label: '🚀 Make Monetizable', prompt: 'What does this IDE need to be a real, publicly monetizable product? Identify every gap: missing features, broken flows, UX issues, security holes. Build me a release checklist.' },
-    { label: '🐦 Fix Bird Feeder', prompt: 'The Midwife / Bird Feeder feature has broken dropdowns and cannot change models. Fix all controls. Make all models selectable. Add bulk operations to set all roles at once.' },
+    { label: '🔍 Analyze & Prioritize', prompt: 'Analyze the entire Personal IDE codebase. List the source files, find what is incomplete, bugged, or not wired into the GUI, and give me a prioritized action plan.' },
+    { label: '🔧 Fix All TS Errors', prompt: 'Search the web app and server for TypeScript compilation problems. Run tsc --noEmit and fix everything that fails.' },
+    { label: '🤖 Audit Agent Pipeline', prompt: 'Read the agent loop, tool executor, and fleet UI. Why does the agent stall or fail to act? Fix the issues and make it production-ready.' },
+    { label: '🔌 Wire All Features', prompt: 'Review all React components in apps/web/src. Find everything built but not accessible in the GUI. Wire it in properly.' },
+    { label: '📚 Read the Docs', prompt: 'List all help/documentation sections available. Read IDE_ARCHITECTURE.md and USER_MANUAL.md, then explain how the app works and how a new user should use it.' },
+    { label: '📊 Research Free Models', prompt: 'Search the model registry and provider routes. Tell me which free models are supported and which current free models are missing from the IDE.' },
+    { label: '⚡ Hardware & Ollama', prompt: 'Run system info commands to detect CPU, GPU, and RAM. Based on the hardware, tell me which local models in the Ollama catalog are realistic to run.' },
+    { label: '🚀 Release Checklist', prompt: 'Read TODO_ROADMAP.md and COMPLETED_LOG.md. Build me a release checklist for turning this into a real public product.' },
   ];
 
   return (
@@ -514,8 +909,8 @@ function WelcomeScreen({ onSend }: { onSend: (msg: string) => void }) {
         <div className="text-5xl mb-3">⚡</div>
         <h2 className="text-2xl font-bold text-ide-text mb-2">The God Factory</h2>
         <p className="text-sm text-ide-text-dim leading-relaxed max-w-xl mx-auto">
-          Your in-app Principal AI Architect. Build features, fix bugs, ship products — without leaving the app.
-          Full codebase access. Auto-backup before edits. Prompt history for iteration.
+          Your in-app Principal AI Architect. It can read files, search code, consult documentation,
+          edit source, and run commands from inside the app. Writes and command execution require your approval.
         </p>
       </div>
       <div className="grid grid-cols-2 gap-2 mb-6">
@@ -530,7 +925,9 @@ function WelcomeScreen({ onSend }: { onSend: (msg: string) => void }) {
       <div className="flex items-center gap-4 justify-center text-[10px] text-ide-text-dim">
         <span>💡 Enter to send · Shift+Enter for newline</span>
         <span>·</span>
-        <span>🔒 Auto-backup before destructive edits</span>
+        <span>🔧 Tool-capable agent with file + docs access</span>
+        <span>·</span>
+        <span>🔒 Writes require approval + auto-backup</span>
         <span>·</span>
         <span>📜 History button saves all prompts</span>
       </div>
