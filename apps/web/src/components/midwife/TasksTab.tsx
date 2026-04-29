@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Zap, ToggleLeft, ToggleRight } from 'lucide-react';
 import type { MidwifeTaskType, TaskModelAssignment } from '../../stores/midwifeStore';
 import { ModelDropdown, ModelPoolEditor } from '../UniversalModelPicker';
+import { useModelStore } from '../../stores/modelStore';
 import { MODELS } from '@personal-ide/shared';
 
 interface TasksTabProps {
@@ -21,14 +22,17 @@ interface TasksTabProps {
 export function TasksTab({
   tasks, allModels, expandedTask, setExpandedTask, onToggle, onModelChange, onCooldownChange,
 }: TasksTabProps) {
+  const { failedModels, hideFailedModels } = useModelStore();
   const [showBulk, setShowBulk] = useState(false);
-  const [bulkModel, setBulkModel] = useState(MODELS[0]?.id || '');
-  const [bulkFallback, setBulkFallback] = useState(MODELS[1]?.id || '');
+  const [bulkModels, setBulkModels] = useState<string[]>(MODELS.slice(0, 2).map(m => m.id));
   const [bulkCooldown, setBulkCooldown] = useState(10000);
+  const [excludeBrokenOnApply, setExcludeBrokenOnApply] = useState(true);
 
   const applyBulkModels = () => {
     tasks.forEach(task => {
-      const models = bulkFallback !== bulkModel ? [bulkModel, bulkFallback] : [bulkModel];
+      const models = excludeBrokenOnApply && hideFailedModels
+        ? bulkModels.filter(modelId => !failedModels[modelId])
+        : bulkModels;
       onModelChange(task.taskType, models);
     });
   };
@@ -79,15 +83,27 @@ export function TasksTab({
 
             {/* Bulk Model Selection */}
             <div className="space-y-2">
-              <span className="text-[10px] text-ide-text-dim">Primary Model (bulk):</span>
-              <ModelDropdown value={bulkModel} onChange={setBulkModel} placeholder="Select primary…" />
-              <span className="text-[10px] text-ide-text-dim">Fallback Model (bulk):</span>
-              <ModelDropdown value={bulkFallback} onChange={setBulkFallback} placeholder="Select fallback…" />
+              <ModelPoolEditor
+                title="Bulk Model Chain"
+                description="Apply an arbitrary ordered model chain to every Midwife task. First is primary, the rest are fallbacks."
+                models={bulkModels}
+                onChange={setBulkModels}
+                showBulkActions
+              />
+              <label className="flex items-center gap-2 text-[10px] text-ide-text-dim">
+                <input
+                  type="checkbox"
+                  checked={excludeBrokenOnApply}
+                  onChange={e => setExcludeBrokenOnApply(e.target.checked)}
+                  className="accent-ide-accent"
+                />
+                Exclude models already marked broken / failed when applying to all tasks
+              </label>
               <button
                 onClick={applyBulkModels}
                 className="w-full px-2 py-1 text-[10px] bg-ide-accent/20 text-ide-accent hover:bg-ide-accent/30 rounded"
               >
-                Apply Models to All Tasks
+                Apply Entire Model Chain to All Tasks
               </button>
             </div>
 

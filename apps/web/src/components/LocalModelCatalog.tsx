@@ -49,7 +49,7 @@ interface InstalledModel {
 
 // ─── Full Catalog of Available Ollama Models ─────────────────────────────────
 
-const OLLAMA_CATALOG: OllamaModelEntry[] = [
+export const OLLAMA_CATALOG: OllamaModelEntry[] = [
   // ── General Purpose ──────────────────────────────────────────────────────
   { name: 'llama3.2:latest', displayName: 'Llama 3.2 (3B)', description: 'Meta Llama 3.2 — fast general model, great for everyday tasks.', category: 'general', tags: ['meta', 'fast', 'small'], sizeGB: 2.0, paramBillions: 3, contextK: 128, isFree: true, isUncensored: false, isDiffusion: false, supportsVision: false, supportsCode: true, quality: 'small', popularity: 9 },
   { name: 'llama3.2:3b', displayName: 'Llama 3.2 3B', description: 'Meta Llama 3.2 3B. Best in class for its size.', category: 'general', tags: ['meta', 'efficient'], sizeGB: 2.0, paramBillions: 3, contextK: 128, isFree: true, isUncensored: false, isDiffusion: false, supportsVision: false, supportsCode: true, quality: 'small', popularity: 8 },

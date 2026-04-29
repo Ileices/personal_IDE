@@ -183,7 +183,7 @@ export function PreviewPanel({
             ref={iframeRef}
             src={url}
             className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+            sandbox="allow-scripts allow-forms allow-popups allow-modals"
             onLoad={() => setIsLoading(false)}
             onError={() => { setIframeError(true); setIsLoading(false); }}
             title="App Preview"

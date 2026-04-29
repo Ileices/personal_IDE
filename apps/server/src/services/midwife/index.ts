@@ -187,6 +187,7 @@ export class MidwifeService {
   private history: FeedingHistoryEntry[] = [];
   private abortController: AbortController | null = null;
   private db: any;
+  private sessionSkippedModels = new Set<string>();
 
   constructor(db: any) {
     this.db = db;
@@ -268,6 +269,7 @@ export class MidwifeService {
     }
 
     this.abortController = new AbortController();
+    this.sessionSkippedModels.clear();
     this.session = {
       id: `midwife-${Date.now()}`,
       startedAt: new Date().toISOString(),
@@ -349,7 +351,8 @@ export class MidwifeService {
   private async executeTask(task: TaskModelAssignment): Promise<void> {
     // Find a model that isn't rate-limited
     let selectedModel: string | null = null;
-    for (const modelId of task.assignedModels) {
+        for (const modelId of task.assignedModels) {
+          if (this.sessionSkippedModels.has(modelId)) continue;
       const check = rateLimiter.canRequest(modelId);
       if (check.allowed) {
         selectedModel = modelId;
@@ -479,6 +482,7 @@ export class MidwifeService {
     } catch (err: any) {
       const statusCode = err?.status || err?.statusCode;
       rateLimiter.recordEnd(selectedModel, { statusCode, success: false });
+        this.sessionSkippedModels.add(selectedModel);
 
       if (statusCode === 429 || statusCode === 403) {
         // Rate limited — will auto-rotate next time

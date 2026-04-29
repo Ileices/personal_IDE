@@ -14,12 +14,14 @@
 // ============================================
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { MODELS, type ModelDefinition } from '@personal-ide/shared';
-import { useModelStore } from '../stores/modelStore';
+import { sortModelsByHealth, useModelStore } from '../stores/modelStore';
 import {
   Search, ChevronDown, ChevronUp, Check, Plus, Trash2,
   Zap, Brain, Cpu, Globe, Code2, BookOpen, X, CheckSquare,
   Square as SquareIcon, LayoutList, Tag, Star,
 } from 'lucide-react';
+import { API_BASE } from '../config';
+import { OLLAMA_CATALOG } from './LocalModelCatalog';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -76,6 +78,152 @@ function providerColor(provider: string): string {
   return colors[provider] || 'text-ide-text-dim bg-ide-panel';
 }
 
+function getLocalCatalogEntry(modelId: string) {
+  const name = modelId.replace(/^ollama\//, '');
+  return OLLAMA_CATALOG.find(m => m.name === name);
+}
+
+function failureBadge(classification?: string): string {
+  switch (classification) {
+    case 'rate_limited': return 'RATE LIMIT';
+    case 'cost_blocked': return 'COST';
+    case 'not_configured': return 'SETUP';
+    case 'not_installed': return 'NOT INSTALLED';
+    case 'discontinued': return 'DISCONTINUED';
+    default: return 'FAILED';
+  }
+}
+
+function MissingLocalModelModal({
+  model,
+  onClose,
+  onReady,
+}: {
+  model: ModelDefinition;
+  onClose: () => void;
+  onReady: () => void;
+}) {
+  const { fetchInstalledLocalModels } = useModelStore();
+  const [drives, setDrives] = useState<Array<{ path: string; freeBytes: number; totalBytes: number; hasOllamaModelsDir: boolean }>>([]);
+  const [loadingDrives, setLoadingDrives] = useState(true);
+  const [installing, setInstalling] = useState(false);
+  const [customPath, setCustomPath] = useState('');
+  const [customStatus, setCustomStatus] = useState<string | null>(null);
+  const catalogEntry = getLocalCatalogEntry(model.id);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE}/api/ollama/drives`)
+      .then(r => r.json())
+      .then(data => { if (active) setDrives(data.drives || []); })
+      .catch(() => {})
+      .finally(() => { if (active) setLoadingDrives(false); });
+    return () => { active = false; };
+  }, []);
+
+  const installModel = async () => {
+    setInstalling(true);
+    setCustomStatus(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/providers/ollama/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: model.id.replace(/^ollama\//, '') }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(data.error || `Install failed: HTTP ${res.status}`);
+      }
+      await fetchInstalledLocalModels();
+      onReady();
+    } catch (err: any) {
+      setCustomStatus(err.message || 'Install failed');
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const checkCustomPath = async () => {
+    if (!customPath.trim()) return;
+    setCustomStatus('Checking custom destination...');
+    try {
+      const res = await fetch(`${API_BASE}/api/ollama/check-path`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directory: customPath.trim(), model: model.id.replace(/^ollama\//, '') }),
+      });
+      const data = await res.json();
+      if (data.found) {
+        setCustomStatus(`Found ${model.name} in ${customPath}`);
+        onReady();
+        return;
+      }
+      setCustomStatus(`Model not found in ${customPath}. You can install it to your active Ollama models directory instead.`);
+    } catch (err: any) {
+      setCustomStatus(err.message || 'Could not check custom destination');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-[640px] max-w-[95vw] bg-ide-panel border border-ide-border rounded-xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-ide-border">
+          <div>
+            <div className="text-sm font-semibold text-ide-text">Local model not installed</div>
+            <div className="text-[11px] text-ide-text-dim mt-0.5">{model.name} is not currently available in your Ollama install.</div>
+          </div>
+          <button onClick={onClose} className="text-ide-text-dim hover:text-ide-text"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-4 space-y-4">
+          <div className="rounded-lg border border-ide-border bg-ide-bg/50 p-3 text-xs text-ide-text-dim space-y-1">
+            <div><span className="text-ide-text">Model:</span> {model.name}</div>
+            {catalogEntry && <div><span className="text-ide-text">Approx size:</span> {catalogEntry.sizeGB.toFixed(1)} GB</div>}
+            <div><span className="text-ide-text">Action:</span> Install now, or point the app at a custom models directory to check whether it already exists there.</div>
+          </div>
+
+          <div>
+            <div className="text-xs font-medium text-ide-text mb-2">Detected drives</div>
+            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+              {loadingDrives && <div className="text-xs text-ide-text-dim">Checking drives...</div>}
+              {!loadingDrives && drives.length === 0 && <div className="text-xs text-ide-text-dim">No drive information available.</div>}
+              {drives.map(drive => (
+                <div key={drive.path} className="rounded border border-ide-border bg-ide-bg px-3 py-2 text-[11px]">
+                  <div className="font-medium text-ide-text">{drive.path}</div>
+                  <div className="text-ide-text-dim">Free: {(drive.freeBytes / (1024 ** 3)).toFixed(1)} GB</div>
+                  <div className="text-ide-text-dim">Total: {(drive.totalBytes / (1024 ** 3)).toFixed(1)} GB</div>
+                  {drive.hasOllamaModelsDir && <div className="text-green-400 mt-1">Detected Ollama models directory</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-ide-text">Custom destination check</div>
+            <div className="flex gap-2">
+              <input
+                value={customPath}
+                onChange={e => setCustomPath(e.target.value)}
+                placeholder="Custom Ollama models directory, e.g. D:\\OllamaModels"
+                className="flex-1 bg-ide-bg border border-ide-border rounded px-2 py-1.5 text-xs focus:outline-none focus:border-ide-accent"
+              />
+              <button onClick={checkCustomPath} className="px-3 py-1.5 text-xs bg-ide-accent/20 text-ide-accent rounded hover:bg-ide-accent/30">
+                Check Path
+              </button>
+            </div>
+            {customStatus && <div className="text-[11px] text-ide-text-dim">{customStatus}</div>}
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-ide-border bg-ide-bg/30">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs border border-ide-border rounded text-ide-text-dim hover:text-ide-text">Cancel</button>
+          <button onClick={installModel} disabled={installing} className="px-3 py-1.5 text-xs bg-green-600/20 text-green-400 rounded hover:bg-green-600/30 disabled:opacity-50">
+            {installing ? 'Installing...' : 'Auto Install to Active Ollama Path'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Single Model Dropdown ────────────────────────────────────────────────────
 // Replaces every <select> / text input for picking ONE model
 
@@ -92,13 +240,23 @@ export function ModelDropdown({
   className?: string;
   disabled?: boolean;
 }) {
-  const { allModels, isLoading, fetchModels } = useModelStore();
+  const {
+    allModels, isLoading, fetchModels, fetchInstalledLocalModels,
+    installedLocalModels, workingModels, failedModels,
+    preferTestedModelsFirst, hideFailedModels,
+  } = useModelStore();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [pendingInstallModel, setPendingInstallModel] = useState<ModelDefinition | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   // Trigger model fetch when dropdown opens
-  useEffect(() => { if (open) fetchModels(); }, [open, fetchModels]);
+  useEffect(() => {
+    if (open) {
+      fetchModels();
+      fetchInstalledLocalModels();
+    }
+  }, [open, fetchModels, fetchInstalledLocalModels]);
 
   useEffect(() => {
     if (!open) return;
@@ -110,20 +268,49 @@ export function ModelDropdown({
   }, [open]);
 
   const filtered = useMemo(() => {
-    if (!search) return allModels;
+    let list = allModels;
+    if (hideFailedModels) {
+      list = list.filter(m => !failedModels[m.id] || m.id === value);
+    }
+    if (!search) {
+      return preferTestedModelsFirst ? sortModelsByHealth(list, workingModels, failedModels) : list;
+    }
     const q = search.toLowerCase();
-    return allModels.filter(m =>
+    const searched = list.filter(m =>
       m.id.toLowerCase().includes(q) ||
       m.name.toLowerCase().includes(q) ||
       m.publisher.toLowerCase().includes(q)
     );
-  }, [search, allModels]);
+    return preferTestedModelsFirst ? sortModelsByHealth(searched, workingModels, failedModels) : searched;
+  }, [search, allModels, hideFailedModels, failedModels, preferTestedModelsFirst, workingModels, value]);
 
   const groups = useMemo(() => groupByProvider(filtered), [filtered]);
   const selected = allModels.find(m => m.id === value);
 
+  const handleSelect = (model: ModelDefinition) => {
+    if (model.id.startsWith('ollama/') && !installedLocalModels.has(model.id)) {
+      setPendingInstallModel(model);
+      return;
+    }
+    onChange(model.id);
+    setOpen(false);
+    setSearch('');
+  };
+
   return (
     <div ref={ref} className={`relative ${className}`}>
+      {pendingInstallModel && (
+        <MissingLocalModelModal
+          model={pendingInstallModel}
+          onClose={() => setPendingInstallModel(null)}
+          onReady={() => {
+            onChange(pendingInstallModel.id);
+            setPendingInstallModel(null);
+            setOpen(false);
+            setSearch('');
+          }}
+        />
+      )}
       <button
         type="button"
         onClick={() => !disabled && setOpen(v => !v)}
@@ -137,6 +324,9 @@ export function ModelDropdown({
             </span>
             <span className="text-ide-text truncate">{selected.name}</span>
             {isFreeModel(selected) && <span className="text-[9px] text-green-400 font-medium ml-auto">FREE</span>}
+              {workingModels.has(selected.id) && <span className="text-[9px] text-green-400">TESTED</span>}
+              {failedModels[selected.id] && <span className="text-[9px] text-red-400">{failureBadge(failedModels[selected.id].classification)}</span>}
+              {selected.id.startsWith('ollama/') && !installedLocalModels.has(selected.id) && <span className="text-[9px] text-yellow-400">NOT INSTALLED</span>}
           </span>
         ) : (
           <span className="text-ide-text-dim">{placeholder}</span>
@@ -168,7 +358,7 @@ export function ModelDropdown({
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => { onChange(m.id); setOpen(false); setSearch(''); }}
+                    onClick={() => handleSelect(m)}
                     className={`w-full flex items-center gap-2 px-3 py-1.5 hover:bg-ide-accent/10 text-left transition-colors ${value === m.id ? 'bg-ide-accent/15' : ''}`}
                   >
                     <span className="flex-1 min-w-0">
@@ -177,6 +367,9 @@ export function ModelDropdown({
                     </span>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {isFreeModel(m) && <span className="text-[9px] px-1 py-0.5 bg-green-500/15 text-green-400 rounded">FREE</span>}
+                      {workingModels.has(m.id) && <span className="text-[9px] px-1 py-0.5 bg-green-500/15 text-green-300 rounded">TESTED</span>}
+                      {failedModels[m.id] && <span className="text-[9px] px-1 py-0.5 bg-red-500/15 text-red-300 rounded">{failureBadge(failedModels[m.id].classification)}</span>}
+                      {m.id.startsWith('ollama/') && !installedLocalModels.has(m.id) && <span className="text-[9px] px-1 py-0.5 bg-yellow-500/15 text-yellow-300 rounded">NOT INSTALLED</span>}
                       {m.supportsTools && <span className="text-[9px] text-purple-400" title="Tools">🔧</span>}
                       {value === m.id && <Check className="w-3 h-3 text-ide-accent" />}
                     </div>
@@ -213,26 +406,43 @@ export function ModelPoolEditor({
   disabled?: boolean;
   showBulkActions?: boolean;
 }) {
-  const { allModels, fetchModels } = useModelStore();
+  const {
+    allModels, fetchModels, fetchInstalledLocalModels,
+    installedLocalModels, workingModels, failedModels,
+    preferTestedModelsFirst, hideFailedModels,
+  } = useModelStore();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [filterFree, setFilterFree] = useState(false);
+  const [pendingInstallModel, setPendingInstallModel] = useState<ModelDefinition | null>(null);
 
-  useEffect(() => { if (pickerOpen) fetchModels(); }, [pickerOpen, fetchModels]);
+  useEffect(() => {
+    if (pickerOpen) {
+      fetchModels();
+      fetchInstalledLocalModels();
+    }
+  }, [pickerOpen, fetchModels, fetchInstalledLocalModels]);
 
   const filtered = useMemo(() => {
     let list = allModels;
+    if (hideFailedModels) list = list.filter(m => !failedModels[m.id]);
     if (filterFree) list = list.filter(isFreeModel);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(m => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q));
     }
-    return list;
-  }, [search, filterFree, allModels]);
+    return preferTestedModelsFirst ? sortModelsByHealth(list, workingModels, failedModels) : list;
+  }, [search, filterFree, allModels, hideFailedModels, failedModels, preferTestedModelsFirst, workingModels]);
 
   const groups = useMemo(() => groupByProvider(filtered), [filtered]);
 
   const addModel = (id: string) => {
+    const def = allModels.find(m => m.id === id);
+    if (!def) return;
+    if (def.id.startsWith('ollama/') && !installedLocalModels.has(def.id)) {
+      setPendingInstallModel(def);
+      return;
+    }
     if (!models.includes(id)) onChange([...models, id]);
   };
 
@@ -270,6 +480,16 @@ export function ModelPoolEditor({
 
   return (
     <div className="space-y-2">
+      {pendingInstallModel && (
+        <MissingLocalModelModal
+          model={pendingInstallModel}
+          onClose={() => setPendingInstallModel(null)}
+          onReady={() => {
+            if (!models.includes(pendingInstallModel.id)) onChange([...models, pendingInstallModel.id]);
+            setPendingInstallModel(null);
+          }}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -301,6 +521,9 @@ export function ModelPoolEditor({
               {def && isFreeModel(def) && (
                 <span className="text-[9px] text-green-400">FREE</span>
               )}
+              {workingModels.has(id) && <span className="text-[9px] text-green-400">TESTED</span>}
+              {failedModels[id] && <span className="text-[9px] text-red-400">{failureBadge(failedModels[id].classification)}</span>}
+              {id.startsWith('ollama/') && !installedLocalModels.has(id) && <span className="text-[9px] text-yellow-400">NOT INSTALLED</span>}
               {!disabled && (
                 <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => moveUp(idx)} disabled={idx === 0} className="p-0.5 text-ide-text-dim hover:text-ide-text disabled:opacity-30">▲</button>
@@ -365,6 +588,9 @@ export function ModelPoolEditor({
             >
               Free only
             </button>
+            <span className="text-[10px] text-ide-text-dim whitespace-nowrap">
+              {preferTestedModelsFirst ? 'Tested models first' : 'Default order'}
+            </span>
             <button onClick={() => setPickerOpen(false)} className="text-ide-text-dim hover:text-ide-text">
               <X className="w-3.5 h-3.5" />
             </button>
@@ -392,6 +618,9 @@ export function ModelPoolEditor({
                         <span className="block text-[9px] text-ide-text-dim">{(m.maxInputTokens / 1000).toFixed(0)}K ctx</span>
                       </span>
                       {isFreeModel(m) && <span className="text-[9px] text-green-400 flex-shrink-0">FREE</span>}
+                      {workingModels.has(m.id) && <span className="text-[9px] text-green-300 flex-shrink-0">TESTED</span>}
+                      {failedModels[m.id] && <span className="text-[9px] text-red-300 flex-shrink-0">{failureBadge(failedModels[m.id].classification)}</span>}
+                      {m.id.startsWith('ollama/') && !installedLocalModels.has(m.id) && <span className="text-[9px] text-yellow-300 flex-shrink-0">NOT INSTALLED</span>}
                     </button>
                   );
                 })}

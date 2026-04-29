@@ -4,6 +4,7 @@
 // ============================================
 import React, { useEffect, useState, useCallback } from 'react';
 import { useMidwifeStore, type MidwifeTaskType } from '../stores/midwifeStore';
+import { useModelStore } from '../stores/modelStore';
 import { MODELS } from '@personal-ide/shared';
 import {
   X, Play, Square,
@@ -30,10 +31,12 @@ export function MidwifePanel({ onClose }: Props) {
     fetchConfig, updateConfig, fetchTasks, updateTask,
     fetchStatus, fetchHistory, startFeeding, stopFeeding,
   } = useMidwifeStore();
+  const { failedModels, clearSessionSkips } = useModelStore();
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'config' | 'history'>('tasks');
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [dynamicModels, setDynamicModels] = useState<DynamicModel[]>([]);
+  const [excludeBrokenOnStart, setExcludeBrokenOnStart] = useState(true);
 
   // Fetch dynamic models from all enabled providers
   const fetchDynamicModels = useCallback(async () => {
@@ -88,6 +91,20 @@ export function MidwifePanel({ onClose }: Props) {
     updateTask(taskType, { cooldownMs });
   }, [updateTask]);
 
+  const handleStartFeeding = useCallback(async () => {
+    clearSessionSkips();
+    if (excludeBrokenOnStart) {
+      for (const task of tasks) {
+        const filtered = task.assignedModels.filter(modelId => !failedModels[modelId]);
+        if (filtered.length !== task.assignedModels.length) {
+          await updateTask(task.taskType, { assignedModels: filtered });
+        }
+      }
+      await fetchTasks();
+    }
+    await startFeeding();
+  }, [clearSessionSkips, excludeBrokenOnStart, failedModels, fetchTasks, startFeeding, tasks, updateTask]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-ide-bg-light border border-ide-border rounded-lg shadow-2xl w-[700px] max-h-[85vh] flex flex-col">
@@ -113,7 +130,7 @@ export function MidwifePanel({ onClose }: Props) {
               </button>
             ) : (
               <button
-                onClick={startFeeding}
+                onClick={handleStartFeeding}
                 disabled={loading}
                 className="flex items-center gap-1 px-3 py-1 text-xs bg-green-600/20 text-green-400 hover:bg-green-600/30 rounded transition-colors"
               >
@@ -168,6 +185,18 @@ export function MidwifePanel({ onClose }: Props) {
             </button>
           ))}
         </div>
+
+        {!status?.isRunning && (
+          <div className="px-4 py-2 border-b border-ide-border bg-ide-bg/30 flex items-center gap-2 text-[11px] text-ide-text-dim">
+            <input
+              type="checkbox"
+              checked={excludeBrokenOnStart}
+              onChange={e => setExcludeBrokenOnStart(e.target.checked)}
+              className="accent-ide-accent"
+            />
+            Exclude models already marked broken / failed before bulk auto generation starts
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">

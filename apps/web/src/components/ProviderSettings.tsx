@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { OllamaSetup } from './OllamaSetup';
 import { API_BASE } from '../config.js';
+import { useModelStore } from '../stores/modelStore';
 
 interface ProviderInfo {
   id: string;
@@ -25,6 +26,10 @@ interface ProviderInfo {
 }
 
 export function ProviderSettings({ onClose }: { onClose: () => void }) {
+  const {
+    allModels, failedModels, bulkTestInProgress, bulkTestProgress,
+    fetchModels: fetchAllModels, testAllModels, testModel, clearFailed, fetchInstalledLocalModels,
+  } = useModelStore();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState<string | null>(null);
@@ -36,11 +41,38 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
   const [githubPat, setGithubPat] = useState('');
   const [updatingGithub, setUpdatingGithub] = useState(false);
   const [githubResult, setGithubResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<'providers' | 'failed'>('providers');
 
   useEffect(() => {
     fetchProviders();
     checkNanoStatus();
+    fetchAllModels();
+    fetchInstalledLocalModels();
   }, []);
+
+  const failedEntries = Object.values(failedModels).sort((a, b) => b.lastTestedAt - a.lastTestedAt);
+
+  function getFailureHelp(classification: string): string {
+    switch (classification) {
+      case 'not_configured': return 'Provider not configured. Add the API key or enable the provider, then retry.';
+      case 'cost_blocked': return 'The provider rejected the call because billing, credits, or quota are missing.';
+      case 'rate_limited': return 'The model hit a rate limit. It will be skipped for the current session and can be retried later.';
+      case 'not_installed': return 'This is a local Ollama model that is not installed on disk yet.';
+      case 'discontinued': return 'The provider no longer exposes this model. Remove it from chains and delete it if it is a stale local install.';
+      default: return 'The test failed. Inspect the error and retry after correcting the provider or model setup.';
+    }
+  }
+
+  async function deleteLocalModel(modelId: string) {
+    const model = modelId.replace(/^ollama\//, '');
+    await fetch(`${API_BASE}/api/providers/ollama/delete`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    }).catch(() => {});
+    clearFailed(modelId);
+    fetchInstalledLocalModels();
+  }
 
   async function checkNanoStatus() {
     setNanoLoading(true);
@@ -164,12 +196,38 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex items-center gap-2 border-b border-ide-border pb-3 mb-1">
+            <button
+              onClick={() => setActiveTab('providers')}
+              className={`px-3 py-1.5 text-xs rounded border transition-colors ${activeTab === 'providers' ? 'border-ide-accent text-ide-accent bg-ide-accent/10' : 'border-ide-border text-ide-text-dim'}`}
+            >
+              Providers
+            </button>
+            <button
+              onClick={() => setActiveTab('failed')}
+              className={`px-3 py-1.5 text-xs rounded border transition-colors ${activeTab === 'failed' ? 'border-red-500/40 text-red-400 bg-red-500/10' : 'border-ide-border text-ide-text-dim'}`}
+            >
+              Failed Models ({failedEntries.length})
+            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => testAllModels(allModels.map(m => m.id))}
+                disabled={bulkTestInProgress || allModels.length === 0}
+                className="px-3 py-1.5 text-xs bg-ide-accent/20 text-ide-accent rounded hover:bg-ide-accent/30 disabled:opacity-50"
+              >
+                {bulkTestInProgress ? `Testing ${bulkTestProgress.completed}/${bulkTestProgress.total}` : `Bulk Cleanup: Test All ${allModels.length}`}
+              </button>
+            </div>
+          </div>
+
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-ide-accent" />
             </div>
           ) : (
             <>
+              {activeTab === 'providers' && (
+                <>
               {/* ── GitHub Token Update ── */}
               <div className="border rounded-lg p-3 border-ide-accent/30 bg-ide-accent/5">
                 <div className="flex items-center gap-2 mb-2">
@@ -388,6 +446,56 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
                 )}
               </div>
             ))}
+                </>
+              )}
+
+              {activeTab === 'failed' && (
+                <div className="space-y-3">
+                  <div className="text-xs text-ide-text-dim">
+                    Failed models are automatically pushed out of the main pickers when "hide failed models" is enabled. Retry them here, clear them manually, or delete stale local copies.
+                  </div>
+                  {failedEntries.length === 0 && (
+                    <div className="text-xs text-ide-text-dim border border-dashed border-ide-border rounded-lg p-4 text-center">
+                      No failed models recorded yet.
+                    </div>
+                  )}
+                  {failedEntries.map(entry => (
+                    <div key={entry.modelId} className="border rounded-lg p-3 border-ide-border bg-ide-bg space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-ide-text">{entry.modelId}</div>
+                          <div className="text-[10px] text-ide-text-dim mt-1">{getFailureHelp(entry.classification)}</div>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400">{entry.classification.replace(/_/g, ' ')}</span>
+                      </div>
+                      <div className="text-[11px] text-ide-text-dim bg-ide-sidebar rounded p-2 break-words">{entry.error}</div>
+                      <div className="text-[10px] text-ide-text-dim">Last tested: {new Date(entry.lastTestedAt).toLocaleString()}</div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => testModel(entry.modelId)}
+                          className="px-2.5 py-1 text-[10px] bg-ide-accent/20 text-ide-accent rounded hover:bg-ide-accent/30"
+                        >
+                          Retry Test
+                        </button>
+                        <button
+                          onClick={() => clearFailed(entry.modelId)}
+                          className="px-2.5 py-1 text-[10px] border border-ide-border rounded text-ide-text-dim hover:text-ide-text"
+                        >
+                          Remove from Failed List
+                        </button>
+                        {entry.modelId.startsWith('ollama/') && (
+                          <button
+                            onClick={() => deleteLocalModel(entry.modelId)}
+                            className="px-2.5 py-1 text-[10px] bg-red-500/10 text-red-400 rounded hover:bg-red-500/20"
+                          >
+                            Delete Local Copy
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>

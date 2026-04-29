@@ -4,7 +4,7 @@
 // ============================================
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { execSync, spawn } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
 import { appConfig } from '../config.js';
@@ -14,6 +14,71 @@ import {
 } from '../services/ollama/index.js';
 
 export async function ollamaRoutes(app: FastifyInstance): Promise<void> {
+
+  /** GET /api/ollama/drives - Discover drives and free space */
+  app.get('/drives', async () => {
+    const platform = os.platform();
+
+    if (platform === 'win32') {
+      try {
+        const ps = execSync(
+          'powershell -NoProfile -Command "Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID,FreeSpace,Size | ConvertTo-Json -Compress"',
+          { timeout: 15000, encoding: 'utf-8', windowsHide: true }
+        ).trim();
+        const parsed = JSON.parse(ps || '[]');
+        const rows = Array.isArray(parsed) ? parsed : [parsed];
+        return {
+          drives: rows
+            .filter((r: any) => !!r?.DeviceID)
+            .map((r: any) => ({
+              path: r.DeviceID,
+              freeBytes: Number(r.FreeSpace || 0),
+              totalBytes: Number(r.Size || 0),
+              hasOllamaModelsDir: existsSync(join(r.DeviceID, '\\', '.ollama', 'models')),
+            })),
+        };
+      } catch {
+        return { drives: [] };
+      }
+    }
+
+    try {
+      const out = execSync('df -k', { timeout: 10000, encoding: 'utf-8' }).trim();
+      const lines = out.split('\n').slice(1);
+      return {
+        drives: lines.map(line => {
+          const parts = line.trim().split(/\s+/);
+          const mount = parts[parts.length - 1] || '/';
+          const totalKb = Number(parts[1] || 0);
+          const freeKb = Number(parts[3] || 0);
+          return {
+            path: mount,
+            freeBytes: freeKb * 1024,
+            totalBytes: totalKb * 1024,
+            hasOllamaModelsDir: existsSync(join(mount, '.ollama', 'models')),
+          };
+        }),
+      };
+    } catch {
+      return { drives: [] };
+    }
+  });
+
+  /** POST /api/ollama/check-path - Check a custom directory for an Ollama model */
+  app.post('/check-path', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { directory, model } = (req.body as any) || {};
+    if (!directory || !model) return reply.status(400).send({ error: 'directory and model are required' });
+
+    try {
+      const manifestsDir = join(directory, 'manifests', 'registry.ollama.ai', 'library');
+      const [baseName, tag = 'latest'] = String(model).split(':');
+      const modelDir = join(manifestsDir, baseName);
+      const found = existsSync(modelDir) && readdirSync(modelDir).some(entry => entry === tag);
+      return { found, directory, model };
+    } catch (err: any) {
+      return reply.status(400).send({ error: err.message });
+    }
+  });
 
   /** GET /api/ollama/diagnose - Full diagnostic scan */
   app.get('/diagnose', async () => {
