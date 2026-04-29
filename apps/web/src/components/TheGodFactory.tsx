@@ -210,6 +210,10 @@ export function TheGodFactory() {
   const [pendingApproval, setPendingApproval]     = useState<ApprovalDetails | null>(null);
   const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
 
+  // Codebase snapshot — pre-loaded on mount so system prompt always has real context
+  const [codebaseTree, setCodebaseTree]   = useState<string>('');
+  const [codebaseReady, setCodebaseReady] = useState(false);
+
   const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
@@ -219,6 +223,39 @@ export function TheGodFactory() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => { saveConv(messages); }, [messages]);
   useEffect(() => { saveHistory(history); }, [history]);
+
+  // ── Load codebase tree on mount ───────────────────────────────────────────
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [treeRes, docsRes] = await Promise.all([
+          fetch(`${API_BASE}/api/codebase/tree?path=.&depth=3`),
+          fetch(`${API_BASE}/api/codebase/docs`),
+        ]);
+        function flatNode(node: { name: string; type: string; children?: unknown[] }, ind = 0): string {
+          const pfx = '  '.repeat(ind) + (node.type === 'directory' ? '📁 ' : '   ');
+          let out = `${pfx}${node.name}\n`;
+          if (node.children) for (const c of node.children as typeof node[]) out += flatNode(c, ind + 1);
+          return out;
+        }
+        const treeData = await treeRes.json().catch(() => ({}));
+        const docsData = await docsRes.json().catch(() => ({}));
+        if (!active) return;
+        const treeText = treeData.tree ? flatNode(treeData.tree).slice(0, 5000) : '';
+        const docsList = docsData.sections ? (docsData.sections as string[]).map((s: string) => `  - ${s}`).join('\n') : '';
+        const snapshot = [
+          treeText ? `## Personal IDE File Tree\n\`\`\`\n${treeText}\`\`\`` : '',
+          docsList ? `## Available Documentation Sections\n${docsList}` : '',
+        ].filter(Boolean).join('\n\n');
+        setCodebaseTree(snapshot);
+        setCodebaseReady(true);
+      } catch {
+        if (active) setCodebaseReady(true); // proceed even if offline
+      }
+    })();
+    return () => { active = false; };
+  }, []);
 
   const selectedModelDef = MODELS.find(m => m.id === localModel);
 
@@ -446,6 +483,7 @@ export function TheGodFactory() {
         `Model: ${localModel}  Date: ${new Date().toISOString().slice(0, 10)}`,
         `When the user asks about how the app works, use the help/docs and source code to answer with specific details from Personal IDE.`,
         `Be direct and actionable. Show complete changes. Explain what changed and why.`,
+        codebaseTree ? `\n${codebaseTree}` : '',
         toolsEnabled ? `\n${TOOL_DEFINITIONS_PROMPT}` : '',
       ].filter(Boolean).join('\n');
       if (toolHistory.length === 0) return lines;
@@ -698,7 +736,7 @@ export function TheGodFactory() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-          {messages.length === 0 && <WelcomeScreen onSend={sendMessage} />}
+          {messages.length === 0 && <WelcomeScreen onSend={sendMessage} codebaseReady={codebaseReady} codebaseTree={codebaseTree} />}
           {messages.map(msg => (
             msg.role === 'tool'
               ? <ToolBubble key={msg.id} message={msg} />
@@ -734,6 +772,9 @@ export function TheGodFactory() {
             <div className="flex items-center gap-2 mb-2 text-[10px] text-purple-400/70">
               <Wrench className="w-3 h-3" />
               <span>Agent mode: reads, searches, edits files and runs commands — writes/execs require your approval</span>
+              {codebaseReady
+                ? <span className="ml-auto text-green-400/70">✓ Codebase loaded</span>
+                : <span className="ml-auto text-yellow-400/70 animate-pulse">⏳ Loading codebase…</span>}
             </div>
           )}
           <div className="flex gap-2 items-end">
@@ -894,7 +935,7 @@ function ToolBubble({ message: msg }: { message: GodMessage }) {
   );
 }
 
-function WelcomeScreen({ onSend }: { onSend: (msg: string) => void }) {
+function WelcomeScreen({ onSend, codebaseReady, codebaseTree }: { onSend: (msg: string) => void; codebaseReady: boolean; codebaseTree: string }) {
   const starters = [
     { label: '🔍 Analyze & Prioritize', prompt: 'Analyze the entire Personal IDE codebase. List the source files, find what is incomplete, bugged, or not wired into the GUI, and give me a prioritized action plan.' },
     { label: '🔧 Fix All TS Errors', prompt: 'Search the web app and server for TypeScript compilation problems. Run tsc --noEmit and fix everything that fails.' },
@@ -915,6 +956,16 @@ function WelcomeScreen({ onSend }: { onSend: (msg: string) => void }) {
           Your in-app Principal AI Architect. It can read files, search code, consult documentation,
           edit source, and run commands from inside the app. Writes and command execution require your approval.
         </p>
+        <div className="mt-3 flex items-center justify-center gap-2">
+          {codebaseReady
+            ? <span className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1 bg-green-500/10 border border-green-500/20 text-green-400 rounded-full">
+                ✓ Codebase loaded{codebaseTree ? ` · ${codebaseTree.split('\n').length} entries indexed` : ''}
+              </span>
+            : <span className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1 bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 rounded-full animate-pulse">
+                ⏳ Loading codebase context…
+              </span>
+          }
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-2 mb-6">
         {starters.map(s => (

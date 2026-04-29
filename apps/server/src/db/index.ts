@@ -402,6 +402,23 @@ const MIGRATIONS: Migration[] = [
   },
 
   // ──────────────────────────────────────────
+  // Migration v3: App KV store (for midwife config, feature flags, etc.)
+  // ──────────────────────────────────────────
+  {
+    version: 3,
+    name: 'app_kv_store',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS app_kv (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
   // Future migrations go here
   // ──────────────────────────────────────────
 ];

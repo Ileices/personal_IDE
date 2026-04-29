@@ -2,7 +2,7 @@
 // ConfigTab — Global cooldown, provider toggles, nano port
 // Extracted from MidwifePanel.tsx
 // ============================================
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Check } from 'lucide-react';
 import { ToggleRow } from './ToggleRow';
 
@@ -13,6 +13,13 @@ interface ConfigTabProps {
 }
 
 export function ConfigTab({ config, updateConfig, onProvidersChanged }: ConfigTabProps) {
+  // Local state prevents slider from snapping back during drag (async API calls)
+  const [localCooldown, setLocalCooldown] = useState<number>(config?.globalCooldownMs ?? 2000);
+  const [localNanoPort, setLocalNanoPort] = useState<number>(config?.nanoPort ?? 5100);
+
+  useEffect(() => { setLocalCooldown(config?.globalCooldownMs ?? 2000); }, [config?.globalCooldownMs]);
+  useEffect(() => { setLocalNanoPort(config?.nanoPort ?? 5100); }, [config?.nanoPort]);
+
   if (!config) return <p className="text-xs text-ide-text-dim">Loading config...</p>;
 
   return (
@@ -20,7 +27,7 @@ export function ConfigTab({ config, updateConfig, onProvidersChanged }: ConfigTa
       {/* Global Cooldown */}
       <div>
         <label htmlFor="global-cooldown" className="text-[10px] text-ide-text-dim block mb-1">
-          Global Cooldown: {(config.globalCooldownMs / 1000).toFixed(1)}s (minimum between any LLM call)
+          Global Cooldown: {(localCooldown / 1000).toFixed(1)}s (minimum between any LLM call)
         </label>
         <input
           id="global-cooldown"
@@ -29,8 +36,10 @@ export function ConfigTab({ config, updateConfig, onProvidersChanged }: ConfigTa
           min={500}
           max={30000}
           step={500}
-          value={config.globalCooldownMs}
-          onChange={e => updateConfig({ globalCooldownMs: parseInt(e.target.value) })}
+          value={localCooldown}
+          onChange={e => setLocalCooldown(parseInt(e.target.value))}
+          onPointerUp={() => updateConfig({ globalCooldownMs: localCooldown })}
+          onKeyUp={() => updateConfig({ globalCooldownMs: localCooldown })}
           className="w-full accent-ide-accent"
         />
       </div>
@@ -58,8 +67,9 @@ export function ConfigTab({ config, updateConfig, onProvidersChanged }: ConfigTa
           id="nano-port"
           name="nano-port"
           type="number"
-          value={config.nanoPort}
-          onChange={e => updateConfig({ nanoPort: parseInt(e.target.value) || 5100 })}
+          value={localNanoPort}
+          onChange={e => setLocalNanoPort(parseInt(e.target.value) || 5100)}
+          onBlur={() => updateConfig({ nanoPort: localNanoPort })}
           className="w-24 text-xs bg-ide-bg border border-ide-border rounded px-2 py-1 text-ide-text"
         />
       </div>

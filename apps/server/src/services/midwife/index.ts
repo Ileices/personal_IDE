@@ -201,6 +201,38 @@ export class MidwifeService {
       tasks: [...DEFAULT_TASKS],
       enabledProviders: ['github'],
     };
+    this.loadFromDb();
+  }
+
+  // ── DB persistence helpers ──────────────────────────────
+  private loadFromDb(): void {
+    try {
+      const row = this.db?.prepare?.('SELECT value FROM app_kv WHERE key = ?').get('midwife_config') as { value: string } | undefined;
+      if (row?.value) {
+        const saved = JSON.parse(row.value) as Partial<MidwifeConfig>;
+        // Merge saved config over defaults — tasks use saved if present, else defaults
+        if (saved.tasks?.length) this.config.tasks = saved.tasks;
+        if (saved.globalCooldownMs !== undefined) this.config.globalCooldownMs = saved.globalCooldownMs;
+        if (saved.maxParallelTasks !== undefined) this.config.maxParallelTasks = saved.maxParallelTasks;
+        if (saved.autoRotateOnRateLimit !== undefined) this.config.autoRotateOnRateLimit = saved.autoRotateOnRateLimit;
+        if (saved.feedToNanoTrainer !== undefined) this.config.feedToNanoTrainer = saved.feedToNanoTrainer;
+        if (saved.nanoPort !== undefined) this.config.nanoPort = saved.nanoPort;
+        if (saved.enabledProviders?.length) this.config.enabledProviders = saved.enabledProviders;
+      }
+    } catch {
+      // If app_kv table doesn't exist yet (migration pending), ignore
+    }
+  }
+
+  private saveToDb(): void {
+    try {
+      this.db?.prepare?.(`
+        INSERT INTO app_kv (key, value, updated_at) VALUES (?, ?, datetime('now'))
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).run('midwife_config', JSON.stringify(this.getConfig()));
+    } catch {
+      // Silently ignore DB errors (e.g. migration not yet applied)
+    }
   }
 
   /** Auto-start feeding after a delay (called from server bootstrap) */
@@ -239,6 +271,7 @@ export class MidwifeService {
     if (updates.feedToNanoTrainer !== undefined) this.config.feedToNanoTrainer = updates.feedToNanoTrainer;
     if (updates.nanoPort !== undefined) this.config.nanoPort = updates.nanoPort;
     if (updates.enabledProviders !== undefined) this.config.enabledProviders = updates.enabledProviders;
+    this.saveToDb();
     return this.getConfig();
   }
 
@@ -246,6 +279,7 @@ export class MidwifeService {
     const task = this.config.tasks.find(t => t.taskType === taskType);
     if (!task) return null;
     Object.assign(task, updates);
+    this.saveToDb();
     return { ...task };
   }
 

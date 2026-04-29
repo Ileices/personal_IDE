@@ -24,8 +24,22 @@ export function TasksTab({
 }: TasksTabProps) {
   const { failedModels, hideFailedModels } = useModelStore();
   const [showBulk, setShowBulk] = useState(false);
-  const [bulkModels, setBulkModels] = useState<string[]>(MODELS.slice(0, 2).map(m => m.id));
+  const [bulkModels, setBulkModels] = useState<string[]>([]);
   const [bulkCooldown, setBulkCooldown] = useState(10000);
+  // Local cooldown values per task — prevents slider snap-back during drag
+  const [localCooldowns, setLocalCooldowns] = useState<Record<string, number>>(() =>
+    Object.fromEntries(tasks.map(t => [t.taskType, t.cooldownMs]))
+  );
+  // Sync when tasks change (e.g. on first fetch)
+  React.useEffect(() => {
+    setLocalCooldowns(prev => {
+      const next = { ...prev };
+      for (const t of tasks) {
+        if (next[t.taskType] === undefined) next[t.taskType] = t.cooldownMs;
+      }
+      return next;
+    });
+  }, [tasks]);
   const [excludeBrokenOnApply, setExcludeBrokenOnApply] = useState(true);
 
   const applyBulkModels = () => {
@@ -173,7 +187,7 @@ export function TasksTab({
                 {/* Cooldown */}
                 <div>
                   <label htmlFor={`cooldown-${task.taskType}`} className="text-[10px] text-ide-text-dim block mb-1">
-                    Cooldown: {(task.cooldownMs / 1000).toFixed(1)}s
+                    Cooldown: {((localCooldowns[task.taskType] ?? task.cooldownMs) / 1000).toFixed(1)}s
                   </label>
                   <input
                     id={`cooldown-${task.taskType}`}
@@ -182,8 +196,10 @@ export function TasksTab({
                     min={1000}
                     max={60000}
                     step={1000}
-                    value={task.cooldownMs}
-                    onChange={e => onCooldownChange(task.taskType, parseInt(e.target.value))}
+                    value={localCooldowns[task.taskType] ?? task.cooldownMs}
+                    onChange={e => setLocalCooldowns(prev => ({ ...prev, [task.taskType]: parseInt(e.target.value) }))}
+                    onPointerUp={() => onCooldownChange(task.taskType, localCooldowns[task.taskType] ?? task.cooldownMs)}
+                    onKeyUp={() => onCooldownChange(task.taskType, localCooldowns[task.taskType] ?? task.cooldownMs)}
                     className="w-full accent-ide-accent"
                   />
                   <div className="flex justify-between text-[9px] text-ide-text-dim">
