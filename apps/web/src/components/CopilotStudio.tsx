@@ -1,7 +1,7 @@
 // ============================================
-// Copilot Studio — Self-Improvement Agent Chat
+// The God Factory — Self-Improvement Agent Chat
 //
-// This is your in-app replacement for GitHub Copilot.
+// This is an in-app replacement for GitHub Copilot.
 // Talk to an agent that can:
 //   - Read/write any file in the codebase
 //   - Run terminal commands (PowerShell/bash)

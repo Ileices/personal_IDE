@@ -50,6 +50,75 @@ import { checkExplorationGate, storeArchitectureSummary, extractArchitectureSumm
 import { switchModel as switchModelFn, handle404ModelNotFound, handleRateLimit as handleRateLimitSwitch, shouldResetToOriginalModel } from './loop/modelSwitcher.js';
 import { drainMessageQueue, formatQueuedMessages, buildLoopBreakoutTask as buildLoopBreakout, isFailedResponse, type QueuedMessage } from './loop/messageAssembly.js';
 import { appConfig } from '../../config.js';
+import { existsSync, readFileSync, statSync } from 'fs';
+import { resolve, isAbsolute } from 'path';
+
+// ─── Spec File Injection ────────────────────────────────────────────────────
+// Scans the initial task for absolute or relative file path references.
+// Reads each file (up to MAX_SPEC_SIZE) and prepends it as a context block
+// so the model has actual spec content rather than just a path string.
+const MAX_SPEC_FILE_SIZE = 40_000; // ~40KB per file
+const MAX_SPEC_FILES = 6;
+const SPEC_EXTENSIONS = new Set(['.txt', '.md', '.json', '.yaml', '.yml', '.toml', '.ini', '.cfg']);
+
+/**
+ * Extract absolute or relative path references from a task string.
+ * Matches patterns like: /foo/bar.txt, C:\foo\bar.txt, Z:\foo\bar.txt, ./foo/bar.md
+ */
+function extractPathRefs(task: string): string[] {
+  const found: string[] = [];
+  // Windows absolute: Z:\path or C:\path
+  const winAbs = task.matchAll(/[A-Za-z]:[\\\/][^\s\n`"'<>|*?]+/g);
+  for (const m of winAbs) found.push(m[0].replace(/[.,;:!?)\]]+$/, ''));
+  // Unix absolute: /path/to/file.ext
+  const unixAbs = task.matchAll(/\/[A-Za-z_.\-\/][^\s\n`"'<>|*?]*/g);
+  for (const m of unixAbs) {
+    const p = m[0].replace(/[.,;:!?)\]]+$/, '');
+    if (p.includes('.') || p.split('/').length > 2) found.push(p);
+  }
+  // Relative: ./path or relative paths ending in known extensions
+  const rel = task.matchAll(/\.{0,2}[\\\/][A-Za-z0-9_.\-\/\\]+\.[a-z]{2,5}/g);
+  for (const m of rel) found.push(m[0].replace(/[.,;:!?)\]]+$/, ''));
+  return [...new Set(found)];
+}
+
+async function injectSpecFiles(
+  task: string,
+  projectRoot: string,
+  emit: (msg: string) => void,
+): Promise<string> {
+  const refs = extractPathRefs(task);
+  if (refs.length === 0) return task;
+
+  const injected: string[] = [];
+  let count = 0;
+
+  for (const ref of refs) {
+    if (count >= MAX_SPEC_FILES) break;
+    const ext = ref.includes('.') ? '.' + ref.split('.').pop()!.toLowerCase() : '';
+    if (ext && !SPEC_EXTENSIONS.has(ext)) continue; // skip binary/unknown types
+
+    try {
+      const absPath = isAbsolute(ref) ? ref : resolve(projectRoot, ref);
+      if (!existsSync(absPath)) continue;
+      const st = statSync(absPath);
+      if (st.isDirectory()) continue;
+      if (st.size > MAX_SPEC_FILE_SIZE) {
+        // Read only first MAX_SPEC_FILE_SIZE chars + truncate notice
+        const content = readFileSync(absPath, 'utf-8').slice(0, MAX_SPEC_FILE_SIZE);
+        injected.push(`\n\n=== SPEC FILE: ${ref} (truncated at ${MAX_SPEC_FILE_SIZE} chars) ===\n${content}\n=== END SPEC FILE ===`);
+      } else {
+        const content = readFileSync(absPath, 'utf-8');
+        injected.push(`\n\n=== SPEC FILE: ${ref} ===\n${content}\n=== END SPEC FILE ===`);
+      }
+      emit(`Injected spec file: ${ref} (${Math.round(st.size / 1024)}KB)`);
+      count++;
+    } catch { /* ignore unreadable files */ }
+  }
+
+  if (injected.length === 0) return task;
+  return task + '\n\n--- SPEC FILE CONTENTS BELOW ---' + injected.join('');
+}
 
 type EventCallback = (event: any) => void;
 
@@ -354,8 +423,14 @@ export class EnhancedAgentLoop {
       this.emit({ type: 'info', message: 'Checkpointing disabled (checkpointEvery=0)' });
     }
 
+    // ── Spec File Injection ──
+    // If the initial task references file paths (absolute or relative), read those files
+    // and prepend their content so the model has actual spec data — not just a path string.
+    // This is the root cause of SoS2-style failures where the model ignores spec because
+    // it can't actually read the file at runtime.
+    let currentTask = await injectSpecFiles(initialTask, this.config.projectRoot, (msg) => this.emit({ type: 'info', message: msg }));
+
     // ── Main Loop ──
-    let currentTask = initialTask;
     const effectiveMaxIterations = this.config.continuousMode ? Infinity : this.config.maxIterations;
     // Store the original model so we can retry it after rate-limit windows reset
     const originalModel = this.config.model;
@@ -520,6 +595,11 @@ export class EnhancedAgentLoop {
             codebaseOverview,
             this.loopBreakoutAttempts,
           );
+
+          // Re-inject spec files into breakout so model actually uses them
+          try {
+            currentTask = await injectSpecFiles(currentTask, this.config.projectRoot, (msg) => this.emit({ type: 'info', message: msg }));
+          } catch { /* non-critical */ }
 
           // Try web search to find new approaches when stuck
           try {
