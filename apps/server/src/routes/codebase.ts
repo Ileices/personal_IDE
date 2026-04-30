@@ -1,5 +1,5 @@
 // ============================================
-// Codebase Routes - God Factory IDE Self-Access
+// Codebase Routes - THE GOD FACTORY IDE Self-Access
 //
 // Read, search, diff, patch, write, and exec on
 // the Personal IDE's own source code.

@@ -1,5 +1,5 @@
 // ============================================
-// The God Factory — Self-Improvement Agent Chat
+// THE GOD FACTORY — Self-Improvement Agent Chat
 //
 // This is an in-app replacement for GitHub Copilot.
 // Talk to an agent that can:
@@ -357,7 +357,7 @@ export function CopilotStudio() {
         <div className="flex items-center justify-between px-4 py-2 border-b border-ide-border bg-ide-panel flex-shrink-0">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-ide-accent" />
-            <span className="text-sm font-semibold text-ide-text">Copilot Studio</span>
+            <span className="text-sm font-semibold text-ide-text">THE GOD FACTORY</span>
             <span className="text-xs text-ide-text-dim px-2 py-0.5 bg-ide-accent/10 rounded-full">
               Self-Improvement Agent
             </span>
@@ -451,7 +451,7 @@ export function CopilotStudio() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask the studio agent to build features, fix bugs, explain code, or enhance the IDE...  (Enter to send, Shift+Enter for newline)"
+                placeholder="Ask THE GOD FACTORY agent to build features, fix bugs, explain code, or enhance the IDE...  (Enter to send, Shift+Enter for newline)"
                 className="w-full bg-ide-bg border border-ide-border rounded-lg px-3 py-2.5 text-sm text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-ide-accent transition-colors min-h-[60px] max-h-[200px]"
                 rows={2}
               />
@@ -516,7 +516,7 @@ function WelcomeScreen({ onSend }: { onSend: (msg: string) => void }) {
         <div className="flex items-center justify-center gap-2 mb-3">
           <Sparkles className="w-8 h-8 text-ide-accent" />
         </div>
-        <h2 className="text-xl font-semibold text-ide-text mb-2">Copilot Studio</h2>
+        <h2 className="text-xl font-semibold text-ide-text mb-2">THE GOD FACTORY</h2>
         <p className="text-sm text-ide-text-dim leading-relaxed">
           Your in-app AI architect. Build features, fix bugs, enhance the IDE — without leaving the app.
           This agent has full access to your codebase, terminal, and the web.

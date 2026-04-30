@@ -196,7 +196,7 @@ export function ModelStrategyPanel() {
           </div>
         )}
         <p className="mt-2 text-[10px] text-ide-text-dim leading-relaxed">
-          If the primary model hits a rate limit or errors, chat, God Factory, and the agent loop now share this fallback chain.
+          If the primary model hits a rate limit or errors, chat, THE GOD FACTORY, and the agent loop now share this fallback chain.
         </p>
         <div className="mt-2 flex items-center justify-between gap-2 rounded border border-ide-border bg-ide-panel/40 px-2 py-1.5 text-[10px]">
           <span className="text-ide-text-dim">

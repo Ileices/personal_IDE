@@ -2,7 +2,7 @@
 // Universal Model Picker
 //
 // THE single model selection component used everywhere:
-// - The God Factory (active model)
+// - THE GOD FACTORY (active model)
 // - Agent Settings (model pools, role overrides)
 // - Model Strategy Panel (fallback chains)
 // - Midwife / Bird Feeder (task models)

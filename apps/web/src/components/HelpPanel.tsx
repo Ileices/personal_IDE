@@ -36,8 +36,8 @@ Personal IDE is a self-improving, AI-native development environment. Unlike trad
 
 1. **Select or create a project** — Use the sidebar to create a new project or open an existing folder.
 2. **Configure AI providers** — Click the Settings icon and add at least one API key. Free providers (Groq, Cerebras, Gemini) require no credit card.
-3. **Open The God Factory** — Click the ✨ Sparkles icon in the left Activity Bar to open the self-improvement agent chat.
-4. **Start building** — Type a request in The God Factory. The agent will read your codebase, propose changes, and apply them.
+3. **Open THE GOD FACTORY** — Click the ✨ Sparkles icon in the left Activity Bar to open the self-improvement agent chat.
+4. **Start building** — Type a request in THE GOD FACTORY. The agent will read your codebase, propose changes, and apply them.
 
 ## Quick Reference
 
@@ -47,12 +47,12 @@ Personal IDE is a self-improving, AI-native development environment. Unlike trad
 - **BUILD AND RUN** button = smart-start your project (auto-detects npm, cargo, go, python)`,
     links: [
       { label: 'AI Providers & Models', sectionId: 'providers' },
-      { label: 'The God Factory', sectionId: 'studio' },
+      { label: 'THE GOD FACTORY', sectionId: 'studio' },
       { label: 'Agent Mode', sectionId: 'agent' },
     ],
     tips: [
       'Use free providers (Groq, Cerebras, Gemini Flash) for most tasks to avoid costs.',
-      'Enable Auto-backup in The God Factory before asking the agent to edit files.',
+      'Enable Auto-backup in THE GOD FACTORY before asking the agent to edit files.',
       'The BLAME panel tracks model quality over time — use it to find which model works best for you.',
     ],
   },
@@ -106,14 +106,14 @@ All models use the format \`provider/modelId\`, e.g.:
   },
   {
     id: 'studio',
-    title: 'The God Factory',
+    title: 'THE GOD FACTORY',
     icon: <Sparkles className="w-4 h-4" />,
     shortDesc: 'Your in-app AI architect. Replaces external chat tools. Builds and repairs the IDE itself.',
-    content: `# The God Factory
+    content: `# THE GOD FACTORY
 
-The God Factory is the centerpiece of Personal IDE. It is a full conversational agent that has access to your codebase, terminal, and the web. Use it to build features, fix bugs, and improve the IDE itself.
+THE GOD FACTORY is the centerpiece of Personal IDE. It is a full conversational agent that has access to your codebase, terminal, and the web. Use it to build features, fix bugs, and improve the IDE itself.
 
-## What The God Factory Can Do
+## What THE GOD FACTORY Can Do
 
 - **Read & write any file** in the project
 - **Run terminal commands** (PowerShell, bash, npm, cargo, etc.)
@@ -181,12 +181,12 @@ The **Fleet** view shows multiple agents running in parallel, each assigned to a
 
 ## Troubleshooting
 
-- **Agent stalls on new projects** — Check if the project template was applied. Use The God Factory to diagnose.
+- **Agent stalls on new projects** — Check if the project template was applied. Use THE GOD FACTORY to diagnose.
 - **Agent pauses unexpectedly** — Check the agent timeout settings and whether context discovery is blocking startup.
 - **Tool calls fail** — Verify the server is running on port 3001 and has access to the file system.`,
     links: [
       { label: 'Agent Fleet', sectionId: 'fleet' },
-      { label: 'The God Factory', sectionId: 'studio' },
+      { label: 'THE GOD FACTORY', sectionId: 'studio' },
       { label: 'NANO Models', sectionId: 'nano' },
     ],
     tips: [

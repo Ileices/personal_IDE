@@ -1,7 +1,7 @@
 // ============================================
 // Chat Routes - SSE streaming chat endpoint
 // Includes: failsafe model fallback, systemPrompt override,
-//           projectId fallback for God Factory mode
+//           projectId fallback for THE GOD FACTORY mode
 // ============================================
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ChatRequest, ProviderType } from '@personal-ide/shared';
@@ -46,11 +46,11 @@ export async function chatRoutes(app: FastifyInstance) {
   app.post('/send', async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as ChatRequest;
 
-    // Validate — projectId can be 'default' when no project is active (God Factory mode)
+    // Validate — projectId can be 'default' when no project is active (THE GOD FACTORY mode)
     if (!body.message || !body.model || !body.mode) {
       return reply.status(400).send({ error: 'Missing required fields: message, model, mode' });
     }
-    // Use 'default' as fallback projectId for God Factory / non-project sessions
+    // Use 'default' as fallback projectId for THE GOD FACTORY / non-project sessions
     if (!body.projectId) {
       body.projectId = 'default';
     }
@@ -140,7 +140,7 @@ export async function chatRoutes(app: FastifyInstance) {
 
     // Build system prompt based on mode
     const systemPromptFn = SYSTEM_PROMPTS[body.mode] || SYSTEM_PROMPTS.ask;
-    // Allow caller to override system prompt (used by The God Factory)
+    // Allow caller to override system prompt (used by THE GOD FACTORY)
     const systemPrompt = body.systemPrompt || systemPromptFn(memoryContext);
 
     // Build messages array

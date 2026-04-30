@@ -267,7 +267,7 @@ function ProvidersSidebarView() {
   );
 }
 
-// ── Copilot Studio ───────────────────────────────
+// ── THE GOD FACTORY ───────────────────────────────
 function StudioView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">

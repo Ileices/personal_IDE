@@ -119,7 +119,7 @@ async function main() {
   await app.register(codeRoutes, { prefix: '/api/code' });
   await app.register(corpusRoutes, { prefix: '/api/corpus' });
 
-  // God Factory — IDE self-modification API (codebase read/search/write/exec)
+  // THE GOD FACTORY — IDE self-modification API (codebase read/search/write/exec)
   await app.register(codebaseRoutes, { prefix: '/api/codebase' });
 
   // BLAME — model attribution + quality forensics

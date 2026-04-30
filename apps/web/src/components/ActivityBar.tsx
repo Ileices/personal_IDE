@@ -47,7 +47,7 @@ interface NavItem {
 
 export function ActivityBar({ active, onChange, fleetBadge, nanoBadge }: ActivityBarProps) {
   const items: NavItem[] = [
-    { id: 'studio',      icon: Sparkles,       label: 'The God Factory — AI Architect' },
+    { id: 'studio',      icon: Sparkles,       label: 'THE GOD FACTORY — AI Architect' },
     { id: 'explorer',    icon: FolderOpen,     label: 'Explorer' },
     { id: 'chat',        icon: MessageSquare,  label: 'Chat' },
     { id: 'agent',       icon: Bot,            label: 'Agent' },

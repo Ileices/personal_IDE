@@ -1,5 +1,5 @@
 // ============================================
-// GodFactoryRightPanel — Intel Panel for The God Factory
+// GodFactoryRightPanel — Intel Panel for THE GOD FACTORY
 // Collapsible sidebar with: Notifications, Suggested Jobs,
 // Codebase Health snapshot, and Brainstorm Pad.
 // ============================================
@@ -41,7 +41,7 @@ export const DEMO_JOBS: SuggestedJob[] = [
     title: 'Add per-model quality tracking',
     category: 'model_tool_enhancement',
     priority: 'medium',
-    source: 'God Factory',
+    source: 'THE GOD FACTORY',
     description: 'Track quality scores per model per interaction type',
   },
   {
@@ -49,7 +49,7 @@ export const DEMO_JOBS: SuggestedJob[] = [
     title: 'Memory tab isolation per agent',
     category: 'memory',
     priority: 'medium',
-    source: 'God Factory',
+    source: 'THE GOD FACTORY',
     description: 'Each agent gets its own isolated memory view',
   },
 ];
@@ -90,12 +90,12 @@ interface SchedulerStatus {
 const SUBSYSTEM_META: Record<SubsystemId, { label: string; description: string; scope: 'ide_app' | 'user_projects' | 'global' }> = {
   ide_codebase_crawler: {
     label: 'IDE Codebase Crawler',
-    description: 'Scans the Personal IDE app itself so The God Factory Agent can reason about and modify the IDE codebase.',
+    description: 'Scans the Personal IDE app itself so THE GOD FACTORY Agent can reason about and modify the IDE codebase.',
     scope: 'ide_app',
   },
   project_state_crawler: {
     label: 'Project Crawler',
-    description: 'Scans the external project being built by the IDE agents (different from "The God Factory Agent"), separate from the IDE app.',
+    description: 'Scans the external project being built by the IDE agents (different from "THE GOD FACTORY Agent"), separate from the IDE app.',
     scope: 'user_projects',
   },
   suggested_jobs_crawler: {
@@ -399,7 +399,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                 </div>
               )}
               <div className="text-[9px] text-ide-text-dim">
-                <span className="text-purple-400">Tip:</span> Ask the God Factory to scan for debt, gaps, or patterns
+                <span className="text-purple-400">Tip:</span> Ask THE GOD FACTORY to scan for debt, gaps, or patterns
               </div>
             </div>
           )}

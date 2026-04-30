@@ -70,7 +70,7 @@ interface PromptHistoryItem {
 const MAX_TOOL_ITERATIONS = 10;
 
 const TOOL_DEFINITIONS_PROMPT = `
-## God Factory Codebase Tools
+## THE GOD FACTORY Codebase Tools
 
 You are operating as an autonomous coding agent with FULL ACCESS to the Personal IDE codebase.
 You can read, search, and modify source files, and run build/lint commands.
@@ -147,7 +147,7 @@ function SocialBar() {
         target="_blank"
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 transition-colors"
-        title="YouTube — The God Factory"
+        title="YouTube — THE GOD FACTORY"
       >
         <Youtube className="w-3 h-3" />
         <span>YouTube</span>
@@ -542,7 +542,7 @@ export function TheGodFactory() {
 
     const buildSystemCtx = (toolHistory: Array<{ role: string; content: string }>) => {
       const lines = [
-        `You are The God Factory — a Principal Software Architect AI integrated into Personal IDE.`,
+        `You are THE GOD FACTORY — a Principal Software Architect AI integrated into Personal IDE.`,
         `Your job is to improve Personal IDE itself — its built-in features, UX, architecture, models, onboarding, docs, and developer tooling.`,
         `Do NOT behave like a generic external project builder unless the user explicitly asks you to inspect an imported project. Your default scope is the Personal IDE application codebase and help/documentation system.`,
         `You have full access to the Personal IDE codebase, terminal, filesystem, and documentation.`,
@@ -712,9 +712,9 @@ export function TheGodFactory() {
               target="_blank"
               rel="noopener noreferrer"
               className="text-base font-bold text-ide-text hover:text-purple-400 transition-colors cursor-pointer"
-              title="YouTube — The God Factory"
+              title="YouTube — THE GOD FACTORY"
             >
-              The God Factory
+              THE GOD FACTORY
             </a>
             <span className="text-xs text-ide-text-dim px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded-full">
               Self-Improvement Agent
@@ -789,7 +789,7 @@ export function TheGodFactory() {
             </div>
           )}
           <div className="ml-auto text-[10px] text-ide-text-dim">
-            Applies to: <span className="text-ide-accent">The God Factory only</span>
+            Applies to: <span className="text-ide-accent">THE GOD FACTORY only</span>
             <span className="ml-2 text-ide-text-dim/50">· Chat uses its own model selector (top bar)</span>
           </div>
         </div>
@@ -854,8 +854,8 @@ export function TheGodFactory() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
               placeholder={toolsEnabled
-                ? "Tell The God Factory what to build, fix, or enhance… it will use tools autonomously (Enter sends)"
-                : "Tell The God Factory what to build, fix, or enhance… (Enter sends, Shift+Enter = newline)"}
+                ? "Tell THE GOD FACTORY what to build, fix, or enhance… it will use tools autonomously (Enter sends)"
+                : "Tell THE GOD FACTORY what to build, fix, or enhance… (Enter sends, Shift+Enter = newline)"}
               className="flex-1 bg-ide-bg border border-ide-border rounded-lg px-3 py-2.5 text-sm text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-purple-500/50 transition-colors min-h-[60px] max-h-[200px]"
               rows={2}
             />
@@ -1031,7 +1031,7 @@ function WelcomeScreen({ onSend, codebaseReady, codebaseTree }: { onSend: (msg: 
     <div className="max-w-3xl mx-auto py-8">
       <div className="text-center mb-8">
         <div className="text-5xl mb-3">⚡</div>
-        <h2 className="text-2xl font-bold text-ide-text mb-2">The God Factory</h2>
+        <h2 className="text-2xl font-bold text-ide-text mb-2">THE GOD FACTORY</h2>
         <p className="text-sm text-ide-text-dim leading-relaxed max-w-xl mx-auto">
           Your in-app Principal AI Architect. It can read files, search code, consult documentation,
           edit source, and run commands from inside the app. Writes and command execution require your approval.
@@ -1082,7 +1082,7 @@ function MessageBubble({ message: msg, copied, onCopy }: { message: GodMessage; 
       </div>
       <div className={`flex-1 max-w-[88%] flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'}`}>
         <div className={`flex items-center gap-2 text-[10px] text-ide-text-dim ${isUser ? 'flex-row-reverse' : ''}`}>
-          <span>{isUser ? 'You' : (msg.model?.split('/').pop() || 'The God Factory')}</span>
+          <span>{isUser ? 'You' : (msg.model?.split('/').pop() || 'THE GOD FACTORY')}</span>
           <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
           {msg.tokenCount && <span>{msg.tokenCount} tokens</span>}
           {msg.backupPath && <span className="text-green-400 flex items-center gap-0.5"><Archive className="w-2.5 h-2.5" />backed up</span>}
