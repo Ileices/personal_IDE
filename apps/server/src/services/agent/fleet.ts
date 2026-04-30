@@ -72,11 +72,13 @@ export interface FleetConfig {
   masterTask: string;
   model: string;
   provider: ProviderType;
+  fallbackModels?: string[];
   agentCount: number;              // How many agents to run
   continuousMode: boolean;
   cooldownMs: number;
   bypassRateLimits: boolean;
   enableSmartChunking: boolean;
+  analyzeCodebase: boolean;
   executionMode: FleetExecutionMode;
   localModelPool: string[];
   cloudModelPool: string[];
@@ -730,6 +732,7 @@ export class AgentFleet {
       autoApproveChanges: true,
       autoAnswerQuestions: true,
       model: assignment.model,
+      fallbackModels: this.config.fallbackModels,
       projectRoot: this.config.projectRoot,
       continuousMode: this.config.continuousMode,
       cooldownMs: this.config.cooldownMs,
@@ -740,7 +743,7 @@ export class AgentFleet {
       checkpointEvery: 0,
       autoFixErrors: subtask.role === 'debugger' || subtask.role === 'implementer',
       autoRunTests: subtask.role === 'tester' || subtask.role === 'debugger',
-      analyzeCodebase: false,
+      analyzeCodebase: this.config.analyzeCodebase,
     };
   }
 

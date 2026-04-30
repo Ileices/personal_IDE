@@ -5,10 +5,12 @@
 // copy feed, message queue during runs
 // ============================================
 import React, { useState, useEffect, useCallback } from 'react';
+import { getPreset } from '@personal-ide/shared';
 import { useAgentStore, type VerbosityLevel } from '../stores/agentStore';
 import { useFleetStore, type FleetAgentInfo } from '../stores/fleetStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useChatStore } from '../stores/chatStore';
+import { API_BASE } from '../config.js';
 import {
   Play, Square, Pause, SkipForward, Settings, Clock,
   AlertCircle, CheckCircle, Loader2, MessageSquare, Bot,
@@ -41,7 +43,7 @@ export function AgentControls() {
     setVerbosity, sendQueuedMessage, toggleEventExpanded, copyEventsToClipboard,
   } = useAgentStore();
   const { activeProject } = useProjectStore();
-  const { selectedModel } = useChatStore();
+  const { selectedModel, setModel } = useChatStore();
   const [task, setTask] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -53,6 +55,11 @@ export function AgentControls() {
   const [fleetMode, setFleetMode] = useState(false);
   const [fleetMessage, setFleetMessage] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState('all-models-balanced');
+  const [strategyPrimaryModel, setStrategyPrimaryModel] = useState(selectedModel || 'openai/gpt-4.1');
+  const [strategyFallbackModels, setStrategyFallbackModels] = useState<string[]>([]);
+  const [failedModelCount, setFailedModelCount] = useState(0);
+  const [cleanupFailedModelsBusy, setCleanupFailedModelsBusy] = useState(false);
+  const [analyzeCodebase, setAnalyzeCodebase] = useState(true);
   const [timingData, setTimingData] = useState<{
     lastCallMs: number; avgCallMs: number; totalCalls: number; tokPerSec: number; activeMs: number;
   } | null>(null);
@@ -84,6 +91,57 @@ export function AgentControls() {
     connectFleetEvents, disconnectFleetEvents,
   } = useFleetStore();
 
+  const persistStrategy = useCallback(async (payload: { presetId?: string; primaryModel?: string; fallbackModels?: string[] }) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/model-strategy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => null);
+      if (!data?.settings) return;
+      setSelectedPresetId(data.settings.presetId || 'all-models-balanced');
+      setStrategyPrimaryModel(data.settings.primaryModel || selectedModel);
+      setStrategyFallbackModels(data.settings.fallbackModels || []);
+      setFailedModelCount((data.failedModels || []).length);
+    } catch {}
+  }, [selectedModel]);
+
+  const refreshStrategy = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/model-strategy`);
+      const data = await res.json().catch(() => null);
+      if (!data?.settings) return null;
+      setSelectedPresetId(data.settings.presetId || 'all-models-balanced');
+      setStrategyPrimaryModel(data.settings.primaryModel || selectedModel);
+      setStrategyFallbackModels(data.settings.fallbackModels || []);
+      setFailedModelCount((data.failedModels || []).length);
+      if (data.settings.primaryModel) setModel(data.settings.primaryModel);
+      return data;
+    } catch {
+      return null;
+    }
+  }, [selectedModel, setModel]);
+
+  useEffect(() => {
+    void refreshStrategy();
+    const timer = window.setInterval(() => {
+      void refreshStrategy();
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [refreshStrategy]);
+
+  const handlePresetChange = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    const preset = getPreset(presetId);
+    if (!preset) return;
+    const fallbackModels = preset.fallbackChain.filter(model => model !== preset.primaryModel);
+    setStrategyPrimaryModel(preset.primaryModel);
+    setStrategyFallbackModels(fallbackModels);
+    setModel(preset.primaryModel);
+    void persistStrategy({ presetId, primaryModel: preset.primaryModel, fallbackModels });
+  };
+
   // Fetch max agents on mount
   useEffect(() => { fetchMaxAgents(); }, []);
 
@@ -96,9 +154,16 @@ export function AgentControls() {
   }, [isFleetRunning]);
 
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!task.trim() || !activeProject) return;
     const trimmed = task.trim();
+    const latest = await refreshStrategy();
+    const latestSettings = latest?.settings;
+    const preset = getPreset(latestSettings?.presetId || selectedPresetId);
+    const runModel = latestSettings?.primaryModel || strategyPrimaryModel || preset?.primaryModel || selectedModel;
+    const fallbackModels = (latestSettings?.fallbackModels?.length ? latestSettings.fallbackModels : strategyFallbackModels).length > 0
+      ? (latestSettings?.fallbackModels?.length ? latestSettings.fallbackModels : strategyFallbackModels)
+      : (preset?.fallbackChain || []).filter(model => model !== runModel);
     // Save to prompt history
     setPromptHistory(prev => {
       const existing = prev.find(h => h.prompt === trimmed);
@@ -109,11 +174,32 @@ export function AgentControls() {
       return updated;
     });
     if (fleetMode) {
-      startFleet(activeProject.id, trimmed, selectedModel);
+      startFleet(activeProject.id, trimmed, runModel, {
+        continuousMode,
+        cooldownMs,
+        bypassRateLimits,
+        enableSmartChunking,
+        analyzeCodebase,
+        maxIterationsPerAgent: maxIterations,
+        fallbackModels,
+      });
       setTask('');
     } else {
-      startAgent(activeProject.id, trimmed, selectedModel);
+      startAgent(activeProject.id, trimmed, runModel, {
+        fallbackModels,
+        analyzeCodebase,
+      });
       setTask('');
+    }
+  };
+
+  const handleCleanupFailedModels = async () => {
+    setCleanupFailedModelsBusy(true);
+    try {
+      await fetch(`${API_BASE}/api/model-strategy/cleanup-failed`, { method: 'POST' });
+      await refreshStrategy();
+    } finally {
+      setCleanupFailedModelsBusy(false);
     }
   };
 
@@ -242,6 +328,8 @@ export function AgentControls() {
           setBypassRateLimits={setBypassRateLimits}
           enableSmartChunking={enableSmartChunking}
           setEnableSmartChunking={setEnableSmartChunking}
+          analyzeCodebase={analyzeCodebase}
+          setAnalyzeCodebase={setAnalyzeCodebase}
           cooldownMs={cooldownMs}
           setCooldownMs={setCooldownMs}
           maxIterations={maxIterations}
@@ -253,7 +341,10 @@ export function AgentControls() {
           autoAnswer={autoAnswer}
           setAutoAnswer={setAutoAnswer}
           selectedPresetId={selectedPresetId}
-          onPresetChange={setSelectedPresetId}
+          onPresetChange={handlePresetChange}
+          failedModelCount={failedModelCount}
+          onCleanupFailedModels={handleCleanupFailedModels}
+          cleanupFailedModelsBusy={cleanupFailedModelsBusy}
           timingData={timingData}
           datasetStats={datasetStats}
           isRunning={isRunning}

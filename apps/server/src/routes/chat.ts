@@ -15,6 +15,8 @@ import { MemoryService } from '../services/memory/index.js';
 import { SYSTEM_PROMPTS, parseStructuredOutput } from '../services/modes/prompts.js';
 import { readFile } from '../services/filesystem/index.js';
 import { appConfig } from '../config.js';
+import { resolveModelStrategy } from '../services/modelStrategy.js';
+import { writeBlameRecord } from './blame.js';
 
 /** Get an LLM client for a model ID, returns null if not configured */
 function getClientForModel(db: any, modelId: string): import('openai').default | null {
@@ -52,6 +54,10 @@ export async function chatRoutes(app: FastifyInstance) {
     if (!body.projectId) {
       body.projectId = 'default';
     }
+
+    const strategy = resolveModelStrategy(db, body.model, body.fallbackModels);
+    body.model = strategy.primaryModel;
+    body.fallbackModels = strategy.fallbackModels;
 
     // Detect provider from model string
     const provider = extractProviderFromModelId(body.model) as ProviderType;
@@ -116,10 +122,20 @@ export async function chatRoutes(app: FastifyInstance) {
     // Save user message
     const userMessageId = memory.addMessage(conversationId, 'user', body.message, body.model, body.mode);
 
+    // Resolve the best project for memory/file-context when running in
+    // default IDE mode (no explicit active project selected).
+    let effectiveProjectId = body.projectId;
+    if (!effectiveProjectId || effectiveProjectId === 'default') {
+      const projects = memory.listProjects();
+      if (projects.length > 0) {
+        effectiveProjectId = projects[0].id;
+      }
+    }
+
     // Build memory context
     let memoryContext = '';
     if (body.autoInjectMemory !== false) {
-      memoryContext = memory.buildMemoryContext(body.projectId, body.message);
+      memoryContext = memory.buildMemoryContext(effectiveProjectId || body.projectId, body.message);
     }
 
     // Build system prompt based on mode
@@ -134,7 +150,7 @@ export async function chatRoutes(app: FastifyInstance) {
 
     // Add file context if requested
     if (body.contextFiles && body.contextFiles.length > 0) {
-      const project = memory.getProject(body.projectId);
+      const project = memory.getProject(effectiveProjectId || body.projectId);
       if (project) {
         for (const fp of body.contextFiles.slice(0, 10)) {
           try {
@@ -172,6 +188,7 @@ export async function chatRoutes(app: FastifyInstance) {
 
       usedModel = modelId;
       const modelDef = getModel(modelId);
+      const callStartMs = Date.now();
 
       try {
         rateLimiter.recordStart(modelId);
@@ -201,20 +218,36 @@ export async function chatRoutes(app: FastifyInstance) {
           messageId: userMessageId,
           onDone: (fullContent, usage) => {
             rateLimiter.recordEnd(modelId);
+            const latencyMs = Date.now() - callStartMs;
 
             // Track upstream 429s for abuse detection
             if (usage && (usage as any).statusCode === 429) {
               userRateLimiter.recordUpstream429(clientIp, userKey);
             }
 
-            // Save assistant message (use actual model used, not body.model)
+            // Write BLAME record (fire-and-forget)
             const structured = parseStructuredOutput(fullContent);
+            writeBlameRecord(db, {
+              model: modelId,
+              mode: body.mode,
+              projectId: body.projectId,
+              conversationId: conversationId || undefined,
+              taskType: body.mode,
+              quality: structured?.confidence ?? undefined,
+              success: true,
+              latencyMs,
+              tokenCount: usage?.totalTokens,
+              promptTokens: usage?.promptTokens,
+              completionTokens: usage?.completionTokens,
+            });
+
+            // Save assistant message (use actual model used, not body.model)
             memory.addMessage(conversationId!, 'assistant', fullContent, modelId, body.mode, structured);
 
             // Auto-save summary if structured output found
             if (structured?.summary) {
-              memory.addNote(body.projectId, {
-                projectId: body.projectId,
+              memory.addNote(effectiveProjectId || body.projectId, {
+                projectId: effectiveProjectId || body.projectId,
                 source: 'auto_summary',
                 category: body.mode,
                 title: `${body.mode}: ${structured.summary.slice(0, 100)}`,
@@ -254,6 +287,20 @@ export async function chatRoutes(app: FastifyInstance) {
         rateLimiter.recordEnd(modelId);
 
         const isFallbackable = isFallbackError(err);
+        // Write a failure BLAME record for this model attempt
+        writeBlameRecord(db, {
+          model: modelId,
+          mode: body.mode,
+          projectId: body.projectId,
+          conversationId: conversationId || undefined,
+          taskType: body.mode,
+          success: false,
+          errorType: err?.status === 429 ? 'rate_limited'
+            : err?.status === 401 || err?.status === 403 ? 'auth_or_quota'
+            : err?.status === 503 || err?.status === 502 ? 'provider_unreachable'
+            : 'model_error',
+          latencyMs: Date.now() - callStartMs,
+        });
         if (!isFallbackable || i === modelsToTry.length - 1) {
           // Not retryable OR no more fallbacks — surface the error
           if (!reply.raw.writableEnded) {

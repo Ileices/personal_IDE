@@ -59,10 +59,12 @@ interface Props {
   codebaseReady: boolean;
   codebaseTree: string;
   projectRoot?: string;
+  projectId?: string;
+  projectName?: string;
   onSendToBrainstorm: (text: string) => void;
 }
 
-type SubsystemId = 'project_state_crawler' | 'suggested_jobs_crawler' | 'gap_analysis';
+type SubsystemId = 'ide_codebase_crawler' | 'project_state_crawler' | 'suggested_jobs_crawler' | 'gap_analysis';
 interface SubsystemConfig {
   enabled: boolean;
   idleEnabled: boolean;
@@ -71,7 +73,44 @@ interface SubsystemConfig {
   manualOnly: boolean;
 }
 
-export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot, onSendToBrainstorm }: Props) {
+interface SubsystemRuntime {
+  lastRun?: { completedAt?: string; projectName?: string; projectRoot?: string; result?: { root?: string } } | null;
+  nextRunAt?: string | null;
+  schedulerActive?: boolean;
+  targetRoot?: string | null;
+  targetProjectName?: string | null;
+}
+
+interface SchedulerStatus {
+  running: boolean;
+  tickMs: number;
+  lastTickAt?: string | null;
+}
+
+const SUBSYSTEM_META: Record<SubsystemId, { label: string; description: string; scope: 'ide_app' | 'user_projects' | 'global' }> = {
+  ide_codebase_crawler: {
+    label: 'IDE Codebase Crawler',
+    description: 'Scans the Personal IDE app itself so The God Factory Agent can reason about and modify the IDE codebase.',
+    scope: 'ide_app',
+  },
+  project_state_crawler: {
+    label: 'Project Crawler',
+    description: 'Scans the external project being built by the IDE agents (different from "The God Factory Agent"), separate from the IDE app.',
+    scope: 'user_projects',
+  },
+  suggested_jobs_crawler: {
+    label: 'Suggested Jobs Crawler',
+    description: 'Turns telemetry and model quality signals into concrete follow-up jobs.',
+    scope: 'global',
+  },
+  gap_analysis: {
+    label: 'Gap Analysis',
+    description: 'Surfaces failure clusters and subsystem gaps from recent runs.',
+    scope: 'global',
+  },
+};
+
+export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot, projectId, projectName, onSendToBrainstorm }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [notifications, setNotifications] = useState<IntelNotification[]>([]);
   const [jobs, setJobs] = useState<SuggestedJob[]>(DEMO_JOBS);
@@ -79,10 +118,18 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [sections, setSections] = useState({ notifications: true, jobs: true, health: true, subsystems: false, brainstorm: false });
   const [blameStats, setBlameStats] = useState<any[]>([]);
   const [subsystems, setSubsystems] = useState<Record<SubsystemId, SubsystemConfig>>({
+    ide_codebase_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 60, maxDepth: 5, manualOnly: false },
     project_state_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 90, maxDepth: 5, manualOnly: false },
     suggested_jobs_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 120, maxDepth: 4, manualOnly: false },
     gap_analysis: { enabled: true, idleEnabled: true, idleIntervalSec: 180, maxDepth: 4, manualOnly: false },
   });
+  const [subsystemStatus, setSubsystemStatus] = useState<Record<SubsystemId, SubsystemRuntime>>({
+    ide_codebase_crawler: {},
+    project_state_crawler: {},
+    suggested_jobs_crawler: {},
+    gap_analysis: {},
+  });
+  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
   const [runningSubsystem, setRunningSubsystem] = useState<SubsystemId | null>(null);
 
   useEffect(() => {
@@ -91,10 +138,19 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       .then(d => { if (d?.stats) setBlameStats(d.stats.slice(0, 4)); })
       .catch(() => {});
 
-    fetch(`${API_BASE}/api/subsystems/settings`)
+    const loadSubsystemSettings = () => fetch(`${API_BASE}/api/subsystems/settings`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.settings) setSubsystems(d.settings); })
+      .then(d => {
+        if (d?.settings) setSubsystems(d.settings);
+        if (d?.status) setSubsystemStatus(d.status);
+        if (d?.scheduler) setSchedulerStatus(d.scheduler);
+      })
       .catch(() => {});
+
+    void loadSubsystemSettings();
+    const refreshTimer = window.setInterval(() => {
+      void loadSubsystemSettings();
+    }, 15000);
 
     if (codebaseReady) {
       setNotifications([{
@@ -103,6 +159,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         timestamp: new Date().toISOString(),
       }]);
     }
+
+    return () => window.clearInterval(refreshTimer);
   }, [codebaseReady]);
 
   const toggleSection = (key: keyof typeof sections) =>
@@ -115,16 +173,33 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [id]: next[id] }),
-    }).catch(() => {});
+    })
+      .then(() => fetch(`${API_BASE}/api/subsystems/settings`))
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.status) setSubsystemStatus(d.status);
+        if (d?.scheduler) setSchedulerStatus(d.scheduler);
+      })
+      .catch(() => {});
   };
 
   const runSubsystem = async (id: SubsystemId) => {
     setRunningSubsystem(id);
     try {
+      const runPayload: Record<string, any> = {
+        subsystem: id,
+        depth: subsystems[id].maxDepth,
+      };
+      if (id === 'project_state_crawler') {
+        if (projectRoot) runPayload.projectRoot = projectRoot;
+        if (projectId) runPayload.projectId = projectId;
+        if (projectName) runPayload.projectName = projectName;
+      }
+
       const res = await fetch(`${API_BASE}/api/subsystems/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subsystem: id, projectRoot, depth: subsystems[id].maxDepth }),
+        body: JSON.stringify(runPayload),
       });
       const data = await res.json();
       const summary = data?.result?.summary || data?.error || 'Run complete';
@@ -140,6 +215,11 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         const incoming = data.result.suggestedJobs as SuggestedJob[];
         setJobs(prev => [...incoming, ...prev].slice(0, 30));
       }
+
+      const settingsRes = await fetch(`${API_BASE}/api/subsystems/settings`);
+      const settingsData = settingsRes.ok ? await settingsRes.json() : null;
+      if (settingsData?.status) setSubsystemStatus(settingsData.status);
+      if (settingsData?.scheduler) setSchedulerStatus(settingsData.scheduler);
     } catch (err: any) {
       setNotifications(prev => [{
         id: `${Date.now()}`,
@@ -337,13 +417,43 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           </button>
           {sections.subsystems && (
             <div className="px-2 pb-2 space-y-1.5">
-              {(['project_state_crawler', 'suggested_jobs_crawler', 'gap_analysis'] as SubsystemId[]).map(id => {
+              {schedulerStatus && (
+                <div className="rounded border border-ide-border/30 bg-ide-panel/50 px-2 py-1.5 text-[9px] text-ide-text-dim">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Idle scheduler</span>
+                    <span className={schedulerStatus.running ? 'text-green-400' : 'text-red-400'}>
+                      {schedulerStatus.running ? 'Running' : 'Stopped'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <span>Tick</span>
+                    <span className="text-ide-text">{Math.round(schedulerStatus.tickMs / 1000)}s</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <span>Last tick</span>
+                    <span className="text-ide-text">{schedulerStatus.lastTickAt ? new Date(schedulerStatus.lastTickAt).toLocaleTimeString() : 'Never'}</span>
+                  </div>
+                </div>
+              )}
+              {(['ide_codebase_crawler', 'project_state_crawler', 'suggested_jobs_crawler', 'gap_analysis'] as SubsystemId[]).map(id => {
                 const cfg = subsystems[id];
-                const label = id.replace(/_/g, ' ');
+                const meta = SUBSYSTEM_META[id];
+                const runtime = subsystemStatus[id] || {};
                 return (
                   <div key={id} className="p-1.5 rounded bg-ide-bg/30 border border-ide-border/30 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-ide-text font-medium capitalize">{label}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-ide-text font-medium">{meta.label}</span>
+                        <span className={`text-[8px] px-1 py-0.5 rounded border ${
+                          meta.scope === 'ide_app'
+                            ? 'border-purple-500/40 text-purple-300 bg-purple-500/10'
+                            : meta.scope === 'user_projects'
+                            ? 'border-cyan-500/40 text-cyan-300 bg-cyan-500/10'
+                            : 'border-ide-border text-ide-text-dim'
+                        }`}>
+                          {meta.scope === 'ide_app' ? 'IDE App' : meta.scope === 'user_projects' ? 'User Projects' : 'Global'}
+                        </span>
+                      </div>
                       <button
                         onClick={() => runSubsystem(id)}
                         disabled={runningSubsystem !== null}
@@ -352,6 +462,28 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                         <Play className="w-2 h-2" />
                         {runningSubsystem === id ? 'Running' : 'Run now'}
                       </button>
+                    </div>
+                    <div className="text-[9px] leading-snug text-ide-text-dim">{meta.description}</div>
+                    <div className="rounded border border-ide-border/30 bg-ide-panel/40 px-1.5 py-1 text-[9px] text-ide-text-dim space-y-0.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Scheduler</span>
+                        <span className={runtime.schedulerActive ? 'text-green-400' : 'text-yellow-400'}>
+                          {runtime.schedulerActive ? 'Active' : 'Manual only'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Last run</span>
+                        <span className="text-ide-text">{runtime.lastRun?.completedAt ? new Date(runtime.lastRun.completedAt).toLocaleTimeString() : 'Never'}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Next run</span>
+                        <span className="text-ide-text">{runtime.nextRunAt ? new Date(runtime.nextRunAt).toLocaleTimeString() : 'N/A'}</span>
+                      </div>
+                      {(runtime.targetProjectName || runtime.targetRoot) && (
+                        <div className="truncate" title={runtime.targetRoot || undefined}>
+                          Target: <span className="text-cyan-300">{runtime.targetProjectName || runtime.targetRoot}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 text-[9px]">
                       <button

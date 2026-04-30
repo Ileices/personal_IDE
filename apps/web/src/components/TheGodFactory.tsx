@@ -204,6 +204,7 @@ export function TheGodFactory() {
   const [showFileSelector, setShowFileSelector] = useState(false);
   const [copied, setCopied]               = useState<string | null>(null);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   // Tool-calling state
   const [toolsEnabled, setToolsEnabled]           = useState(true);
@@ -214,6 +215,7 @@ export function TheGodFactory() {
   // Codebase snapshot — pre-loaded on mount so system prompt always has real context
   const [codebaseTree, setCodebaseTree]   = useState<string>('');
   const [codebaseReady, setCodebaseReady] = useState(false);
+  const [feedbackContext, setFeedbackContext] = useState<string>('');
 
   const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -230,18 +232,29 @@ export function TheGodFactory() {
     let active = true;
     (async () => {
       try {
-        const [treeRes, docsRes, stateRes] = await Promise.all([
+        const [treeRes, docsRes, stateRes, projectStateRes, feedbackIndexRes] = await Promise.all([
           fetch(`${API_BASE}/api/codebase/tree?path=.&depth=3`),
           fetch(`${API_BASE}/api/codebase/docs`),
           fetch(`${API_BASE}/api/subsystems/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              subsystem: 'project_state_crawler',
-              projectRoot: activeProject?.rootPath,
+              subsystem: 'ide_codebase_crawler',
               depth: 4,
             }),
           }),
+          activeProject?.rootPath
+            ? fetch(`${API_BASE}/api/subsystems/run`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  subsystem: 'project_state_crawler',
+                  projectRoot: activeProject.rootPath,
+                  depth: 4,
+                }),
+              })
+            : Promise.resolve(null),
+          fetch(`${API_BASE}/api/codebase/feedback`),
         ]);
         function flatNode(node: { name: string; type: string; children?: unknown[] }, ind = 0): string {
           const pfx = '  '.repeat(ind) + (node.type === 'directory' ? '📁 ' : '   ');
@@ -252,20 +265,47 @@ export function TheGodFactory() {
         const treeData = await treeRes.json().catch(() => ({}));
         const docsData = await docsRes.json().catch(() => ({}));
         const stateData = await stateRes.json().catch(() => ({}));
+        const projectStateData = projectStateRes ? await projectStateRes.json().catch(() => ({})) : null;
+        const feedbackIndex = await feedbackIndexRes.json().catch(() => ({}));
         if (!active) return;
         const treeText = treeData.tree ? flatNode(treeData.tree).slice(0, 5000) : '';
         const docsList = docsData.sections ? (docsData.sections as string[]).map((s: string) => `  - ${s}`).join('\n') : '';
-        const stateSummary = stateData?.result?.summary ? `## Project State Summary\n${stateData.result.summary}` : '';
-        const extSummary = Array.isArray(stateData?.result?.topExtensions) && stateData.result.topExtensions.length
-          ? `## Dominant File Types\n${stateData.result.topExtensions.map((x: { ext: string; count: number }) => `  - ${x.ext}: ${x.count}`).join('\n')}`
+        const ideSummary = stateData?.result?.summary ? `## IDE App State Summary\n${stateData.result.summary}` : '';
+        const ideExtSummary = Array.isArray(stateData?.result?.topExtensions) && stateData.result.topExtensions.length
+          ? `## IDE App File Types\n${stateData.result.topExtensions.map((x: { ext: string; count: number }) => `  - ${x.ext}: ${x.count}`).join('\n')}`
           : '';
+        const projectSummary = projectStateData?.result?.summary ? `## Active Project State Summary\n${projectStateData.result.summary}` : '';
+        const projectExtSummary = Array.isArray(projectStateData?.result?.topExtensions) && projectStateData.result.topExtensions.length
+          ? `## Active Project File Types\n${projectStateData.result.topExtensions.map((x: { ext: string; count: number }) => `  - ${x.ext}: ${x.count}`).join('\n')}`
+          : '';
+        const preferredFeedbackSections = ['unifi_spec.txt', 'memory_tab_spec.txt', 'memory_tab_spec_addendum.txt'];
+        const availableFeedbackSections = Array.isArray(feedbackIndex?.sections)
+          ? (feedbackIndex.sections as string[])
+          : [];
+        const toFetch = preferredFeedbackSections.filter((s) => availableFeedbackSections.includes(s));
+        const feedbackChunks = await Promise.all(
+          toFetch.map(async (section) => {
+            try {
+              const res = await fetch(`${API_BASE}/api/codebase/feedback?section=${encodeURIComponent(section)}`);
+              const data = await res.json().catch(() => ({}));
+              if (!data?.content) return '';
+              const content = String(data.content).slice(0, 10000);
+              return `## Feedback Spec: ${section}\n\n${content}`;
+            } catch {
+              return '';
+            }
+          })
+        );
         const snapshot = [
           treeText ? `## Personal IDE File Tree\n\`\`\`\n${treeText}\`\`\`` : '',
-          stateSummary,
-          extSummary,
+          ideSummary,
+          ideExtSummary,
+          projectSummary,
+          projectExtSummary,
           docsList ? `## Available Documentation Sections\n${docsList}` : '',
         ].filter(Boolean).join('\n\n');
         setCodebaseTree(snapshot);
+        setFeedbackContext(feedbackChunks.filter(Boolean).join('\n\n'));
         setCodebaseReady(true);
       } catch {
         if (active) setCodebaseReady(true); // proceed even if offline
@@ -415,7 +455,16 @@ export function TheGodFactory() {
     const res = await fetch(`${API_BASE}/api/chat/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       signal: abortCtrl.signal,
-      body: JSON.stringify({ message: prompt, model: localModel, mode: 'agent', projectId: activeProject?.id || 'default', systemPrompt: systemContext, autoInjectMemory: false }),
+      body: JSON.stringify({
+        message: prompt,
+        model: localModel,
+        mode: 'agent',
+        projectId: activeProject?.id,
+        conversationId: conversationId || undefined,
+        contextFiles: selectedFiles.length > 0 ? selectedFiles : undefined,
+        systemPrompt: systemContext,
+        autoInjectMemory: true,
+      }),
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -436,7 +485,9 @@ export function TheGodFactory() {
         if (data === '[DONE]') break;
         try {
           const ev = JSON.parse(data);
-          if (ev.type === 'content_delta' && ev.delta) {
+          if (ev.type === 'message_start' && ev.conversationId) {
+            setConversationId(ev.conversationId);
+          } else if (ev.type === 'content_delta' && ev.delta) {
             fullContent += ev.delta;
             setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: fullContent } : m));
           } else if (ev.type === 'content_done') {
@@ -499,8 +550,10 @@ export function TheGodFactory() {
         selectedFiles.length > 0 ? `Context files: ${selectedFiles.join(', ')}` : '',
         `Model: ${localModel}  Date: ${new Date().toISOString().slice(0, 10)}`,
         `When the user asks about how the app works, use the help/docs and source code to answer with specific details from Personal IDE.`,
+        `Treat loaded feedback specs as hard product constraints when they apply.`,
         `Be direct and actionable. Show complete changes. Explain what changed and why.`,
         codebaseTree ? `\n${codebaseTree}` : '',
+        feedbackContext ? `\n${feedbackContext}` : '',
         toolsEnabled ? `\n${TOOL_DEFINITIONS_PROMPT}` : '',
       ].filter(Boolean).join('\n');
       if (toolHistory.length === 0) return lines;
@@ -577,7 +630,7 @@ export function TheGodFactory() {
   };
 
   const stopStreaming  = () => abortRef.current?.abort();
-  const clearConv      = () => { setMessages([]); try { localStorage.removeItem(CONV_KEY); } catch {} };
+  const clearConv      = () => { setMessages([]); setConversationId(null); try { localStorage.removeItem(CONV_KEY); } catch {} };
   const copyMsg        = (content: string, id: string) => { navigator.clipboard.writeText(content).catch(() => {}); setCopied(id); setTimeout(() => setCopied(null), 1500); };
   const exportConv     = () => {
     const text = messages.map(m => `[${m.role.toUpperCase()}] ${m.timestamp}\n${m.content}`).join('\n\n---\n\n');
@@ -828,6 +881,8 @@ export function TheGodFactory() {
         codebaseReady={codebaseReady}
         codebaseTree={codebaseTree}
         projectRoot={activeProject?.rootPath}
+        projectId={activeProject?.id}
+        projectName={activeProject?.name}
         onSendToBrainstorm={(text) => { setInput(text); inputRef.current?.focus(); }}
       />
     </div>

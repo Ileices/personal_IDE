@@ -190,7 +190,7 @@ function StatusBar() {
   const { mode } = useChatStore();
   const { state: agentState } = useAgentStore();
   const dot =
-    agentState === 'running'  ? 'bg-green-400 animate-pulse' :
+    agentState === 'executing' ? 'bg-green-400 animate-pulse' :
     agentState === 'planning' ? 'bg-yellow-400 animate-pulse' :
     agentState === 'error'    ? 'bg-red-400' :
     agentState === 'complete' ? 'bg-blue-400' : 'bg-ide-text-dim';

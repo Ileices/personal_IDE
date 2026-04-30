@@ -27,6 +27,16 @@ export interface ModelStats {
   instructionAdherence?: number;
   structuralIntegrity?: number;
   outputEfficiency?: number;
+  strategyConfig?: {
+    recommended?: boolean;
+    action?: string;
+    reason?: string;
+    cleanupEligible?: boolean;
+    blockScope?: 'temporary' | 'persistent';
+    failureSummary?: { providerFailures: number; authFailures: number; rateLimitFailures: number };
+    source?: string;
+    observedAt?: string;
+  };
 }
 
 export type TabId = 'models' | 'records' | 'analysis';

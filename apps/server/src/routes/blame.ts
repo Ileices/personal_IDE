@@ -10,6 +10,59 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { randomUUID } from 'crypto';
 
+export interface BlameWriteInput {
+  model: string;
+  mode: string;
+  projectId?: string;
+  conversationId?: string;
+  agentRunId?: string;
+  taskType?: string;
+  quality?: number;
+  success: boolean;
+  errorType?: string;
+  filePath?: string;
+  latencyMs?: number;
+  tokenCount?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+}
+
+/** Write a single blame record + update model_registry. Fire-and-forget safe. */
+export function writeBlameRecord(db: any, input: BlameWriteInput): void {
+  try {
+    const id = randomUUID();
+    db.prepare(`
+      INSERT INTO blame_records
+        (id, model, mode, project_id, conversation_id, agent_run_id,
+         task_type, quality, success, error_type, file_path,
+         latency_ms, token_count, prompt_tokens, completion_tokens)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      input.model,
+      input.mode,
+      input.projectId ?? null,
+      input.conversationId ?? null,
+      input.agentRunId ?? null,
+      input.taskType ?? 'unknown',
+      input.quality ?? null,
+      input.success ? 1 : 0,
+      input.errorType ?? null,
+      input.filePath ?? null,
+      input.latencyMs ?? null,
+      input.tokenCount ?? null,
+      input.promptTokens ?? null,
+      input.completionTokens ?? null,
+    );
+    _upsertModelRegistry(db, input.model, {
+      success: input.success,
+      quality: input.quality,
+      latencyMs: input.latencyMs,
+      tokenCount: input.tokenCount,
+    });
+  } catch { /* best-effort — never throw from instrumentation */ }
+}
+
 export async function blameRoutes(app: FastifyInstance) {
   const db = (app as any).db;
 
@@ -61,6 +114,7 @@ export async function blameRoutes(app: FastifyInstance) {
           hallucination: r.hallucination,
           structuralIntegrity: r.structural_integrity,
           outputEfficiency: r.output_efficiency,
+          strategyConfig: (() => { try { return r.strategy_config ? JSON.parse(r.strategy_config) : undefined; } catch { return undefined; } })(),
         }));
       } else {
         // Fallback: aggregate live from blame_records
@@ -260,11 +314,52 @@ export async function blameRoutes(app: FastifyInstance) {
 
         emit({ log: `  ${model.split('/').pop()}: quality=${Math.round(avgQuality)}% success=${Math.round(successRate * 100)}% trend=${trend}` });
 
+        const failures = rows.filter(r => r.success !== 1);
+        const providerFailures = failures.filter(r => /provider|connect|timeout|unreachable|network|503|502/i.test(String(r.error_type || ''))).length;
+        const authFailures = failures.filter(r => /auth|401|403|quota/i.test(String(r.error_type || ''))).length;
+        const rateLimitFailures = failures.filter(r => /429|rate/i.test(String(r.error_type || ''))).length;
+        const dominantFailureKind = providerFailures >= authFailures && providerFailures >= rateLimitFailures && providerFailures > 0
+          ? 'provider_unreachable'
+          : authFailures >= rateLimitFailures && authFailures > 0
+            ? 'auth_or_quota'
+            : rateLimitFailures > 0
+              ? 'rate_limited'
+              : 'low_quality';
+
         // Generate strategy config recommendations
         if (successRate < 0.5 || avgQuality < 40) {
-          configUpdates[model] = { recommended: false, reason: 'low_quality', successRate, avgQuality };
+          const cleanupEligible = dominantFailureKind === 'low_quality';
+          const blockScope = cleanupEligible ? 'persistent' : 'temporary';
+          configUpdates[model] = {
+            recommended: false,
+            action: cleanupEligible ? 'block' : 'deprioritize',
+            reason: dominantFailureKind,
+            successRate,
+            avgQuality,
+            avgLatency,
+            cleanupEligible,
+            blockScope,
+            failureSummary: {
+              providerFailures,
+              authFailures,
+              rateLimitFailures,
+            },
+            source: 'blame_crawler',
+            observedAt: new Date().toISOString(),
+          };
         } else if (successRate > 0.85 && avgQuality > 70) {
-          configUpdates[model] = { recommended: true, tier: 'primary', successRate, avgQuality };
+          configUpdates[model] = {
+            recommended: true,
+            action: 'promote',
+            tier: 'primary',
+            reason: 'high_quality',
+            successRate,
+            avgQuality,
+            avgLatency,
+            cleanupEligible: false,
+            source: 'blame_crawler',
+            observedAt: new Date().toISOString(),
+          };
         }
       }
 

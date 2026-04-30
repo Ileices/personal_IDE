@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Infinity, ShieldOff, Puzzle, Timer, Clock,
   Users, Cpu, Layers, Zap, ChevronDown, ChevronRight,
+  Eye,
 } from 'lucide-react';
 import {
   MODEL_PRESETS, getPresetModels, estimateDailyCapacity, getModelCooldown,
@@ -68,6 +69,8 @@ interface AgentSettingsProps {
   setBypassRateLimits: (v: boolean) => void;
   enableSmartChunking: boolean;
   setEnableSmartChunking: (v: boolean) => void;
+  analyzeCodebase: boolean;
+  setAnalyzeCodebase: (v: boolean) => void;
   cooldownMs: number;
   setCooldownMs: (v: number) => void;
   maxIterations: number;
@@ -81,6 +84,9 @@ interface AgentSettingsProps {
   // Preset support
   selectedPresetId: string;
   onPresetChange: (presetId: string) => void;
+  failedModelCount: number;
+  onCleanupFailedModels: () => void;
+  cleanupFailedModelsBusy: boolean;
   // Timing display
   timingData?: {
     lastCallMs: number;
@@ -108,10 +114,13 @@ export function AgentSettings({
   cloudModelPool, setCloudModelPool,
   roleModelOverrides, setRoleModelOverride,
   continuousMode, setContinuousMode, bypassRateLimits, setBypassRateLimits,
-  enableSmartChunking, setEnableSmartChunking, cooldownMs, setCooldownMs,
+  enableSmartChunking, setEnableSmartChunking,
+  analyzeCodebase, setAnalyzeCodebase,
+  cooldownMs, setCooldownMs,
   maxIterations, setMaxIterations, stepDelayMs, setStepDelay,
   autoApprove, setAutoApprove, autoAnswer, setAutoAnswer,
   selectedPresetId, onPresetChange,
+  failedModelCount, onCleanupFailedModels, cleanupFailedModelsBusy,
   timingData, datasetStats,
   isRunning, isFleetRunning,
 }: AgentSettingsProps) {
@@ -143,6 +152,18 @@ export function AgentSettings({
           ))}
         </select>
         <div className="text-[9px] text-ide-text-dim px-1">{selectedPreset.description}</div>
+        <div className="flex items-center justify-between gap-2 rounded border border-ide-border/50 bg-ide-panel/40 px-2 py-1 text-[10px]">
+          <span className="text-ide-text-dim">
+            Failed models detected: <span className="text-ide-text">{failedModelCount}</span>
+          </span>
+          <button
+            onClick={onCleanupFailedModels}
+            disabled={cleanupFailedModelsBusy}
+            className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+          >
+            {cleanupFailedModelsBusy ? 'Cleaning…' : 'Clean Failed'}
+          </button>
+        </div>
 
         {/* Preset Stats */}
         <div className="flex flex-wrap gap-1.5 text-[9px]">
@@ -310,6 +331,15 @@ export function AgentSettings({
         onChange={() => setEnableSmartChunking(!enableSmartChunking)}
         disabled={isRunning}
         activeColor="bg-blue-500"
+      />
+
+      <ToggleRow
+        icon={<Eye className="w-3 h-3 text-cyan-400" />}
+        label="Analyze Codebase Before Run"
+        value={analyzeCodebase}
+        onChange={() => setAnalyzeCodebase(!analyzeCodebase)}
+        disabled={isRunning || isFleetRunning}
+        activeColor="bg-cyan-500"
       />
 
       <div className="border-t border-ide-border/50 my-1" />

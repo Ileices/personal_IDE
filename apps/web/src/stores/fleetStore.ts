@@ -66,7 +66,15 @@ interface FleetStore {
   roleModelOverrides: Partial<Record<AgentRole, string>>;
 
   // Actions
-  startFleet: (projectId: string, task: string, model: string) => Promise<void>;
+  startFleet: (projectId: string, task: string, model: string, options?: {
+    continuousMode?: boolean;
+    cooldownMs?: number;
+    bypassRateLimits?: boolean;
+    enableSmartChunking?: boolean;
+    analyzeCodebase?: boolean;
+    maxIterationsPerAgent?: number;
+    fallbackModels?: string[];
+  }) => Promise<void>;
   stopFleet: () => Promise<void>;
   pauseFleet: () => Promise<void>;
   resumeFleet: () => Promise<void>;
@@ -110,7 +118,7 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
   cloudModelPool: [],
   roleModelOverrides: {},
 
-  startFleet: async (projectId, task, model) => {
+  startFleet: async (projectId, task, model, options) => {
     const {
       selectedAgentCount,
       fleetContinuousMode,
@@ -126,11 +134,14 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
       projectId,
       task,
       model,
+      fallbackModels: options?.fallbackModels,
       agentCount: selectedAgentCount,
-      continuousMode: fleetContinuousMode,
-      cooldownMs: fleetCooldownMs,
-      bypassRateLimits: fleetBypassRateLimits,
-      enableSmartChunking: true,
+      continuousMode: options?.continuousMode ?? fleetContinuousMode,
+      cooldownMs: options?.cooldownMs ?? fleetCooldownMs,
+      bypassRateLimits: options?.bypassRateLimits ?? fleetBypassRateLimits,
+      enableSmartChunking: options?.enableSmartChunking ?? true,
+      analyzeCodebase: options?.analyzeCodebase ?? true,
+      maxIterationsPerAgent: options?.maxIterationsPerAgent,
       executionMode,
     };
 

@@ -29,6 +29,7 @@ import { ProjectTierEngine } from '../analysis/projectTierEngine.js';
 import { ConversationIndexer } from '../analysis/conversationIndexer.js';
 import { LogWriter } from './logWriter.js';
 import { LoopDetector } from './loopDetector.js';
+import { writeBlameRecord } from '../../routes/blame.js';
 import { webSearch, formatSearchForLLM } from './webSearch.js';
 import { CodeIndexer } from './codeIndexer.js';
 import { detectPlatform, formatPlatformForLLM, type PlatformInfo } from './platformDetector.js';
@@ -657,6 +658,7 @@ export class EnhancedAgentLoop {
         if (!response) {
           rateLimiter.recordStart(this.config.model);
           const timingCallId = this.timingService.startCall(this.config.model, this.currentIteration);
+          const agentCallStartMs = Date.now();
           let llmCallSucceeded = false;
           try {
             response = await completeChatResponse(client, this.config.model, messages, {
@@ -678,6 +680,22 @@ export class EnhancedAgentLoop {
               statusCode,
               headers: parsedHeaders,
               success: false,
+            });
+
+            // Write BLAME failure record
+            writeBlameRecord(this.db, {
+              model: this.config.model,
+              mode: 'agent',
+              projectId: this.config.projectRoot,
+              conversationId: this.conversationId,
+              agentRunId: this.runId,
+              taskType: 'agent_step',
+              success: false,
+              errorType: statusCode === 429 ? 'rate_limited'
+                : statusCode === 401 || statusCode === 403 ? 'auth_or_quota'
+                : statusCode === 503 || statusCode === 502 ? 'provider_unreachable'
+                : 'model_error',
+              latencyMs: Date.now() - agentCallStartMs,
             });
 
             // ── Handle 404 — Model not found (extracted to modelSwitcher.ts) ──
@@ -748,11 +766,23 @@ export class EnhancedAgentLoop {
               success: true,
             });
             // End timing and emit timing event
-            this.timingService.endCall(timingCallId, {
+            const timingResult = this.timingService.endCall(timingCallId, {
               tokensUsed: response.usage?.total_tokens || 0,
               success: true,
             });
             this.emit({ type: 'timing_update', timing: this.timingService.formatForEvent() });
+            // Write BLAME success record
+            writeBlameRecord(this.db, {
+              model: this.config.model,
+              mode: 'agent',
+              projectId: this.config.projectRoot,
+              conversationId: this.conversationId,
+              agentRunId: this.runId,
+              taskType: 'agent_step',
+              success: true,
+              latencyMs: (timingResult as any)?.durationMs ?? (Date.now() - agentCallStartMs),
+              tokenCount: response.usage?.total_tokens,
+            });
           }
         }
 

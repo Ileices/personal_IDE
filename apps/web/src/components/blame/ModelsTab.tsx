@@ -95,6 +95,44 @@ export function ModelsTab({ stats, loading, expandedModel, onToggleExpanded }: P
                 <div className="mt-1 text-[9px] text-ide-text-dim">
                   Last used: {new Date(s.lastUsed).toLocaleDateString()}
                 </div>
+                {s.strategyConfig && (
+                  <div className="mt-1.5 rounded border border-ide-border/40 bg-ide-panel/40 px-1.5 py-1 text-[9px] space-y-0.5">
+                    <div className="text-ide-text-dim uppercase tracking-wider text-[8px] mb-1">Strategy Signal</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-ide-text-dim">Status</span>
+                      <span className={s.strategyConfig.recommended === false ? 'text-red-400' : 'text-green-400'}>
+                        {s.strategyConfig.recommended === false ? 'Flagged' : 'OK'}
+                      </span>
+                    </div>
+                    {s.strategyConfig.reason && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-ide-text-dim">Reason</span>
+                        <span className="text-ide-text">{s.strategyConfig.reason.replace(/_/g, ' ')}</span>
+                      </div>
+                    )}
+                    {s.strategyConfig.blockScope && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-ide-text-dim">Block scope</span>
+                        <span className={s.strategyConfig.blockScope === 'persistent' ? 'text-red-400' : 'text-yellow-400'}>
+                          {s.strategyConfig.blockScope}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-ide-text-dim">Cleanup eligible</span>
+                      <span className={s.strategyConfig.cleanupEligible ? 'text-red-400' : 'text-green-400'}>
+                        {s.strategyConfig.cleanupEligible ? 'Yes' : 'No (transient)'}
+                      </span>
+                    </div>
+                    {s.strategyConfig.failureSummary && (
+                      <div className="mt-0.5 text-[8px] text-ide-text-dim/70 space-y-0.5">
+                        <div>Provider down: {s.strategyConfig.failureSummary.providerFailures}</div>
+                        <div>Auth/quota: {s.strategyConfig.failureSummary.authFailures}</div>
+                        <div>Rate limited: {s.strategyConfig.failureSummary.rateLimitFailures}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

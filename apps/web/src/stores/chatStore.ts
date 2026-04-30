@@ -6,6 +6,13 @@ import { create } from 'zustand';
 import type { AssistantMode, ChatMessage } from '@personal-ide/shared';
 import { apiStream, apiGet, apiPut, apiDelete } from '../api/client';
 
+interface ModelStrategyResponse {
+  settings?: {
+    primaryModel?: string;
+    fallbackModels?: string[];
+  };
+}
+
 /** Summary info for a conversation in the sidebar */
 export interface ConversationInfo {
   id: string;
@@ -66,6 +73,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   sendMessage: async (projectId: string, message: string) => {
     const { conversationId, selectedModel, mode } = get();
     let { contextFiles } = get();
+    let effectiveModel = selectedModel;
+    let fallbackModels: string[] | undefined;
+
+    try {
+      const strategy = await apiGet<ModelStrategyResponse>('/model-strategy');
+      if (strategy?.settings?.primaryModel) {
+        effectiveModel = strategy.settings.primaryModel;
+        fallbackModels = strategy.settings.fallbackModels || [];
+        if (effectiveModel !== selectedModel) {
+          set({ selectedModel: effectiveModel });
+        }
+      }
+    } catch { /* strategy endpoint may be unavailable during startup */ }
 
     // Auto-inject file context from project tree if none explicitly set
     if (contextFiles.length === 0 && projectId) {
@@ -119,7 +139,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         {
           projectId,
           message,
-          model: selectedModel,
+          model: effectiveModel,
+          fallbackModels,
           mode,
           conversationId: conversationId || undefined,
           contextFiles: contextFiles.length > 0 ? contextFiles : undefined,
@@ -127,6 +148,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         },
         (event) => {
           switch (event.type) {
+            case 'model_fallback':
+              if (event.to) effectiveModel = event.to;
+              break;
             case 'message_start':
               if (event.conversationId) newConvId = event.conversationId;
               break;
@@ -144,7 +168,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 role: 'assistant',
                 content: fullContent,
                 status: 'complete',
-                model: selectedModel,
+                model: effectiveModel,
                 mode,
                 tokenCount: event.usage?.totalTokens,
                 createdAt: new Date().toISOString(),

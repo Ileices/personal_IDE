@@ -12,6 +12,7 @@ import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
 import { userRateLimiter } from '../services/llm/userRateLimiter.js';
 import { destroyActiveAgent } from '../routes/agent.js';
+import { stopSubsystemScheduler } from '../services/subsystemScheduler.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10_000; // force-kill after 10s
 
@@ -42,6 +43,11 @@ export function registerGracefulShutdown(app: FastifyInstance): void {
         destroyActiveAgent();
         console.log('  ✓ Active agent cleaned up');
       } catch { /* no active agent */ }
+
+      try {
+        stopSubsystemScheduler();
+        console.log('  ✓ Subsystem scheduler cleaned up');
+      } catch { /* no scheduler */ }
 
       // 3. Close WebSocket connections
       try {

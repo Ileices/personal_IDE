@@ -7,6 +7,7 @@ import type { AgentConfig, ProviderType } from '@personal-ide/shared';
 import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
 import { appConfig } from '../config.js';
 import { MemoryService } from '../services/memory/index.js';
+import { resolveModelStrategy } from '../services/modelStrategy.js';
 
 // Active agent loop (singleton - one loop at a time)
 let activeAgent: EnhancedAgentLoop | null = null;
@@ -48,6 +49,7 @@ export async function agentRoutes(app: FastifyInstance) {
       autoFixErrors?: boolean;
       autoRunTests?: boolean;
       analyzeCodebase?: boolean;
+      fallbackModels?: string[];
     };
 
     if (!body.projectId || !body.task) {
@@ -60,8 +62,9 @@ export async function agentRoutes(app: FastifyInstance) {
     }
 
     const modelStr = body.model || 'openai/gpt-4.1';
+    const strategy = resolveModelStrategy(db, modelStr, body.fallbackModels);
     // Detect provider from model string (e.g. "nano/nano-sea" -> "nano")
-    const provider: ProviderType = body.provider || (extractProviderFromModelId(modelStr) as ProviderType);
+    const provider: ProviderType = body.provider || (extractProviderFromModelId(strategy.primaryModel) as ProviderType);
 
     const config = {
       maxIterations: body.maxIterations || appConfig.agent.maxIterations,
@@ -69,8 +72,9 @@ export async function agentRoutes(app: FastifyInstance) {
       maxTokensPerStep: appConfig.agent.maxTokensPerStep,
       autoApproveChanges: body.autoApproveChanges ?? true,
       autoAnswerQuestions: body.autoAnswerQuestions ?? true,
-      model: modelStr,
+      model: strategy.primaryModel,
       projectRoot: project.rootPath,
+      fallbackModels: strategy.fallbackModels,
       // New options
       continuousMode: body.continuousMode ?? false,
       cooldownMs: body.cooldownMs ?? 0,
@@ -78,11 +82,11 @@ export async function agentRoutes(app: FastifyInstance) {
       enableSmartChunking: body.enableSmartChunking ?? true,
       // Enhanced options
       provider,
-      contextWindow: body.contextWindow || getModel(modelStr)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
+      contextWindow: body.contextWindow || getModel(strategy.primaryModel)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
       checkpointEvery: body.checkpointEvery ?? 0,
       autoFixErrors: body.autoFixErrors ?? true,
       autoRunTests: body.autoRunTests ?? true,
-      analyzeCodebase: body.analyzeCodebase ?? false,
+      analyzeCodebase: body.analyzeCodebase ?? true,
     };
 
     activeAgent = new EnhancedAgentLoop(db, config);

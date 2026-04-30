@@ -30,7 +30,9 @@ import { codeRoutes } from './routes/code.js';
 import { corpusRoutes } from './routes/corpus.js';
 import { codebaseRoutes } from './routes/codebase.js';
 import { blameRoutes } from './routes/blame.js';
+import { modelStrategyRoutes } from './routes/modelStrategy.js';
 import { subsystemsRoutes } from './routes/subsystems.js';
+import { startSubsystemScheduler } from './services/subsystemScheduler.js';
 import csrfPlugin from './plugins/csrf.js';
 import { validationPlugin } from './plugins/validation.js';
 import { registerGracefulShutdown } from './plugins/gracefulShutdown.js';
@@ -123,6 +125,9 @@ async function main() {
   // BLAME — model attribution + quality forensics
   await app.register(blameRoutes, { prefix: '/api/blame' });
 
+  // Model strategy — authoritative fallback and primary-model settings
+  await app.register(modelStrategyRoutes, { prefix: '/api/model-strategy' });
+
   // Subsystems — unified control plane for crawlers/analysis
   await app.register(subsystemsRoutes, { prefix: '/api/subsystems' });
 
@@ -142,6 +147,8 @@ async function main() {
     console.log(`\n🚀 Personal IDE Server running at http://localhost:${appConfig.server.port}`);
     console.log(`📂 API docs: http://localhost:${appConfig.server.port}/api/health`);
     console.log(`🌐 Frontend: ${appConfig.frontend.url}\n`);
+
+    startSubsystemScheduler(db);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

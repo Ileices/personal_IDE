@@ -7,11 +7,9 @@ import {
   Pause, Play, StopCircle, Send,
   Users, Brain, Bug, Beaker, Eye,
 } from 'lucide-react';
+import type { FleetAgentInfo } from '../../stores/fleetStore';
 
-interface FleetAgent {
-  id: string;
-  role: string;
-  status: 'running' | 'paused' | 'stopped' | 'idle' | 'complete' | 'error';
+interface FleetAgent extends FleetAgentInfo {
   currentStep?: number;
   maxSteps?: number;
   currentTask?: string;

@@ -24,6 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // ── Monorepo root ─ routes→src→server→apps→root ─────────────────────────────
 const IDE_ROOT = resolve(__dirname, '../../../../');
 const DOCS_DIR = join(IDE_ROOT, 'documentation');
+const FEEDBACK_DIR = resolve(IDE_ROOT, '../build_runs/feedback');
 
 // ── Blocked command patterns (same as toolExecutor.ts) ──────────────────────
 const BLOCKED_PATTERNS = [
@@ -151,6 +152,16 @@ function listDocFiles(): string[] {
   } catch { return []; }
 }
 
+function listFeedbackFiles(): string[] {
+  if (!existsSync(FEEDBACK_DIR)) return [];
+  try {
+    return readdirSync(FEEDBACK_DIR, { withFileTypes: true })
+      .filter(e => e.isFile() && e.name.endsWith('.txt'))
+      .map(e => e.name)
+      .sort((a, b) => a.localeCompare(b));
+  } catch { return []; }
+}
+
 // ── Route registration ────────────────────────────────────────────────────────
 export async function codebaseRoutes(app: FastifyInstance) {
 
@@ -252,6 +263,44 @@ export async function codebaseRoutes(app: FastifyInstance) {
     try {
       let content = readFileSync(join(DOCS_DIR, match), 'utf-8');
       if (content.length > 60000) content = content.slice(0, 60000) + '\n... [truncated]';
+      return { section: match, content };
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // GET /api/codebase/feedback?section=
+  //   section: filename or keyword (from ../build_runs/feedback)
+  // ─────────────────────────────────────────────────────────────────────────
+  app.get('/feedback', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { section } = req.query as { section?: string };
+    const files = listFeedbackFiles();
+
+    if (!section) {
+      return {
+        root: FEEDBACK_DIR,
+        sections: files,
+        tip: 'Add ?section=FILENAME to read one feedback document',
+      };
+    }
+
+    const match = files.find(f =>
+      f.toLowerCase() === section.toLowerCase() ||
+      f.toLowerCase().startsWith(section.toLowerCase()) ||
+      f.toLowerCase().includes(section.toLowerCase())
+    );
+
+    if (!match) {
+      return reply.status(404).send({
+        error: `Feedback section "${section}" not found`,
+        available: files,
+      });
+    }
+
+    try {
+      let content = readFileSync(join(FEEDBACK_DIR, match), 'utf-8');
+      if (content.length > 120000) content = content.slice(0, 120000) + '\n... [truncated]';
       return { section: match, content };
     } catch (err: any) {
       return reply.status(500).send({ error: err.message });

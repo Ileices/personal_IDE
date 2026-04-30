@@ -8,6 +8,7 @@ import type { ProviderType } from '@personal-ide/shared';
 import { getModel, extractProviderFromModelId, PROVIDERS } from '@personal-ide/shared';
 import { appConfig } from '../config.js';
 import { MemoryService } from '../services/memory/index.js';
+import { resolveModelStrategy } from '../services/modelStrategy.js';
 
 let activeFleet: AgentFleet | null = null;
 
@@ -78,6 +79,7 @@ export async function fleetRoutes(app: FastifyInstance) {
       cooldownMs?: number;
       bypassRateLimits?: boolean;
       enableSmartChunking?: boolean;
+      analyzeCodebase?: boolean;
       provider?: ProviderType;
       executionMode?: FleetExecutionMode;
       localModelPool?: string[];
@@ -86,6 +88,7 @@ export async function fleetRoutes(app: FastifyInstance) {
       contextWindow?: number;
       maxIterationsPerAgent?: number;
       enableSubAgents?: boolean;
+      fallbackModels?: string[];
     };
 
     if (!body.projectId || !body.task) {
@@ -98,8 +101,9 @@ export async function fleetRoutes(app: FastifyInstance) {
     }
 
     const modelStr = body.model || 'openai/gpt-4.1';
+    const strategy = resolveModelStrategy(db, modelStr, body.fallbackModels);
     // Detect provider from model
-    const provider: ProviderType = body.provider || (extractProviderFromModelId(modelStr) as ProviderType);
+    const provider: ProviderType = body.provider || (extractProviderFromModelId(strategy.primaryModel) as ProviderType);
     const localModelPool = normalizeModelPool(body.localModelPool);
     const cloudModelPool = normalizeModelPool(body.cloudModelPool);
     const roleModelOverrides = normalizeRoleOverrides(body.roleModelOverrides);
@@ -115,18 +119,20 @@ export async function fleetRoutes(app: FastifyInstance) {
       projectId: body.projectId,
       projectRoot: project.rootPath,
       masterTask: body.task,
-      model: modelStr,
+      model: strategy.primaryModel,
       provider,
       agentCount,
       continuousMode: body.continuousMode ?? true,
       cooldownMs: body.cooldownMs ?? 5000,
       bypassRateLimits: body.bypassRateLimits ?? (provider === 'ollama'),
       enableSmartChunking: body.enableSmartChunking ?? true,
+      analyzeCodebase: body.analyzeCodebase ?? true,
+      fallbackModels: strategy.fallbackModels,
       executionMode,
       localModelPool,
       cloudModelPool,
       roleModelOverrides,
-      contextWindow: body.contextWindow || getModel(modelStr)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
+      contextWindow: body.contextWindow || getModel(strategy.primaryModel)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
       maxIterationsPerAgent: body.maxIterationsPerAgent,
       enableSubAgents: body.enableSubAgents ?? false,
     };

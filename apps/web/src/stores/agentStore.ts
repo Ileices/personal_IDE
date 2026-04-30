@@ -61,7 +61,7 @@ interface AgentStore {
   currentModel: string | null;
   modelSwitchHistory: Array<{ from: string; to: string; reason: string; timestamp: string }>;
 
-  startAgent: (projectId: string, task: string, model: string) => Promise<void>;
+  startAgent: (projectId: string, task: string, model: string, options?: { fallbackModels?: string[]; analyzeCodebase?: boolean }) => Promise<void>;
   stopAgent: () => Promise<void>;
   pauseAgent: () => Promise<void>;
   resumeAgent: () => Promise<void>;
@@ -114,13 +114,14 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   currentModel: null,
   modelSwitchHistory: [],
 
-  startAgent: async (projectId, task, model) => {
+  startAgent: async (projectId, task, model, options) => {
     const { maxIterations, stepDelayMs, autoApprove, autoAnswer, continuousMode, cooldownMs, bypassRateLimits, enableSmartChunking } = get();
 
     await apiPost('/agent/start', {
       projectId,
       task,
       model,
+      fallbackModels: options?.fallbackModels,
       maxIterations,
       stepDelayMs,
       autoApproveChanges: autoApprove,
@@ -129,6 +130,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       cooldownMs,
       bypassRateLimits,
       enableSmartChunking,
+      analyzeCodebase: options?.analyzeCodebase ?? true,
     });
 
     set({ isRunning: true, state: 'planning', currentIteration: 0, events: [] });
