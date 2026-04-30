@@ -29,6 +29,7 @@ import { healthRoutes } from './routes/health.js';
 import { codeRoutes } from './routes/code.js';
 import { corpusRoutes } from './routes/corpus.js';
 import { codebaseRoutes } from './routes/codebase.js';
+import { blameRoutes } from './routes/blame.js';
 import csrfPlugin from './plugins/csrf.js';
 import { validationPlugin } from './plugins/validation.js';
 import { registerGracefulShutdown } from './plugins/gracefulShutdown.js';
@@ -117,6 +118,9 @@ async function main() {
 
   // God Factory — IDE self-modification API (codebase read/search/write/exec)
   await app.register(codebaseRoutes, { prefix: '/api/codebase' });
+
+  // BLAME — model attribution + quality forensics
+  await app.register(blameRoutes, { prefix: '/api/blame' });
 
   // Health — rich diagnostic endpoint (replaces inline handler)
   await app.register(healthRoutes);

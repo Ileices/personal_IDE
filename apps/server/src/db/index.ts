@@ -419,6 +419,113 @@ const MIGRATIONS: Migration[] = [
   },
 
   // ──────────────────────────────────────────
+  // Migration v4: Forensic BLAME + quality tables
+  // ──────────────────────────────────────────
+  {
+    version: 4,
+    name: 'forensic_blame_tables',
+    up(db: Database.Database) {
+      db.exec(`
+        -- Per-output BLAME records: every AI response is attributed to a model+mode
+        CREATE TABLE IF NOT EXISTS blame_records (
+          id TEXT PRIMARY KEY,
+          model TEXT NOT NULL,
+          mode TEXT NOT NULL DEFAULT 'ask',
+          project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+          conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+          agent_run_id TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+          task_type TEXT NOT NULL DEFAULT 'unknown',
+          quality INTEGER,
+          success INTEGER NOT NULL DEFAULT 1,
+          error_type TEXT,
+          file_path TEXT,
+          latency_ms INTEGER,
+          token_count INTEGER,
+          prompt_tokens INTEGER,
+          completion_tokens INTEGER,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Quality dimension scores (1:1 with blame_records, populated by crawler)
+        CREATE TABLE IF NOT EXISTS quality_records (
+          id TEXT PRIMARY KEY,
+          blame_id TEXT NOT NULL REFERENCES blame_records(id) ON DELETE CASCADE,
+          tag_conformance REAL DEFAULT 0,
+          instruction_adherence REAL DEFAULT 0,
+          hallucination REAL DEFAULT 0,
+          structural_integrity REAL DEFAULT 0,
+          output_efficiency REAL DEFAULT 0,
+          dimension_notes TEXT DEFAULT '{}',
+          crawled_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Tool criticism log: tracks tool call failures + patterns
+        CREATE TABLE IF NOT EXISTS tool_criticism_records (
+          id TEXT PRIMARY KEY,
+          model TEXT NOT NULL,
+          tool_name TEXT NOT NULL,
+          agent_run_id TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+          failure_type TEXT NOT NULL DEFAULT 'unknown',
+          input_summary TEXT DEFAULT '',
+          output_summary TEXT DEFAULT '',
+          criticism TEXT DEFAULT '',
+          severity TEXT NOT NULL DEFAULT 'warning' CHECK (severity IN ('info','warning','error','critical')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Blame successes: high-quality outputs saved as training seeds
+        CREATE TABLE IF NOT EXISTS blame_successes (
+          id TEXT PRIMARY KEY,
+          blame_id TEXT NOT NULL REFERENCES blame_records(id) ON DELETE CASCADE,
+          model TEXT NOT NULL,
+          task_type TEXT NOT NULL,
+          prompt_excerpt TEXT DEFAULT '',
+          output_excerpt TEXT DEFAULT '',
+          quality_score INTEGER NOT NULL,
+          tags TEXT DEFAULT '[]',
+          promoted_to_training INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Model registry: aggregated per-model strategy config
+        CREATE TABLE IF NOT EXISTS model_registry (
+          id TEXT PRIMARY KEY,
+          model_id TEXT NOT NULL UNIQUE,
+          display_name TEXT NOT NULL,
+          provider TEXT NOT NULL DEFAULT 'unknown',
+          total_runs INTEGER NOT NULL DEFAULT 0,
+          success_rate REAL NOT NULL DEFAULT 0,
+          avg_quality REAL NOT NULL DEFAULT 0,
+          avg_latency_ms REAL NOT NULL DEFAULT 0,
+          total_tokens INTEGER NOT NULL DEFAULT 0,
+          trend TEXT NOT NULL DEFAULT 'flat' CHECK (trend IN ('up','down','flat')),
+          tag_conformance REAL,
+          instruction_adherence REAL,
+          hallucination REAL,
+          structural_integrity REAL,
+          output_efficiency REAL,
+          strategy_config TEXT DEFAULT '{}',
+          last_run_at TEXT,
+          last_crawled_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Indexes
+        CREATE INDEX IF NOT EXISTS idx_blame_model ON blame_records(model);
+        CREATE INDEX IF NOT EXISTS idx_blame_project ON blame_records(project_id);
+        CREATE INDEX IF NOT EXISTS idx_blame_mode ON blame_records(mode);
+        CREATE INDEX IF NOT EXISTS idx_blame_created ON blame_records(created_at);
+        CREATE INDEX IF NOT EXISTS idx_quality_blame ON quality_records(blame_id);
+        CREATE INDEX IF NOT EXISTS idx_tool_crit_model ON tool_criticism_records(model);
+        CREATE INDEX IF NOT EXISTS idx_tool_crit_tool ON tool_criticism_records(tool_name);
+        CREATE INDEX IF NOT EXISTS idx_blame_success_model ON blame_successes(model);
+        CREATE INDEX IF NOT EXISTS idx_model_registry_id ON model_registry(model_id);
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
   // Future migrations go here
   // ──────────────────────────────────────────
 ];

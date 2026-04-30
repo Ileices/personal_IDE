@@ -14,11 +14,11 @@ import {
   AlertCircle, CheckCircle, Loader2, MessageSquare, Bot,
   Infinity, Zap, Puzzle, Timer, ShieldOff, Copy, Check,
   ChevronDown, ChevronRight, Send, Eye, EyeOff, Filter,
-  Users, UserPlus, Cpu, BookOpen, ArrowRightLeft, History, X, Trash2,
+  Users, UserPlus, Cpu, ArrowRightLeft, History, X, Trash2,
 } from 'lucide-react';
-import { MEGA_PROMPTS, type MegaPrompt } from '../data/megaPrompts';
 import { AgentSettings } from './agent/AgentSettings';
 import { AgentEventFeed } from './agent/AgentEventFeed';
+import { MegaPromptsPanel } from './agent/MegaPromptsPanel';
 
 // Prompt history persistence
 const AGENT_HIST_KEY = 'agent_loop_prompt_history';
@@ -52,7 +52,6 @@ export function AgentControls() {
   const [copiedFeed, setCopiedFeed] = useState(false);
   const [fleetMode, setFleetMode] = useState(false);
   const [fleetMessage, setFleetMessage] = useState('');
-  const [showPresets, setShowPresets] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState('all-models-balanced');
   const [timingData, setTimingData] = useState<{
     lastCallMs: number; avgCallMs: number; totalCalls: number; tokPerSec: number; activeMs: number;
@@ -315,51 +314,17 @@ export function AgentControls() {
       {/* Task Input + Controls */}
       {!isRunning && !isFleetRunning && (
         <div className="p-2">
-          {/* Mega-Prompt Presets */}
-          <div className="mb-2">
-            <button
-              onClick={() => setShowPresets(!showPresets)}
-              className="flex items-center gap-1 text-[10px] text-ide-text-dim hover:text-ide-accent mb-1"
-            >
-              <BookOpen className="w-3 h-3" />
-              Mega-Prompts
-              {showPresets ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            </button>
-            {showPresets && (
-              <div className="space-y-1 mb-2">
-                {MEGA_PROMPTS.map(preset => {
-                  const estTokens = Math.round(preset.prompt.length / 3.5);
-                  const isLarge = estTokens > 8000;
-                  return (
-                    <div key={preset.id} className="relative group">
-                      <button
-                        onClick={() => {
-                          setTask(preset.prompt);
-                          if (preset.fleetRecommended) {
-                            setFleetMode(true);
-                            setSelectedAgentCount(Math.min(preset.recommendedAgentCount, maxAgents));
-                          }
-                          setShowPresets(false);
-                        }}
-                        className="w-full text-left px-2 py-1.5 bg-ide-bg/50 hover:bg-ide-bg border border-ide-border/50 rounded text-[10px] transition-colors"
-                      >
-                        <div className="flex items-center gap-1">
-                          <span className="font-medium text-ide-text">{preset.name}</span>
-                          {preset.fleetRecommended && (
-                            <span className="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[8px]">Fleet ×{preset.recommendedAgentCount}</span>
-                          )}
-                          {isLarge && (
-                            <span className="px-1 py-0.5 rounded bg-yellow-500/15 text-yellow-400 text-[8px]">~{(estTokens / 1000).toFixed(0)}K tok</span>
-                          )}
-                        </div>
-                        <div className="text-ide-text-dim mt-0.5">{preset.description}</div>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {/* Mega-Prompt Presets — extracted component */}
+          <MegaPromptsPanel
+            maxAgents={maxAgents}
+            onSelect={(prompt, fleet, agentCount) => {
+              setTask(prompt);
+              if (fleet) {
+                setFleetMode(true);
+                setSelectedAgentCount(agentCount);
+              }
+            }}
+          />
           {/* Task size indicator */}
           {task.length > 500 && (
             <div className={`flex items-center justify-between mb-1.5 px-2 py-1 rounded text-[9px] ${
