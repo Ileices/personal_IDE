@@ -30,6 +30,7 @@ import { codeRoutes } from './routes/code.js';
 import { corpusRoutes } from './routes/corpus.js';
 import { codebaseRoutes } from './routes/codebase.js';
 import { blameRoutes } from './routes/blame.js';
+import { subsystemsRoutes } from './routes/subsystems.js';
 import csrfPlugin from './plugins/csrf.js';
 import { validationPlugin } from './plugins/validation.js';
 import { registerGracefulShutdown } from './plugins/gracefulShutdown.js';
@@ -121,6 +122,9 @@ async function main() {
 
   // BLAME — model attribution + quality forensics
   await app.register(blameRoutes, { prefix: '/api/blame' });
+
+  // Subsystems — unified control plane for crawlers/analysis
+  await app.register(subsystemsRoutes, { prefix: '/api/subsystems' });
 
   // Health — rich diagnostic endpoint (replaces inline handler)
   await app.register(healthRoutes);

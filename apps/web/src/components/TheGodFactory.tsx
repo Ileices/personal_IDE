@@ -230,9 +230,18 @@ export function TheGodFactory() {
     let active = true;
     (async () => {
       try {
-        const [treeRes, docsRes] = await Promise.all([
+        const [treeRes, docsRes, stateRes] = await Promise.all([
           fetch(`${API_BASE}/api/codebase/tree?path=.&depth=3`),
           fetch(`${API_BASE}/api/codebase/docs`),
+          fetch(`${API_BASE}/api/subsystems/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subsystem: 'project_state_crawler',
+              projectRoot: activeProject?.rootPath,
+              depth: 4,
+            }),
+          }),
         ]);
         function flatNode(node: { name: string; type: string; children?: unknown[] }, ind = 0): string {
           const pfx = '  '.repeat(ind) + (node.type === 'directory' ? '📁 ' : '   ');
@@ -242,11 +251,18 @@ export function TheGodFactory() {
         }
         const treeData = await treeRes.json().catch(() => ({}));
         const docsData = await docsRes.json().catch(() => ({}));
+        const stateData = await stateRes.json().catch(() => ({}));
         if (!active) return;
         const treeText = treeData.tree ? flatNode(treeData.tree).slice(0, 5000) : '';
         const docsList = docsData.sections ? (docsData.sections as string[]).map((s: string) => `  - ${s}`).join('\n') : '';
+        const stateSummary = stateData?.result?.summary ? `## Project State Summary\n${stateData.result.summary}` : '';
+        const extSummary = Array.isArray(stateData?.result?.topExtensions) && stateData.result.topExtensions.length
+          ? `## Dominant File Types\n${stateData.result.topExtensions.map((x: { ext: string; count: number }) => `  - ${x.ext}: ${x.count}`).join('\n')}`
+          : '';
         const snapshot = [
           treeText ? `## Personal IDE File Tree\n\`\`\`\n${treeText}\`\`\`` : '',
+          stateSummary,
+          extSummary,
           docsList ? `## Available Documentation Sections\n${docsList}` : '',
         ].filter(Boolean).join('\n\n');
         setCodebaseTree(snapshot);
@@ -256,7 +272,7 @@ export function TheGodFactory() {
       }
     })();
     return () => { active = false; };
-  }, []);
+  }, [activeProject?.rootPath]);
 
   const selectedModelDef = MODELS.find(m => m.id === localModel);
 
@@ -811,6 +827,7 @@ export function TheGodFactory() {
       <GodFactoryRightPanel
         codebaseReady={codebaseReady}
         codebaseTree={codebaseTree}
+        projectRoot={activeProject?.rootPath}
         onSendToBrainstorm={(text) => { setInput(text); inputRef.current?.focus(); }}
       />
     </div>

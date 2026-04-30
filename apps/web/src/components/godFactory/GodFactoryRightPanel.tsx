@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Zap, ChevronDown, ChevronRight, ChevronLeft,
-  AlertTriangle, Star, Shield, Sparkles, Send, X,
+  AlertTriangle, Star, Shield, Sparkles, Send, X, SlidersHorizontal, Play,
 } from 'lucide-react';
 import { API_BASE } from '../../config.js';
 
@@ -58,21 +58,42 @@ export const DEMO_JOBS: SuggestedJob[] = [
 interface Props {
   codebaseReady: boolean;
   codebaseTree: string;
+  projectRoot?: string;
   onSendToBrainstorm: (text: string) => void;
 }
 
-export function GodFactoryRightPanel({ codebaseReady, codebaseTree, onSendToBrainstorm }: Props) {
+type SubsystemId = 'project_state_crawler' | 'suggested_jobs_crawler' | 'gap_analysis';
+interface SubsystemConfig {
+  enabled: boolean;
+  idleEnabled: boolean;
+  idleIntervalSec: number;
+  maxDepth: number;
+  manualOnly: boolean;
+}
+
+export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot, onSendToBrainstorm }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [notifications, setNotifications] = useState<IntelNotification[]>([]);
   const [jobs, setJobs] = useState<SuggestedJob[]>(DEMO_JOBS);
   const [brainstorm, setBrainstorm] = useState('');
-  const [sections, setSections] = useState({ notifications: true, jobs: true, health: true, brainstorm: false });
+  const [sections, setSections] = useState({ notifications: true, jobs: true, health: true, subsystems: false, brainstorm: false });
   const [blameStats, setBlameStats] = useState<any[]>([]);
+  const [subsystems, setSubsystems] = useState<Record<SubsystemId, SubsystemConfig>>({
+    project_state_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 90, maxDepth: 5, manualOnly: false },
+    suggested_jobs_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 120, maxDepth: 4, manualOnly: false },
+    gap_analysis: { enabled: true, idleEnabled: true, idleIntervalSec: 180, maxDepth: 4, manualOnly: false },
+  });
+  const [runningSubsystem, setRunningSubsystem] = useState<SubsystemId | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/blame/records?limit=5`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.stats) setBlameStats(d.stats.slice(0, 4)); })
+      .catch(() => {});
+
+    fetch(`${API_BASE}/api/subsystems/settings`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.settings) setSubsystems(d.settings); })
       .catch(() => {});
 
     if (codebaseReady) {
@@ -86,6 +107,51 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, onSendToBrai
 
   const toggleSection = (key: keyof typeof sections) =>
     setSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const updateSubsystem = (id: SubsystemId, patch: Partial<SubsystemConfig>) => {
+    const next = { ...subsystems, [id]: { ...subsystems[id], ...patch } };
+    setSubsystems(next);
+    fetch(`${API_BASE}/api/subsystems/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [id]: next[id] }),
+    }).catch(() => {});
+  };
+
+  const runSubsystem = async (id: SubsystemId) => {
+    setRunningSubsystem(id);
+    try {
+      const res = await fetch(`${API_BASE}/api/subsystems/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subsystem: id, projectRoot, depth: subsystems[id].maxDepth }),
+      });
+      const data = await res.json();
+      const summary = data?.result?.summary || data?.error || 'Run complete';
+      setNotifications(prev => [{
+        id: `${Date.now()}`,
+        type: (data.success ? 'info' : 'error') as IntelNotification['type'],
+        source: id,
+        message: summary,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 12));
+
+      if (id === 'suggested_jobs_crawler' && data?.result?.suggestedJobs?.length) {
+        const incoming = data.result.suggestedJobs as SuggestedJob[];
+        setJobs(prev => [...incoming, ...prev].slice(0, 30));
+      }
+    } catch (err: any) {
+      setNotifications(prev => [{
+        id: `${Date.now()}`,
+        type: 'error' as IntelNotification['type'],
+        source: id,
+        message: `Run failed: ${err.message}`,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 12));
+    } finally {
+      setRunningSubsystem(null);
+    }
+  };
 
   const treeLineCount = codebaseTree.split('\n').length;
 
@@ -255,6 +321,85 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, onSendToBrai
               <div className="text-[9px] text-ide-text-dim">
                 <span className="text-purple-400">Tip:</span> Ask the God Factory to scan for debt, gaps, or patterns
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Brainstorm Pad ── */}
+        <div className="border-b border-ide-border/50">
+          <button onClick={() => toggleSection('subsystems')}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
+            <div className="flex items-center gap-1.5">
+              <SlidersHorizontal className="w-3 h-3 text-cyan-400" />
+              Subsystem Controls
+            </div>
+            {sections.subsystems ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          {sections.subsystems && (
+            <div className="px-2 pb-2 space-y-1.5">
+              {(['project_state_crawler', 'suggested_jobs_crawler', 'gap_analysis'] as SubsystemId[]).map(id => {
+                const cfg = subsystems[id];
+                const label = id.replace(/_/g, ' ');
+                return (
+                  <div key={id} className="p-1.5 rounded bg-ide-bg/30 border border-ide-border/30 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-ide-text font-medium capitalize">{label}</span>
+                      <button
+                        onClick={() => runSubsystem(id)}
+                        disabled={runningSubsystem !== null}
+                        className="text-[9px] px-1.5 py-0.5 bg-cyan-500/15 text-cyan-300 rounded hover:bg-cyan-500/25 disabled:opacity-40 flex items-center gap-1"
+                      >
+                        <Play className="w-2 h-2" />
+                        {runningSubsystem === id ? 'Running' : 'Run now'}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1 text-[9px]">
+                      <button
+                        onClick={() => updateSubsystem(id, { enabled: !cfg.enabled })}
+                        className={`px-1.5 py-0.5 rounded border ${cfg.enabled ? 'border-green-500/40 text-green-400 bg-green-500/10' : 'border-ide-border text-ide-text-dim'}`}
+                      >
+                        {cfg.enabled ? 'Enabled' : 'Disabled'}
+                      </button>
+                      <button
+                        onClick={() => updateSubsystem(id, { idleEnabled: !cfg.idleEnabled })}
+                        className={`px-1.5 py-0.5 rounded border ${cfg.idleEnabled ? 'border-blue-500/40 text-blue-400 bg-blue-500/10' : 'border-ide-border text-ide-text-dim'}`}
+                      >
+                        Idle {cfg.idleEnabled ? 'ON' : 'OFF'}
+                      </button>
+                      <button
+                        onClick={() => updateSubsystem(id, { manualOnly: !cfg.manualOnly })}
+                        className={`px-1.5 py-0.5 rounded border ${cfg.manualOnly ? 'border-yellow-500/40 text-yellow-400 bg-yellow-500/10' : 'border-ide-border text-ide-text-dim'}`}
+                      >
+                        Manual {cfg.manualOnly ? 'ONLY' : 'AUTO'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 text-[9px] text-ide-text-dim">
+                      <label className="flex items-center gap-1">
+                        Depth
+                        <input
+                          type="number"
+                          min={1}
+                          max={8}
+                          value={cfg.maxDepth}
+                          onChange={e => updateSubsystem(id, { maxDepth: Math.max(1, Math.min(8, Number(e.target.value) || 1)) })}
+                          className="w-10 bg-ide-panel border border-ide-border rounded px-1 py-0.5 text-[9px]"
+                        />
+                      </label>
+                      <label className="flex items-center gap-1 justify-end">
+                        Idle s
+                        <input
+                          type="number"
+                          min={15}
+                          max={3600}
+                          value={cfg.idleIntervalSec}
+                          onChange={e => updateSubsystem(id, { idleIntervalSec: Math.max(15, Math.min(3600, Number(e.target.value) || 15)) })}
+                          className="w-12 bg-ide-panel border border-ide-border rounded px-1 py-0.5 text-[9px]"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
