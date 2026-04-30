@@ -1,37 +1,29 @@
 // ============================================
 // Memory Panel - View, search, create notes
 // ============================================
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useProjectStore } from '../stores/projectStore';
+import { useChatStore } from '../stores/chatStore';
 import {
   Brain, Plus, Search, X, ChevronDown, ChevronRight,
   Trash2, Edit3, Save, Tag, FileText, Loader2, StickyNote
 } from 'lucide-react';
 import { API_BASE } from '../config.js';
-
-interface MemoryNote {
-  id: string;
-  projectId: string;
-  source: string;
-  category: string;
-  title: string;
-  content: string;
-  tags: string[];
-  relatedFiles: string[];
-  importance: number;
-  conversationId?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import { MemoryAccessBar } from './memory/MemoryAccessBar.js';
+import type { MemoryAccessMode, MemoryNote, MemoryPreset } from './memory/types.js';
 
 export function MemoryPanel() {
   const { activeProject } = useProjectStore();
+  const { conversationId } = useChatStore();
   const [notes, setNotes] = useState<MemoryNote[]>([]);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [accessMode, setAccessMode] = useState<MemoryAccessMode>('total');
+  const [preset, setPreset] = useState<MemoryPreset>('recent_decisions');
+  const [customSources, setCustomSources] = useState<string[]>(['user_note', 'agent_log']);
 
   // New note form
   const [newTitle, setNewTitle] = useState('');
@@ -199,6 +191,41 @@ export function MemoryPanel() {
     question_answer: '❓ Q&A',
   };
 
+  const filteredNotes = useMemo(() => {
+    let out = [...notes];
+
+    if (accessMode === 'self') {
+      // SELF mode is conversation-scoped with user notes as fallback context.
+      out = out.filter(n => (conversationId && n.conversationId === conversationId) || n.source === 'user_note');
+    }
+
+    if (accessMode === 'custom') {
+      out = out.filter(n => customSources.includes(n.source));
+    }
+
+    if (accessMode === 'preset') {
+      if (preset === 'recent_decisions') {
+        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        out = out.filter(n => (n.category === 'decision' || n.category === 'architecture') && new Date(n.updatedAt).getTime() >= weekAgo);
+      }
+      if (preset === 'bugs_only') {
+        out = out.filter(n => n.category === 'bug' || n.tags.some(t => /bug|fix|regression/i.test(t)));
+      }
+      if (preset === 'high_priority') {
+        out = out.filter(n => n.importance >= 80);
+      }
+      if (preset === 'agent_activity') {
+        out = out.filter(n => n.source === 'agent_log' || n.source === 'auto_summary');
+      }
+    }
+
+    return out;
+  }, [notes, accessMode, customSources, preset, conversationId]);
+
+  function toggleCustomSource(source: string) {
+    setCustomSources(prev => prev.includes(source) ? prev.filter(s => s !== source) : [...prev, source]);
+  }
+
   if (!activeProject) {
     return (
       <div className="p-3 text-xs text-ide-text-dim">
@@ -253,6 +280,15 @@ export function MemoryPanel() {
               <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          <MemoryAccessBar
+            mode={accessMode}
+            preset={preset}
+            customSources={customSources}
+            onModeChange={setAccessMode}
+            onPresetChange={setPreset}
+            onToggleCustomSource={toggleCustomSource}
+          />
 
           {/* Create Form */}
           {showCreate && (
@@ -344,10 +380,10 @@ export function MemoryPanel() {
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="w-4 h-4 animate-spin text-ide-accent" />
               </div>
-            ) : notes.length === 0 ? (
+            ) : filteredNotes.length === 0 ? (
               <div className="text-center py-4">
                 <StickyNote className="w-5 h-5 text-ide-text-dim mx-auto mb-1" />
-                <p className="text-[10px] text-ide-text-dim">No notes yet</p>
+                <p className="text-[10px] text-ide-text-dim">No notes in this memory view</p>
                 <button
                   onClick={() => setShowCreate(true)}
                   className="text-[10px] text-ide-accent hover:underline mt-1"
@@ -356,7 +392,7 @@ export function MemoryPanel() {
                 </button>
               </div>
             ) : (
-              notes.map(note => (
+              filteredNotes.map(note => (
                 <div
                   key={note.id}
                   className="p-2 bg-ide-bg rounded border border-ide-border hover:border-ide-accent/30 transition-colors"
