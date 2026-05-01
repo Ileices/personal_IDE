@@ -1,5 +1,8 @@
 # Personal IDE
 
+[OUT_OF_DATE]
+[UPDATE_SCHEDULED] = 5-1-26 0300 PST
+
 AI-powered coding assistant with GitHub Copilot models, project memory, autonomous agent loop, and the **Sea of Nanos** distributed compute mesh.
 
 ## Quick Start
