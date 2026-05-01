@@ -27,6 +27,7 @@ export function initDatabase(dbPath: string): Database.Database {
 
   // Run migrations
   runMigrations(db);
+  ensureGodFactorySchemaBackfill(db);
 
   return db;
 }
@@ -82,6 +83,81 @@ function runMigrations(db: Database.Database): void {
       break;
     }
   }
+}
+
+function ensureGodFactorySchemaBackfill(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_queue (
+      notification_id TEXT PRIMARY KEY,
+      category TEXT NOT NULL,
+      source_forensic_id TEXT,
+      severity TEXT NOT NULL,
+      summary_tags TEXT NOT NULL DEFAULT '[]',
+      natural_language_summary TEXT NOT NULL,
+      cycle_id TEXT,
+      presented_to_user INTEGER NOT NULL DEFAULT 0,
+      user_acknowledged INTEGER NOT NULL DEFAULT 0,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_notification_queue_ack ON notification_queue(user_acknowledged, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_notification_queue_severity ON notification_queue(severity, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_notification_queue_source ON notification_queue(source_forensic_id);
+
+    CREATE TABLE IF NOT EXISTS idle_suggestions (
+      suggestion_id TEXT PRIMARY KEY,
+      category TEXT NOT NULL,
+      source_devtags TEXT NOT NULL DEFAULT '[]',
+      source_files TEXT NOT NULL DEFAULT '[]',
+      source_lines TEXT NOT NULL DEFAULT '[]',
+      source_forensic_ids TEXT NOT NULL DEFAULT '[]',
+      natural_language_summary TEXT NOT NULL,
+      suggested_job_id TEXT,
+      presented_to_user INTEGER NOT NULL DEFAULT 0,
+      user_response TEXT,
+      cycle_id TEXT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_idle_suggestions_response ON idle_suggestions(user_response, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_idle_suggestions_job ON idle_suggestions(suggested_job_id);
+
+    CREATE TABLE IF NOT EXISTS brainstorm_records (
+      brainstorm_id TEXT PRIMARY KEY,
+      user_input_raw TEXT NOT NULL,
+      generated_job_id TEXT,
+      processing_status TEXT NOT NULL DEFAULT 'pending',
+      cycle_id TEXT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_brainstorm_processing_status ON brainstorm_records(processing_status, timestamp);
+
+    CREATE TABLE IF NOT EXISTS god_factory_actions (
+      action_id TEXT PRIMARY KEY,
+      action_type TEXT NOT NULL,
+      target_id TEXT,
+      target_type TEXT,
+      authority_invoked TEXT,
+      justification_tags TEXT NOT NULL DEFAULT '[]',
+      result TEXT NOT NULL,
+      cycle_id TEXT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_god_factory_actions_type ON god_factory_actions(action_type, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_god_factory_actions_target ON god_factory_actions(target_type, target_id);
+
+    CREATE TABLE IF NOT EXISTS interactive_sessions (
+      session_id TEXT PRIMARY KEY,
+      start_cycle TEXT,
+      end_cycle TEXT,
+      user_inputs TEXT NOT NULL DEFAULT '[]',
+      agent_responses TEXT NOT NULL DEFAULT '[]',
+      sub_agents_spawned TEXT NOT NULL DEFAULT '[]',
+      jobs_created TEXT NOT NULL DEFAULT '[]',
+      jobs_implemented TEXT NOT NULL DEFAULT '[]',
+      notifications_presented TEXT NOT NULL DEFAULT '[]',
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_interactive_sessions_timestamp ON interactive_sessions(timestamp);
+  `);
 }
 
 // ─────────────────────────────────────────────
@@ -521,6 +597,1135 @@ const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_tool_crit_tool ON tool_criticism_records(tool_name);
         CREATE INDEX IF NOT EXISTS idx_blame_success_model ON blame_successes(model);
         CREATE INDEX IF NOT EXISTS idx_model_registry_id ON model_registry(model_id);
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v5: Tag Registry (devtags, plantags, buildtags)
+  // ──────────────────────────────────────────
+  {
+    version: 5,
+    name: 'tag_registry',
+    up(db: Database.Database) {
+      db.exec(`
+        -- Devtag registry: all structural code tags
+        CREATE TABLE IF NOT EXISTS devtags (
+          id TEXT PRIMARY KEY,
+          tag_key TEXT NOT NULL UNIQUE,
+          tag_type TEXT NOT NULL,
+          name TEXT NOT NULL,
+          parent_id TEXT REFERENCES devtags(id) ON DELETE SET NULL,
+          file_path TEXT,
+          line_start INTEGER,
+          line_end INTEGER,
+          project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','orphaned','dead','retired')),
+          dead_detected_cycle INTEGER,
+          retirement_scheduled_cycle INTEGER,
+          last_commit_id TEXT,
+          metadata TEXT DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Plantag registry: plan/requirement tags
+        CREATE TABLE IF NOT EXISTS plantags (
+          id TEXT PRIMARY KEY,
+          tag_key TEXT NOT NULL UNIQUE,
+          tag_type TEXT NOT NULL,
+          name TEXT NOT NULL,
+          project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_progress','done','blocked','orphaned')),
+          blocking_reason TEXT,
+          linked_devtag_id TEXT REFERENCES devtags(id) ON DELETE SET NULL,
+          cycle_id TEXT,
+          metadata TEXT DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Buildtag registry: action/build tags
+        CREATE TABLE IF NOT EXISTS buildtags (
+          id TEXT PRIMARY KEY,
+          tag_key TEXT NOT NULL,
+          tag_type TEXT NOT NULL,
+          target_devtag_id TEXT REFERENCES devtags(id) ON DELETE SET NULL,
+          agent_id TEXT NOT NULL,
+          project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+          cycle_id TEXT,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','validated','executing','committed','failed','reverted','orphaned')),
+          plantag_id TEXT REFERENCES plantags(id) ON DELETE SET NULL,
+          commit_id TEXT,
+          metadata TEXT DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Tag relationship schema rules (deterministic constraint table)
+        CREATE TABLE IF NOT EXISTS tag_relationship_rules (
+          id TEXT PRIMARY KEY,
+          rule_type TEXT NOT NULL CHECK (rule_type IN ('parent_child','peer','requires_target')),
+          child_tag_type TEXT NOT NULL,
+          parent_tag_type TEXT NOT NULL,
+          strict INTEGER NOT NULL DEFAULT 1,
+          description TEXT DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Pending registry partition (for Diff Sub-Agent)
+        CREATE TABLE IF NOT EXISTS devtag_pending (
+          id TEXT PRIMARY KEY,
+          cycle_id TEXT NOT NULL,
+          buildtag_id TEXT REFERENCES buildtags(id) ON DELETE CASCADE,
+          predicted_state TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Devtag claim locks (for Conflict Sub-Agent)
+        CREATE TABLE IF NOT EXISTS devtag_claims (
+          id TEXT PRIMARY KEY,
+          devtag_id TEXT NOT NULL REFERENCES devtags(id) ON DELETE CASCADE,
+          agent_id TEXT NOT NULL,
+          cycle_id TEXT NOT NULL,
+          claimed_at TEXT NOT NULL DEFAULT (datetime('now')),
+          released_at TEXT,
+          UNIQUE(devtag_id, agent_id, cycle_id)
+        );
+
+        -- Context window exclusion log
+        CREATE TABLE IF NOT EXISTS context_window_exclusions (
+          id TEXT PRIMARY KEY,
+          cycle_id TEXT NOT NULL,
+          agent_id TEXT NOT NULL,
+          excluded_tag_id TEXT REFERENCES devtags(id) ON DELETE CASCADE,
+          exclusion_reason TEXT NOT NULL,
+          rank_score REAL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Indexes
+        CREATE INDEX IF NOT EXISTS idx_devtags_project ON devtags(project_id);
+        CREATE INDEX IF NOT EXISTS idx_devtags_status ON devtags(status);
+        CREATE INDEX IF NOT EXISTS idx_devtags_type ON devtags(tag_type);
+        CREATE INDEX IF NOT EXISTS idx_devtags_file ON devtags(file_path);
+        CREATE INDEX IF NOT EXISTS idx_plantags_project ON plantags(project_id);
+        CREATE INDEX IF NOT EXISTS idx_plantags_status ON plantags(status);
+        CREATE INDEX IF NOT EXISTS idx_buildtags_project ON buildtags(project_id);
+        CREATE INDEX IF NOT EXISTS idx_buildtags_agent ON buildtags(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_buildtags_cycle ON buildtags(cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_devtag_claims_devtag ON devtag_claims(devtag_id);
+        CREATE INDEX IF NOT EXISTS idx_devtag_claims_agent ON devtag_claims(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_devtag_pending_cycle ON devtag_pending(cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_cwexclusions_cycle ON context_window_exclusions(cycle_id);
+
+        -- Seed tag relationship rules from spec
+        INSERT OR IGNORE INTO tag_relationship_rules (id,rule_type,child_tag_type,parent_tag_type,description) VALUES
+          ('r1','parent_child','method','class','devtag:method requires parent devtag:class'),
+          ('r2','parent_child','field','schema','devtag:field requires parent devtag:schema or devtag:model'),
+          ('r3','parent_child','field','model','devtag:field requires parent devtag:model'),
+          ('r4','parent_child','prop','component','devtag:prop requires parent devtag:component'),
+          ('r5','parent_child','stage','pipeline','devtag:stage requires parent devtag:pipeline'),
+          ('r6','parent_child','nano:node','nano:layer','devtag:nano:node requires parent devtag:nano:layer'),
+          ('r7','parent_child','nano:layer','nano:module','devtag:nano:layer requires parent devtag:nano:module'),
+          ('r8','parent_child','nano:weight:frozen','nano:module','devtag:nano:weight:frozen requires parent devtag:nano:module'),
+          ('r9','parent_child','nano:weight:personal','nano:module','devtag:nano:weight:personal requires parent devtag:nano:module'),
+          ('r10','parent_child','nano:rby:r','nano:trifecta','devtag:nano:rby:r requires parent devtag:nano:trifecta'),
+          ('r11','parent_child','nano:rby:b','nano:trifecta','devtag:nano:rby:b requires parent devtag:nano:trifecta'),
+          ('r12','parent_child','nano:rby:y','nano:trifecta','devtag:nano:rby:y requires parent devtag:nano:trifecta'),
+          ('r13','peer','calls','function','devtag:calls requires caller and callee to be function or method'),
+          ('r14','peer','depends_on','*','devtag:depends_on requires both a and b to exist in registry'),
+          ('r15','peer','subscribes_to','event','devtag:subscribes_to requires event to exist as devtag:event'),
+          ('r16','peer','publishes','event','devtag:publishes requires event to exist as devtag:event'),
+          ('r17','requires_target','overrides','inherits','devtag:overrides requires parent devtag:inherits or devtag:extends'),
+          ('r18','requires_target','injected_into','function','devtag:injected_into requires target devtag:function or method or class');
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v6: Forensic Database (addendum tables)
+  // ──────────────────────────────────────────
+  {
+    version: 6,
+    name: 'forensic_addendum_tables',
+    up(db: Database.Database) {
+      db.exec(`
+        -- regression_history: per-committed-step regression records
+        CREATE TABLE IF NOT EXISTS regression_history (
+          entry_id TEXT PRIMARY KEY,
+          devtag TEXT NOT NULL,
+          file TEXT NOT NULL,
+          line_start INTEGER,
+          line_end INTEGER,
+          cause_buildtag_id TEXT REFERENCES buildtags(id) ON DELETE SET NULL,
+          cause_agent_id TEXT NOT NULL,
+          prior_plantag_status TEXT NOT NULL,
+          cycle_id TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- conflict_log: devtag claim conflicts between parallel agents
+        CREATE TABLE IF NOT EXISTS conflict_log (
+          entry_id TEXT PRIMARY KEY,
+          devtag_claimed TEXT NOT NULL,
+          claiming_agent_id TEXT NOT NULL,
+          blocked_agent_id TEXT NOT NULL,
+          resolution TEXT NOT NULL DEFAULT 'queued' CHECK (resolution IN ('queued','released','deadlock','escalated','timeout')),
+          wait_cycles INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- dead_tags: devtags that no longer correspond to existing code
+        CREATE TABLE IF NOT EXISTS dead_tags (
+          entry_id TEXT PRIMARY KEY,
+          devtag TEXT NOT NULL,
+          last_known_file TEXT NOT NULL,
+          last_known_line INTEGER,
+          detected_cycle INTEGER NOT NULL,
+          retirement_scheduled_cycle INTEGER,
+          resolved INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- diff_failures: Diff Sub-Agent predicted state mismatches
+        CREATE TABLE IF NOT EXISTS diff_failures (
+          entry_id TEXT PRIMARY KEY,
+          buildtag_set TEXT NOT NULL,
+          predicted_devtag_state TEXT NOT NULL,
+          required_plantag_state TEXT NOT NULL,
+          mismatch_detail TEXT NOT NULL,
+          agent_id TEXT NOT NULL,
+          cycle_id TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- integration_failures: Integration Verification Sub-Agent results
+        CREATE TABLE IF NOT EXISTS integration_failures (
+          entry_id TEXT PRIMARY KEY,
+          new_devtag TEXT NOT NULL,
+          missing_connected_devtag TEXT NOT NULL,
+          relationship_type TEXT NOT NULL,
+          file TEXT NOT NULL,
+          agent_id TEXT NOT NULL,
+          severity TEXT NOT NULL DEFAULT 'warning' CHECK (severity IN ('info','warning','error','critical','fatal')),
+          cycle_id TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- version_commits: Version Control Agent commit records
+        CREATE TABLE IF NOT EXISTS version_commits (
+          commit_id TEXT PRIMARY KEY,
+          buildtag_set TEXT NOT NULL,
+          devtag_state_before TEXT NOT NULL,
+          devtag_state_after TEXT NOT NULL,
+          plantags_satisfied TEXT NOT NULL DEFAULT '[]',
+          agent_id TEXT NOT NULL,
+          reverted INTEGER NOT NULL DEFAULT 0,
+          revert_timestamp TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- nano_anomalies: Nano Liaison Agent anomaly records
+        CREATE TABLE IF NOT EXISTS nano_anomalies (
+          entry_id TEXT PRIMARY KEY,
+          nano_devtag TEXT NOT NULL,
+          anomaly_type TEXT NOT NULL CHECK (anomaly_type IN ('nan_weights','inf_weights','identical_generation','rby_stall','other')),
+          cycle_id TEXT NOT NULL,
+          generation_id TEXT,
+          matrix_name TEXT,
+          detail TEXT NOT NULL,
+          agent_id TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- spawn_violations: unauthorized spawn attempts
+        CREATE TABLE IF NOT EXISTS spawn_violations (
+          entry_id TEXT PRIMARY KEY,
+          requesting_agent_id TEXT NOT NULL,
+          requested_sub_agent TEXT NOT NULL,
+          authority_chart_result TEXT NOT NULL,
+          blocked INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- systemic_regressions: Regression Agent pattern reports
+        CREATE TABLE IF NOT EXISTS systemic_regressions (
+          entry_id TEXT PRIMARY KEY,
+          dimension TEXT NOT NULL CHECK (dimension IN ('devtag','file','agent_id','build_phase')),
+          dimension_value TEXT NOT NULL,
+          regression_count INTEGER NOT NULL,
+          cycle_window INTEGER NOT NULL,
+          affected_devtags TEXT NOT NULL DEFAULT '[]',
+          suggested_guard_tags TEXT NOT NULL DEFAULT '[]',
+          flagged_to_god_factory INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- tag_mismatches: base spec forensic table (referenced in retirement chart)
+        CREATE TABLE IF NOT EXISTS tag_mismatches (
+          entry_id TEXT PRIMARY KEY,
+          devtag TEXT NOT NULL,
+          mismatch_type TEXT NOT NULL,
+          severity TEXT NOT NULL DEFAULT 'error' CHECK (severity IN ('info','warning','error','critical','fatal')),
+          previous_occurrences INTEGER NOT NULL DEFAULT 0,
+          cycle_id TEXT,
+          file TEXT,
+          agent_id TEXT,
+          escalated INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Indexes
+        CREATE INDEX IF NOT EXISTS idx_regression_devtag ON regression_history(devtag);
+        CREATE INDEX IF NOT EXISTS idx_regression_cycle ON regression_history(cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_conflict_log_devtag ON conflict_log(devtag_claimed);
+        CREATE INDEX IF NOT EXISTS idx_dead_tags_devtag ON dead_tags(devtag);
+        CREATE INDEX IF NOT EXISTS idx_diff_failures_cycle ON diff_failures(cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_integration_failures_cycle ON integration_failures(cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_version_commits_agent ON version_commits(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_nano_anomalies_cycle ON nano_anomalies(cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_spawn_violations_agent ON spawn_violations(requesting_agent_id);
+        CREATE INDEX IF NOT EXISTS idx_systemic_regressions_dim ON systemic_regressions(dimension, dimension_value);
+        CREATE INDEX IF NOT EXISTS idx_tag_mismatches_devtag ON tag_mismatches(devtag);
+        CREATE INDEX IF NOT EXISTS idx_tag_mismatches_severity ON tag_mismatches(severity);
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v7: Addendum schema completions
+  // build_phase in regression_history, missing
+  // relationship rules, failure_escalation_log
+  // ──────────────────────────────────────────
+  {
+    version: 7,
+    name: 'addendum_schema_completions',
+    up(db: Database.Database) {
+      db.exec(`
+        -- Add build_phase to regression_history (used by Regression Agent systemic analysis)
+        ALTER TABLE regression_history ADD COLUMN build_phase TEXT;
+
+        -- failure_escalation_log: tracks Builder/Command Agent failure escalation levels
+        CREATE TABLE IF NOT EXISTS failure_escalation_log (
+          entry_id TEXT PRIMARY KEY,
+          decision_cycle_id TEXT NOT NULL,
+          step_id TEXT,
+          level INTEGER NOT NULL CHECK (level IN (1,2,3,4,5)),
+          fail_count INTEGER NOT NULL DEFAULT 1,
+          agent_id TEXT NOT NULL,
+          action_taken TEXT NOT NULL,
+          plantag_id TEXT REFERENCES plantags(id) ON DELETE SET NULL,
+          detail TEXT DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fail_esc_cycle ON failure_escalation_log(decision_cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_fail_esc_level ON failure_escalation_log(level);
+        CREATE INDEX IF NOT EXISTS idx_regression_phase ON regression_history(build_phase);
+
+        -- Seed missing relationship rules
+        INSERT OR IGNORE INTO tag_relationship_rules (id,rule_type,child_tag_type,parent_tag_type,description) VALUES
+          ('r13b','peer','calls','method','devtag:calls also requires caller and callee to be method'),
+          ('r19','requires_target','symlink','file','devtag:symlink requires target devtag:file or devtag:directory'),
+          ('r20','peer','circular_dependency','*','devtag:circular_dependency is only valid when both devtag_a and devtag_b exist and devtag:depends_on chains between them are verified');
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v8: Gap Analysis System Tables
+  // ──────────────────────────────────────────
+  {
+    version: 8,
+    name: 'gap_analysis_tables',
+    up(db: Database.Database) {
+      db.exec(`
+        -- coverage_matrix: Coverage Analysis Agent output
+        CREATE TABLE IF NOT EXISTS coverage_matrix (
+          entry_id TEXT PRIMARY KEY,
+          scope TEXT NOT NULL CHECK (scope IN ('plan','test','nano','total')),
+          plantag_or_devtag TEXT NOT NULL,
+          coverage_state TEXT NOT NULL CHECK (coverage_state IN ('covered','partial','missing','not_required')),
+          coverage_percent REAL NOT NULL DEFAULT 0,
+          missing_tags TEXT NOT NULL DEFAULT '[]',
+          cycle_id TEXT NOT NULL,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_coverage_matrix_scope ON coverage_matrix(scope);
+        CREATE INDEX IF NOT EXISTS idx_coverage_matrix_cycle ON coverage_matrix(cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_coverage_matrix_tag ON coverage_matrix(plantag_or_devtag);
+
+        -- patterns: Pattern Recognition Agent registry
+        CREATE TABLE IF NOT EXISTS patterns (
+          pattern_id TEXT PRIMARY KEY,
+          failure_type TEXT NOT NULL,
+          devtag_type TEXT NOT NULL,
+          agent_category TEXT NOT NULL,
+          build_phase TEXT NOT NULL DEFAULT '',
+          first_occurrence TEXT NOT NULL DEFAULT (datetime('now')),
+          recurrence_count INTEGER NOT NULL DEFAULT 1,
+          severity TEXT NOT NULL DEFAULT 'warning' CHECK (severity IN ('info','warning','error','critical','fatal')),
+          severity_trend TEXT NOT NULL DEFAULT 'stable' CHECK (severity_trend IN ('stable','escalating','de-escalating')),
+          contributing_forensic_ids TEXT NOT NULL DEFAULT '[]',
+          flagged_to_god_factory INTEGER NOT NULL DEFAULT 0,
+          is_anti_pattern INTEGER NOT NULL DEFAULT 0,
+          anti_pattern_type TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_patterns_type ON patterns(failure_type);
+        CREATE INDEX IF NOT EXISTS idx_patterns_severity ON patterns(severity);
+        CREATE INDEX IF NOT EXISTS idx_patterns_flagged ON patterns(flagged_to_god_factory);
+
+        -- debt_history: Debt Tracking Agent history
+        CREATE TABLE IF NOT EXISTS debt_history (
+          entry_id TEXT PRIMARY KEY,
+          file_path TEXT NOT NULL,
+          debt_score REAL NOT NULL DEFAULT 0,
+          score_breakdown TEXT NOT NULL DEFAULT '{}',
+          ceiling REAL NOT NULL DEFAULT 15,
+          ceiling_exceeded INTEGER NOT NULL DEFAULT 0,
+          cycle_id TEXT NOT NULL,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_debt_history_file ON debt_history(file_path);
+        CREATE INDEX IF NOT EXISTS idx_debt_history_exceeded ON debt_history(ceiling_exceeded);
+        CREATE INDEX IF NOT EXISTS idx_debt_history_cycle ON debt_history(cycle_id);
+
+        -- tag_collisions: Tag System Analysis Agent — duplicate name detection
+        CREATE TABLE IF NOT EXISTS tag_collisions (
+          entry_id TEXT PRIMARY KEY,
+          devtag_name TEXT NOT NULL,
+          file_a TEXT NOT NULL,
+          parent_a TEXT,
+          file_b TEXT NOT NULL,
+          parent_b TEXT,
+          detected_cycle TEXT NOT NULL,
+          resolved INTEGER NOT NULL DEFAULT 0,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_tag_collisions_name ON tag_collisions(devtag_name);
+        CREATE INDEX IF NOT EXISTS idx_tag_collisions_resolved ON tag_collisions(resolved);
+
+        -- agent_performance: Agent Performance Analysis Agent metrics
+        CREATE TABLE IF NOT EXISTS agent_performance (
+          entry_id TEXT PRIMARY KEY,
+          agent_id TEXT NOT NULL,
+          cycle_id TEXT NOT NULL,
+          conformance_rate REAL NOT NULL DEFAULT 0,
+          retry_rate REAL NOT NULL DEFAULT 0,
+          escalation_rate REAL NOT NULL DEFAULT 0,
+          cycle_contribution INTEGER NOT NULL DEFAULT 0,
+          regression_contribution INTEGER NOT NULL DEFAULT 0,
+          spawn_efficiency REAL NOT NULL DEFAULT 0,
+          context_efficiency REAL NOT NULL DEFAULT 0,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_perf_agent ON agent_performance(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_agent_perf_cycle ON agent_performance(cycle_id);
+
+        -- tag_resolution_log: all tag resolution + gap tool call timing
+        CREATE TABLE IF NOT EXISTS tag_resolution_log (
+          entry_id TEXT PRIMARY KEY,
+          tag_type TEXT NOT NULL,
+          tag_id TEXT,
+          agent_id TEXT NOT NULL,
+          model_tier TEXT NOT NULL DEFAULT 'unknown',
+          resolution_time_ms INTEGER NOT NULL DEFAULT 0,
+          cache_hit INTEGER NOT NULL DEFAULT 0,
+          cycle_id TEXT NOT NULL,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_tag_res_type ON tag_resolution_log(tag_type);
+        CREATE INDEX IF NOT EXISTS idx_tag_res_agent ON tag_resolution_log(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_tag_res_cycle ON tag_resolution_log(cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_tag_res_slow ON tag_resolution_log(resolution_time_ms);
+
+        -- gap_reports: Gap Analysis Agent synthesized reports
+        CREATE TABLE IF NOT EXISTS gap_reports (
+          report_id TEXT PRIMARY KEY,
+          cycle_range_start INTEGER NOT NULL,
+          cycle_range_end INTEGER NOT NULL,
+          session_id TEXT NOT NULL,
+          gap_category TEXT NOT NULL CHECK (gap_category IN ('coverage','structural','process','tag_system','agent_performance')),
+          affected_tags TEXT NOT NULL DEFAULT '[]',
+          affected_agents TEXT NOT NULL DEFAULT '[]',
+          affected_files TEXT NOT NULL DEFAULT '[]',
+          severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info','warning','error','critical','fatal')),
+          pattern_id TEXT REFERENCES patterns(pattern_id) ON DELETE SET NULL,
+          recommended_action_tags TEXT NOT NULL DEFAULT '[]',
+          forensic_entry_ids TEXT NOT NULL DEFAULT '[]',
+          flagged_to_god_factory INTEGER NOT NULL DEFAULT 0,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_gap_reports_category ON gap_reports(gap_category);
+        CREATE INDEX IF NOT EXISTS idx_gap_reports_severity ON gap_reports(severity);
+        CREATE INDEX IF NOT EXISTS idx_gap_reports_session ON gap_reports(session_id);
+        CREATE INDEX IF NOT EXISTS idx_gap_reports_flagged ON gap_reports(flagged_to_god_factory);
+
+        -- vocabulary_gaps: Tag System Analysis Agent — untagged structure findings
+        CREATE TABLE IF NOT EXISTS vocabulary_gaps (
+          entry_id TEXT PRIMARY KEY,
+          file_path TEXT NOT NULL,
+          untagged_structure_type TEXT NOT NULL,
+          occurrence_count INTEGER NOT NULL DEFAULT 1,
+          first_detected_cycle TEXT NOT NULL,
+          resolved INTEGER NOT NULL DEFAULT 0,
+          proposed_tag_type TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_vocab_gaps_file ON vocabulary_gaps(file_path);
+        CREATE INDEX IF NOT EXISTS idx_vocab_gaps_resolved ON vocabulary_gaps(resolved);
+        CREATE INDEX IF NOT EXISTS idx_vocab_gaps_type ON vocabulary_gaps(untagged_structure_type);
+
+        -- spaghetti_index: referenced by Debt Tracking Agent formula
+        CREATE TABLE IF NOT EXISTS spaghetti_index (
+          entry_id TEXT PRIMARY KEY,
+          file_path TEXT NOT NULL,
+          module_devtag TEXT NOT NULL,
+          edge_count INTEGER NOT NULL DEFAULT 0,
+          test_coverage_delta REAL NOT NULL DEFAULT 0,
+          cycle_id TEXT NOT NULL,
+          detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_spaghetti_file ON spaghetti_index(file_path);
+
+        -- under_engineered_regions: referenced by Debt Tracking Agent formula
+        CREATE TABLE IF NOT EXISTS under_engineered_regions (
+          entry_id TEXT PRIMARY KEY,
+          file_path TEXT NOT NULL,
+          region_type TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          cycle_id TEXT NOT NULL,
+          detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- over_engineered_regions: referenced by Debt Tracking Agent formula
+        CREATE TABLE IF NOT EXISTS over_engineered_regions (
+          entry_id TEXT PRIMARY KEY,
+          file_path TEXT NOT NULL,
+          region_type TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          cycle_id TEXT NOT NULL,
+          detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v9: Blame Crawler full schema
+  // + suggested jobs persistence
+  // ──────────────────────────────────────────
+  {
+    version: 9,
+    name: 'blame_crawler_full_schema',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, column: string): boolean => {
+        const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+        return cols.some(c => c.name === column);
+      };
+
+      const addColumnIfMissing = (table: string, sql: string, column: string) => {
+        if (!hasColumn(table, column)) {
+          db.exec(`ALTER TABLE ${table} ADD COLUMN ${sql}`);
+        }
+      };
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS suggested_jobs (
+          id TEXT PRIMARY KEY,
+          category TEXT NOT NULL,
+          source TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low','medium','high','critical')),
+          payload TEXT NOT NULL DEFAULT '{}',
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','applied','dismissed')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_suggested_jobs_category ON suggested_jobs(category);
+        CREATE INDEX IF NOT EXISTS idx_suggested_jobs_status ON suggested_jobs(status);
+
+        CREATE TABLE IF NOT EXISTS output_capture_events (
+          id TEXT PRIMARY KEY,
+          blame_id TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          payload TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_output_capture_events_blame ON output_capture_events(blame_id);
+
+        CREATE INDEX IF NOT EXISTS idx_quality_model ON quality_records(model_id);
+        CREATE INDEX IF NOT EXISTS idx_quality_composite ON quality_records(composite_quality_score);
+        CREATE INDEX IF NOT EXISTS idx_tool_crit_model_interaction ON tool_criticism_records(model_id, interaction_type);
+        CREATE INDEX IF NOT EXISTS idx_blame_success_model_interaction ON blame_successes(model_id, interaction_type);
+      `);
+
+      // blame_records full spec columns
+      addColumnIfMissing('blame_records', 'blame_id TEXT', 'blame_id');
+      addColumnIfMissing('blame_records', 'model_id TEXT', 'model_id');
+      addColumnIfMissing('blame_records', 'model_provider TEXT', 'model_provider');
+      addColumnIfMissing('blame_records', 'model_name TEXT', 'model_name');
+      addColumnIfMissing('blame_records', 'model_version TEXT', 'model_version');
+      addColumnIfMissing('blame_records', 'context_window_tokens INTEGER', 'context_window_tokens');
+      addColumnIfMissing('blame_records', 'output_tokens_allowed INTEGER', 'output_tokens_allowed');
+      addColumnIfMissing('blame_records', 'context_utilization_percent REAL', 'context_utilization_percent');
+      addColumnIfMissing('blame_records', 'output_utilization_percent REAL', 'output_utilization_percent');
+      addColumnIfMissing('blame_records', 'agent_id TEXT', 'agent_id');
+      addColumnIfMissing('blame_records', 'agent_role TEXT', 'agent_role');
+      addColumnIfMissing('blame_records', 'interaction_type TEXT', 'interaction_type');
+      addColumnIfMissing('blame_records', 'build_phase TEXT', 'build_phase');
+      addColumnIfMissing('blame_records', 'cycle_id TEXT', 'cycle_id');
+      addColumnIfMissing('blame_records', 'session_id TEXT', 'session_id');
+      addColumnIfMissing('blame_records', 'decided_step_id TEXT', 'decided_step_id');
+      addColumnIfMissing('blame_records', 'plantag_references TEXT DEFAULT "[]"', 'plantag_references');
+      addColumnIfMissing('blame_records', 'devtag_references TEXT DEFAULT "[]"', 'devtag_references');
+      addColumnIfMissing('blame_records', 'buildtag_references TEXT DEFAULT "[]"', 'buildtag_references');
+      addColumnIfMissing('blame_records', 'tag_validation_result TEXT', 'tag_validation_result');
+      addColumnIfMissing('blame_records', 'tag_validation_failure_codes TEXT DEFAULT "[]"', 'tag_validation_failure_codes');
+      addColumnIfMissing('blame_records', 'retry_count INTEGER DEFAULT 0', 'retry_count');
+      addColumnIfMissing('blame_records', 'escalation_level INTEGER DEFAULT 0', 'escalation_level');
+      addColumnIfMissing('blame_records', 'output_hash TEXT', 'output_hash');
+      addColumnIfMissing('blame_records', 'drift_detected INTEGER DEFAULT 0', 'drift_detected');
+      addColumnIfMissing('blame_records', 'forensic_entry_ids TEXT DEFAULT "[]"', 'forensic_entry_ids');
+      addColumnIfMissing('blame_records', 'duration_ms INTEGER', 'duration_ms');
+      addColumnIfMissing('blame_records', 'timestamp TEXT', 'timestamp');
+
+      // quality_records full spec columns
+      addColumnIfMissing('quality_records', 'quality_id TEXT', 'quality_id');
+      addColumnIfMissing('quality_records', 'model_id TEXT', 'model_id');
+      addColumnIfMissing('quality_records', 'tag_conformance_score REAL', 'tag_conformance_score');
+      addColumnIfMissing('quality_records', 'context_utilization_score REAL', 'context_utilization_score');
+      addColumnIfMissing('quality_records', 'instruction_adherence_score REAL', 'instruction_adherence_score');
+      addColumnIfMissing('quality_records', 'hallucination_rate REAL', 'hallucination_rate');
+      addColumnIfMissing('quality_records', 'structural_integrity_score REAL', 'structural_integrity_score');
+      addColumnIfMissing('quality_records', 'regression_risk_score REAL', 'regression_risk_score');
+      addColumnIfMissing('quality_records', 'output_efficiency_score REAL', 'output_efficiency_score');
+      addColumnIfMissing('quality_records', 'composite_quality_score REAL', 'composite_quality_score');
+      addColumnIfMissing('quality_records', 'failure_modes TEXT DEFAULT "[]"', 'failure_modes');
+      addColumnIfMissing('quality_records', 'cycle_id TEXT', 'cycle_id');
+      addColumnIfMissing('quality_records', 'timestamp TEXT', 'timestamp');
+
+      // tool_criticism_records full spec columns
+      addColumnIfMissing('tool_criticism_records', 'criticism_id TEXT', 'criticism_id');
+      addColumnIfMissing('tool_criticism_records', 'model_id TEXT', 'model_id');
+      addColumnIfMissing('tool_criticism_records', 'interaction_type TEXT', 'interaction_type');
+      addColumnIfMissing('tool_criticism_records', 'failing_quality_dimensions TEXT DEFAULT "[]"', 'failing_quality_dimensions');
+      addColumnIfMissing('tool_criticism_records', 'active_tool_configs TEXT DEFAULT "[]"', 'active_tool_configs');
+      addColumnIfMissing('tool_criticism_records', 'active_prompt_structures TEXT DEFAULT "[]"', 'active_prompt_structures');
+      addColumnIfMissing('tool_criticism_records', 'failure_pattern TEXT', 'failure_pattern');
+      addColumnIfMissing('tool_criticism_records', 'proposed_tool_modifications TEXT DEFAULT "[]"', 'proposed_tool_modifications');
+      addColumnIfMissing('tool_criticism_records', 'proposed_new_tools TEXT DEFAULT "[]"', 'proposed_new_tools');
+      addColumnIfMissing('tool_criticism_records', 'scales_to_model_tiers TEXT DEFAULT "[]"', 'scales_to_model_tiers');
+      addColumnIfMissing('tool_criticism_records', 'suggested_job_id TEXT', 'suggested_job_id');
+      addColumnIfMissing('tool_criticism_records', 'cycle_id TEXT', 'cycle_id');
+      addColumnIfMissing('tool_criticism_records', 'timestamp TEXT', 'timestamp');
+
+      // blame_successes full spec columns
+      addColumnIfMissing('blame_successes', 'success_id TEXT', 'success_id');
+      addColumnIfMissing('blame_successes', 'model_id TEXT', 'model_id');
+      addColumnIfMissing('blame_successes', 'interaction_type TEXT', 'interaction_type');
+      addColumnIfMissing('blame_successes', 'composite_quality_score_avg REAL', 'composite_quality_score_avg');
+      addColumnIfMissing('blame_successes', 'prompt_structure_ids TEXT DEFAULT "[]"', 'prompt_structure_ids');
+      addColumnIfMissing('blame_successes', 'tool_config_ids TEXT DEFAULT "[]"', 'tool_config_ids');
+      addColumnIfMissing('blame_successes', 'context_size_tokens INTEGER', 'context_size_tokens');
+      addColumnIfMissing('blame_successes', 'tag_types_involved TEXT DEFAULT "[]"', 'tag_types_involved');
+      addColumnIfMissing('blame_successes', 'model_tier INTEGER', 'model_tier');
+      addColumnIfMissing('blame_successes', 'consecutive_count INTEGER DEFAULT 0', 'consecutive_count');
+      addColumnIfMissing('blame_successes', 'suggested_job_id TEXT', 'suggested_job_id');
+      addColumnIfMissing('blame_successes', 'cycle_id TEXT', 'cycle_id');
+      addColumnIfMissing('blame_successes', 'timestamp TEXT', 'timestamp');
+
+      // model_registry full spec columns
+      addColumnIfMissing('model_registry', 'model_name TEXT', 'model_name');
+      addColumnIfMissing('model_registry', 'model_version TEXT', 'model_version');
+      addColumnIfMissing('model_registry', 'context_window_tokens INTEGER', 'context_window_tokens');
+      addColumnIfMissing('model_registry', 'safe_prompt_ceiling_tokens INTEGER', 'safe_prompt_ceiling_tokens');
+      addColumnIfMissing('model_registry', 'safe_output_ceiling_tokens INTEGER', 'safe_output_ceiling_tokens');
+      addColumnIfMissing('model_registry', 'model_tier INTEGER', 'model_tier');
+      addColumnIfMissing('model_registry', 'observed_conformance_rate REAL', 'observed_conformance_rate');
+      addColumnIfMissing('model_registry', 'observed_retry_rate REAL', 'observed_retry_rate');
+      addColumnIfMissing('model_registry', 'observed_hallucination_rate REAL', 'observed_hallucination_rate');
+      addColumnIfMissing('model_registry', 'observed_context_loss_threshold_tokens INTEGER', 'observed_context_loss_threshold_tokens');
+      addColumnIfMissing('model_registry', 'observed_spaghetti_rate REAL', 'observed_spaghetti_rate');
+      addColumnIfMissing('model_registry', 'observed_ai_slop_rate REAL', 'observed_ai_slop_rate');
+      addColumnIfMissing('model_registry', 'observed_avg_output_tokens INTEGER', 'observed_avg_output_tokens');
+      addColumnIfMissing('model_registry', 'observed_avg_duration_ms INTEGER', 'observed_avg_duration_ms');
+      addColumnIfMissing('model_registry', 'strengths TEXT DEFAULT "[]"', 'strengths');
+      addColumnIfMissing('model_registry', 'weaknesses TEXT DEFAULT "[]"', 'weaknesses');
+      addColumnIfMissing('model_registry', 'recommended_interaction_types TEXT DEFAULT "[]"', 'recommended_interaction_types');
+      addColumnIfMissing('model_registry', 'avoided_interaction_types TEXT DEFAULT "[]"', 'avoided_interaction_types');
+      addColumnIfMissing('model_registry', 'tool_configs_generated TEXT DEFAULT "[]"', 'tool_configs_generated');
+      addColumnIfMissing('model_registry', 'last_updated_cycle INTEGER', 'last_updated_cycle');
+      addColumnIfMissing('model_registry', 'last_updated_by TEXT', 'last_updated_by');
+
+      // Seed/backfill derived alias columns
+      db.exec(`
+        UPDATE blame_records
+        SET
+          blame_id = COALESCE(blame_id, id),
+          model_id = COALESCE(model_id, model),
+          interaction_type = COALESCE(interaction_type, mode),
+          duration_ms = COALESCE(duration_ms, latency_ms),
+          timestamp = COALESCE(timestamp, created_at)
+        WHERE blame_id IS NULL OR model_id IS NULL OR interaction_type IS NULL OR duration_ms IS NULL OR timestamp IS NULL;
+
+        UPDATE quality_records
+        SET
+          quality_id = COALESCE(quality_id, id),
+          tag_conformance_score = COALESCE(tag_conformance_score, tag_conformance),
+          instruction_adherence_score = COALESCE(instruction_adherence_score, instruction_adherence),
+          hallucination_rate = COALESCE(hallucination_rate, hallucination),
+          structural_integrity_score = COALESCE(structural_integrity_score, structural_integrity),
+          output_efficiency_score = COALESCE(output_efficiency_score, output_efficiency),
+          timestamp = COALESCE(timestamp, crawled_at)
+        WHERE quality_id IS NULL OR timestamp IS NULL;
+
+        UPDATE model_registry
+        SET
+          model_name = COALESCE(model_name, display_name),
+          model_version = COALESCE(model_version, 'unknown'),
+          observed_avg_output_tokens = COALESCE(observed_avg_output_tokens, CAST(total_tokens / CASE WHEN total_runs > 0 THEN total_runs ELSE 1 END AS INTEGER)),
+          observed_avg_duration_ms = COALESCE(observed_avg_duration_ms, CAST(avg_latency_ms AS INTEGER))
+        WHERE model_name IS NULL OR model_version IS NULL;
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v10: Project State Crawler tables
+  // ──────────────────────────────────────────
+  {
+    version: 10,
+    name: 'project_state_crawler_tables',
+    up(db: Database.Database) {
+      db.exec(`
+        -- Ground truth snapshots: one per crawl run
+        CREATE TABLE IF NOT EXISTS ground_truth_snapshots (
+          id TEXT PRIMARY KEY,
+          snapshot_id TEXT NOT NULL UNIQUE,
+          cycle_id TEXT NOT NULL,
+          total_devtags INTEGER NOT NULL DEFAULT 0,
+          registry_surplus_count INTEGER NOT NULL DEFAULT 0,
+          registry_deficit_count INTEGER NOT NULL DEFAULT 0,
+          content_drift_count INTEGER NOT NULL DEFAULT 0,
+          location_drift_count INTEGER NOT NULL DEFAULT 0,
+          systemic_drift_flagged INTEGER NOT NULL DEFAULT 0,
+          parse_duration_ms INTEGER NOT NULL DEFAULT 0,
+          project_path TEXT NOT NULL DEFAULT '',
+          total_files INTEGER NOT NULL DEFAULT 0,
+          skipped_files_count INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'complete' CHECK (status IN ('running','complete','error')),
+          error_message TEXT,
+          triggered_by TEXT NOT NULL DEFAULT 'manual',
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_gts_snapshot_id ON ground_truth_snapshots(snapshot_id);
+        CREATE INDEX IF NOT EXISTS idx_gts_cycle ON ground_truth_snapshots(cycle_id);
+        CREATE INDEX IF NOT EXISTS idx_gts_timestamp ON ground_truth_snapshots(timestamp);
+
+        -- Devtags extracted from disk (per snapshot)
+        CREATE TABLE IF NOT EXISTS snapshot_devtags (
+          id TEXT PRIMARY KEY,
+          entry_id TEXT NOT NULL UNIQUE,
+          snapshot_id TEXT NOT NULL,
+          devtag_type TEXT NOT NULL,
+          devtag_name TEXT NOT NULL DEFAULT '',
+          file_path TEXT NOT NULL DEFAULT '',
+          line_start INTEGER NOT NULL DEFAULT 0,
+          line_end INTEGER NOT NULL DEFAULT 0,
+          parent_devtag TEXT,
+          content_hash TEXT NOT NULL DEFAULT '',
+          language TEXT NOT NULL DEFAULT 'unknown',
+          relationship_tags TEXT NOT NULL DEFAULT '[]',
+          skipped INTEGER NOT NULL DEFAULT 0,
+          skip_reason TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_sd_snapshot ON snapshot_devtags(snapshot_id);
+        CREATE INDEX IF NOT EXISTS idx_sd_file_path ON snapshot_devtags(file_path);
+        CREATE INDEX IF NOT EXISTS idx_sd_devtag_type ON snapshot_devtags(devtag_type);
+        CREATE INDEX IF NOT EXISTS idx_sd_devtag_name ON snapshot_devtags(devtag_name);
+
+        -- Drift events: differences between snapshot and registry
+        CREATE TABLE IF NOT EXISTS drift_events (
+          id TEXT PRIMARY KEY,
+          entry_id TEXT NOT NULL UNIQUE,
+          snapshot_id TEXT NOT NULL,
+          drift_type TEXT NOT NULL CHECK (drift_type IN ('registry_surplus','registry_deficit','content_drift','location_drift')),
+          devtag TEXT NOT NULL DEFAULT '',
+          devtag_type TEXT,
+          file_path TEXT NOT NULL DEFAULT '',
+          line_start_registry INTEGER,
+          line_start_snapshot INTEGER,
+          content_hash_registry TEXT,
+          content_hash_snapshot TEXT,
+          severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info','warning','error')),
+          resolved INTEGER NOT NULL DEFAULT 0,
+          resolver_agent_id TEXT,
+          resolved_at TEXT,
+          halted_build_step INTEGER NOT NULL DEFAULT 0,
+          systemic INTEGER NOT NULL DEFAULT 0,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_de_snapshot ON drift_events(snapshot_id);
+        CREATE INDEX IF NOT EXISTS idx_de_drift_type ON drift_events(drift_type);
+        CREATE INDEX IF NOT EXISTS idx_de_severity ON drift_events(severity);
+        CREATE INDEX IF NOT EXISTS idx_de_resolved ON drift_events(resolved);
+        CREATE INDEX IF NOT EXISTS idx_de_file_path ON drift_events(file_path);
+
+        -- Skipped files log
+        CREATE TABLE IF NOT EXISTS psc_skipped_files (
+          id TEXT PRIMARY KEY,
+          entry_id TEXT NOT NULL UNIQUE,
+          snapshot_id TEXT NOT NULL,
+          file_path TEXT NOT NULL DEFAULT '',
+          skip_reason TEXT NOT NULL DEFAULT 'unknown',
+          file_size_bytes INTEGER,
+          whitelisted INTEGER NOT NULL DEFAULT 0,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_pscsf_snapshot ON psc_skipped_files(snapshot_id);
+        CREATE INDEX IF NOT EXISTS idx_pscsf_file_path ON psc_skipped_files(file_path);
+
+        -- Language registry: extension → grammar
+        CREATE TABLE IF NOT EXISTS language_registry (
+          id TEXT PRIMARY KEY,
+          language_id TEXT NOT NULL UNIQUE,
+          file_extension TEXT NOT NULL,
+          grammar_name TEXT NOT NULL,
+          grammar_version TEXT NOT NULL DEFAULT '1.0.0',
+          registered_by TEXT NOT NULL DEFAULT 'system',
+          enabled INTEGER NOT NULL DEFAULT 1,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_lr_extension ON language_registry(file_extension);
+      `);
+
+      // Seed default language registry
+      const langs = [
+        ['ts', 'typescript', 'tree-sitter-typescript'],
+        ['tsx', 'typescript', 'tree-sitter-typescript'],
+        ['js', 'javascript', 'tree-sitter-javascript'],
+        ['jsx', 'javascript', 'tree-sitter-javascript'],
+        ['mjs', 'javascript', 'tree-sitter-javascript'],
+        ['cjs', 'javascript', 'tree-sitter-javascript'],
+        ['py', 'python', 'tree-sitter-python'],
+        ['rs', 'rust', 'tree-sitter-rust'],
+        ['go', 'go', 'tree-sitter-go'],
+        ['java', 'java', 'tree-sitter-java'],
+        ['c', 'c', 'tree-sitter-c'],
+        ['cpp', 'cpp', 'tree-sitter-cpp'],
+        ['h', 'c', 'tree-sitter-c'],
+        ['hpp', 'cpp', 'tree-sitter-cpp'],
+        ['rb', 'ruby', 'tree-sitter-ruby'],
+        ['swift', 'swift', 'tree-sitter-swift'],
+        ['kt', 'kotlin', 'tree-sitter-kotlin'],
+        ['cs', 'csharp', 'tree-sitter-c-sharp'],
+        ['php', 'php', 'tree-sitter-php'],
+        ['json', 'json', 'tree-sitter-json'],
+        ['yaml', 'yaml', 'tree-sitter-yaml'],
+        ['yml', 'yaml', 'tree-sitter-yaml'],
+        ['md', 'markdown', 'tree-sitter-markdown'],
+        ['css', 'css', 'tree-sitter-css'],
+        ['html', 'html', 'tree-sitter-html'],
+        ['sql', 'sql', 'tree-sitter-sql'],
+        ['sh', 'bash', 'tree-sitter-bash'],
+        ['bash', 'bash', 'tree-sitter-bash'],
+        ['toml', 'toml', 'tree-sitter-toml'],
+        ['xml', 'xml', 'tree-sitter-xml'],
+      ];
+      const stmt = db.prepare(`
+        INSERT OR IGNORE INTO language_registry (id, language_id, file_extension, grammar_name, grammar_version, registered_by)
+        VALUES (?, ?, ?, ?, '1.0.0', 'system')
+      `);
+      const { randomUUID } = require('crypto');
+      for (const [ext, lang, grammar] of langs) {
+        stmt.run(randomUUID(), `${lang}_${ext}`, ext, grammar);
+      }
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v11: PSC whitelist + directory stats
+  // ──────────────────────────────────────────
+  {
+    version: 11,
+    name: 'psc_whitelist_and_dir_stats',
+    up(db: Database.Database) {
+      db.exec(`
+        -- psc_whitelist: files/dirs forced to parse regardless of size or extension
+        CREATE TABLE IF NOT EXISTS psc_whitelist (
+          id TEXT PRIMARY KEY,
+          path_pattern TEXT NOT NULL UNIQUE,
+          reason TEXT NOT NULL DEFAULT 'manually_added',
+          added_by TEXT NOT NULL DEFAULT 'user',
+          force_parse INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_psc_whitelist_path ON psc_whitelist(path_pattern);
+
+        -- psc_directory_stats: per-directory devtag counts per snapshot
+        CREATE TABLE IF NOT EXISTS psc_directory_stats (
+          id TEXT PRIMARY KEY,
+          snapshot_id TEXT NOT NULL,
+          directory_path TEXT NOT NULL,
+          file_count INTEGER NOT NULL DEFAULT 0,
+          devtag_count INTEGER NOT NULL DEFAULT 0,
+          skipped_count INTEGER NOT NULL DEFAULT 0,
+          parse_duration_ms INTEGER NOT NULL DEFAULT 0,
+          sub_crawler_status TEXT NOT NULL DEFAULT 'complete' CHECK (sub_crawler_status IN ('complete','error','skipped')),
+          error_message TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(snapshot_id, directory_path)
+        );
+        CREATE INDEX IF NOT EXISTS idx_psc_dir_stats_snapshot ON psc_directory_stats(snapshot_id);
+        CREATE INDEX IF NOT EXISTS idx_psc_dir_stats_dir ON psc_directory_stats(directory_path);
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v12: Suggested Jobs System
+  // ──────────────────────────────────────────
+  {
+    version: 12,
+    name: 'suggested_jobs_system',
+    up(db: Database.Database) {
+      db.exec(`
+        -- job_records: canonical job list (the Judge)
+        CREATE TABLE IF NOT EXISTS job_records (
+          id TEXT PRIMARY KEY,
+          job_id TEXT NOT NULL UNIQUE,
+          job_category TEXT NOT NULL CHECK (job_category IN (
+            'test_missing','dead_code_removal','debt_reduction','regression_hardening',
+            'integration_repair','anti_pattern_mitigation','tag_schema_extension',
+            'performance_test_missing','security_gap','nano_coverage_gap',
+            'model_tool_enhancement','model_config_promotion','external_project',
+            'user_requested','god_factory_scan'
+          )),
+          source TEXT NOT NULL CHECK (source IN (
+            'blame_crawler','suggested_jobs_crawler','user','god_factory_agent'
+          )),
+          source_record_ids TEXT NOT NULL DEFAULT '[]',
+          priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('critical','high','medium','low')),
+          title TEXT NOT NULL,
+          affected_files TEXT NOT NULL DEFAULT '[]',
+          affected_devtags TEXT NOT NULL DEFAULT '[]',
+          affected_plantags TEXT NOT NULL DEFAULT '[]',
+          required_buildtags TEXT NOT NULL DEFAULT '[]',
+          blocking_jobs TEXT NOT NULL DEFAULT '[]',
+          blocked_by_jobs TEXT NOT NULL DEFAULT '[]',
+          hierarchy TEXT NOT NULL DEFAULT '{}',
+          atomic_steps TEXT NOT NULL DEFAULT '[]',
+          sandbox_spec TEXT NOT NULL DEFAULT '{}',
+          implementation_status TEXT NOT NULL DEFAULT 'suggested' CHECK (implementation_status IN (
+            'suggested','sandbox_ready','implementing','implemented','rejected','archived'
+          )),
+          created_cycle INTEGER NOT NULL DEFAULT 0,
+          last_updated_cycle INTEGER NOT NULL DEFAULT 0,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_job_records_status ON job_records(implementation_status);
+        CREATE INDEX IF NOT EXISTS idx_job_records_priority ON job_records(priority, created_cycle);
+        CREATE INDEX IF NOT EXISTS idx_job_records_category ON job_records(job_category);
+        CREATE INDEX IF NOT EXISTS idx_job_records_source ON job_records(source);
+
+        -- sandbox_runs: per-cycle loop records for each job sandbox
+        CREATE TABLE IF NOT EXISTS sandbox_runs (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL UNIQUE,
+          job_id TEXT NOT NULL,
+          cycle_number INTEGER NOT NULL DEFAULT 0,
+          stage TEXT NOT NULL DEFAULT 'building' CHECK (stage IN (
+            'building','testing','review','debug','complete','failed'
+          )),
+          builder_output TEXT,
+          test_results TEXT NOT NULL DEFAULT '[]',
+          review_findings TEXT NOT NULL DEFAULT '[]',
+          debug_records TEXT NOT NULL DEFAULT '[]',
+          loop_coordinator_decision TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_sandbox_runs_job ON sandbox_runs(job_id);
+        CREATE INDEX IF NOT EXISTS idx_sandbox_runs_cycle ON sandbox_runs(job_id, cycle_number);
+
+        -- sj_test_results: structured test outcomes per sandbox cycle
+        CREATE TABLE IF NOT EXISTS sj_test_results (
+          id TEXT PRIMARY KEY,
+          test_id TEXT NOT NULL UNIQUE,
+          job_id TEXT NOT NULL,
+          sandbox_id TEXT,
+          devtag_tested TEXT NOT NULL,
+          test_type TEXT NOT NULL DEFAULT 'unit',
+          expected_devtag_state TEXT,
+          actual_devtag_state TEXT,
+          passed INTEGER NOT NULL DEFAULT 0,
+          failure_reason_tags TEXT NOT NULL DEFAULT '[]',
+          agent_id TEXT,
+          cycle_id TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_sj_test_results_job ON sj_test_results(job_id);
+        CREATE INDEX IF NOT EXISTS idx_sj_test_results_passed ON sj_test_results(job_id, passed);
+
+        -- sj_debug_records: structured debug output from Debug Sub-Agent
+        CREATE TABLE IF NOT EXISTS sj_debug_records (
+          id TEXT PRIMARY KEY,
+          debug_id TEXT NOT NULL UNIQUE,
+          test_id TEXT NOT NULL,
+          job_id TEXT NOT NULL,
+          failing_devtag TEXT NOT NULL,
+          failing_test_id TEXT NOT NULL,
+          expected_state TEXT,
+          actual_state TEXT,
+          proposed_buildtag_correction TEXT,
+          applied INTEGER NOT NULL DEFAULT 0,
+          cycle_id TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_sj_debug_job ON sj_debug_records(job_id);
+
+        -- implementation_log: step-by-step implementation pipeline audit
+        CREATE TABLE IF NOT EXISTS implementation_log (
+          id TEXT PRIMARY KEY,
+          log_id TEXT NOT NULL UNIQUE,
+          job_id TEXT NOT NULL,
+          stage TEXT NOT NULL,
+          step_id TEXT,
+          buildtag_applied TEXT,
+          devtag_state_before TEXT,
+          devtag_state_after TEXT,
+          validation_result TEXT,
+          test_result_ids TEXT NOT NULL DEFAULT '[]',
+          cycle_id TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_impl_log_job ON implementation_log(job_id);
+        CREATE INDEX IF NOT EXISTS idx_impl_log_stage ON implementation_log(job_id, stage);
+
+        -- crash_recovery_log: auto-recovery events for implementation pipeline
+        CREATE TABLE IF NOT EXISTS crash_recovery_log (
+          id TEXT PRIMARY KEY,
+          recovery_id TEXT NOT NULL UNIQUE,
+          job_id TEXT,
+          stage_at_crash TEXT,
+          rollback_point_id TEXT,
+          recovery_action TEXT,
+          recovery_result TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_crash_recovery_job ON crash_recovery_log(job_id);
+
+        -- sj_crawler_state: persistent state for the Suggested Jobs Crawler
+        CREATE TABLE IF NOT EXISTS sj_crawler_state (
+          id TEXT PRIMARY KEY DEFAULT 'singleton',
+          mode TEXT NOT NULL DEFAULT 'idle' CHECK (mode IN ('idle','blame_driven','independent','paused')),
+          current_protocol INTEGER,
+          last_blame_processed_at TEXT,
+          last_independent_run_at TEXT,
+          cycle_count INTEGER NOT NULL DEFAULT 0,
+          blame_queue_depth INTEGER NOT NULL DEFAULT 0,
+          jobs_generated_total INTEGER NOT NULL DEFAULT 0,
+          status_message TEXT,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT OR IGNORE INTO sj_crawler_state (id) VALUES ('singleton');
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v13: God Factory Agent tables
+  // ──────────────────────────────────────────
+  {
+    version: 13,
+    name: 'god_factory_agent_tables',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS notification_queue (
+          notification_id TEXT PRIMARY KEY,
+          category TEXT NOT NULL,
+          source_forensic_id TEXT,
+          severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info','warning','error','critical','fatal')),
+          summary_tags TEXT NOT NULL DEFAULT '[]',
+          natural_language_summary TEXT NOT NULL,
+          cycle_id TEXT,
+          presented_to_user INTEGER NOT NULL DEFAULT 0,
+          user_acknowledged INTEGER NOT NULL DEFAULT 0,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_notification_queue_ack ON notification_queue(user_acknowledged, timestamp);
+        CREATE INDEX IF NOT EXISTS idx_notification_queue_severity ON notification_queue(severity, timestamp);
+        CREATE INDEX IF NOT EXISTS idx_notification_queue_source ON notification_queue(source_forensic_id);
+
+        CREATE TABLE IF NOT EXISTS idle_suggestions (
+          suggestion_id TEXT PRIMARY KEY,
+          category TEXT NOT NULL CHECK (category IN (
+            'trivial_enhancement','feature_bridge','performance_opportunity',
+            'debt_warning','regression_trend','model_behavior_alert'
+          )),
+          source_devtags TEXT NOT NULL DEFAULT '[]',
+          source_files TEXT NOT NULL DEFAULT '[]',
+          source_lines TEXT NOT NULL DEFAULT '[]',
+          source_forensic_ids TEXT NOT NULL DEFAULT '[]',
+          natural_language_summary TEXT NOT NULL,
+          suggested_job_id TEXT,
+          presented_to_user INTEGER NOT NULL DEFAULT 0,
+          user_response TEXT CHECK (user_response IN ('accepted','rejected','deferred')),
+          cycle_id TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_idle_suggestions_response ON idle_suggestions(user_response, timestamp);
+        CREATE INDEX IF NOT EXISTS idx_idle_suggestions_presented ON idle_suggestions(presented_to_user, timestamp);
+
+        CREATE TABLE IF NOT EXISTS brainstorm_records (
+          brainstorm_id TEXT PRIMARY KEY,
+          user_input_raw TEXT NOT NULL,
+          generated_job_id TEXT,
+          processing_status TEXT NOT NULL DEFAULT 'queued' CHECK (processing_status IN ('queued','processed','failed')),
+          cycle_id TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_brainstorm_records_status ON brainstorm_records(processing_status, timestamp);
+
+        CREATE TABLE IF NOT EXISTS god_factory_actions (
+          action_id TEXT PRIMARY KEY,
+          action_type TEXT NOT NULL,
+          target_id TEXT,
+          target_type TEXT,
+          authority_invoked TEXT,
+          justification_tags TEXT NOT NULL DEFAULT '[]',
+          result TEXT NOT NULL DEFAULT 'recorded',
+          cycle_id TEXT,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_gf_actions_type ON god_factory_actions(action_type, timestamp);
+
+        CREATE TABLE IF NOT EXISTS interactive_sessions (
+          session_id TEXT PRIMARY KEY,
+          start_cycle INTEGER,
+          end_cycle INTEGER,
+          user_inputs TEXT NOT NULL DEFAULT '[]',
+          agent_responses TEXT NOT NULL DEFAULT '[]',
+          sub_agents_spawned TEXT NOT NULL DEFAULT '[]',
+          jobs_created INTEGER NOT NULL DEFAULT 0,
+          jobs_implemented INTEGER NOT NULL DEFAULT 0,
+          notifications_presented INTEGER NOT NULL DEFAULT 0,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
       `);
     },
   },

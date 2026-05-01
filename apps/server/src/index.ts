@@ -32,7 +32,15 @@ import { codebaseRoutes } from './routes/codebase.js';
 import { blameRoutes } from './routes/blame.js';
 import { modelStrategyRoutes } from './routes/modelStrategy.js';
 import { subsystemsRoutes } from './routes/subsystems.js';
+import { tagRegistryRoutes } from './routes/tagRegistry.js';
+import { forensicRoutes } from './routes/forensic.js';
+import { spawnAuthorityRoutes } from './routes/spawnAuthority.js';
+import { gapAnalysisRoutes } from './routes/gapAnalysis.js';
+import { projectStateCrawlerRoutes } from './routes/projectStateCrawler.js';
+import { suggestedJobsRoutes } from './routes/suggestedJobs.js';
+import { godFactoryRoutes } from './routes/godFactory.js';
 import { startSubsystemScheduler } from './services/subsystemScheduler.js';
+import { runSuggestedJobsCrawlerTick, runSandboxTick } from './services/suggestedJobsCrawler/index.js';
 import csrfPlugin from './plugins/csrf.js';
 import { validationPlugin } from './plugins/validation.js';
 import { registerGracefulShutdown } from './plugins/gracefulShutdown.js';
@@ -131,6 +139,27 @@ async function main() {
   // Subsystems — unified control plane for crawlers/analysis
   await app.register(subsystemsRoutes, { prefix: '/api/subsystems' });
 
+  // Tag Registry — devtags, plantags, buildtags, relationship validation
+  await app.register(tagRegistryRoutes, { prefix: '/api/tags' });
+
+  // Forensic — all forensic table reads + sub-agent invocations
+  await app.register(forensicRoutes, { prefix: '/api/forensic' });
+
+  // Spawn Authority — check spawn permissions, view violations
+  await app.register(spawnAuthorityRoutes, { prefix: '/api/spawn' });
+
+  // Gap Analysis — coverage, patterns, debt, tag system, agent performance
+  await app.register(gapAnalysisRoutes, { prefix: '/api/gap' });
+
+  // Project State Crawler — deterministic devtag extraction + drift detection
+  await app.register(projectStateCrawlerRoutes, { prefix: '/api/project-state-crawler' });
+
+  // Suggested Jobs System — codebase review protocols + implementation pipeline
+  await app.register(suggestedJobsRoutes, { prefix: '/api/suggested-jobs' });
+
+  // God Factory Agent — notification queue, idle suggestions, brainstorm, model/background status
+  await app.register(godFactoryRoutes, { prefix: '/api/god-factory' });
+
   // Health — rich diagnostic endpoint (replaces inline handler)
   await app.register(healthRoutes);
 
@@ -149,6 +178,19 @@ async function main() {
     console.log(`🌐 Frontend: ${appConfig.frontend.url}\n`);
 
     startSubsystemScheduler(db);
+
+    // Suggested Jobs Crawler — runs every 2 minutes, alternating crawler ticks + sandbox ticks
+    let sjTickCounter = 0;
+    setInterval(() => {
+      try {
+        if (sjTickCounter % 2 === 0) {
+          runSuggestedJobsCrawlerTick(db);
+        } else {
+          runSandboxTick(db);
+        }
+        sjTickCounter++;
+      } catch { /* non-fatal */ }
+    }, 2 * 60 * 1000);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

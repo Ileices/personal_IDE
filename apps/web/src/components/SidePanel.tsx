@@ -21,6 +21,11 @@ import { ModelStrategyPanel } from './ModelStrategyPanel';
 import { BlamePanel } from './BlamePanel';
 import { HelpPanel } from './HelpPanel';
 import { LocalModelCatalog } from './LocalModelCatalog';
+import { TagRegistryPanel } from './TagRegistryPanel';
+import { ForensicPanel } from './ForensicPanel';
+import { GapAnalysisPanel } from './GapAnalysisPanel';
+import { ProjectStateCrawlerPanel } from './ProjectStateCrawlerPanel';
+import { SuggestedJobsPanel } from './SuggestedJobsPanel';
 import { ProviderSetupWizard } from './wizards/ProviderSetupWizard';
 import { ModelStrategyWizard } from './wizards/ModelStrategyWizard';
 
@@ -77,6 +82,11 @@ export function SidePanel({ view, width, onClose, onNewProject }: SidePanelProps
       {view === 'rates' && <RatesView />}
       {view === 'blame' && <BlameView />}
       {view === 'local-models' && <LocalModelCatalogView />}
+      {view === 'tags' && <TagRegistryView />}
+      {view === 'forensic' && <ForensicView />}
+      {view === 'gap' && <GapAnalysisPanel />}
+      {view === 'project-state-crawler' && <ProjectStateCrawlerPanel />}
+      {view === 'suggested-jobs' && <SuggestedJobsPanel />}
       {view === 'help' && <HelpView />}
     </div>
   );
@@ -333,6 +343,24 @@ function HelpView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <HelpPanel />
+    </div>
+  );
+}
+
+// ── Tag Registry ──────────────────────────────────
+function TagRegistryView() {
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <TagRegistryPanel />
+    </div>
+  );
+}
+
+// ── Forensic Database ─────────────────────────────
+function ForensicView() {
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <ForensicPanel />
     </div>
   );
 }

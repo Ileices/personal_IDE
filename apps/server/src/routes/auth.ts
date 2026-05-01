@@ -204,12 +204,15 @@ export async function authRoutes(app: FastifyInstance) {
     return { success: true };
   });
 
-  // --- GET /api/auth/token - Get active token (internal use) ---
+  // --- GET /api/auth/token - Disabled: never expose decrypted tokens over HTTP ---
   app.get('/token', async (_req: FastifyRequest, reply: FastifyReply) => {
-    const row = db.prepare('SELECT token_encrypted FROM auth_tokens WHERE is_active = 1').get() as any;
+    const row = db.prepare('SELECT 1 FROM auth_tokens WHERE is_active = 1').get() as any;
     if (!row) {
       return reply.status(401).send({ error: 'Not authenticated' });
     }
-    return { token: smartDecrypt(row.token_encrypted, appConfig.security.encryptKey) || '' };
+    return reply.status(403).send({
+      error: 'Direct token retrieval is disabled for security reasons',
+      tokenAvailable: true,
+    });
   });
 }

@@ -147,3 +147,53 @@ jobs:
       # Basic: check that no import is broken
       - name: Check shared package
         run: pnpm --filter @personal-ide/shared exec tsc --noEmit
+
+  # ─────────────────────────────────────────
+  # Job 5: Security checks
+  # ─────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run pnpm audit (high+)
+        run: |
+          set -euo pipefail
+          for dir in . apps/server apps/web testing packages/shared; do
+            if [ -f "$dir/package.json" ]; then
+              echo "Auditing $dir"
+              pnpm --dir "$dir" audit --audit-level high
+            fi
+          done
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit for NANO requirements
+        run: pip-audit -r NANO_train/requirements.txt
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --config .gitleaks.toml --redact
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

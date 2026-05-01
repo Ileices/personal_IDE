@@ -125,7 +125,7 @@ export function loadConfig(): AppConfig {
   return {
     server: {
       port: envInt('SERVER_PORT', 3001),
-      host: env('SERVER_HOST', '0.0.0.0'),
+      host: env('SERVER_HOST', '127.0.0.1'),
     },
     github: {
       pat: env('GITHUB_PAT'),

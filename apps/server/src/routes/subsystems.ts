@@ -249,7 +249,7 @@ export function executeSubsystem(db: any, request: SubsystemRunRequest): { subsy
        FROM model_registry ORDER BY total_runs DESC LIMIT 20`
     ).all() as Array<{ model_id: string; avg_quality: number; success_rate: number; total_runs: number; trend: string }>;
 
-    const jobs = rows
+    const derivedJobs = rows
       .filter(r => r.total_runs >= 3 && (r.avg_quality < 55 || r.success_rate < 0.65 || r.trend === 'down'))
       .slice(0, 12)
       .map((r, i) => ({
@@ -260,6 +260,16 @@ export function executeSubsystem(db: any, request: SubsystemRunRequest): { subsy
         source: 'Suggested Jobs Crawler',
         description: `Quality ${Math.round(r.avg_quality || 0)}%, success ${Math.round((r.success_rate || 0) * 100)}%, trend ${r.trend}. Build route/tooling mitigation.`
       }));
+
+    const blameJobs = db.prepare(
+      `SELECT id, title, category, priority, source, description
+       FROM suggested_jobs
+       WHERE status = 'pending'
+       ORDER BY datetime(created_at) DESC
+       LIMIT 20`
+    ).all() as Array<{ id: string; title: string; category: string; priority: string; source: string; description: string }>;
+
+    const jobs = [...blameJobs, ...derivedJobs].slice(0, 30);
 
     result = {
       scannedModels: rows.length,

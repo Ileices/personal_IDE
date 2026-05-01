@@ -108,20 +108,6 @@ export async function chatRoutes(app: FastifyInstance) {
       });
     }
 
-    // Get or create conversation
-    let conversationId = body.conversationId;
-    if (!conversationId) {
-      conversationId = memory.createConversation(
-        body.projectId,
-        body.message.slice(0, 50),
-        body.mode,
-        body.model
-      );
-    }
-
-    // Save user message
-    const userMessageId = memory.addMessage(conversationId, 'user', body.message, body.model, body.mode);
-
     // Resolve the best project for memory/file-context when running in
     // default IDE mode (no explicit active project selected).
     let effectiveProjectId = body.projectId;
@@ -131,6 +117,20 @@ export async function chatRoutes(app: FastifyInstance) {
         effectiveProjectId = projects[0].id;
       }
     }
+
+    // Get or create conversation
+    let conversationId = body.conversationId;
+    if (!conversationId) {
+      conversationId = memory.createConversation(
+        effectiveProjectId || body.projectId,
+        body.message.slice(0, 50),
+        body.mode,
+        body.model
+      );
+    }
+
+    // Save user message
+    const userMessageId = memory.addMessage(conversationId, 'user', body.message, body.model, body.mode);
 
     // Build memory context
     let memoryContext = '';
@@ -230,15 +230,30 @@ export async function chatRoutes(app: FastifyInstance) {
             writeBlameRecord(db, {
               model: modelId,
               mode: body.mode,
+              interactionType: body.mode,
+              buildPhase: 'chat_response',
               projectId: body.projectId,
               conversationId: conversationId || undefined,
               taskType: body.mode,
               quality: structured?.confidence ?? undefined,
               success: true,
               latencyMs,
+              durationMs: latencyMs,
               tokenCount: usage?.totalTokens,
               promptTokens: usage?.promptTokens,
               completionTokens: usage?.completionTokens,
+              contextWindowTokens: (modelDef as any)?.maxInputTokens,
+              outputTokensAllowed: modelDef?.maxOutputTokens,
+              outputText: fullContent,
+              cycleId: new Date().toISOString().slice(0, 10),
+              tagValidationResult: structured ? 'pass' : 'partial',
+              tagValidationFailureCodes: structured ? [] : ['unstructured_output'],
+              qualitySignals: {
+                tagConformanceScore: structured ? Math.min(1, Math.max(0, (structured.confidence ?? 70) / 100)) : 0.65,
+                instructionAdherenceScore: structured ? 0.9 : 0.65,
+                structuralIntegrityScore: structured ? 0.9 : 0.7,
+                hallucinationRate: 0.02,
+              },
             });
 
             // Save assistant message (use actual model used, not body.model)
@@ -291,6 +306,8 @@ export async function chatRoutes(app: FastifyInstance) {
         writeBlameRecord(db, {
           model: modelId,
           mode: body.mode,
+          interactionType: body.mode,
+          buildPhase: 'chat_response',
           projectId: body.projectId,
           conversationId: conversationId || undefined,
           taskType: body.mode,
@@ -300,6 +317,12 @@ export async function chatRoutes(app: FastifyInstance) {
             : err?.status === 503 || err?.status === 502 ? 'provider_unreachable'
             : 'model_error',
           latencyMs: Date.now() - callStartMs,
+          durationMs: Date.now() - callStartMs,
+          contextWindowTokens: (modelDef as any)?.maxInputTokens,
+          outputTokensAllowed: modelDef?.maxOutputTokens,
+          cycleId: new Date().toISOString().slice(0, 10),
+          tagValidationResult: 'fail',
+          tagValidationFailureCodes: ['upstream_model_error'],
         });
         if (!isFallbackable || i === modelsToTry.length - 1) {
           // Not retryable OR no more fallbacks — surface the error

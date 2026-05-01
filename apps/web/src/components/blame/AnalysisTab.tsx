@@ -1,10 +1,13 @@
 import React from 'react';
 import { CheckCircle, Globe, RefreshCw, ToggleLeft, ToggleRight, Zap } from 'lucide-react';
-import type { ModelStats } from './types.js';
+import type { BlameSuccess, ModelStats, SuggestedJob, ToolCriticism } from './types.js';
 import { qualityColor } from './ui.js';
 
 interface Props {
   stats: ModelStats[];
+  criticisms: ToolCriticism[];
+  successes: BlameSuccess[];
+  suggestedJobs: SuggestedJob[];
   autoUpdate: boolean;
   crawlerRunning: boolean;
   crawlerLog: string[];
@@ -17,6 +20,9 @@ interface Props {
 
 export function AnalysisTab({
   stats,
+  criticisms,
+  successes,
+  suggestedJobs,
   autoUpdate,
   crawlerRunning,
   crawlerLog,
@@ -110,6 +116,54 @@ export function AnalysisTab({
                 Discard
               </button>
             </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-ide-bg border border-ide-border rounded p-2.5 space-y-2">
+        <div className="text-[10px] font-semibold text-ide-text">Forensic Signals</div>
+        <div className="grid grid-cols-3 gap-2 text-[10px]">
+          <div className="rounded border border-red-500/20 bg-red-500/5 p-1.5">
+            <div className="text-[9px] text-ide-text-dim">Tool Criticisms</div>
+            <div className="text-red-400 font-semibold text-sm">{criticisms.length}</div>
+          </div>
+          <div className="rounded border border-green-500/20 bg-green-500/5 p-1.5">
+            <div className="text-[9px] text-ide-text-dim">Success Attributions</div>
+            <div className="text-green-400 font-semibold text-sm">{successes.length}</div>
+          </div>
+          <div className="rounded border border-blue-500/20 bg-blue-500/5 p-1.5">
+            <div className="text-[9px] text-ide-text-dim">Suggested Jobs</div>
+            <div className="text-blue-400 font-semibold text-sm">{suggestedJobs.length}</div>
+          </div>
+        </div>
+
+        {criticisms.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[9px] text-ide-text-dim uppercase tracking-wider">Latest Criticisms</div>
+            {criticisms.slice(0, 4).map(c => (
+              <div key={c.criticismId} className="rounded border border-ide-border/40 bg-ide-panel/30 px-2 py-1 text-[9px]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-ide-text truncate" title={c.modelId}>{c.modelId.split('/').pop()}</span>
+                  <span className="text-red-400 uppercase">{c.severity || 'error'}</span>
+                </div>
+                <div className="text-ide-text-dim">{c.interactionType} — {c.failurePattern}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {successes.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[9px] text-ide-text-dim uppercase tracking-wider">Latest Successes</div>
+            {successes.slice(0, 4).map(s => (
+              <div key={s.successId} className="rounded border border-ide-border/40 bg-ide-panel/30 px-2 py-1 text-[9px]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-ide-text truncate" title={s.modelId}>{s.modelId.split('/').pop()}</span>
+                  <span className="text-green-400">{Math.round((s.compositeQualityScoreAvg || 0) * 100)}%</span>
+                </div>
+                <div className="text-ide-text-dim">{s.interactionType} — streak {s.consecutiveCount}</div>
+              </div>
+            ))}
           </div>
         )}
       </div>

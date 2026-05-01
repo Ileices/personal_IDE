@@ -1,0 +1,21 @@
+title = "personal-ide gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignore generated datasets and placeholder example values"
+paths = [
+  '''^apps/NANO_train/nano_data/''',
+  '''^NANO_train/nano_data/''',
+  '''^documentation/chat_backup/''',
+  '''^NANO_train/logs/''',
+  '''^NANO_train/checkpoints/'''
+]
+regexes = [
+  '''ghp_x+''',
+  '''github_pat_x+''',
+  '''change-me-to-a-random-string''',
+  '''your-secure-random-string-here''',
+  '''ghp_your_token_here'''
+]

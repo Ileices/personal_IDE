@@ -686,9 +686,12 @@ export class EnhancedAgentLoop {
             writeBlameRecord(this.db, {
               model: this.config.model,
               mode: 'agent',
+              interactionType: 'agent_loop',
+              buildPhase: 'agent_step_execution',
               projectId: this.config.projectRoot,
               conversationId: this.conversationId,
               agentRunId: this.runId,
+              cycleId: new Date().toISOString().slice(0, 10),
               taskType: 'agent_step',
               success: false,
               errorType: statusCode === 429 ? 'rate_limited'
@@ -696,6 +699,9 @@ export class EnhancedAgentLoop {
                 : statusCode === 503 || statusCode === 502 ? 'provider_unreachable'
                 : 'model_error',
               latencyMs: Date.now() - agentCallStartMs,
+              durationMs: Date.now() - agentCallStartMs,
+              tagValidationResult: 'fail',
+              tagValidationFailureCodes: ['agent_step_model_error'],
             });
 
             // ── Handle 404 — Model not found (extracted to modelSwitcher.ts) ──
@@ -775,13 +781,21 @@ export class EnhancedAgentLoop {
             writeBlameRecord(this.db, {
               model: this.config.model,
               mode: 'agent',
+              interactionType: 'agent_loop',
+              buildPhase: 'agent_step_execution',
               projectId: this.config.projectRoot,
               conversationId: this.conversationId,
               agentRunId: this.runId,
+              cycleId: new Date().toISOString().slice(0, 10),
               taskType: 'agent_step',
               success: true,
               latencyMs: (timingResult as any)?.durationMs ?? (Date.now() - agentCallStartMs),
+              durationMs: (timingResult as any)?.durationMs ?? (Date.now() - agentCallStartMs),
               tokenCount: response.usage?.total_tokens,
+              promptTokens: response.usage?.prompt_tokens,
+              completionTokens: response.usage?.completion_tokens,
+              outputText: response.content || '',
+              tagValidationResult: 'partial',
             });
           }
         }

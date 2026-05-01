@@ -65,6 +65,26 @@ interface PromptHistoryItem {
   lastModel?: string;
 }
 
+interface GodFactoryQueueItem {
+  notification_id: string;
+  category: string;
+  severity: string;
+  natural_language_summary: string;
+  source_forensic_id?: string | null;
+  timestamp: string;
+}
+
+interface GodFactoryIdleSuggestion {
+  suggestion_id: string;
+  category: string;
+  natural_language_summary: string;
+  source_devtags: string[];
+  source_files: string[];
+  source_lines: Array<[number, number]>;
+  suggested_job_id?: string | null;
+  timestamp: string;
+}
+
 // ─── Tool constants ───────────────────────────────────────────────────────────
 
 const MAX_TOOL_ITERATIONS = 10;
@@ -73,7 +93,7 @@ const TOOL_DEFINITIONS_PROMPT = `
 ## THE GOD FACTORY Codebase Tools
 
 You are operating as an autonomous coding agent with FULL ACCESS to the Personal IDE codebase.
-You can read, search, and modify source files, and run build/lint commands.
+You can read, search, and modify source files, run build/lint commands, and query live God Factory system state.
 
 To call a tool, output a fenced code block with language \`tool_call\` containing valid JSON:
 
@@ -89,12 +109,40 @@ To call a tool, output a fenced code block with language \`tool_call\` containin
 | read_file | Read file content | \`path\` (required), \`startLine?\`, \`endLine?\` |
 | search_code | Grep search codebase | \`query\` (required), \`maxResults?\` |
 | get_docs | Read documentation | \`section?\` (e.g. "architecture", "llm") |
+| get_notification_queue | Read queued God Factory notifications | \`limit?\` |
+| get_idle_suggestions | Read unacknowledged idle suggestions | \`limit?\` |
+| find_suggested_jobs | Search Suggested Jobs before planning new work | \`query\` (required), \`limit?\` |
+| get_job_detail | Read a Suggested Job and sandbox state | \`jobId\` (required) |
+| create_brainstorm_job | Turn an enhancement idea into a Suggested Job immediately | \`input\` (required) |
+| read_sandbox_status | Read sandbox_spec and recent sandbox runs for a job | \`jobId\` (required) |
+| read_forensic_entries | Read regression and tag-mismatch forensic entries | \`devtag?\`, \`severity?\`, \`cycleId?\`, \`limit?\` |
+| read_blame_records | Read blame + quality records for a model | \`model\` (required), \`interactionType?\`, \`limit?\`, \`projectId?\` |
+| inspect_devtag | Resolve a devtag from the latest crawler snapshot | \`name\` (required), \`limit?\` |
+| live_debt_check | Compute current debt scores for one or more files | \`files\` (required string array) |
+| live_coverage_check | Read live coverage for one or more plantags or a scope | \`plantags?\` (string array), \`scope?\` |
+| live_pattern_query | Query recurring patterns and severity trends | \`failure_type?\`, \`devtag_type?\`, \`agent_category?\`, \`build_phase?\`, \`min_recurrence?\`, \`anti_pattern_only?\` |
 | patch_file | Replace a string in a file (requires user approval) | \`path\`, \`oldString\`, \`newString\` |
 | write_file | Write/create a whole file (requires user approval) | \`path\`, \`content\` |
 | run_command | Run a terminal command (requires user approval) | \`command\`, \`explanation\`, \`cwd?\` |
+| resolve_devtag | Resolve a devtag by tag_key from the registry | \`tag_key\` (required) |
+| tag_vocabulary_diff | Show all tag types in use, proposed, and unused | _(no params)_ |
+| orphan_scan | Find dead/orphaned devtags and buildtags | _(no params)_ |
+| conflict_scan | Show active devtag claim conflicts | \`devtag_ids?\` (comma-separated) |
+| gap_scan | Run a live gap analysis scan | \`scope?\`, \`depth?\`, \`tag_filter?\` |
+| regression_index | Get systemic regression entries | \`devtag?\`, \`limit?\` |
+| debt_heatmap | Show debt heatmap by file/component | \`threshold?\` (0.0–1.0) |
+| pattern_trend | Get trend data for a recurring pattern | \`pattern_id\` (required), \`limit?\` |
+| agent_conformance_report | Get agent performance/conformance report | \`agent_id?\` |
+| implementation_pipeline_status | Get staged pipeline progress for an implementing job | \`job_id\` (required) |
+| spawn_authority_check | Check if a sub-agent spawn is authorized | \`requesting_agent_id\`, \`requesting_agent_type\`, \`requested_sub_agent\` |
 
 ### Tool Rules
 - Use ONE tool call per response turn
+- When the user asks for a feature, enhancement, or implementation, call \`find_suggested_jobs\` first
+- If a matching job exists, call \`get_job_detail\` or \`read_sandbox_status\` before recommending implementation
+- If no matching job exists for a requested enhancement, call \`create_brainstorm_job\` to create a real Suggested Job instead of inventing one
+- When the user asks about codebase state, regressions, model performance, coverage, debt, or recurring failures, use the live God Factory tools instead of guessing
+- Brainstorm responses must cite live tool results such as devtags, files, debt scores, patterns, or blame/model data
 - Always READ a file before patching it (ensures oldString matches exactly)
 - For patch_file: include 3+ lines of unchanged context around the target text
 - patch_file oldString must match EXACTLY ONCE — add more context if needed
@@ -120,11 +168,68 @@ function formatToolSummary(call: ToolCall): string {
     case 'read_file':    return `read_file(${p.path}${p.startLine ? `:${p.startLine}-${p.endLine || '?'}` : ''})`;
     case 'search_code':  return `search_code("${p.query}")`;
     case 'get_docs':     return `get_docs(${p.section || 'index'})`;
+    case 'get_notification_queue': return `get_notification_queue(${p.limit || 10})`;
+    case 'get_idle_suggestions': return `get_idle_suggestions(${p.limit || 10})`;
+    case 'find_suggested_jobs': return `find_suggested_jobs("${p.query}")`;
+    case 'get_job_detail': return `get_job_detail(${p.jobId})`;
+    case 'create_brainstorm_job': return `create_brainstorm_job(${String(p.input).slice(0, 40)})`;
+    case 'read_sandbox_status': return `read_sandbox_status(${p.jobId})`;
+    case 'read_forensic_entries': return `read_forensic_entries(${p.devtag || p.severity || 'recent'})`;
+    case 'read_blame_records': return `read_blame_records(${p.model})`;
+    case 'inspect_devtag': return `inspect_devtag(${p.name})`;
+    case 'live_debt_check': return `live_debt_check(${Array.isArray(p.files) ? p.files.length : 0} files)`;
+    case 'live_coverage_check': return `live_coverage_check(${Array.isArray(p.plantags) ? p.plantags.join(',') : p.scope || 'scope'})`;
+    case 'live_pattern_query': return `live_pattern_query(${p.failure_type || p.devtag_type || 'patterns'})`;
     case 'patch_file':   return `patch_file(${p.path})`;
     case 'write_file':   return `write_file(${p.path})`;
     case 'run_command':  return `run_command(${String(p.command).slice(0, 60)})`;
+    case 'resolve_devtag': return `resolve_devtag(${p.tag_key})`;
+    case 'tag_vocabulary_diff': return `tag_vocabulary_diff()`;
+    case 'orphan_scan':  return `orphan_scan()`;
+    case 'conflict_scan': return `conflict_scan(${p.devtag_ids || 'all'})`;
+    case 'gap_scan':     return `gap_scan(${p.scope || 'full'})`;
+    case 'regression_index': return `regression_index(${p.devtag || 'all'})`;
+    case 'debt_heatmap': return `debt_heatmap(threshold=${p.threshold ?? 0})`;
+    case 'pattern_trend': return `pattern_trend(${p.pattern_id})`;
+    case 'agent_conformance_report': return `agent_conformance_report(${p.agent_id || 'all'})`;
+    case 'implementation_pipeline_status': return `implementation_pipeline_status(${p.job_id})`;
+    case 'spawn_authority_check': return `spawn_authority_check(${p.requested_sub_agent})`;
     default:             return `${call.tool}(${JSON.stringify(p).slice(0, 60)})`;
   }
+}
+
+function safePretty(value: unknown): string {
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function buildSessionBriefing(notifications: GodFactoryQueueItem[], suggestions: GodFactoryIdleSuggestion[]): string {
+  const lines: string[] = ['[THE GOD FACTORY STARTUP BRIEF]'];
+
+  if (notifications.length === 0) {
+    lines.push('Notification queue: no queued notifications.');
+  } else {
+    lines.push('Notification queue:');
+    notifications.forEach((item, index) => {
+      lines.push(`${index + 1}. [${item.severity}] ${item.category} — ${item.natural_language_summary}`);
+    });
+  }
+
+  if (suggestions.length === 0) {
+    lines.push('Idle suggestions: none waiting.');
+  } else {
+    lines.push('Idle suggestions:');
+    suggestions.forEach((item, index) => {
+      const refs = [
+        item.source_devtags?.length ? `devtags: ${item.source_devtags.join(', ')}` : '',
+        item.source_files?.length ? `files: ${item.source_files.join(', ')}` : '',
+      ].filter(Boolean).join(' | ');
+      lines.push(`${index + 1}. ${item.category} — ${item.natural_language_summary}${refs ? ` (${refs})` : ''}`);
+    });
+  }
+
+  lines.push('I am ready for the next instruction.');
+  return lines.join('\n');
 }
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -205,6 +310,8 @@ export function TheGodFactory() {
   const [copied, setCopied]               = useState<string | null>(null);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [godFactorySessionId, setGodFactorySessionId] = useState<string | null>(null);
+  const [sessionEpoch, setSessionEpoch] = useState(0);
 
   // Tool-calling state
   const [toolsEnabled, setToolsEnabled]           = useState(true);
@@ -220,12 +327,15 @@ export function TheGodFactory() {
   const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const godFactorySessionIdRef = useRef<string | null>(null);
+  const sessionIntroShownRef = useRef<string | null>(null);
 
   // Keep local model in sync with global if global changes and we haven't overridden
   useEffect(() => { if (selectedModel && !localModel) setLocalModel(selectedModel); }, [selectedModel]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => { saveConv(messages); }, [messages]);
   useEffect(() => { saveHistory(history); }, [history]);
+  useEffect(() => { godFactorySessionIdRef.current = godFactorySessionId; }, [godFactorySessionId]);
 
   // ── Load codebase tree on mount ───────────────────────────────────────────
   useEffect(() => {
@@ -326,6 +436,88 @@ export function TheGodFactory() {
     });
   }, []);
 
+  const createGodFactorySession = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/god-factory/sessions/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_cycle: `${Date.now()}`,
+          notifications_presented: [],
+          project_id: activeProject?.id ?? null,
+        }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null) as { session_id?: string } | null;
+      if (!data?.session_id) return null;
+      setGodFactorySessionId(data.session_id);
+      godFactorySessionIdRef.current = data.session_id;
+      return data.session_id;
+    } catch {
+      return null;
+    }
+  }, [activeProject?.id]);
+
+  const ensureGodFactorySession = useCallback(async () => {
+    return godFactorySessionIdRef.current || await createGodFactorySession();
+  }, [createGodFactorySession]);
+
+  const appendGodFactorySession = useCallback(async (payload: Record<string, unknown>) => {
+    const sessionId = await ensureGodFactorySession();
+    if (!sessionId) return;
+    try {
+      await fetch(`${API_BASE}/api/god-factory/sessions/${sessionId}/append`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // noop
+    }
+  }, [ensureGodFactorySession]);
+
+  const injectSessionBriefing = useCallback(async (sessionId: string) => {
+    if (sessionIntroShownRef.current === sessionId) return;
+
+    try {
+      const [queueRes, suggestionsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/god-factory/queue?limit=5`),
+        fetch(`${API_BASE}/api/god-factory/idle-suggestions?limit=5`),
+      ]);
+      const queueData = queueRes.ok ? await queueRes.json().catch(() => null) as { notifications?: GodFactoryQueueItem[] } | null : null;
+      const suggestionsData = suggestionsRes.ok ? await suggestionsRes.json().catch(() => null) as { suggestions?: GodFactoryIdleSuggestion[] } | null : null;
+      const notifications = queueData?.notifications || [];
+      const suggestions = suggestionsData?.suggestions || [];
+
+      setMessages(prev => {
+        if (prev.some(msg => msg.id === `gf-startup-${sessionId}`)) return prev;
+        return [...prev, {
+          id: `gf-startup-${sessionId}`,
+          role: 'assistant',
+          content: buildSessionBriefing(notifications, suggestions),
+          timestamp: new Date().toISOString(),
+          status: 'done',
+          model: localModel,
+        }];
+      });
+
+      for (const item of notifications) {
+        void appendGodFactorySession({ notification_presented: item.notification_id });
+      }
+    } finally {
+      sessionIntroShownRef.current = sessionId;
+    }
+  }, [appendGodFactorySession, localModel]);
+
+  useEffect(() => {
+    void ensureGodFactorySession();
+  }, [ensureGodFactorySession, sessionEpoch]);
+
+  useEffect(() => {
+    if (!godFactorySessionId) return;
+    void injectSessionBriefing(godFactorySessionId);
+  }, [godFactorySessionId, injectSessionBriefing]);
+
   // ── Approval helper (promise-based modal) ─────────────────────────────────
   const requestApproval = useCallback((details: ApprovalDetails): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -389,6 +581,148 @@ export function TheGodFactory() {
           if (data.sections) return `Available docs:\n${(data.sections as string[]).join('\n')}\n\nUse get_docs with a section name to read it.`;
           return String(data.content || '').slice(0, 8000);
         }
+        case 'get_notification_queue': {
+          const limit = Math.min(Math.max(Number(params.limit || 10), 1), 20);
+          const res = await fetch(`${API_BASE}/api/god-factory/queue?limit=${limit}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty(data.notifications || []);
+        }
+        case 'get_idle_suggestions': {
+          const limit = Math.min(Math.max(Number(params.limit || 10), 1), 20);
+          const res = await fetch(`${API_BASE}/api/god-factory/idle-suggestions?limit=${limit}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty(data.suggestions || []);
+        }
+        case 'find_suggested_jobs': {
+          const query = String(params.query || '').trim();
+          if (!query) return 'Error: query is required';
+          const limit = Math.min(Math.max(Number(params.limit || 10), 1), 25);
+          const qp = new URLSearchParams({ search: query, limit: String(limit) });
+          const res = await fetch(`${API_BASE}/api/suggested-jobs/jobs?${qp}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty({ total: data.total, jobs: data.jobs });
+        }
+        case 'get_job_detail': {
+          const jobId = String(params.jobId || '').trim();
+          if (!jobId) return 'Error: jobId is required';
+          const res = await fetch(`${API_BASE}/api/suggested-jobs/jobs/${encodeURIComponent(jobId)}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty(data);
+        }
+        case 'create_brainstorm_job': {
+          const input = String(params.input || '').trim();
+          if (!input) return 'Error: input is required';
+          const res = await fetch(`${API_BASE}/api/god-factory/brainstorm`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input }),
+          });
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty(data);
+        }
+        case 'read_sandbox_status': {
+          const jobId = String(params.jobId || '').trim();
+          if (!jobId) return 'Error: jobId is required';
+          const res = await fetch(`${API_BASE}/api/suggested-jobs/jobs/${encodeURIComponent(jobId)}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty({
+            job: data.job,
+            sandbox_spec: data.job?.sandbox_spec,
+            sandboxRuns: data.sandboxRuns,
+            testResults: data.testResults,
+          });
+        }
+        case 'read_forensic_entries': {
+          const limit = Math.min(Math.max(Number(params.limit || 20), 1), 100);
+          const devtag = params.devtag ? String(params.devtag) : '';
+          const severity = params.severity ? String(params.severity) : '';
+          const cycleId = params.cycleId ? String(params.cycleId) : '';
+          const regQ = new URLSearchParams({ limit: String(limit) });
+          if (devtag) regQ.set('devtag', devtag);
+          if (cycleId) regQ.set('cycle_id', cycleId);
+          const mismatchQ = new URLSearchParams();
+          if (devtag) mismatchQ.set('devtag', devtag);
+          if (severity) mismatchQ.set('severity', severity);
+          const [regressionsRes, mismatchesRes] = await Promise.all([
+            fetch(`${API_BASE}/api/forensic/regressions?${regQ}`),
+            fetch(`${API_BASE}/api/forensic/tag-mismatches?${mismatchQ}`),
+          ]);
+          const regressions = regressionsRes.ok ? await regressionsRes.json().catch(() => ({})) : {};
+          const mismatches = mismatchesRes.ok ? await mismatchesRes.json().catch(() => ({})) : {};
+          return safePretty({ regressions: regressions.entries || [], tag_mismatches: mismatches.entries || [] });
+        }
+        case 'read_blame_records': {
+          const model = String(params.model || '').trim();
+          if (!model) return 'Error: model is required';
+          const qp = new URLSearchParams({ model, limit: String(Math.min(Math.max(Number(params.limit || 20), 1), 100)) });
+          if (params.interactionType) qp.set('interactionType', String(params.interactionType));
+          if (params.projectId) qp.set('projectId', String(params.projectId));
+          const res = await fetch(`${API_BASE}/api/blame/records?${qp}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty(data);
+        }
+        case 'inspect_devtag': {
+          const name = String(params.name || '').trim();
+          if (!name) return 'Error: name is required';
+          const limit = Math.min(Math.max(Number(params.limit || 20), 1), 100);
+          const snapshotsRes = await fetch(`${API_BASE}/api/project-state-crawler/snapshots`);
+          const snapshots = await snapshotsRes.json().catch(() => []);
+          const snapshotId = Array.isArray(snapshots) && snapshots[0]?.snapshot_id ? snapshots[0].snapshot_id : null;
+          if (!snapshotId) return 'Error: no crawler snapshot is available';
+          const qp = new URLSearchParams({ name, limit: String(limit) });
+          const res = await fetch(`${API_BASE}/api/project-state-crawler/snapshots/${encodeURIComponent(snapshotId)}/devtags?${qp}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty({ snapshot_id: snapshotId, total: data.total, rows: data.rows });
+        }
+        case 'live_debt_check': {
+          const files = Array.isArray(params.files) ? params.files.map(String).filter(Boolean) : [];
+          if (files.length === 0) return 'Error: files must be a non-empty array';
+          const results = await Promise.all(files.map(async (filePath) => {
+            const res = await fetch(`${API_BASE}/api/gap/debt/score?file_path=${encodeURIComponent(filePath)}`);
+            const data = await res.json().catch(() => ({ error: 'Failed to read debt score' }));
+            return { file_path: filePath, result: data };
+          }));
+          results.sort((left, right) => Number(right.result?.debt_score || 0) - Number(left.result?.debt_score || 0));
+          return safePretty(results);
+        }
+        case 'live_coverage_check': {
+          const plantags = Array.isArray(params.plantags) ? params.plantags.map(String).filter(Boolean) : [];
+          if (plantags.length > 0) {
+            const results = await Promise.all(plantags.map(async (plantag) => {
+              const res = await fetch(`${API_BASE}/api/gap/coverage/check/${encodeURIComponent(plantag)}`);
+              const data = await res.json().catch(() => ({ error: 'Failed to read coverage' }));
+              return { plantag, result: data };
+            }));
+            return safePretty(results);
+          }
+          const qp = new URLSearchParams();
+          if (params.scope) qp.set('scope', String(params.scope));
+          const res = await fetch(`${API_BASE}/api/gap/coverage?${qp}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty(data);
+        }
+        case 'live_pattern_query': {
+          const qp = new URLSearchParams();
+          if (params.failure_type) qp.set('failure_type', String(params.failure_type));
+          if (params.devtag_type) qp.set('devtag_type', String(params.devtag_type));
+          if (params.agent_category) qp.set('agent_category', String(params.agent_category));
+          if (params.build_phase) qp.set('build_phase', String(params.build_phase));
+          if (params.min_recurrence !== undefined) qp.set('min_recurrence', String(params.min_recurrence));
+          if (params.anti_pattern_only !== undefined) qp.set('anti_pattern_only', String(Boolean(params.anti_pattern_only)));
+          const res = await fetch(`${API_BASE}/api/gap/patterns?${qp}`);
+          const data = await res.json();
+          if (data.error) return `Error: ${data.error}`;
+          return safePretty(data);
+        }
         case 'patch_file': {
           const prevRes = await fetch(`${API_BASE}/api/codebase/patch`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -433,8 +767,97 @@ export function TheGodFactory() {
             ? `Command succeeded:\n${result.output || '(no output)'}`
             : `Command failed (exit ${result.exitCode}):\n${result.output || result.error}`;
         }
+        case 'resolve_devtag': {
+          const res = await fetch(`${API_BASE}/api/tags/devtags/resolve?tag_key=${encodeURIComponent(String(params.tag_key || ''))}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Not found'}`;
+          return safePretty(data);
+        }
+        case 'tag_vocabulary_diff': {
+          const res = await fetch(`${API_BASE}/api/tags/vocabulary-diff`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'orphan_scan': {
+          const res = await fetch(`${API_BASE}/api/tags/orphan-scan`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'conflict_scan': {
+          const qs = params.devtag_ids ? `?devtag_ids=${encodeURIComponent(String(params.devtag_ids))}` : '';
+          const res = await fetch(`${API_BASE}/api/tags/conflict-scan${qs}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'gap_scan': {
+          const qp = new URLSearchParams();
+          if (params.scope) qp.set('scope', String(params.scope));
+          if (params.depth) qp.set('depth', String(params.depth));
+          if (params.tag_filter) qp.set('tag_filter', String(params.tag_filter));
+          const res = await fetch(`${API_BASE}/api/gap/scan?${qp.toString()}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'regression_index': {
+          const qp = new URLSearchParams();
+          if (params.devtag) qp.set('devtag', String(params.devtag));
+          if (params.limit) qp.set('limit', String(params.limit));
+          const res = await fetch(`${API_BASE}/api/forensic/regressions?${qp.toString()}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'debt_heatmap': {
+          const qp = new URLSearchParams();
+          if (params.threshold) qp.set('threshold', String(params.threshold));
+          const res = await fetch(`${API_BASE}/api/gap/debt/heatmap?${qp.toString()}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'pattern_trend': {
+          const patternId = encodeURIComponent(String(params.pattern_id || ''));
+          const qp = new URLSearchParams();
+          if (params.limit) qp.set('limit', String(params.limit));
+          const res = await fetch(`${API_BASE}/api/gap/patterns/${patternId}?${qp.toString()}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'agent_conformance_report': {
+          const qp = new URLSearchParams();
+          if (params.agent_id) qp.set('agent_id', String(params.agent_id));
+          const res = await fetch(`${API_BASE}/api/gap/performance?${qp.toString()}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'implementation_pipeline_status': {
+          const jobId = encodeURIComponent(String(params.job_id || ''));
+          const res = await fetch(`${API_BASE}/api/god-factory/implementation-pipeline/${jobId}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Not found'}`;
+          return safePretty(data);
+        }
+        case 'spawn_authority_check': {
+          const res = await fetch(`${API_BASE}/api/spawn/check`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              requesting_agent_id: params.requesting_agent_id,
+              requesting_agent_type: params.requesting_agent_type,
+              requested_sub_agent: params.requested_sub_agent,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
         default:
-          return `Unknown tool: ${tool}. Available: list_files, read_file, search_code, get_docs, patch_file, write_file, run_command`;
+          return `Unknown tool: ${tool}. Available: list_files, read_file, search_code, get_docs, get_notification_queue, get_idle_suggestions, find_suggested_jobs, get_job_detail, create_brainstorm_job, read_sandbox_status, read_forensic_entries, read_blame_records, inspect_devtag, live_debt_check, live_coverage_check, live_pattern_query, patch_file, write_file, run_command, resolve_devtag, tag_vocabulary_diff, orphan_scan, conflict_scan, gap_scan, regression_index, debt_heatmap, pattern_trend, agent_conformance_report, implementation_pipeline_status, spawn_authority_check`;
       }
     } catch (err: any) {
       return `Tool error (${tool}): ${err.message}`;
@@ -539,6 +962,7 @@ export function TheGodFactory() {
     setToolIterationCount(0);
     const abort = new AbortController();
     abortRef.current = abort;
+    let finalAssistantContent = '';
 
     const buildSystemCtx = (toolHistory: Array<{ role: string; content: string }>) => {
       const lines = [
@@ -551,6 +975,10 @@ export function TheGodFactory() {
         `Model: ${localModel}  Date: ${new Date().toISOString().slice(0, 10)}`,
         `When the user asks about how the app works, use the help/docs and source code to answer with specific details from Personal IDE.`,
         `Treat loaded feedback specs as hard product constraints when they apply.`,
+        `When the user requests a feature or implementation, check Suggested Jobs first. If a matching job exists, inspect its sandbox status before proposing implementation.`,
+        `If no matching Suggested Job exists for a requested enhancement, create one through the God Factory brainstorm/job path instead of inventing a fake record.`,
+        `When the user asks about regressions, codebase health, model behavior, patterns, coverage, or forensic state, use the live God Factory tools and cite concrete results.`,
+        `Brainstorm responses must be grounded in real IDE state such as devtags, files, debt scores, pattern data, or blame/model registry results.`,
         `Be direct and actionable. Show complete changes. Explain what changed and why.`,
         codebaseTree ? `\n${codebaseTree}` : '',
         feedbackContext ? `\n${feedbackContext}` : '',
@@ -563,6 +991,7 @@ export function TheGodFactory() {
 
     try {
       const { content: firstContent } = await streamTurn(trimmed, buildSystemCtx([]), abort);
+      finalAssistantContent = firstContent;
 
       if (!toolsEnabled || abort.signal.aborted) { setIsStreaming(false); abortRef.current = null; return; }
 
@@ -602,6 +1031,7 @@ export function TheGodFactory() {
         const nextPrompt = `[TOOL RESULT for ${formatToolSummary(toolCall)}]:\n${toolResult.slice(0, 6000)}\n\nContinue. Use another tool if needed, or provide your final response.`;
         const { content: nextContent } = await streamTurn(nextPrompt, buildSystemCtx(toolHistory), abort);
         currentContent = nextContent;
+        finalAssistantContent = nextContent;
       }
 
       if (iteration >= MAX_TOOL_ITERATIONS) {
@@ -623,6 +1053,10 @@ export function TheGodFactory() {
         });
       }
     } finally {
+      void appendGodFactorySession({
+        user_input: trimmed,
+        ...(finalAssistantContent ? { agent_response: finalAssistantContent } : {}),
+      });
       setIsStreaming(false);
       setToolIterationCount(0);
       abortRef.current = null;
@@ -630,7 +1064,15 @@ export function TheGodFactory() {
   };
 
   const stopStreaming  = () => abortRef.current?.abort();
-  const clearConv      = () => { setMessages([]); setConversationId(null); try { localStorage.removeItem(CONV_KEY); } catch {} };
+  const clearConv      = () => {
+    setMessages([]);
+    setConversationId(null);
+    setGodFactorySessionId(null);
+    godFactorySessionIdRef.current = null;
+    sessionIntroShownRef.current = null;
+    setSessionEpoch(prev => prev + 1);
+    try { localStorage.removeItem(CONV_KEY); } catch {}
+  };
   const copyMsg        = (content: string, id: string) => { navigator.clipboard.writeText(content).catch(() => {}); setCopied(id); setTimeout(() => setCopied(null), 1500); };
   const exportConv     = () => {
     const text = messages.map(m => `[${m.role.toUpperCase()}] ${m.timestamp}\n${m.content}`).join('\n\n---\n\n');

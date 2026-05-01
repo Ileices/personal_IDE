@@ -12,6 +12,12 @@ import { spawn, ChildProcess, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
+const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+function isLoopbackIp(ip: string): boolean {
+  return LOOPBACK_IPS.has(ip);
+}
+
 interface RunCommandRequest {
   command: string;
   cwd?: string;
@@ -145,6 +151,12 @@ function detectCompiler(lang: string): string | null {
 }
 
 export async function previewRoutes(app: FastifyInstance) {
+  // These endpoints can execute local commands; restrict access to loopback only.
+  app.addHook('onRequest', async (req, reply) => {
+    if (!isLoopbackIp(req.ip)) {
+      return reply.status(403).send({ error: 'Preview endpoints are only available from localhost' });
+    }
+  });
 
   // ── Run arbitrary command ──
   app.post('/run', async (req: FastifyRequest) => {

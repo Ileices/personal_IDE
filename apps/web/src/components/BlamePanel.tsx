@@ -3,21 +3,35 @@
 //
 // Every AI-generated output is "blamed" on the
 // specific model + mode that produced it.
-// This panel shows quality metrics, lets you
-// trigger the crawler agent, and manage
-// auto-update of model strategy configs.
+// 7 tabs: Models · Records · Quality · Criticisms · Successes · Jobs · Analysis
 // ============================================
-import React, { useEffect, useState } from 'react';
-import { Activity, Bot, Download, Fingerprint, Layers, RefreshCw } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Activity, AlertTriangle, Award, Bot, Briefcase, Download, Fingerprint, Layers, RefreshCw, Sparkles } from 'lucide-react';
 import { API_BASE } from '../config.js';
 import { AnalysisTab } from './blame/AnalysisTab.js';
+import { CriticismsTab } from './blame/CriticismsTab.js';
+import { JobsTab } from './blame/JobsTab.js';
 import { ModelsTab } from './blame/ModelsTab.js';
+import { QualityTab } from './blame/QualityTab.js';
 import { RecordsTab } from './blame/RecordsTab.js';
-import type { BlameRecord, ModelStats, TabId } from './blame/types.js';
+import { SuccessesTab } from './blame/SuccessesTab.js';
+import type {
+  BlameRecord,
+  BlameSuccess,
+  ModelStats,
+  QualityRecord,
+  SuggestedJob,
+  TabId,
+  ToolCriticism,
+} from './blame/types.js';
 
 export function BlamePanel() {
   const [records, setRecords] = useState<BlameRecord[]>([]);
   const [stats, setStats] = useState<ModelStats[]>([]);
+  const [quality, setQuality] = useState<QualityRecord[]>([]);
+  const [criticisms, setCriticisms] = useState<ToolCriticism[]>([]);
+  const [successes, setSuccesses] = useState<BlameSuccess[]>([]);
+  const [suggestedJobs, setSuggestedJobs] = useState<SuggestedJob[]>([]);
   const [loading, setLoading] = useState(false);
   const [crawlerRunning, setCrawlerRunning] = useState(false);
   const [autoUpdate, setAutoUpdate] = useState(false);
@@ -28,20 +42,43 @@ export function BlamePanel() {
   const [activeTab, setActiveTab] = useState<TabId>('models');
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/blame/records?limit=100`);
-      if (res.ok) {
-        const data = await res.json();
+      const [recordsRes, qualityRes, criticismsRes, successesRes, jobsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/blame/records?limit=100`),
+        fetch(`${API_BASE}/api/blame/quality?limit=100`),
+        fetch(`${API_BASE}/api/blame/criticisms?limit=50`),
+        fetch(`${API_BASE}/api/blame/successes?limit=50`),
+        fetch(`${API_BASE}/api/blame/jobs?limit=100`),
+      ]);
+
+      if (recordsRes.ok) {
+        const data = await recordsRes.json();
         setRecords(data.records || []);
         setStats(data.stats || []);
       }
-    } catch { /* server may not have this endpoint yet — show empty state */ }
+      if (qualityRes.ok) {
+        const data = await qualityRes.json();
+        setQuality(data.quality || []);
+      }
+      if (criticismsRes.ok) {
+        const data = await criticismsRes.json();
+        setCriticisms(data.criticisms || []);
+      }
+      if (successesRes.ok) {
+        const data = await successesRes.json();
+        setSuccesses(data.successes || []);
+      }
+      if (jobsRes.ok) {
+        const data = await jobsRes.json();
+        setSuggestedJobs(data.jobs || []);
+      }
+    } catch { /* server offline — show empty state */ }
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const runCrawler = async () => {
     setCrawlerRunning(true);
@@ -105,10 +142,20 @@ export function BlamePanel() {
     a.click(); URL.revokeObjectURL(url);
   };
 
-  const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
-    { id: 'models', label: 'Models', icon: <Bot className="w-3 h-3" /> },
-    { id: 'records', label: 'Records', icon: <Layers className="w-3 h-3" /> },
-    { id: 'analysis', label: 'Analysis', icon: <Activity className="w-3 h-3" /> },
+  const handleJobStatusChange = (id: string, status: 'applied' | 'dismissed') => {
+    setSuggestedJobs(prev => prev.map(j => j.id === id ? { ...j, status } : j));
+  };
+
+  const pendingJobCount = suggestedJobs.filter(j => j.status === 'pending').length;
+
+  const tabs: { id: TabId; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: 'models', label: 'Models', icon: <Bot className="w-3 h-3" />, badge: stats.length || undefined },
+    { id: 'records', label: 'Records', icon: <Layers className="w-3 h-3" />, badge: records.length || undefined },
+    { id: 'quality', label: 'Quality', icon: <Sparkles className="w-3 h-3" />, badge: quality.length || undefined },
+    { id: 'criticisms', label: 'Criticisms', icon: <AlertTriangle className="w-3 h-3" />, badge: criticisms.length || undefined },
+    { id: 'successes', label: 'Successes', icon: <Award className="w-3 h-3" />, badge: successes.length || undefined },
+    { id: 'jobs', label: 'Jobs', icon: <Briefcase className="w-3 h-3" />, badge: pendingJobCount || undefined },
+    { id: 'analysis', label: 'Crawler', icon: <Activity className="w-3 h-3" /> },
   ];
 
   return (
@@ -132,16 +179,22 @@ export function BlamePanel() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-ide-border flex-shrink-0 bg-ide-panel">
+      {/* Tabs — scrollable row */}
+      <div className="flex border-b border-ide-border flex-shrink-0 bg-ide-panel overflow-x-auto">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
-            className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
               activeTab === t.id
                 ? 'border-ide-accent text-ide-accent'
                 : 'border-transparent text-ide-text-dim hover:text-ide-text'
             }`}>
-            {t.icon}{t.label}
+            {t.icon}
+            {t.label}
+            {t.badge !== undefined && (
+              <span className={`text-[8px] px-1 rounded ${activeTab === t.id ? 'bg-ide-accent/20 text-ide-accent' : 'bg-ide-bg text-ide-text-dim'}`}>
+                {t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -167,9 +220,32 @@ export function BlamePanel() {
           />
         )}
 
+        {activeTab === 'quality' && (
+          <QualityTab quality={quality} loading={loading} />
+        )}
+
+        {activeTab === 'criticisms' && (
+          <CriticismsTab criticisms={criticisms} loading={loading} />
+        )}
+
+        {activeTab === 'successes' && (
+          <SuccessesTab successes={successes} loading={loading} />
+        )}
+
+        {activeTab === 'jobs' && (
+          <JobsTab
+            jobs={suggestedJobs}
+            loading={loading}
+            onJobStatusChange={handleJobStatusChange}
+          />
+        )}
+
         {activeTab === 'analysis' && (
           <AnalysisTab
             stats={stats}
+            criticisms={criticisms}
+            successes={successes}
+            suggestedJobs={suggestedJobs}
             autoUpdate={autoUpdate}
             crawlerRunning={crawlerRunning}
             crawlerLog={crawlerLog}

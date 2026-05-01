@@ -3,56 +3,154 @@
 // Collapsible sidebar with: Notifications, Suggested Jobs,
 // Codebase Health snapshot, and Brainstorm Pad.
 // ============================================
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Zap, ChevronDown, ChevronRight, ChevronLeft,
   AlertTriangle, Star, Shield, Sparkles, Send, X, SlidersHorizontal, Play,
+  RefreshCw, Briefcase, Clock3, PauseCircle, PlayCircle,
 } from 'lucide-react';
 import { API_BASE } from '../../config.js';
 
 export interface SuggestedJob {
-  id: string;
+  id: string;          // internal UI id (same as job_id from API)
+  job_id: string;      // canonical API id for action calls
   title: string;
   category: string;
-  priority: 'high' | 'medium' | 'low';
+  priority: 'critical' | 'high' | 'medium' | 'low';
   source: string;
   description: string;
+  implementation_status: string;
+  affected_devtags: string[];
+  affected_files: string[];
+  atomic_steps: unknown[];
+  sandbox_spec: { status: string; cycles_used: number; cycle_limit: number };
 }
 
 export interface IntelNotification {
   id: string;
-  type: 'info' | 'warning' | 'success' | 'error';
+  type: 'info' | 'warning' | 'success' | 'error' | 'critical' | 'fatal';
   message: string;
   timestamp: string;
   source: string;
 }
 
-export const DEMO_JOBS: SuggestedJob[] = [
-  {
-    id: '1',
-    title: 'Fix agent loop spec-reading',
-    category: 'agent',
-    priority: 'high',
-    source: 'Blame Crawler',
-    description: 'Inject spec file content at agent start to prevent generic scaffold output',
-  },
-  {
-    id: '2',
-    title: 'Add per-model quality tracking',
-    category: 'model_tool_enhancement',
-    priority: 'medium',
-    source: 'THE GOD FACTORY',
-    description: 'Track quality scores per model per interaction type',
-  },
-  {
-    id: '3',
-    title: 'Memory tab isolation per agent',
-    category: 'memory',
-    priority: 'medium',
-    source: 'THE GOD FACTORY',
-    description: 'Each agent gets its own isolated memory view',
-  },
-];
+interface IdleSuggestion {
+  suggestion_id: string;
+  category: 'trivial_enhancement' | 'feature_bridge' | 'performance_opportunity' | 'debt_warning' | 'regression_trend' | 'model_behavior_alert';
+  source_devtags: string[];
+  source_files: string[];
+  source_lines: Array<[number, number]>;
+  source_forensic_ids: string[];
+  natural_language_summary: string;
+  suggested_job_id: string | null;
+  presented_to_user: boolean;
+  user_response: 'accepted' | 'rejected' | 'deferred' | null;
+  timestamp: string;
+}
+
+interface ModelHealthRecord {
+  model_id: string;
+  display_name: string;
+  provider: string;
+  avg_quality: number;
+  success_rate: number;
+  total_runs: number;
+  tag_conformance: number;
+  instruction_adherence: number;
+  hallucination: number;
+  trend: 'up' | 'down' | 'flat';
+  composite_quality_score: number;
+}
+
+interface NotificationDetailResponse {
+  notification: Record<string, unknown> & {
+    notification_id: string;
+    category: string;
+    severity: string;
+    natural_language_summary: string;
+    summary_tags: string[];
+    timestamp: string;
+  };
+  source_detail: Record<string, unknown> | null;
+}
+
+interface ModelHealthDetailResponse {
+  model: Record<string, unknown> & {
+    model_id: string;
+    display_name: string;
+    provider: string;
+    recommended_interaction_types?: string[];
+    avoided_interaction_types?: string[];
+    strengths?: string[];
+    weaknesses?: string[];
+  };
+  recent_quality: Array<Record<string, unknown>>;
+  recent_blame: Array<Record<string, unknown>>;
+}
+
+interface CodebaseHealthPayload {
+  latest_snapshot: null | {
+    snapshot_id: string;
+    total_devtags: number;
+    registry_surplus_count: number;
+    registry_deficit_count: number;
+    systemic_drift_flagged: boolean;
+    content_drift_count: number;
+    location_drift_count: number;
+    parse_duration_ms: number;
+    timestamp: string;
+  };
+  top_debt_files: Array<{
+    file_path: string;
+    debt_score: number;
+    ceiling: number;
+    ceiling_exceeded: boolean;
+    score_breakdown: Record<string, unknown>;
+  }>;
+  gap_summary: {
+    total_reports: number;
+    flagged_reports: number;
+  };
+}
+
+interface GodFactoryActionRecord {
+  action_id: string;
+  action_type: string;
+  target_id: string | null;
+  target_type: string | null;
+  authority_invoked: string | null;
+  justification_tags: string[];
+  result: string;
+  timestamp: string;
+}
+
+function mapApiJobToSuggestedJob(raw: Record<string, unknown>): SuggestedJob {
+  const tags = Array.isArray(raw.affected_devtags) ? raw.affected_devtags as string[] : [];
+  const files = Array.isArray(raw.affected_files) ? raw.affected_files as string[] : [];
+  const steps = Array.isArray(raw.atomic_steps) ? raw.atomic_steps : [];
+  const sbSpec = (raw.sandbox_spec && typeof raw.sandbox_spec === 'object')
+    ? raw.sandbox_spec as { status: string; cycles_used: number; cycle_limit: number }
+    : { status: 'not_started', cycles_used: 0, cycle_limit: 50 };
+  const descParts: string[] = [];
+  if (tags.length) descParts.push(`${tags.length} devtag${tags.length !== 1 ? 's' : ''}`);
+  if (files.length) descParts.push(`${files.length} file${files.length !== 1 ? 's' : ''}`);
+  if (steps.length) descParts.push(`${steps.length} step${steps.length !== 1 ? 's' : ''}`);
+  descParts.push(`sandbox: ${sbSpec.status}`);
+  return {
+    id: raw.job_id as string,
+    job_id: raw.job_id as string,
+    title: raw.title as string,
+    category: (raw.job_category as string || '').replace(/_/g, ' '),
+    priority: (raw.priority as SuggestedJob['priority']) || 'medium',
+    source: (raw.source as string || '').replace(/_/g, ' '),
+    description: descParts.join(' · '),
+    implementation_status: raw.implementation_status as string,
+    affected_devtags: tags,
+    affected_files: files,
+    atomic_steps: steps,
+    sandbox_spec: sbSpec,
+  };
+}
 
 // ── Component ─────────────────────────────────
 interface Props {
@@ -87,6 +185,55 @@ interface SchedulerStatus {
   lastTickAt?: string | null;
 }
 
+interface BackgroundSubAgentStatus {
+  label: string;
+  description: string;
+  last_run_cycle: string | null;
+  last_run_at: string | null;
+  status: string;
+  scan_position?: string | null;
+}
+
+interface BackgroundStatusPayload {
+  scheduler: SchedulerStatus;
+  subsystemStatus: Record<SubsystemId, SubsystemRuntime>;
+  controls?: {
+    sandbox_paused: boolean;
+  };
+  idleScanner?: {
+    scan_position?: string | null;
+    last_monitor_run?: string | null;
+  };
+  backgroundSubAgents?: {
+    registry_monitor: BackgroundSubAgentStatus;
+    idle_scanner: BackgroundSubAgentStatus;
+    debt_monitor: BackgroundSubAgentStatus;
+    model_performance_monitor: BackgroundSubAgentStatus;
+    gap_report_monitor: BackgroundSubAgentStatus;
+    pattern_watch: BackgroundSubAgentStatus;
+  };
+}
+
+interface ImplementationStage {
+  stage: number;
+  name: string;
+  key: string;
+  description: string;
+  status: 'pending' | 'in_progress' | 'complete' | 'failed';
+  entries: number;
+  last_entry_at: string | null;
+  last_validation: string | null;
+}
+
+interface ImplementingJob {
+  job_id: string;
+  title: string;
+  implementation_status: string;
+  current_stage: number | null;
+  stages: ImplementationStage[];
+  sandbox_spec: Record<string, unknown>;
+}
+
 const SUBSYSTEM_META: Record<SubsystemId, { label: string; description: string; scope: 'ide_app' | 'user_projects' | 'global' }> = {
   ide_codebase_crawler: {
     label: 'IDE Codebase Crawler',
@@ -113,9 +260,21 @@ const SUBSYSTEM_META: Record<SubsystemId, { label: string; description: string; 
 export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot, projectId, projectName, onSendToBrainstorm }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [notifications, setNotifications] = useState<IntelNotification[]>([]);
-  const [jobs, setJobs] = useState<SuggestedJob[]>(DEMO_JOBS);
+  const [idleSuggestions, setIdleSuggestions] = useState<IdleSuggestion[]>([]);
+  const [modelHealth, setModelHealth] = useState<ModelHealthRecord[]>([]);
+  const [codebaseHealth, setCodebaseHealth] = useState<CodebaseHealthPayload | null>(null);
+  const [backgroundStatus, setBackgroundStatus] = useState<BackgroundStatusPayload | null>(null);
+  const [selectedNotification, setSelectedNotification] = useState<NotificationDetailResponse | null>(null);
+  const [selectedModel, setSelectedModel] = useState<ModelHealthDetailResponse | null>(null);
+  const [recentActions, setRecentActions] = useState<GodFactoryActionRecord[]>([]);
+  const [controlBusy, setControlBusy] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<SuggestedJob[]>([]);
+  const [externalJobs, setExternalJobs] = useState<SuggestedJob[]>([]);
+  const [implementingJobs, setImplementingJobs] = useState<ImplementingJob[]>([]);
+  const [totalJobs, setTotalJobs] = useState(0);
+  const [jobsLoading, setJobsLoading] = useState(false);
   const [brainstorm, setBrainstorm] = useState('');
-  const [sections, setSections] = useState({ notifications: true, jobs: true, health: true, subsystems: false, brainstorm: false });
+  const [sections, setSections] = useState({ notifications: true, idleSuggestions: true, jobs: true, externalProjects: false, implementingPipeline: false, health: true, modelHealth: true, background: false, subsystems: false, brainstorm: false });
   const [blameStats, setBlameStats] = useState<any[]>([]);
   const [subsystems, setSubsystems] = useState<Record<SubsystemId, SubsystemConfig>>({
     ide_codebase_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 60, maxDepth: 5, manualOnly: false },
@@ -132,11 +291,138 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
   const [runningSubsystem, setRunningSubsystem] = useState<SubsystemId | null>(null);
 
+  const loadQueue = useCallback(() => {
+    fetch(`${API_BASE}/api/god-factory/queue?limit=20`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { notifications?: Array<Record<string, unknown>> } | null) => {
+        if (!d?.notifications) return;
+        const mapped = d.notifications.map((n) => ({
+          id: String(n.notification_id || ''),
+          type: (String(n.severity || 'info') as IntelNotification['type']),
+          message: String(n.natural_language_summary || ''),
+          timestamp: String(n.timestamp || new Date().toISOString()),
+          source: String(n.category || 'god_factory').replace(/_/g, ' '),
+        }));
+        setNotifications(mapped);
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadIdleSuggestions = useCallback(() => {
+    fetch(`${API_BASE}/api/god-factory/idle-suggestions?limit=10`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { suggestions?: IdleSuggestion[] } | null) => {
+        if (d?.suggestions) setIdleSuggestions(d.suggestions);
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadModelHealth = useCallback(() => {
+    fetch(`${API_BASE}/api/god-factory/model-health?limit=8`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { models?: ModelHealthRecord[] } | null) => {
+        if (d?.models) setModelHealth(d.models);
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadBackgroundStatus = useCallback(() => {
+    fetch(`${API_BASE}/api/god-factory/background-status`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: BackgroundStatusPayload | null) => {
+        if (d) setBackgroundStatus(d);
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadCodebaseHealth = useCallback(() => {
+    fetch(`${API_BASE}/api/god-factory/codebase-health`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: CodebaseHealthPayload | null) => {
+        if (d) setCodebaseHealth(d);
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadRecentActions = useCallback(() => {
+    fetch(`${API_BASE}/api/god-factory/actions?limit=8`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { actions?: GodFactoryActionRecord[] } | null) => {
+        if (d?.actions) setRecentActions(d.actions);
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadSuggestedJobs = useCallback(() => {
+    setJobsLoading(true);
+    fetch(`${API_BASE}/api/suggested-jobs/jobs?limit=10&status=suggested`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { jobs?: Record<string, unknown>[]; total?: number } | null) => {
+        if (d?.jobs) {
+          setJobs(d.jobs.map(mapApiJobToSuggestedJob));
+          setTotalJobs(d.total ?? d.jobs.length);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setJobsLoading(false));
+  }, []);
+
+  const loadExternalJobs = useCallback(() => {
+    fetch(`${API_BASE}/api/suggested-jobs/jobs?limit=10&category=external_project`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { jobs?: Record<string, unknown>[] } | null) => {
+        if (d?.jobs) setExternalJobs(d.jobs.map(mapApiJobToSuggestedJob));
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadImplementingJobs = useCallback(() => {
+    fetch(`${API_BASE}/api/suggested-jobs/jobs?limit=5&status=implementing`)
+      .then(r => r.ok ? r.json() : null)
+      .then(async (d: { jobs?: Record<string, unknown>[] } | null) => {
+        if (!d?.jobs?.length) { setImplementingJobs([]); return; }
+        const details = await Promise.all(
+          d.jobs.map(async (j) => {
+            const jobId = String(j.job_id || '');
+            const res = await fetch(`${API_BASE}/api/god-factory/implementation-pipeline/${encodeURIComponent(jobId)}`).catch(() => null);
+            if (!res || !res.ok) return null;
+            return res.json() as Promise<ImplementingJob>;
+          })
+        );
+        setImplementingJobs(details.filter((x): x is ImplementingJob => x !== null));
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetch(`${API_BASE}/api/blame/records?limit=5`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.stats) setBlameStats(d.stats.slice(0, 4)); })
       .catch(() => {});
+
+    // Load real suggested jobs
+    loadSuggestedJobs();
+    loadExternalJobs();
+    loadImplementingJobs();
+    loadQueue();
+    loadIdleSuggestions();
+    loadModelHealth();
+    loadCodebaseHealth();
+    loadBackgroundStatus();
+    loadRecentActions();
+    const jobsTimer = window.setInterval(() => {
+      loadSuggestedJobs();
+      loadExternalJobs();
+      loadImplementingJobs();
+    }, 30_000);
+    const gfTimer = window.setInterval(() => {
+      loadQueue();
+      loadIdleSuggestions();
+      loadModelHealth();
+      loadCodebaseHealth();
+      loadBackgroundStatus();
+      loadRecentActions();
+    }, 20_000);
 
     const loadSubsystemSettings = () => fetch(`${API_BASE}/api/subsystems/settings`)
       .then(r => r.ok ? r.json() : null)
@@ -153,15 +439,21 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     }, 15000);
 
     if (codebaseReady) {
-      setNotifications([{
-        id: '1', type: 'success', source: 'Codebase Scanner',
-        message: 'Codebase snapshot loaded — tools active',
+      setNotifications(prev => [{
+        id: `codebase-${Date.now()}`,
+        type: 'success' as const,
+        source: 'interactive state',
+        message: 'Codebase snapshot loaded and God Factory interactive state is active.',
         timestamp: new Date().toISOString(),
-      }]);
+      }, ...prev].slice(0, 20));
     }
 
-    return () => window.clearInterval(refreshTimer);
-  }, [codebaseReady]);
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.clearInterval(jobsTimer);
+      window.clearInterval(gfTimer);
+    };
+  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions]);
 
   const toggleSection = (key: keyof typeof sections) =>
     setSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -235,15 +527,84 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
 
   const treeLineCount = codebaseTree.split('\n').length;
 
+  const archiveJob = async (jobId: string) => {
+    await fetch(`${API_BASE}/api/suggested-jobs/jobs/${jobId}/archive`, { method: 'POST' }).catch(() => {});
+    setJobs(prev => prev.filter(j => j.job_id !== jobId));
+    setTotalJobs(prev => Math.max(0, prev - 1));
+  };
+
+  const implementJob = async (job: SuggestedJob) => {
+    onSendToBrainstorm(`Implement this suggested job:\n\n**${job.title}**\n\nCategory: ${job.category}\nAffected devtags: ${job.affected_devtags.join(', ') || 'none'}\nAffected files: ${job.affected_files.join(', ') || 'none'}\nAtomic steps: ${job.atomic_steps.length}\n\nJob ID: ${job.job_id}`);
+    await fetch(`${API_BASE}/api/suggested-jobs/jobs/${job.job_id}/implement`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ override_sandbox: true }),
+    }).catch(() => {});
+    loadSuggestedJobs();
+  };
+
   const priorityColor = (p: SuggestedJob['priority']) =>
-    p === 'high'   ? 'text-red-400 bg-red-400/10' :
-    p === 'medium' ? 'text-yellow-400 bg-yellow-400/10' :
-                     'text-green-400 bg-green-400/10';
+    p === 'critical' ? 'text-red-400 bg-red-500/15 border border-red-500/30' :
+    p === 'high'     ? 'text-orange-400 bg-orange-400/10' :
+    p === 'medium'   ? 'text-yellow-400 bg-yellow-400/10' :
+                       'text-green-400 bg-green-400/10';
 
   const notifColor = (t: IntelNotification['type']) =>
     t === 'success' ? 'text-green-400' :
     t === 'warning' ? 'text-yellow-400' :
-    t === 'error'   ? 'text-red-400'   : 'text-blue-400';
+    t === 'error'   ? 'text-red-400'   :
+    t === 'critical' ? 'text-red-500'  :
+    t === 'fatal'   ? 'text-red-600'   : 'text-blue-400';
+
+  const acknowledgeNotification = async (id: string) => {
+    await fetch(`${API_BASE}/api/god-factory/queue/${id}/ack`, { method: 'POST' }).catch(() => {});
+    setNotifications(prev => prev.filter(x => x.id !== id));
+  };
+
+  const respondIdleSuggestion = async (suggestionId: string, response: 'accepted' | 'rejected' | 'deferred') => {
+    await fetch(`${API_BASE}/api/god-factory/idle-suggestions/${suggestionId}/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ response }),
+    }).catch(() => {});
+
+    setIdleSuggestions(prev => prev.filter(s => s.suggestion_id !== suggestionId));
+    if (response === 'accepted') {
+      loadSuggestedJobs();
+      loadQueue();
+    }
+  };
+
+  const inspectNotification = async (id: string) => {
+    const res = await fetch(`${API_BASE}/api/god-factory/queue/${id}`).catch(() => null);
+    const data = res && res.ok ? await res.json() as NotificationDetailResponse : null;
+    if (data) setSelectedNotification(data);
+  };
+
+  const inspectModel = async (modelId: string) => {
+    const res = await fetch(`${API_BASE}/api/god-factory/model-health/${encodeURIComponent(modelId)}`).catch(() => null);
+    const data = res && res.ok ? await res.json() as ModelHealthDetailResponse : null;
+    if (data) setSelectedModel(data);
+  };
+
+  const runControl = async (control: string, subsystemId?: SubsystemId) => {
+    const busyKey = subsystemId ? `${control}:${subsystemId}` : control;
+    setControlBusy(busyKey);
+    try {
+      await fetch(`${API_BASE}/api/god-factory/controls/background`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ control, subsystem_id: subsystemId, reason: 'god_factory_gui' }),
+      });
+      loadBackgroundStatus();
+      loadRecentActions();
+      loadQueue();
+    } catch {
+      // noop
+    } finally {
+      setControlBusy(null);
+    }
+  };
 
   if (collapsed) {
     return (
@@ -260,7 +621,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   }
 
   return (
-    <div className="w-64 flex-shrink-0 bg-ide-panel border-l border-ide-border flex flex-col overflow-hidden">
+    <div className="w-64 flex-shrink-0 bg-ide-panel border-l border-ide-border flex flex-col overflow-hidden relative">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-ide-border flex-shrink-0">
         <div className="flex items-center gap-1.5">
@@ -272,6 +633,110 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           <ChevronRight className="w-3 h-3" />
         </button>
       </div>
+
+      {(selectedNotification || selectedModel) && (
+        <div className="absolute inset-0 z-10 bg-ide-panel/95 backdrop-blur-sm flex flex-col border-l border-ide-border">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-ide-border">
+            <div className="text-[11px] font-semibold text-ide-text">
+              {selectedNotification ? 'Notification Detail' : 'Model Detail'}
+            </div>
+            <button
+              onClick={() => { setSelectedNotification(null); setSelectedModel(null); }}
+              className="p-1 text-ide-text-dim hover:text-ide-text"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 text-[10px] space-y-2">
+            {selectedNotification && (
+              <>
+                <div className="rounded border border-ide-border/40 bg-ide-bg/30 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ide-text font-medium">{selectedNotification.notification.category.replace(/_/g, ' ')}</span>
+                    <span className={`text-[9px] ${notifColor(selectedNotification.notification.severity as IntelNotification['type'])}`}>
+                      {selectedNotification.notification.severity}
+                    </span>
+                  </div>
+                  <div className="text-ide-text mt-1 leading-snug">{selectedNotification.notification.natural_language_summary}</div>
+                  <div className="text-[9px] text-ide-text-dim mt-1">
+                    {new Date(selectedNotification.notification.timestamp).toLocaleString()}
+                  </div>
+                </div>
+                {selectedNotification.notification.summary_tags?.length > 0 && (
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Summary Tags</div>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedNotification.notification.summary_tags.map((tag) => (
+                        <span key={tag} className="text-[9px] px-1 py-0.5 rounded bg-ide-bg text-ide-text-dim border border-ide-border/40">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedNotification.source_detail && (
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Decoded Source Detail</div>
+                    <pre className="max-h-72 overflow-auto rounded border border-ide-border/40 bg-ide-bg/30 p-2 text-[9px] text-ide-text whitespace-pre-wrap break-all">
+                      {JSON.stringify(selectedNotification.source_detail, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </>
+            )}
+            {selectedModel && (
+              <>
+                <div className="rounded border border-ide-border/40 bg-ide-bg/30 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ide-text font-medium">{selectedModel.model.display_name || selectedModel.model.model_id}</span>
+                    <span className="text-[9px] text-ide-text-dim">{selectedModel.model.provider}</span>
+                  </div>
+                  <div className="text-[9px] text-ide-text-dim mt-1">{selectedModel.model.model_id}</div>
+                  {!!selectedModel.model.recommended_interaction_types?.length && (
+                    <div className="mt-2">
+                      <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Recommended</div>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedModel.model.recommended_interaction_types.map((item) => (
+                          <span key={item} className="text-[9px] px-1 py-0.5 rounded bg-green-500/10 text-green-300 border border-green-500/20">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!!selectedModel.model.avoided_interaction_types?.length && (
+                    <div className="mt-2">
+                      <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Avoid</div>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedModel.model.avoided_interaction_types.map((item) => (
+                          <span key={item} className="text-[9px] px-1 py-0.5 rounded bg-red-500/10 text-red-300 border border-red-500/20">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Recent Quality</div>
+                  <div className="space-y-1">
+                    {selectedModel.recent_quality.length === 0 ? (
+                      <div className="text-[9px] text-ide-text-dim">No quality records.</div>
+                    ) : selectedModel.recent_quality.map((item, index) => (
+                      <div key={`${item.id || index}`} className="rounded border border-ide-border/30 bg-ide-bg/20 px-2 py-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-ide-text-dim">{String(item.interaction_type || 'unknown')}</span>
+                          <span className="text-ide-text font-mono">{Math.round(Number(item.composite_quality_score || 0) * 100)}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Recent Blame</div>
+                  <pre className="max-h-72 overflow-auto rounded border border-ide-border/40 bg-ide-bg/30 p-2 text-[9px] text-ide-text whitespace-pre-wrap break-all">
+                    {JSON.stringify(selectedModel.recent_blame, null, 2)}
+                  </pre>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {/* ── Notifications ── */}
@@ -294,17 +759,68 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
               ) : notifications.map(n => (
                 <div key={n.id} className="flex items-start gap-1.5 p-1.5 rounded bg-ide-bg/30 group">
                   <span className={`text-[10px] mt-0.5 ${notifColor(n.type)}`}>●</span>
-                  <div className="flex-1 min-w-0">
+                  <button onClick={() => void inspectNotification(n.id)} className="flex-1 min-w-0 text-left">
                     <div className="text-[10px] text-ide-text leading-snug">{n.message}</div>
                     <div className="text-[9px] text-ide-text-dim mt-0.5">
                       {n.source} · {new Date(n.timestamp).toLocaleTimeString()}
                     </div>
-                  </div>
+                  </button>
                   <button
-                    onClick={() => setNotifications(prev => prev.filter(x => x.id !== n.id))}
+                    onClick={() => void acknowledgeNotification(n.id)}
                     className="opacity-0 group-hover:opacity-100 text-ide-text-dim hover:text-red-400">
                     <X className="w-2.5 h-2.5" />
                   </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Idle Suggestions ── */}
+        <div className="border-b border-ide-border/50">
+          <button onClick={() => toggleSection('idleSuggestions')}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
+            <div className="flex items-center gap-1.5">
+              <Star className="w-3 h-3 text-cyan-400" />
+              Idle Suggestions
+              {idleSuggestions.length > 0 && (
+                <span className="px-1 bg-cyan-400/20 text-cyan-300 rounded text-[9px]">{idleSuggestions.length}</span>
+              )}
+            </div>
+            {sections.idleSuggestions ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          {sections.idleSuggestions && (
+            <div className="px-2 pb-2 space-y-1.5">
+              {idleSuggestions.length === 0 ? (
+                <div className="text-[10px] text-ide-text-dim px-1 py-2 text-center">No pending idle suggestions</div>
+              ) : idleSuggestions.map(s => (
+                <div key={s.suggestion_id} className="p-1.5 rounded bg-ide-bg/30 border border-ide-border/30">
+                  <div className="text-[9px] text-cyan-300 mb-0.5">{s.category.replace(/_/g, ' ')}</div>
+                  <div className="text-[10px] text-ide-text leading-snug">{s.natural_language_summary}</div>
+                  {!!s.source_files?.length && (
+                    <div className="text-[9px] text-ide-text-dim mt-1 truncate" title={s.source_files.join(', ')}>
+                      Files: {s.source_files.slice(0, 2).join(', ')}{s.source_files.length > 2 ? '…' : ''}
+                    </div>
+                  )}
+                  {!!s.source_lines?.length && (
+                    <div className="text-[9px] text-ide-text-dim mt-0.5">
+                      Lines: {s.source_lines.map(([start, end]) => `${start}${end !== start ? `-${end}` : ''}`).join(', ')}
+                    </div>
+                  )}
+                  <div className="mt-1.5 flex items-center gap-1">
+                    <button
+                      onClick={() => void respondIdleSuggestion(s.suggestion_id, 'accepted')}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                    >Accept</button>
+                    <button
+                      onClick={() => void respondIdleSuggestion(s.suggestion_id, 'deferred')}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"
+                    >Defer</button>
+                    <button
+                      onClick={() => void respondIdleSuggestion(s.suggestion_id, 'rejected')}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                    >Reject</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -316,18 +832,21 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           <button onClick={() => toggleSection('jobs')}
             className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
             <div className="flex items-center gap-1.5">
-              <Star className="w-3 h-3 text-purple-400" />
+              <Briefcase className="w-3 h-3 text-purple-400" />
               Suggested Jobs
-              {jobs.length > 0 && (
-                <span className="px-1 bg-purple-400/20 text-purple-300 rounded text-[9px]">{jobs.length}</span>
+              {totalJobs > 0 && (
+                <span className="px-1 bg-purple-400/20 text-purple-300 rounded text-[9px]">{totalJobs}</span>
               )}
+              {jobsLoading && <RefreshCw className="w-2.5 h-2.5 text-ide-text-dim animate-spin" />}
             </div>
             {sections.jobs ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           </button>
           {sections.jobs && (
             <div className="px-2 pb-2 space-y-1.5">
-              {jobs.length === 0 ? (
-                <div className="text-[10px] text-ide-text-dim px-1 py-2 text-center">No pending jobs</div>
+              {jobs.length === 0 && !jobsLoading ? (
+                <div className="text-[10px] text-ide-text-dim px-1 py-2 text-center">No pending jobs — crawler is running</div>
+              ) : jobs.length === 0 && jobsLoading ? (
+                <div className="text-[10px] text-ide-text-dim px-1 py-2 text-center">Loading…</div>
               ) : jobs.map(job => (
                 <div key={job.id} className="p-1.5 rounded bg-ide-bg/30 border border-ide-border/30 group">
                   <div className="flex items-start justify-between gap-1 mb-1">
@@ -338,17 +857,129 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   </div>
                   <div className="text-[9px] text-ide-text-dim leading-snug mb-1.5">{job.description}</div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-purple-400/70">{job.source}</span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                    <span className="text-[9px] text-purple-400/70">{job.category}</span>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => onSendToBrainstorm(`Work on this suggested job: ${job.title}\n\n${job.description}`)}
+                        onClick={() => void implementJob(job)}
+                        title="Send to chat & trigger implementation"
                         className="text-[9px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded hover:bg-purple-500/30"
+                      >→ Implement</button>
+                      <button
+                        onClick={() => onSendToBrainstorm(`Job to discuss: ${job.title}\n\nCategory: ${job.category}\nSource: ${job.source}\n${job.description}`)}
+                        title="Discuss in chat"
+                        className="text-[9px] px-1.5 py-0.5 bg-ide-accent/15 text-ide-accent rounded hover:bg-ide-accent/25"
                       >→ Chat</button>
                       <button
-                        onClick={() => setJobs(prev => prev.filter(j => j.id !== job.id))}
+                        onClick={() => void archiveJob(job.job_id)}
+                        title="Archive job"
                         className="text-[9px] px-1 py-0.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20"
                       ><X className="w-2 h-2" /></button>
                     </div>
+                  </div>
+                </div>
+              ))}
+              {totalJobs > jobs.length && (
+                <div className="text-[9px] text-ide-text-dim text-center pt-1">
+                  +{totalJobs - jobs.length} more — open Suggested Jobs panel to see all
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── External Projects ── */}
+        <div className="border-b border-ide-border/50">
+          <button onClick={() => toggleSection('externalProjects')}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
+            <div className="flex items-center gap-1.5">
+              <Briefcase className="w-3 h-3 text-cyan-400" />
+              External Projects
+              {externalJobs.length > 0 && (
+                <span className="px-1 bg-cyan-400/20 text-cyan-300 rounded text-[9px]">{externalJobs.length}</span>
+              )}
+            </div>
+            {sections.externalProjects ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          {sections.externalProjects && (
+            <div className="px-2 pb-2 space-y-1.5">
+              <div className="text-[9px] text-ide-text-dim px-1 pb-1">Jobs from external codebase reviews. These do not feed the IDE implementation pipeline.</div>
+              {externalJobs.length === 0 ? (
+                <div className="text-[10px] text-ide-text-dim px-1 py-2 text-center">No external project jobs</div>
+              ) : externalJobs.map(job => (
+                <div key={job.id} className="p-1.5 rounded bg-ide-bg/30 border border-cyan-500/20 group">
+                  <div className="flex items-start justify-between gap-1 mb-1">
+                    <span className="text-[10px] text-ide-text font-medium leading-snug flex-1">{job.title}</span>
+                    <span className={`text-[8px] px-1 py-0.5 rounded flex-shrink-0 ${priorityColor(job.priority)}`}>
+                      {job.priority}
+                    </span>
+                  </div>
+                  <div className="text-[9px] text-ide-text-dim leading-snug mb-1.5">{job.description}</div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-cyan-400/70">external project</span>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => onSendToBrainstorm(`Review external project job:\n\n**${job.title}**\n\nSource: ${job.source}\n${job.description}`)}
+                        title="Discuss in chat"
+                        className="text-[9px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 rounded hover:bg-cyan-500/30"
+                      >→ Chat</button>
+                      <button
+                        onClick={() => void archiveJob(job.job_id)}
+                        title="Archive job"
+                        className="text-[9px] px-1 py-0.5 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20"
+                      ><X className="w-2 h-2" /></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Implementation Pipeline ── */}
+        <div className="border-b border-ide-border/50">
+          <button onClick={() => toggleSection('implementingPipeline')}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
+            <div className="flex items-center gap-1.5">
+              <Play className="w-3 h-3 text-green-400" />
+              Implementing
+              {implementingJobs.length > 0 && (
+                <span className="px-1 bg-green-400/20 text-green-300 rounded text-[9px]">{implementingJobs.length}</span>
+              )}
+            </div>
+            {sections.implementingPipeline ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          {sections.implementingPipeline && (
+            <div className="px-2 pb-2 space-y-2">
+              {implementingJobs.length === 0 ? (
+                <div className="text-[10px] text-ide-text-dim px-1 py-2 text-center">No jobs currently implementing</div>
+              ) : implementingJobs.map(job => (
+                <div key={job.job_id} className="p-1.5 rounded bg-ide-bg/30 border border-green-500/20">
+                  <div className="text-[10px] text-ide-text font-medium mb-1.5 leading-snug">{job.title}</div>
+                  <div className="text-[9px] text-ide-text-dim mb-1.5">
+                    Stage {job.current_stage ?? '?'} of 6 · {job.implementation_status}
+                  </div>
+                  <div className="space-y-0.5">
+                    {job.stages.map(stage => (
+                      <div key={stage.stage} className="flex items-center gap-1.5 text-[9px]">
+                        <span className={
+                          stage.status === 'complete' ? 'text-green-400' :
+                          stage.status === 'in_progress' ? 'text-yellow-300' :
+                          stage.status === 'failed' ? 'text-red-400' :
+                          'text-ide-text-dim'
+                        }>
+                          {stage.status === 'complete' ? '✓' :
+                           stage.status === 'in_progress' ? '▶' :
+                           stage.status === 'failed' ? '✗' : '○'}
+                        </span>
+                        <span className={stage.status === 'in_progress' ? 'text-yellow-300 font-medium' : stage.status === 'complete' ? 'text-green-400/70' : 'text-ide-text-dim'}>
+                          {stage.name}
+                        </span>
+                        {stage.status === 'in_progress' && <RefreshCw className="w-2 h-2 text-yellow-400 animate-spin" />}
+                        {stage.entries > 0 && (
+                          <span className="text-ide-text-dim ml-auto">{stage.entries} steps</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -374,12 +1005,51 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   {codebaseReady ? '✓ Ready' : '⏳ Loading'}
                 </span>
               </div>
+              {codebaseHealth?.latest_snapshot && (
+                <>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-ide-text-dim">Registered devtags</span>
+                    <span className="text-ide-text">{codebaseHealth.latest_snapshot.total_devtags.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-ide-text-dim">Registry surplus</span>
+                    <span className="text-red-400">{codebaseHealth.latest_snapshot.registry_surplus_count}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-ide-text-dim">Registry deficit</span>
+                    <span className="text-yellow-400">{codebaseHealth.latest_snapshot.registry_deficit_count}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-ide-text-dim">Systemic drift</span>
+                    <span className={codebaseHealth.latest_snapshot.systemic_drift_flagged ? 'text-red-400' : 'text-green-400'}>
+                      {codebaseHealth.latest_snapshot.systemic_drift_flagged ? 'FLAGGED' : 'Clear'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-ide-text-dim">Gap reports</span>
+                    <span className="text-ide-text">{codebaseHealth.gap_summary.total_reports} total / {codebaseHealth.gap_summary.flagged_reports} flagged</span>
+                  </div>
+                </>
+              )}
               {treeLineCount > 1 && (
                 <div className="flex items-center justify-between text-[10px]">
                   <span className="text-ide-text-dim">Tree lines</span>
                   <span className="text-ide-text">{treeLineCount.toLocaleString()}</span>
                 </div>
               )}
+              {codebaseHealth?.top_debt_files?.length ? (
+                <div>
+                  <div className="text-[9px] text-ide-text-dim mb-1">Debt Heatmap</div>
+                  {codebaseHealth.top_debt_files.slice(0, 4).map((file) => (
+                    <div key={file.file_path} className="flex items-center justify-between text-[9px] py-0.5 gap-2">
+                      <span className="text-ide-text-dim truncate" title={file.file_path}>{file.file_path.split(/[\\/]/).pop()}</span>
+                      <span className={file.ceiling_exceeded ? 'text-red-400 font-mono' : 'text-yellow-400 font-mono'}>
+                        {file.debt_score.toFixed(1)}/{file.ceiling.toFixed(1)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {blameStats.length > 0 && (
                 <div>
                   <div className="text-[9px] text-ide-text-dim mb-1">Model Quality</div>
@@ -401,6 +1071,118 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
               <div className="text-[9px] text-ide-text-dim">
                 <span className="text-purple-400">Tip:</span> Ask THE GOD FACTORY to scan for debt, gaps, or patterns
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Model Health ── */}
+        <div className="border-b border-ide-border/50">
+          <button onClick={() => toggleSection('modelHealth')}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
+            <div className="flex items-center gap-1.5">
+              <Shield className="w-3 h-3 text-blue-400" />
+              Model Health
+            </div>
+            {sections.modelHealth ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          {sections.modelHealth && (
+            <div className="px-2 pb-2 space-y-1">
+              {modelHealth.length === 0 ? (
+                <div className="text-[10px] text-ide-text-dim px-1 py-2 text-center">No model health records</div>
+              ) : modelHealth.map(m => (
+                <button key={m.model_id} onClick={() => void inspectModel(m.model_id)} className="w-full text-left rounded border border-ide-border/30 bg-ide-bg/30 px-2 py-1.5 hover:bg-ide-bg/50 transition-colors">
+                  <div className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="text-ide-text truncate" title={m.model_id}>{m.display_name || m.model_id}</span>
+                    <span className={m.composite_quality_score < 0.6 ? 'text-red-400 font-mono' : m.composite_quality_score < 0.75 ? 'text-yellow-400 font-mono' : 'text-green-400 font-mono'}>
+                      {Math.round(m.composite_quality_score * 100)}%
+                    </span>
+                  </div>
+                  <div className="text-[9px] text-ide-text-dim mt-0.5 flex items-center justify-between">
+                    <span>{Math.round(m.success_rate * 100)}% success</span>
+                    <span>{m.total_runs} runs</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Background Scan Status ── */}
+        <div className="border-b border-ide-border/50">
+          <button onClick={() => toggleSection('background')}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
+            <div className="flex items-center gap-1.5">
+              <Clock3 className="w-3 h-3 text-indigo-400" />
+              Background Scan Status
+            </div>
+            {sections.background ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          {sections.background && (
+            <div className="px-2 pb-2 space-y-1.5 text-[9px]">
+              <div className="rounded border border-ide-border/30 bg-ide-bg/30 px-2 py-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-ide-text-dim">Scheduler</span>
+                  <span className={backgroundStatus?.scheduler?.running ? 'text-green-400' : 'text-yellow-400'}>
+                    {backgroundStatus?.scheduler?.running ? 'Running' : 'Paused'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-ide-text-dim">Last tick</span>
+                  <span className="text-ide-text">{backgroundStatus?.scheduler?.lastTickAt ? new Date(backgroundStatus.scheduler.lastTickAt).toLocaleTimeString() : 'Never'}</span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-ide-text-dim">Idle scan position</span>
+                  <span className="text-ide-text truncate max-w-[130px]" title={backgroundStatus?.idleScanner?.scan_position || ''}>{backgroundStatus?.idleScanner?.scan_position || 'N/A'}</span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-ide-text-dim">Sandbox loop</span>
+                  <span className={backgroundStatus?.controls?.sandbox_paused ? 'text-yellow-400' : 'text-green-400'}>
+                    {backgroundStatus?.controls?.sandbox_paused ? 'Paused' : 'Running'}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  <button
+                    onClick={() => void runControl(backgroundStatus?.scheduler?.running ? 'pause_scheduler' : 'resume_scheduler')}
+                    disabled={controlBusy === 'pause_scheduler' || controlBusy === 'resume_scheduler'}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 disabled:opacity-40 flex items-center gap-1"
+                  >
+                    {backgroundStatus?.scheduler?.running ? <PauseCircle className="w-2.5 h-2.5" /> : <PlayCircle className="w-2.5 h-2.5" />}
+                    {backgroundStatus?.scheduler?.running ? 'Pause scheduler' : 'Resume scheduler'}
+                  </button>
+                  <button
+                    onClick={() => void runControl(backgroundStatus?.controls?.sandbox_paused ? 'resume_sandbox' : 'pause_sandbox')}
+                    disabled={controlBusy === 'pause_sandbox' || controlBusy === 'resume_sandbox'}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 disabled:opacity-40 flex items-center gap-1"
+                  >
+                    {backgroundStatus?.controls?.sandbox_paused ? <PlayCircle className="w-2.5 h-2.5" /> : <PauseCircle className="w-2.5 h-2.5" />}
+                    {backgroundStatus?.controls?.sandbox_paused ? 'Resume sandbox' : 'Pause sandbox'}
+                  </button>
+                </div>
+              </div>
+              {/* Per-sub-agent monitor breakdown */}
+              {backgroundStatus?.backgroundSubAgents && (
+                <div className="space-y-1">
+                  <div className="text-[9px] text-ide-text-dim uppercase tracking-wider px-0.5 pt-0.5">God Factory Monitors</div>
+                  {Object.entries(backgroundStatus.backgroundSubAgents).map(([key, agent]) => (
+                    <div key={key} className="rounded border border-ide-border/30 bg-ide-bg/20 px-2 py-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-ide-text font-medium">{agent.label}</span>
+                        <span className={
+                          agent.status === 'running' ? 'text-green-400' :
+                          agent.status === 'error' ? 'text-red-400' :
+                          agent.status === 'idle' ? 'text-ide-text-dim' :
+                          'text-yellow-400'
+                        }>{agent.status}</span>
+                      </div>
+                      <div className="text-[9px] text-ide-text-dim mt-0.5 truncate" title={agent.description}>{agent.description}</div>
+                      <div className="text-[9px] text-ide-text-dim mt-0.5 flex items-center gap-2">
+                        <span>Last: {agent.last_run_at ? new Date(agent.last_run_at).toLocaleTimeString() : 'Never'}</span>
+                        {agent.last_run_cycle && <span>· cycle {agent.last_run_cycle}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -493,6 +1275,13 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                         {cfg.enabled ? 'Enabled' : 'Disabled'}
                       </button>
                       <button
+                        onClick={() => void runControl(cfg.enabled ? 'pause_subsystem' : 'resume_subsystem', id)}
+                        disabled={controlBusy === `pause_subsystem:${id}` || controlBusy === `resume_subsystem:${id}`}
+                        className="px-1.5 py-0.5 rounded border border-cyan-500/30 text-cyan-300 bg-cyan-500/10 disabled:opacity-40"
+                      >
+                        {cfg.enabled ? 'Pause' : 'Resume'}
+                      </button>
+                      <button
                         onClick={() => updateSubsystem(id, { idleEnabled: !cfg.idleEnabled })}
                         className={`px-1.5 py-0.5 rounded border ${cfg.idleEnabled ? 'border-blue-500/40 text-blue-400 bg-blue-500/10' : 'border-ide-border text-ide-text-dim'}`}
                       >
@@ -532,6 +1321,19 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   </div>
                 );
               })}
+              {recentActions.length > 0 && (
+                <div className="rounded border border-ide-border/30 bg-ide-panel/50 px-2 py-1.5">
+                  <div className="text-[9px] text-ide-text-dim uppercase tracking-wider mb-1">Recent Authority Actions</div>
+                  <div className="space-y-1">
+                    {recentActions.slice(0, 4).map((action) => (
+                      <div key={action.action_id} className="text-[9px] leading-snug">
+                        <div className="text-ide-text">{action.action_type.replace(/_/g, ' ')}{action.target_id ? ` · ${action.target_id}` : ''}</div>
+                        <div className="text-ide-text-dim">{action.result} · {new Date(action.timestamp).toLocaleTimeString()}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -556,7 +1358,19 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                 className="w-full bg-ide-bg border border-ide-border/50 rounded px-2 py-1.5 text-[10px] text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-blue-400/50 mb-1.5"
               />
               <button
-                onClick={() => { if (brainstorm.trim()) { onSendToBrainstorm(brainstorm.trim()); setBrainstorm(''); } }}
+                onClick={async () => {
+                  if (!brainstorm.trim()) return;
+                  const text = brainstorm.trim();
+                  await fetch(`${API_BASE}/api/god-factory/brainstorm`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ input: text }),
+                  }).catch(() => {});
+                  onSendToBrainstorm(text);
+                  setBrainstorm('');
+                  loadSuggestedJobs();
+                  loadQueue();
+                }}
                 disabled={!brainstorm.trim()}
                 className="w-full text-[10px] py-1 bg-blue-500/15 text-blue-300 rounded hover:bg-blue-500/25 disabled:opacity-30 flex items-center justify-center gap-1"
               >

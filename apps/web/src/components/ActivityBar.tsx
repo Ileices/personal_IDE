@@ -8,6 +8,7 @@ import {
   FolderOpen, MessageSquare, Bot, Globe, Network,
   Waves, Database, Bird, Clock, Settings, GitBranch,
   ShieldCheck, Zap, HelpCircle, BarChart2, Sparkles, Fingerprint, Cpu,
+  Tag, AlertTriangle, Scan, Layers, Briefcase,
 } from 'lucide-react';
 
 export type ActivityView =
@@ -27,6 +28,11 @@ export type ActivityView =
   | 'rates'
   | 'blame'
   | 'local-models'
+  | 'tags'
+  | 'forensic'
+  | 'gap'
+  | 'project-state-crawler'
+  | 'suggested-jobs'
   | 'help';
 
 interface ActivityBarProps {
@@ -61,6 +67,11 @@ export function ActivityBar({ active, onChange, fleetBadge, nanoBadge }: Activit
     { id: 'rates',       icon: BarChart2,      label: 'Rate Limits & Usage' },
     { id: 'blame',       icon: Fingerprint,    label: 'BLAME — Model Quality Tracking' },
     { id: 'local-models', icon: Cpu,             label: 'Local Model Catalog (Ollama)' },
+    { id: 'tags',        icon: Tag,            label: 'Tag Registry — Devtags / Plantags / Buildtags' },
+    { id: 'forensic',    icon: AlertTriangle,  label: 'Forensic Database — Agent Audit Tables' },
+    { id: 'gap',         icon: Scan,           label: 'Gap Analysis — Coverage, Debt, Patterns' },
+    { id: 'project-state-crawler', icon: Layers, label: 'Project State Crawler — Devtag Extraction & Drift' },
+    { id: 'suggested-jobs', icon: Briefcase, label: 'Suggested Jobs — Codebase Review & Implementation Pipeline' },
   ];
 
   const bottomItems: NavItem[] = [

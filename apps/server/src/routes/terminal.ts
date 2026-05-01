@@ -6,10 +6,23 @@
 // ============================================
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { TerminalService } from '../services/terminal/index.js';
+import { appConfig } from '../config.js';
 
 const termService = new TerminalService();
+const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
+function isLoopbackIp(ip: string): boolean {
+  return LOOPBACK_IPS.has(ip);
+}
 
 export async function terminalRoutes(app: FastifyInstance) {
+  // Terminal endpoints can execute commands; expose them to local machine only.
+  app.addHook('onRequest', async (req, reply) => {
+    if (!isLoopbackIp(req.ip)) {
+      return reply.status(403).send({ error: 'Terminal endpoints are only available from localhost' });
+    }
+  });
 
   // ── Session CRUD ──
 
@@ -95,12 +108,17 @@ export async function terminalRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Session not found' });
     }
 
+    const reqOrigin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
+    const allowedOrigin = reqOrigin && LOCAL_DEV_ORIGIN_RE.test(reqOrigin)
+      ? reqOrigin
+      : appConfig.frontend.url;
+
     // Set SSE headers
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowedOrigin,
     });
 
     const cleanup = termService.onOutput(id, (ev) => {
