@@ -65,18 +65,68 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## Help System Coverage (Spec Alignment Pass)
+## Help System and Feature Discovery
 
-The in-app Help menu now carries an expanded architecture map based on the unified specification set in `build_runs/feedback/*`.
+**The Help system is now an executable roadmap.**
 
-What this pass includes:
-- Expanded help coverage for Build Layer, Meta Layer, agent authority, memory surfaces, tag schema, Project State Crawler, Gap Analysis, Blame, Suggested Jobs, and Nano Sea v2 roadmap concepts.
-- **Coming Soon** markers in Help for specification-defined behaviors not yet fully wired in UI/runtime.
-- Section **tags** (pipeline tags) to show which subsystems work together and to support targeted implementation follow-up.
-- Improved Help search indexing across section metadata and context (title, summary, details, tags, anchor IDs, control quick tips), not only section titles.
+### What's in the Help Section?
 
-Companion architecture note for Nano Sea rework:
-- `NANO_train/NANO_corpus/lump/NERDS_ASSEMBLE.txt`
+Accessible via the Help icon (Activity Bar, bottom left) or `?` keyboard shortcut:
+
+| Coverage | Details |
+|----------|---------|
+| **Shell Navigation** | Activity Bar, Top Bar, Editor tabs, Terminal, Preview, Conversation Sidebar — quick tips on every major control |
+| **Agent Architecture** | God Factory, Chat Agent, Agent Agent-Loop, Fleet, persistent crawlers — memory scopes, authority model, interaction types |
+| **Build Layer Detail** | Pre-edit protocol, Memory/Project/State crawlers, WAITING state machine, Skeptic/Command/Builder agents, post-commit validation |
+| **Meta Layer Detail** | Blame Crawler quality dimensions, tool criticism, Gap Analysis 5-agent system, Suggested Jobs 10-protocol suite, sandbox execution |
+| **Memory System** | All 6 LLM interaction memory surfaces (Ask/Edit/Plan × Chat/Agent Loop) with scope enforcement (TOTAL/SELF/CUSTOM/PRESET) |
+| **Project State Crawler** | Ground truth snapshots, drift event taxonomy (4 types), Tree-sitter parsing per language, reconciliation rules |
+| **Nano Sea v2** | Swarm layer architecture, chromatic routing (RBY-simplex), soft-k routing (8-10% improvement proven), cosmic cycles (train→compress→deposit→rebuild), Fleet Agents-Nano |
+| **Advanced Panels** | Tag Registry, Forensic Database, Gap Analysis, Project State Crawler, Suggested Jobs — all with detailed tab-by-tab guides |
+| **Coming Soon Features** | 20+ specification-defined features marked as `coming_soon` to guide implementation priorities |
+
+### Search and Tags
+
+- **Full-Text Search**: Searches section titles, summaries, all detail content, tags, and quick tips — not just titles
+- **Tag Navigation**: Sections tagged with feature names, pipeline membership (`build-layer`, `meta-layer`, `nano-sea-v2`), and status (`coming-soon`, `active`)
+- **Cross-References**: Each section links to related panels and forensic database entries
+
+### "Coming Soon" Features
+
+The Help system marks unimplemented specification concepts with status `coming_soon`:
+
+- **Build Layer**: Complete WAITING state machine timeline, Skeptic/Command/Builder evaluation logs
+- **Meta Layer**: Tool Criticism event log, Gap Analysis result aggregation dashboard
+- **Memory**: Six dedicated memory surfaces (Ask/Edit/Plan × Chat/Agent Loop) as first-class UI panels
+- **Project State Crawler**: Ground truth snapshot viewer, drift event categorizer with severity scoring
+- **Nano Sea v2**: Architecture map, swarm layer visualizer, cosmic cycle timeline, RBY-simplex navigator
+- **Integration**: Nano Sea feedback loop monitoring, Fleet Agents-Nano orchestration panel
+
+These "coming soon" items serve two purposes:
+1. **User expectations**: Users know what's planned and can navigate to related implemented features
+2. **Implementation roadmap**: Engineers can use tags to identify features ready for surgical implementation
+
+### Unified Spec Alignment
+
+This pass expands Help coverage based on the 12 specification documents in `build_runs/feedback/`:
+- `unifi_spec.txt` — Unified Build Layer + Meta Layer architecture
+- `the_god_factory_agent.txt` — God Factory interactive + background scan states
+- `memory_tab_spec.txt` — Six dedicated memory surfaces + 9 agents + scope enforcement
+- `suggested_jobs_system.txt` — Blame-driven crawler + 10 protocols + sandbox pipeline
+- `forensic_database_blame_crawler.txt` — Blame records, quality dimensions, tool criticism
+- `gap_analysis_system.txt` — 5 gap agents, drift types, forensic outputs
+- `project_state_crawler.txt` — Ground truth, drift detection, WAITING integration
+- Plus 5 additional specification documents on nano sea, midwife, deployment, security, and training
+
+### Nano Sea Engineer Guide
+
+See `NANO_train/NANO_corpus/lump/NERDS_ASSEMBLE.txt` for the comprehensive Nano Sea v2 alignment document written for engineers:
+- 30 validated experiments proving soft-k routing outperforms hard top-k by 8-10%
+- Swarm layer mechanics and chromatic index routing (RBY-simplex) explanation
+- Cosmic cycles and deposit-guided warm-start (+25% convergence improvement)
+- Integration into agent query routing with blame feedback loop
+- 6-phase build order and anti-patterns guide
+- Q&A and vision statement for the future nano sea
 
 ---
 
