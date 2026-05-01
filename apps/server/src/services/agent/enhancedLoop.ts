@@ -47,6 +47,7 @@ import { adaptPromptForModel } from '../modes/modelPromptAdapter.js';
 import { OllamaHealthMonitor } from '../ollama/healthMonitor.js';
 import { ToolExecutor } from './loop/toolExecutor.js';
 import { HierarchicalCodeIndex } from './indexer/hierarchicalIndex.js';
+import { ContextWindowManager } from '../contextWindowManager/index.js';
 import { checkExplorationGate, storeArchitectureSummary, extractArchitectureSummary } from './loop/explorationGate.js';
 import { switchModel as switchModelFn, handle404ModelNotFound, handleRateLimit as handleRateLimitSwitch, shouldResetToOriginalModel } from './loop/modelSwitcher.js';
 import { drainMessageQueue, formatQueuedMessages, buildLoopBreakoutTask as buildLoopBreakout, isFailedResponse, type QueuedMessage } from './loop/messageAssembly.js';
@@ -184,10 +185,18 @@ export class EnhancedAgentLoop {
   private toolExecutor: ToolExecutor;
   // v5 services — hierarchical index + exploration gate
   private hierarchicalIndex: HierarchicalCodeIndex;
+  private contextWindowManager: ContextWindowManager;
   private depGraphContext = '';
   private moduleClusterContext = '';
   private explorationContext = '';
   private totalCodeFiles = 0;
+  // knowledge-graph dirty tracking — accumulates paths written this iteration;
+  // drained and re-indexed at the top of the NEXT iteration
+  private dirtyFiles: Set<string> = new Set();
+  // Provider-switch context adaptation — when switching to a smaller-context model,
+  // trigger one short summarization call before next iteration's history append
+  private pendingProviderSwitchSummary = false;
+  private preSwitchContextWindow = 0;
 
   constructor(
     private db: Database.Database,
@@ -217,6 +226,7 @@ export class EnhancedAgentLoop {
     this.toolExecutor = new ToolExecutor(config.projectRoot);
     // v5 services
     this.hierarchicalIndex = new HierarchicalCodeIndex(db);
+    this.contextWindowManager = new ContextWindowManager(db);
 
     // Start Ollama health monitor if provider is ollama
     if (config.provider === 'ollama') {
@@ -275,6 +285,7 @@ export class EnhancedAgentLoop {
    * Switch to a different model — delegates to extracted modelSwitcher module.
    */
   private switchModel(newModelId: string, reason: string): void {
+    const oldContextWindow = this.contextWindow;
     const result = switchModelFn(
       this.config.model, this.config.provider, this.contextWindow,
       newModelId, reason, (e) => this.emit(e),
@@ -282,6 +293,21 @@ export class EnhancedAgentLoop {
     this.config.model = result.newModel;
     this.config.provider = result.newProvider;
     this.contextWindow = result.newContextWindow;
+    // ── Smart Checkpoint: provider_switch — new provider may behave differently ──
+    try {
+      this.checkpoint.createCheckpoint(
+        this.config.projectRoot, '', this.runId, this.currentIteration,
+        `provider_switch: ${result.newModel} — ${reason.slice(0, 80)}`, 'auto:provider_switch',
+      );
+      this.emit({ type: 'checkpoint_created', iteration: this.currentIteration, trigger: 'provider_switch', description: `Switched to ${result.newModel}` });
+    } catch { /* checkpoint not yet initialized or non-critical */ }
+    // If new model has materially smaller context, schedule a history summarization
+    // pass so the agent doesn't silently lose its run grounding on the next iteration.
+    if (result.newContextWindow < oldContextWindow * 0.75) {
+      this.pendingProviderSwitchSummary = true;
+      this.preSwitchContextWindow = oldContextWindow;
+      this.emit({ type: 'info', message: `Context window shrank ${oldContextWindow}→${result.newContextWindow} on provider switch — will summarize history before next iteration` });
+    }
   }
 
   /** Queue a user message to be picked up by the agent loop */
@@ -457,6 +483,19 @@ export class EnhancedAgentLoop {
 
         this.currentIteration++;
 
+        // ── Knowledge Graph Liveness: drain dirty-file set from previous iteration ──
+        // Bounded by number of unique files touched — not by write count (agent may
+        // thrash the same file many times). Clear BEFORE building context for this
+        // iteration so the agent sees the up-to-date graph.
+        if (this.dirtyFiles.size > 0) {
+          const pathsToReindex = [...this.dirtyFiles];
+          this.dirtyFiles.clear();
+          try {
+            this.relationshipIndex.reindexFiles(projectId, this.config.projectRoot, pathsToReindex);
+            this.emit({ type: 'info', message: `Knowledge graph refreshed for ${pathsToReindex.length} changed file(s)` });
+          } catch { /* non-critical — re-index is best-effort */ }
+        }
+
         // Get LLM Client
         const client = getClientFromDb(this.db, this.config.provider);
         if (!client) {
@@ -465,7 +504,42 @@ export class EnhancedAgentLoop {
           break;
         }
 
-        // Rate Limit Check (skip if bypassed, but still respect cooldowns)
+        // ── Provider-switch context adaptation ──────────────────────────────────
+        // When we switched to a smaller-context-window model, summarize the
+        // conversation history so the agent knows "where it is" without needing
+        // the full (now unaffordable) history. One cheap LLM call prevents silent
+        // context corruption across the entire remainder of the run.
+        if (this.pendingProviderSwitchSummary) {
+          this.pendingProviderSwitchSummary = false;
+          try {
+            const historyForSummary = this.memory.getMessages(this.conversationId)
+              .slice(-20)
+              .map(m => `[${m.role.toUpperCase()}]: ${m.content.slice(0, 800)}`)
+              .join('\n\n');
+            if (historyForSummary.length > 100) {
+              this.emit({ type: 'info', message: 'Summarizing run history for new provider context budget…' });
+              const summaryResp = await client.chat.completions.create({
+                model: this.config.model,
+                messages: [
+                  { role: 'system', content: 'You are a concise summarizer. Summarize the provided agent run history in 3 sentences: what was accomplished, what changed, and what the current task state is. Be specific about file names and actions taken.' },
+                  { role: 'user', content: `Agent run history (pre-provider-switch, original context: ${this.preSwitchContextWindow} tokens):\n\n${historyForSummary}\n\nSummarize in 3 sentences.` },
+                ],
+                max_tokens: 250,
+              } as any);
+              const summary = (summaryResp as any)?.choices?.[0]?.message?.content?.trim() || '';
+              if (summary) {
+                // Inject as a synthetic run-context message so appendHistory picks it up
+                this.memory.addMessage(this.conversationId, 'user',
+                  `[run_context_summary — provider switch to ${this.config.model}] ${summary}`,
+                  this.config.model, 'agent');
+                this.emit({ type: 'info', message: 'Run context summary injected: ' + summary.slice(0, 120) });
+              }
+            }
+          } catch (summaryErr: any) {
+            // Summarization is best-effort — never block the agent run
+            this.emit({ type: 'info', message: 'Context summarization skipped: ' + summaryErr.message });
+          }
+        }
         if (!this.config.bypassRateLimits) {
           // Periodically try to switch back to original model (every 2 minutes)
           if (shouldResetToOriginalModel(this.config.model, originalModel, lastModelResetCheck, 120_000, rateLimiter)) {
@@ -541,6 +615,7 @@ export class EnhancedAgentLoop {
           analyzer: this.analyzer,
           codeIndexer: this.codeIndexer,
           hierarchicalIndex: this.hierarchicalIndex,
+          contextWindowManager: this.contextWindowManager,
         });
 
         const messages = assembled.messages;
@@ -562,6 +637,16 @@ export class EnhancedAgentLoop {
         const queuedMsgs = this.drainQueue();
         if (queuedMsgs.length > 0) {
           this.emit({ type: 'info', message: 'Processing ' + queuedMsgs.length + ' queued user message(s)' });
+          // ── Smart Checkpoint: user_interject — user changed goal mid-run ──────
+          // Save the pivot point so the user can roll back to before the direction change.
+          try {
+            const interjectLabel = `user_interject: iter ${this.currentIteration} — "${queuedMsgs[0].content.slice(0, 80)}"`;
+            this.checkpoint.createCheckpoint(
+              this.config.projectRoot, projectId, this.runId,
+              this.currentIteration, interjectLabel, 'auto:user_interject',
+            );
+            this.emit({ type: 'checkpoint_created', iteration: this.currentIteration, trigger: 'user_interject', description: interjectLabel });
+          } catch { /* non-critical */ }
           for (const qm of queuedMsgs) {
             this.memory.addMessage(this.conversationId, 'user', '[Queued] ' + qm.content, this.config.model, 'agent');
           }
@@ -665,6 +750,23 @@ export class EnhancedAgentLoop {
               temperature: 0.3,
               maxTokens: this.config.maxTokensPerStep,
             });
+
+            // Nano confidence-aware fallback: if confidence is low, prefer fallback chain
+            // instead of letting low-agreement output mutate project state.
+            if (this.config.provider === 'nano' && typeof response.confidence === 'number') {
+              const threshold = appConfig.contextDefaults.nanoConfidenceThreshold;
+              if (response.confidence < threshold) {
+                const fallback = rateLimiter.findFallback(this.config.model, 'agent');
+                this.emit({
+                  type: 'info',
+                  message: `Nano confidence ${response.confidence.toFixed(3)} < ${threshold}; rerouting to fallback ${fallback || '(none)'}`,
+                });
+                if (fallback && fallback !== this.config.model) {
+                  this.switchModel(fallback, `Low nano confidence (${response.confidence.toFixed(3)})`);
+                  continue;
+                }
+              }
+            }
             llmCallSucceeded = true;
           } catch (err: any) {
             // Cancel timing on error
@@ -854,6 +956,13 @@ export class EnhancedAgentLoop {
         const structured = responseResult.structured;
         const fileChangesCount = responseResult.fileChangesCount;
 
+        // ── Mark changed files dirty for knowledge-graph re-index next iteration ──
+        if (structured?.filesChanged?.length) {
+          for (const fc of structured.filesChanged) {
+            if (fc.path) this.dirtyFiles.add(fc.path);
+          }
+        }
+
         // ── Extract architecture summary after exploration gate iteration ──
         if (this.currentIteration === 1 && this.totalCodeFiles >= 3) {
           const archSummary = extractArchitectureSummary(content);
@@ -881,9 +990,58 @@ export class EnhancedAgentLoop {
           this.emit({ type: 'dataset_update', dataset: this.datasetBuilder?.formatForEvent() });
         } catch { /* non-critical */ }
 
+        // ── Bird-feed observation to Nano Sea (fire-and-forget, Priority 1) ──
+        // Runs AFTER the LLM response and BEFORE tool execution so the training
+        // pair is (what we asked, what the model said) — not (what we asked, what tools did).
+        if (!failedResp && content.length > 0) {
+          try {
+            const nanoBaseUrl = appConfig.services.nanoSeaUrl;
+            fetch(nanoBaseUrl + '/v1/training/observe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                query: currentTask.slice(0, 4000),
+                response: content.slice(0, 8000),
+                source: 'agent_loop',
+                quality: structured?.confidence ? structured.confidence / 100 : 0.75,
+                metadata: {
+                  provider: this.config.provider,
+                  model: this.config.model,
+                  iteration: this.currentIteration,
+                  runId: this.runId,
+                  filesChanged: fileChangesCount,
+                  timestamp: Date.now(),
+                },
+              }),
+            }).catch(() => {}); // nano server may be stopped — never throw
+          } catch { /* non-critical */ }
+        }
+
         // ── Execute Agent Commands via ToolExecutor ──
-        const commandsToRun = structured?.commands && structured.commands.length > 0
-          ? structured.commands
+        const normalizedStructuredCommands = Array.isArray(structured?.commands)
+          ? (structured!.commands as any[])
+              .map((cmd) => {
+                // Accept both canonical object format and legacy string format.
+                if (typeof cmd === 'string') {
+                  return { command: cmd, purpose: 'structured command (legacy string)' };
+                }
+                if (cmd && typeof cmd.command === 'string') {
+                  return {
+                    command: cmd.command,
+                    purpose: typeof cmd.purpose === 'string' && cmd.purpose.trim()
+                      ? cmd.purpose
+                      : 'structured command',
+                    cwd: typeof cmd.cwd === 'string' ? cmd.cwd : undefined,
+                    timeoutMs: typeof cmd.timeoutMs === 'number' ? cmd.timeoutMs : undefined,
+                  };
+                }
+                return null;
+              })
+              .filter(Boolean) as Array<{ command: string; purpose: string; cwd?: string; timeoutMs?: number }>
+          : [];
+
+        const commandsToRun = normalizedStructuredCommands.length > 0
+          ? normalizedStructuredCommands
           : parseShellCommandsFromFreeText(content); // fallback: freeform code blocks (local models)
         if (commandsToRun.length > 0) {
           try {

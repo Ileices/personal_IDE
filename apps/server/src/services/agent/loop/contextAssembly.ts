@@ -11,6 +11,7 @@ import type { CheckpointService } from '../../checkpoint/index.js';
 import type { CodebaseAnalyzer } from '../../analysis/codebase.js';
 import type { CodeIndexer } from '../codeIndexer.js';
 import type { HierarchicalCodeIndex } from '../indexer/hierarchicalIndex.js';
+import type { ContextWindowManager } from '../../contextWindowManager/index.js';
 
 const FILE_LIST_CACHE_TTL_MS = 20_000;
 const FILE_LIST_SCAN_MAX_FILES = 400;
@@ -76,6 +77,7 @@ export interface ContextServices {
   analyzer: CodebaseAnalyzer;
   codeIndexer: CodeIndexer;
   hierarchicalIndex?: HierarchicalCodeIndex;
+  contextWindowManager?: ContextWindowManager;
 }
 
 export interface AssembledContext {
@@ -135,7 +137,46 @@ export function assembleContext(
   } catch { /* ignore */ }
 
   // Memory context
-  const memoryContext = services.memory.buildMemoryContext(config.projectId, config.currentTask);
+  let memoryContext = services.memory.buildMemoryContext(config.projectId, config.currentTask);
+  let relationshipContext = config.relationshipContext;
+  let tierContext = config.tierContext;
+  let logHealthContext = config.logHealthContext;
+  let conversationIndexContext = config.conversationIndexContext;
+  let platformContext = config.platformContext;
+  let depGraphContext = config.depGraphContext;
+  let moduleClusterContext = config.moduleClusterContext;
+  let explorationContext = config.explorationContext;
+
+  // Canonical context-window shaping (Tier 4 budget for agent_loop).
+  // This ensures the dedicated manager is part of real execution, not just API exposure.
+  if (services.contextWindowManager) {
+    const shaped = services.contextWindowManager.fitPrioritySlots({
+      system_prompt: config.codebaseOverview || '',
+      task_buildtags: [taskTrackerContext, checkpointInfo].filter(Boolean).join('\n\n'),
+      devtags: [relationshipContext, tierContext, logHealthContext].filter(Boolean).join('\n\n'),
+      history: [conversationIndexContext, platformContext, explorationContext || ''].filter(Boolean).join('\n\n'),
+      memory: memoryContext,
+      code_content: [codeIndexContext, depGraphContext || '', moduleClusterContext || ''].filter(Boolean).join('\n\n'),
+    }, 4, `agent_loop:${config.conversationId}`);
+
+    taskTrackerContext = shaped.slots.task_buildtags;
+    checkpointInfo = '';
+    memoryContext = shaped.slots.memory;
+    // Collapse secondary contexts into canonical channels after shaping.
+    const shapedDevtags = shaped.slots.devtags;
+    const shapedHistory = shaped.slots.history;
+    const shapedCode = shaped.slots.code_content;
+
+    relationshipContext = shapedDevtags;
+    tierContext = '';
+    logHealthContext = '';
+    conversationIndexContext = shapedHistory;
+    platformContext = '';
+    explorationContext = '';
+    depGraphContext = '';
+    moduleClusterContext = '';
+    codeIndexContext = shapedCode;
+  }
 
   // System prompt
   const systemPrompt = buildAgentSystemPrompt({
@@ -148,15 +189,15 @@ export function assembleContext(
     iteration: config.currentIteration,
     maxIterations: config.maxIterations,
     projectLanguages: config.projectLanguages,
-    relationshipContext: config.relationshipContext,
-    tierContext: config.tierContext,
-    logHealthContext: config.logHealthContext,
-    conversationIndexContext: config.conversationIndexContext,
-    platformContext: config.platformContext,
+    relationshipContext,
+    tierContext,
+    logHealthContext,
+    conversationIndexContext,
+    platformContext,
     codeIndexContext,
-    depGraphContext: config.depGraphContext,
-    moduleClusterContext: config.moduleClusterContext,
-    explorationContext: config.explorationContext,
+    depGraphContext,
+    moduleClusterContext,
+    explorationContext,
   });
 
   // Messages array

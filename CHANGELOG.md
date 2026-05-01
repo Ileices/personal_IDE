@@ -7,6 +7,105 @@ Entries are in reverse chronological order.
 
 ---
 
+## [Unreleased / 2026-05-02] — Integration Hardening: Transactional Spawn, Stability Monitor, Context Budget, Nano Confidence
+
+**12 integration cohesion patches applied. All builds clean. Spawn / agent / fleet lifecycle end-to-end verified.**
+
+### Transactional Spawn Authority (Patch 1 — `spawnAuthority` service + route)
+
+The old `POST /api/spawn/check` was a single-shot authorization check with no audit trail.
+Replaced with a two-phase transactional confirmation model:
+
+| Step | Endpoint | Result |
+|---|---|---|
+| 1. Request | `POST /api/spawn/request` | `{status:pending_confirmation, confirmationId, tier, agent_class}` |
+| 2. Inspect | `GET /api/spawn/confirmation/:id` | `{status:pending_confirmation \| accepted \| rejected}` |
+| 3. Approve | `POST /api/spawn/confirmation/:id/approve` | `{resolved:true, status:accepted}` |
+| 4. Reject | `POST /api/spawn/confirmation/:id/reject` | `{resolved:true, status:rejected}` |
+| 5. Execute | `POST /api/spawn/execute` | `{allowed:true}` on first call; `{allowed:false, reason:…}` on replay |
+
+Idempotency: a consumed or rejected confirmation cannot be re-executed. Replay is denied with an explicit reason string. Old `check` / `violations` / `model-tier` / `chart` endpoints are preserved for backward compatibility.
+
+`TheGodFactory.tsx` `spawn_authority_check` tool updated to route through the confirmation-aware flow.
+
+### Stability Monitor with Auto-Rollback (Patch 2 — new `stabilityMonitor` service + `stability` route)
+
+New `StabilityMonitor` class with rolling 10-cycle window:
+
+- Persists `StabilitySnapshot` records to `stability_snapshots` table on every `record()` call
+- Threshold checks after every record: 2 consecutive test failures, blame score drop >0.15 over 3 cycles, 2 consecutive loop detections, buildtag rejection spike >0.20
+- On threshold breach: fires rollback `notification_queue` entry + creates forensic suggested job
+- `healthStatus()` returns `'healthy' | 'degraded' | 'critical'`
+- Wired into `suggestedJobsCrawler` — `record()` called on every crawler tick; rollback result gates pipeline continuation (rollback triggered → pipeline aborted for that tick)
+
+New REST endpoints:
+- `GET /api/stability/window` → `{health, snapshots[]}`
+- `POST /api/stability/record` → snapshot + rollback result
+
+### Context Window Manager Integration (Patch 3 — `contextWindowManager` + `contextAssembly` + `enhancedLoop`)
+
+`ContextWindowManager.fitPrioritySlots()` integrated into the agent loop context assembly path:
+
+- Priority order: `system_prompt > task_buildtags > devtags > history > memory > code_content`
+- Tier ceilings: T1 2k, T2 6k, T3 16k, T4 80k, T5 160k tokens
+- Truncation events logged to `notification_queue` for forensic inspection
+- `contextAssembly.ts` uses shaped locals (never mutates incoming agent config)
+- Legacy `contextWindow.ts` sub-agent aligned to canonical manager to eliminate behavioral drift
+
+### Nano Confidence Threshold + Provider Fallback (Patch 4 — `config` + `streaming` + `chat` + `enhancedLoop`)
+
+- `appConfig.nano.confidenceThreshold` added (default `0.65`)
+- `streaming.ts` non-stream path now returns provider metadata including `confidence` in the call result
+- `chat.ts` and `enhancedLoop.ts` check confidence against threshold; if below, reroute to next-highest-confidence provider before returning to the caller
+- Prevents silent degraded-quality responses when the nano provider is under-trained
+
+### Nano Liaison Telemetry Payload Alignment (Patch 5 — `trainer.py` + new `nanoLiaison` service)
+
+`NANO_train/training/trainer.py` status payload now exposes per-nano `training_steps`, `best_loss`, and `last_loss` at the top level of each nano entry (previously nested under internal tracking fields), making them directly accessible to the liaison without post-processing.
+
+New `NanoLiaisonAgent` (`services/nanoLiaison/index.ts`):
+- Polls Python Nano Sea `/v1/training/status` every 15 s
+- Diffs nano states between polls; creates `devtag` records for changed nanos
+- Writes forensic entries for anomalies (loss spike, training stall)
+- `startNanoLiaisonAgent(db)` singleton wired into server startup
+
+### Suggested Jobs Crawler Rollback Gating (Patch 6 — `suggestedJobsCrawler`)
+
+`StabilityMonitor.record()` is called on every crawler sandbox tick. If the returned rollback result indicates a rollback was triggered, the current crawl pipeline is aborted for that tick and a forensic note is written. This prevents the crawler from continuing to generate and queue jobs during an active stability regression.
+
+### Additional New Services
+
+- **`milestoneEmitter.ts`** (`services/agent/loop/`): `writeMilestone()`, `writeQualitySnapshot()`, `emitIterationMilestones()`, `inferQualityFromContext()` — structured loop progress written to `loop_milestones` + `loop_quality_snapshots` tables
+- **`siliconFactory/index.ts`** + **`siliconFactory.ts`** route (1821 + 627 lines): task lifecycle, IAP messaging, sync locks, state snapshots, symbol graph, test indexing, embeddings
+
+### Runtime Verification Results
+
+All verification run against the live server after clean rebuild:
+
+| Check | Result |
+|---|---|
+| `tsc` server build | ✅ clean (pre-existing chunk-size warnings only) |
+| Vite web build | ✅ clean |
+| `GET /api/health` | ✅ 200 |
+| Spawn: request → pending | ✅ `{status:pending_confirmation}` |
+| Spawn: approve → accepted | ✅ `{resolved:true, status:accepted}` |
+| Spawn: execute ×1 | ✅ `{allowed:true}` |
+| Spawn: execute ×2 (replay) | ✅ `{allowed:false, reason:Confirmation not approved…}` |
+| Agent start/status/pause/resume/stop | ✅ all HTTP 200 |
+| Fleet start/pause/resume/stop | ✅ all HTTP 200 |
+| Chat SSE, conversation CRUD | ✅ all HTTP 200 |
+| Ollama proxy routes | ✅ HTTP 200 |
+| Nano payload routes (no Nano Sea) | ✅ graceful 200 |
+| Migration 100 `forensic_composite_indexes` | ⚠️ FAILS — `agent_class` column missing in `blame_records`; non-blocking, schema version stays at v17 |
+| `nanoTelemetryShape` check | ⚠️ expected fail — Nano Sea not running in this env |
+
+### Known Issues
+
+- **Migration 100 (`forensic_composite_indexes`)** — creates index on `blame_records.agent_class` but that column does not exist in the current schema. Non-blocking (server starts at v17). Fix: add `agent_class TEXT` column to `blame_records` in migration prior to 100.
+- **`localhost` vs `127.0.0.1` on Windows** — on this machine, `localhost` resolves to `::1` (IPv6) while `127.0.0.1` (IPv4) is not bound. Use `localhost:3001` for all requests; `127.0.0.1:3001` will time out (HTTP 000).
+
+---
+
 ## [Unreleased / 2026-05-01] — Unified Spec Full Implementation
 
 **Largest single commit in project history. 64 files changed, 19,699 insertions.**

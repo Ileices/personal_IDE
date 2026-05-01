@@ -10,6 +10,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Send, Square, Bot, User, Copy, Check, Loader2, ClipboardCopy, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { ConversationSidebar } from './ConversationSidebar';
+import { HelpTip } from './HelpTip';
 
 export function ChatPanel() {
   const {
@@ -188,7 +189,7 @@ export function ChatPanel() {
           </div>
         )}
         <div className="flex items-end gap-2">
-          <div className="flex-1 relative">
+          <div className="flex-1 relative" data-help-id="chat.input">
             <textarea
               id="chat-input"
               name="chat-input"
@@ -207,37 +208,52 @@ export function ChatPanel() {
                 t.style.height = Math.min(t.scrollHeight, 120) + 'px';
               }}
             />
+            <div className="absolute top-1.5 right-1.5">
+              <HelpTip helpId="chat.input" />
+            </div>
           </div>
 
           {isStreaming ? (
-            <button
-              onClick={stopStreaming}
-              className="p-3 bg-ide-error text-white rounded-lg hover:bg-ide-error/80 transition-colors shrink-0"
-              title="Stop generating"
-            >
-              <Square className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1" data-help-id="chat.stop">
+              <button
+                onClick={stopStreaming}
+                className="p-3 bg-ide-error text-white rounded-lg hover:bg-ide-error/80 transition-colors shrink-0"
+                title="Stop generating"
+              >
+                <Square className="w-4 h-4" />
+              </button>
+              <HelpTip helpId="chat.stop" />
+            </div>
           ) : (
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || !activeProject}
-              className="p-3 bg-ide-accent text-ide-panel rounded-lg hover:bg-ide-accent/80 transition-colors disabled:opacity-30 shrink-0"
-              title="Send message"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1" data-help-id="chat.send">
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || !activeProject}
+                className="p-3 bg-ide-accent text-ide-panel rounded-lg hover:bg-ide-accent/80 transition-colors disabled:opacity-30 shrink-0"
+                title="Send message"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+              <HelpTip helpId="chat.send" />
+            </div>
           )}
         </div>
         <div className="flex items-center justify-between mt-1.5 text-[10px] text-ide-text-dim px-1">
           <span>Enter to send, Shift+Enter for new line</span>
           <div className="flex items-center gap-2">
             {messages.length > 0 && (
-              <button onClick={copyConversation} className="hover:text-ide-accent flex items-center gap-0.5" title="Copy entire conversation">
-                {copiedConvo ? <Check className="w-3 h-3 text-ide-success" /> : <ClipboardCopy className="w-3 h-3" />}
-                {copiedConvo ? 'Copied!' : 'Copy Chat'}
-              </button>
+              <div className="flex items-center gap-1" data-help-id="chat.copy-conversation">
+                <button onClick={copyConversation} className="hover:text-ide-accent flex items-center gap-0.5" title="Copy entire conversation">
+                  {copiedConvo ? <Check className="w-3 h-3 text-ide-success" /> : <ClipboardCopy className="w-3 h-3" />}
+                  {copiedConvo ? 'Copied!' : 'Copy Chat'}
+                </button>
+                <HelpTip helpId="chat.copy-conversation" />
+              </div>
             )}
-            <button onClick={newConversation} className="hover:text-ide-accent">New Chat</button>
+            <div className="flex items-center gap-1" data-help-id="chat.new-conversation">
+              <button onClick={newConversation} className="hover:text-ide-accent">New Chat</button>
+              <HelpTip helpId="chat.new-conversation" />
+            </div>
           </div>
         </div>
       </div>

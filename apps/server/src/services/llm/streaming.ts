@@ -135,7 +135,7 @@ export async function completeChatResponse(
     signal?: AbortSignal;
     timeoutMs?: number;
   }
-): Promise<{ content: string; usage: any; headers?: Record<string, string>; statusCode?: number }> {
+): Promise<{ content: string; usage: any; headers?: Record<string, string>; statusCode?: number; confidence?: number; nanoCount?: number }> {
   // Use .withResponse() to capture HTTP headers for rate limit tracking
   const modelParams = buildModelParams(model, {
     temperature: options?.temperature,
@@ -169,5 +169,7 @@ export async function completeChatResponse(
     usage: response.usage,
     headers: Object.keys(headers).length > 0 ? headers : undefined,
     statusCode: rawResponse.status,
+    confidence: typeof (response as any)?.confidence === 'number' ? (response as any).confidence : undefined,
+    nanoCount: typeof (response as any)?.nano_count === 'number' ? (response as any).nano_count : undefined,
   };
 }

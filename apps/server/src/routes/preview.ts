@@ -46,6 +46,13 @@ interface PreviewUrlRequest {
   waitMs?: number;
 }
 
+interface PreviewSmokeRequest {
+  url: string;
+  paths?: string[];
+  requiredText?: string[];
+  timeoutMs?: number;
+}
+
 const isWindows = process.platform === 'win32';
 
 // ── Active server process registry (prevents leaks) ──
@@ -332,6 +339,57 @@ export async function previewRoutes(app: FastifyInstance) {
         url: body.url,
       };
     }
+  });
+
+  // ── Smoke macro: check one or more routes and assert required text ──
+  app.post('/macro/smoke', async (req: FastifyRequest) => {
+    const body = req.body as PreviewSmokeRequest;
+    if (!body?.url) return { success: false, error: 'url is required' };
+
+    const timeoutMs = Math.min(Math.max(body.timeoutMs || 5000, 1000), 20000);
+    const base = body.url.replace(/\/$/, '');
+    const paths = (body.paths && body.paths.length > 0) ? body.paths : ['/'];
+    const required = body.requiredText || [];
+
+    const checks: Array<{ path: string; success: boolean; status?: number; error?: string; foundRequiredText: boolean }> = [];
+
+    for (const p of paths.slice(0, 20)) {
+      const fullUrl = `${base}${p.startsWith('/') ? p : `/${p}`}`;
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), timeoutMs);
+        const res = await fetch(fullUrl, { signal: controller.signal });
+        clearTimeout(t);
+        const text = await res.text();
+        const foundRequiredText = required.every((needle) => text.toLowerCase().includes(String(needle).toLowerCase()));
+
+        checks.push({
+          path: p,
+          success: res.status >= 200 && res.status < 400,
+          status: res.status,
+          foundRequiredText,
+        });
+      } catch (err: any) {
+        checks.push({
+          path: p,
+          success: false,
+          error: err.message,
+          foundRequiredText: false,
+        });
+      }
+    }
+
+    const ok = checks.every(c => c.success && (required.length === 0 || c.foundRequiredText));
+    return {
+      success: ok,
+      checks,
+      summary: {
+        total: checks.length,
+        passed: checks.filter(c => c.success).length,
+        failed: checks.filter(c => !c.success).length,
+        requiredTextChecks: required.length,
+      },
+    };
   });
 
   // ── Detect available compilers/runtimes ──

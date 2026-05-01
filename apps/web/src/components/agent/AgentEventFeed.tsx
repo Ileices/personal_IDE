@@ -58,6 +58,7 @@ export function AgentEventFeed({
       'error', 'run_complete', 'step_complete', 'file_changed',
       'errors_detected', 'tests_failed', 'checkpoint_created',
       'loop_detected', 'message_queued',
+      'tool_result', 'runtime_check',
     ]);
 
     const detailedTypes = new Set([
@@ -65,7 +66,7 @@ export function AgentEventFeed({
       'state_change', 'step_start', 'info', 'auto_answer',
       'question_logged', 'chunking_start', 'chunking_complete',
       'chunking_error', 'cooldown', 'continuous_mode',
-      'rate_limit_bypass',
+      'rate_limit_bypass', 'tool_executing', 'tool_blocked',
     ]);
 
     const allowed = verbosity === 'minimal' ? minimalTypes : detailedTypes;
@@ -205,6 +206,10 @@ function getEventTypeClass(type: string): string {
     rate_limit_bypass: 'text-orange-400', step_complete: 'text-green-300',
     errors_detected: 'text-yellow-400', tests_failed: 'text-red-400',
     checkpoint_created: 'text-cyan-400',
+    tool_executing: 'text-blue-400',
+    tool_result: 'text-cyan-300',
+    tool_blocked: 'text-orange-400',
+    runtime_check: 'text-green-300',
   };
   return map[type] || 'text-ide-text';
 }
@@ -234,6 +239,27 @@ function ExpandedContent({ event }: { event: AgentEvent }) {
   }
   if (event.type === 'file_changed') {
     return <div>Path: {event.data?.change?.path}<br/>Action: {event.data?.change?.action}<br/>Summary: {event.data?.change?.summary}</div>;
+  }
+  if (event.type === 'tool_result') {
+    return (
+      <div>
+        Command: {event.data?.command}<br />
+        Success: {String(event.data?.success)}<br />
+        Exit: {event.data?.exitCode ?? 'n/a'}<br />
+        Duration: {event.data?.durationMs ?? 0}ms<br />
+        Output: {event.data?.outputSnippet || '(none)'}
+      </div>
+    );
+  }
+  if (event.type === 'runtime_check') {
+    return (
+      <div>
+        Stage: {event.data?.stage}<br />
+        Success: {String(event.data?.success)}<br />
+        Command: {event.data?.command || 'n/a'}<br />
+        Exit: {event.data?.exitCode ?? 'n/a'}
+      </div>
+    );
   }
   return <div>{JSON.stringify(event.data, null, 2).slice(0, 1500)}</div>;
 }

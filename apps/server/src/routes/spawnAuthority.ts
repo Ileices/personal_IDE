@@ -35,6 +35,103 @@ export async function spawnAuthorityRoutes(app: FastifyInstance) {
     return tier;
   }));
 
+  // Request spawn with automatic Tier 3+ confirmation gating.
+  // Tier 1-2: auto-approved (returns { status: 'approved', ... }).
+  // Tier 3+:  creates a pending confirmation card (returns { status: 'pending_confirmation', confirmationId }).
+  // Client must poll /confirmation/:id to know when user accepts/rejects.
+  app.post('/request', safeRoute(async (req: FastifyRequest) => {
+    const body = req.body as any;
+    const { requesting_agent_id, requesting_agent_type, requested_sub_agent } = body;
+    const { tier } = SpawnAuthorityService.getModelTier(requested_sub_agent || '');
+
+    // First check authority
+    const authResult = spawnService.checkSpawnAuthority(requesting_agent_id, requesting_agent_type, requested_sub_agent);
+    if (!authResult.allowed) {
+      return { status: 'denied', reason: authResult.reason };
+    }
+
+    if (tier <= 2) {
+      // Auto-approve — log and return
+      return { status: 'approved', agent_class: requested_sub_agent, tier };
+    }
+
+    // Tier 3+: surface a confirmation card to the user
+    const { confirmationId, expiresAt } = spawnService.createPendingConfirmation({
+      requestedSubAgent: requested_sub_agent,
+      requestedTier: tier,
+      requestedBy: requesting_agent_type,
+      requestedById: requesting_agent_id,
+      expiresAfterMs: 60_000,
+    });
+    return { status: 'pending_confirmation', confirmationId, expiresAt, tier, agent_class: requested_sub_agent };
+  }));
+
+  // Poll for confirmation status
+  app.get('/confirmation/:id', safeRoute(async (req: FastifyRequest) => {
+    const { id } = req.params as { id: string };
+    const status = spawnService.checkConfirmation(id);
+    return { confirmationId: id, status };
+  }));
+
+  // Explicit user decision endpoints
+  app.post('/confirmation/:id/approve', safeRoute(async (req: FastifyRequest) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as any;
+    const result = spawnService.resolveConfirmation(id, true, body?.acted_by || 'user');
+    return { confirmationId: id, ...result };
+  }));
+
+  app.post('/confirmation/:id/reject', safeRoute(async (req: FastifyRequest) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as any;
+    const result = spawnService.resolveConfirmation(id, false, body?.acted_by || 'user');
+    return { confirmationId: id, ...result };
+  }));
+
+  // Transactional execution check: Tier 3+ requires one-time consumed approval.
+  app.post('/execute', safeRoute(async (req: FastifyRequest) => {
+    const body = req.body as any;
+    const {
+      requesting_agent_id,
+      requesting_agent_type,
+      requested_sub_agent,
+      confirmation_id,
+    } = body;
+
+    const base = spawnService.checkSpawnAuthority(
+      requesting_agent_id,
+      requesting_agent_type,
+      requested_sub_agent,
+    );
+    if (!base.allowed) {
+      return { allowed: false, reason: base.reason, status: 'denied' };
+    }
+
+    const { tier } = SpawnAuthorityService.getModelTier(requested_sub_agent || '');
+    if (tier <= 2) {
+      return { allowed: true, status: 'approved', tier, agent_class: requested_sub_agent };
+    }
+
+    if (!confirmation_id) {
+      return {
+        allowed: false,
+        status: 'pending_confirmation',
+        reason: 'Tier 3+ spawn requires confirmation_id',
+      };
+    }
+
+    const consumed = spawnService.consumeApprovedConfirmation(String(confirmation_id));
+    if (!consumed) {
+      return {
+        allowed: false,
+        status: 'denied',
+        reason: 'Confirmation not approved, expired, or already consumed',
+      };
+    }
+
+    return { allowed: true, status: 'approved', tier, agent_class: requested_sub_agent };
+  }));
+
   // Get the full authority chart
   app.get('/chart', safeRoute(async () => {
     return {

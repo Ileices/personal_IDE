@@ -39,7 +39,13 @@ import { gapAnalysisRoutes } from './routes/gapAnalysis.js';
 import { projectStateCrawlerRoutes } from './routes/projectStateCrawler.js';
 import { suggestedJobsRoutes } from './routes/suggestedJobs.js';
 import { godFactoryRoutes } from './routes/godFactory.js';
+import { siliconFactoryRoutes } from './routes/siliconFactory.js';
+import { projectFactoryRoutes } from './routes/projectFactory.js';
+import { stabilityRoutes } from './routes/stability.js';
+import { contextWindowRoutes } from './routes/contextWindow.js';
+import { startNanoLiaisonAgent } from './services/nanoLiaison/index.js';
 import { startSubsystemScheduler } from './services/subsystemScheduler.js';
+import { startSiliconFactorySupervisor } from './services/siliconFactory/index.js';
 import { runSuggestedJobsCrawlerTick, runSandboxTick } from './services/suggestedJobsCrawler/index.js';
 import csrfPlugin from './plugins/csrf.js';
 import { validationPlugin } from './plugins/validation.js';
@@ -160,6 +166,18 @@ async function main() {
   // God Factory Agent — notification queue, idle suggestions, brainstorm, model/background status
   await app.register(godFactoryRoutes, { prefix: '/api/god-factory' });
 
+  // Silicon Factory — autonomous task ledger, handshake protocol, cold-boot recovery
+  await app.register(siliconFactoryRoutes, { prefix: '/api/silicon-factory' });
+
+  // Project Factory — scaffold, import analysis, milestone/quality history
+  await app.register(projectFactoryRoutes, { prefix: '/api/project-factory' });
+
+  // Stability Monitor — rolling 10-cycle health window, auto-rollback triggers
+  await app.register(stabilityRoutes, { prefix: '/api/stability' });
+
+  // Context Window Manager — priority-based context assembly with budget enforcement
+  await app.register(contextWindowRoutes, { prefix: '/api/context-window' });
+
   // Health — rich diagnostic endpoint (replaces inline handler)
   await app.register(healthRoutes);
 
@@ -178,6 +196,17 @@ async function main() {
     console.log(`🌐 Frontend: ${appConfig.frontend.url}\n`);
 
     startSubsystemScheduler(db);
+    try {
+      startNanoLiaisonAgent(db, { nanoPort: 5100 });
+    } catch (err) {
+      app.log.warn('Nano Liaison Agent did not start: ' + err);
+    }
+    try {
+      startSiliconFactorySupervisor(db);
+    } catch (err) {
+      app.log.error(err);
+      app.log.warn('Silicon Factory supervisor did not start (migration likely pending or failed).');
+    }
 
     // Suggested Jobs Crawler — runs every 2 minutes, alternating crawler ticks + sandbox ticks
     let sjTickCounter = 0;

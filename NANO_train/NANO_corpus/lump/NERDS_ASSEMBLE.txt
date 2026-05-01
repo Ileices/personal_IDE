@@ -1,0 +1,56 @@
+NERDS ASSEMBLE
+
+If you are reading this, you are part of the Nano Sea reconstruction crew.
+
+This is the straight talk version.
+
+We are not polishing a toy chatbot.
+We are building a tagged, agentic, self-improving engineering organism.
+The Nano Sea is not a sidecar. It is the long game.
+
+North star:
+- Replace brittle monolithic prompt dependence with structured, inspectable swarm cognition.
+- Keep deterministic scaffolding (tags, validators, drift checks, forensic traces) around adaptive learning.
+- Make every operation attributable, reversible, and debuggable.
+
+What changes in the rework:
+1. Architecture alignment
+- Align all Nano Sea internals with unified build/meta layer architecture.
+- Treat parser-derived ground truth and tag registry as first-class integration surfaces.
+- Build toward one authority model where routing, memory, and lifecycle are policy-driven.
+
+2. Memory and context discipline
+- No giant context dumps.
+- Chunked, tier-aware, role-aware memory routing.
+- Agent/interaction-specific memory surfaces that can be audited and replayed.
+
+3. Lifecycle rigor
+- Train, compress, deposit, rebuild loops are not optional flavor.
+- They are required for quality climb and controlled evolution.
+- Every cycle should emit measurable deltas (fitness, debt impact, regression impact).
+
+4. Tooling and observability
+- If it cannot be measured, it cannot be trusted.
+- If it cannot be rolled back, it cannot be deployed.
+- If it cannot be explained with tags and forensic records, it is not done.
+
+5. Scale path
+- Design for constrained hardware first, then expand.
+- Keep fallback behavior explicit across model tiers.
+- Make distributed mesh and paging additive, not architecture-breaking.
+
+Implementation stance:
+- Small valid steps over grand rewrites.
+- Preserve traceability across every modification.
+- Prefer composable modules with narrow contracts.
+- Document where the spec is ahead of the code as COMING SOON, then close those gaps surgically.
+
+For future nerds joining the trench:
+- Read the delivery package in this folder.
+- Respect the build order.
+- Do not bypass validators for speed.
+- Do not hide uncertainty behind fluent text.
+- Keep the system legible for the next engineer.
+
+Nano Sea v2 is the bridge from assistant behavior to autonomous engineering infrastructure.
+Build it like the future depends on correctness, because it does.

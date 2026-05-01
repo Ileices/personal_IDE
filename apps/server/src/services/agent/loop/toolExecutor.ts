@@ -229,7 +229,7 @@ export class ToolExecutor {
         const durationMs = Date.now() - startTime;
         const outputBudget = Math.min(MAX_OUTPUT_PER_COMMAND, MAX_TOTAL_OUTPUT_CHARS - totalOutputChars);
         // Always keep at least 200 chars so error messages aren't lost
-        const truncatedOutput = execResult.output.slice(0, Math.max(outputBudget, 200));
+        let truncatedOutput = execResult.output.slice(0, Math.max(outputBudget, 200));
         totalOutputChars += truncatedOutput.length;
 
         // Infer exit code from output (sentinel approach doesn't give real $?)
@@ -237,6 +237,30 @@ export class ToolExecutor {
         const success = !execResult.exitHint && exitCode === 0;
 
         this.totalCommandsExecuted++;
+
+        // Preview-first feedback loop: if this looks like a dev/start command,
+        // try to resolve a reachable localhost URL and emit it to the UI.
+        if (success && this.looksLikeServerCommand(sanitized)) {
+          const url = this.extractPreviewUrl(truncatedOutput) || await this.detectReachableLocalUrl();
+          if (url) {
+            emit({ type: 'server_started', url, command: sanitized.slice(0, 200) });
+            emit({ type: 'preview_url', url, source: 'tool_executor' });
+            try {
+              const health = await this.checkPreviewHealth(url);
+              emit({
+                type: 'runtime_check',
+                stage: 'preview',
+                success: health.success,
+                url,
+                statusCode: health.statusCode,
+                bodyLength: health.bodyLength,
+              });
+              truncatedOutput += `\n\n[preview-check] ${url} -> ${health.success ? 'OK' : 'FAIL'} (${health.statusCode ?? 'n/a'})`;
+            } catch {
+              // best-effort
+            }
+          }
+        }
 
         results.push({
           command: sanitized,
@@ -404,6 +428,47 @@ export class ToolExecutor {
     }
 
     return 0;
+  }
+
+  /** Identify commands likely to start a local app preview server. */
+  private looksLikeServerCommand(command: string): boolean {
+    const c = command.toLowerCase();
+    return (
+      /\b(npm|pnpm|yarn)\s+(run\s+)?(dev|start|serve)\b/.test(c) ||
+      /\b(vite|next|nuxt|astro)\s+(dev|start|preview)\b/.test(c) ||
+      /\buvicorn\b|\bflask\s+run\b|\bpython\s+.*main\.py\b/.test(c)
+    );
+  }
+
+  /** Parse localhost URL from command output if present. */
+  private extractPreviewUrl(output: string): string | null {
+    const match = output.match(/https?:\/\/(localhost|127\.0\.0\.1):\d{2,5}/i);
+    return match?.[0] || null;
+  }
+
+  /** Probe common local dev ports for a reachable preview URL. */
+  private async detectReachableLocalUrl(): Promise<string | null> {
+    const ports = [5173, 5174, 3000, 3001, 4173, 8080];
+    for (const port of ports) {
+      try {
+        const url = `http://localhost:${port}`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
+        if (res.ok || (res.status >= 200 && res.status < 500)) return url;
+      } catch {
+        // try next port
+      }
+    }
+    return null;
+  }
+
+  private async checkPreviewHealth(url: string): Promise<{ success: boolean; statusCode?: number; bodyLength: number }> {
+    const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
+    const text = await res.text();
+    return {
+      success: res.status >= 200 && res.status < 400,
+      statusCode: res.status,
+      bodyLength: text.length,
+    };
   }
 
   /** Create a blocked result */

@@ -65,6 +65,21 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
+## Help System Coverage (Spec Alignment Pass)
+
+The in-app Help menu now carries an expanded architecture map based on the unified specification set in `build_runs/feedback/*`.
+
+What this pass includes:
+- Expanded help coverage for Build Layer, Meta Layer, agent authority, memory surfaces, tag schema, Project State Crawler, Gap Analysis, Blame, Suggested Jobs, and Nano Sea v2 roadmap concepts.
+- **Coming Soon** markers in Help for specification-defined behaviors not yet fully wired in UI/runtime.
+- Section **tags** (pipeline tags) to show which subsystems work together and to support targeted implementation follow-up.
+- Improved Help search indexing across section metadata and context (title, summary, details, tags, anchor IDs, control quick tips), not only section titles.
+
+Companion architecture note for Nano Sea rework:
+- `NANO_train/NANO_corpus/lump/NERDS_ASSEMBLE.txt`
+
+---
+
 ## Architecture
 
 ```

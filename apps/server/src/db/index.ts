@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1156,11 +1157,6 @@ const MIGRATIONS: Migration[] = [
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_output_capture_events_blame ON output_capture_events(blame_id);
-
-        CREATE INDEX IF NOT EXISTS idx_quality_model ON quality_records(model_id);
-        CREATE INDEX IF NOT EXISTS idx_quality_composite ON quality_records(composite_quality_score);
-        CREATE INDEX IF NOT EXISTS idx_tool_crit_model_interaction ON tool_criticism_records(model_id, interaction_type);
-        CREATE INDEX IF NOT EXISTS idx_blame_success_model_interaction ON blame_successes(model_id, interaction_type);
       `);
 
       // blame_records full spec columns
@@ -1260,6 +1256,14 @@ const MIGRATIONS: Migration[] = [
       addColumnIfMissing('model_registry', 'tool_configs_generated TEXT DEFAULT "[]"', 'tool_configs_generated');
       addColumnIfMissing('model_registry', 'last_updated_cycle INTEGER', 'last_updated_cycle');
       addColumnIfMissing('model_registry', 'last_updated_by TEXT', 'last_updated_by');
+
+      // Now that columns exist, create the indexes that reference them
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_quality_model ON quality_records(model_id);
+        CREATE INDEX IF NOT EXISTS idx_quality_composite ON quality_records(composite_quality_score);
+        CREATE INDEX IF NOT EXISTS idx_tool_crit_model_interaction ON tool_criticism_records(model_id, interaction_type);
+        CREATE INDEX IF NOT EXISTS idx_blame_success_model_interaction ON blame_successes(model_id, interaction_type);
+      `);
 
       // Seed/backfill derived alias columns
       db.exec(`
@@ -1445,7 +1449,6 @@ const MIGRATIONS: Migration[] = [
         INSERT OR IGNORE INTO language_registry (id, language_id, file_extension, grammar_name, grammar_version, registered_by)
         VALUES (?, ?, ?, ?, '1.0.0', 'system')
       `);
-      const { randomUUID } = require('crypto');
       for (const [ext, lang, grammar] of langs) {
         stmt.run(randomUUID(), `${lang}_${ext}`, ext, grammar);
       }
@@ -1731,8 +1734,317 @@ const MIGRATIONS: Migration[] = [
   },
 
   // ──────────────────────────────────────────
+  // Migration v14: Silicon Factory core tables
+  // ──────────────────────────────────────────
+  {
+    version: 14,
+    name: 'silicon_factory_core_tables',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS silicon_tasks (
+          id TEXT PRIMARY KEY,
+          parent_id TEXT REFERENCES silicon_tasks(id),
+          previous_id TEXT REFERENCES silicon_tasks(id),
+          status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','ACTIVE','COMPLETED','FAILED','ESCALATED')),
+          agent_type TEXT NOT NULL,
+          instruction TEXT NOT NULL,
+          context_keys TEXT,
+          next_step_hint TEXT,
+          output_raw TEXT,
+          handshake_blob TEXT,
+          files_modified TEXT,
+          token_count_in INTEGER NOT NULL DEFAULT 0,
+          token_count_out INTEGER NOT NULL DEFAULT 0,
+          attempt_count INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          completed_at INTEGER,
+          thermal_at_run REAL,
+          provenance_tags TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_silicon_tasks_status_created ON silicon_tasks(status, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_silicon_tasks_previous ON silicon_tasks(previous_id);
+
+        CREATE TABLE IF NOT EXISTS silicon_project_config (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS silicon_black_box_log (
+          id TEXT PRIMARY KEY,
+          task_id TEXT,
+          agent_id TEXT NOT NULL,
+          prompt TEXT NOT NULL,
+          response TEXT NOT NULL,
+          token_in INTEGER NOT NULL DEFAULT 0,
+          token_out INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_silicon_black_box_task ON silicon_black_box_log(task_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS silicon_z_state_buffer (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL,
+          partial_output TEXT NOT NULL,
+          token_position INTEGER NOT NULL DEFAULT 0,
+          completed INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_silicon_zstate_task ON silicon_z_state_buffer(task_id, completed, updated_at DESC);
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v15: Silicon Factory extensions
+  // ──────────────────────────────────────────
+  {
+    version: 15,
+    name: 'silicon_factory_iap_locks_snapshots',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS silicon_iap_messages (
+          id TEXT PRIMARY KEY,
+          from_agent TEXT NOT NULL,
+          to_agent TEXT NOT NULL,
+          message_type TEXT NOT NULL,
+          payload TEXT NOT NULL DEFAULT '{}',
+          status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'acked')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          acked_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_silicon_iap_to_status ON silicon_iap_messages(to_agent, status, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS silicon_sync_locks (
+          lock_key TEXT PRIMARY KEY,
+          owner_agent TEXT NOT NULL,
+          acquired_at TEXT NOT NULL DEFAULT (datetime('now')),
+          expires_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_silicon_lock_expires ON silicon_sync_locks(expires_at);
+
+        CREATE TABLE IF NOT EXISTS silicon_state_snapshots (
+          snapshot_id TEXT PRIMARY KEY,
+          reason TEXT NOT NULL DEFAULT 'manual',
+          snapshot_blob TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_silicon_state_snapshots_created ON silicon_state_snapshots(created_at DESC);
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v16: Test execution index + symbol embeddings
+  // ──────────────────────────────────────────
+  {
+    version: 16,
+    name: 'silicon_test_index_and_embeddings',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS silicon_test_index (
+          id TEXT PRIMARY KEY,
+          test_file TEXT NOT NULL,
+          test_name TEXT NOT NULL,
+          source_file TEXT,
+          source_symbol TEXT,
+          project_id TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          indexed_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_silicon_test_symbol ON silicon_test_index(source_symbol, project_id);
+        CREATE INDEX IF NOT EXISTS idx_silicon_test_file ON silicon_test_index(source_file, project_id);
+        CREATE INDEX IF NOT EXISTS idx_silicon_test_project ON silicon_test_index(project_id);
+
+        CREATE TABLE IF NOT EXISTS silicon_symbol_embeddings (
+          symbol_id TEXT NOT NULL,
+          project_id TEXT NOT NULL DEFAULT '',
+          terms TEXT NOT NULL DEFAULT '{}',
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (symbol_id, project_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_silicon_embeddings_project ON silicon_symbol_embeddings(project_id);
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
+  // Migration v17: Project Factory — milestones,
+  // quality snapshots, god-factory loop state
+  // ──────────────────────────────────────────
+  {
+    version: 17,
+    name: 'project_factory_tracking',
+    up(db: Database.Database) {
+      db.exec(`
+        -- Structured milestone tree written by the agent loop per run.
+        -- Enables "what is the agent working on right now?" and historical progress views.
+        CREATE TABLE IF NOT EXISTS loop_milestones (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          run_id TEXT NOT NULL,
+          parent_id TEXT REFERENCES loop_milestones(id) ON DELETE SET NULL,
+          title TEXT NOT NULL,
+          detail TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending','in_progress','complete','failed','skipped')),
+          source TEXT NOT NULL DEFAULT 'agent'
+            CHECK (source IN ('agent','user','system','fleet')),
+          iteration INTEGER NOT NULL DEFAULT 0,
+          files_changed INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_lm_project_run ON loop_milestones(project_id, run_id);
+        CREATE INDEX IF NOT EXISTS idx_lm_status ON loop_milestones(run_id, status);
+        CREATE INDEX IF NOT EXISTS idx_lm_parent ON loop_milestones(parent_id);
+
+        -- Per-iteration quality snapshot: build / test / lint outcomes.
+        -- Enables quality trend charts (green/red per iteration).
+        CREATE TABLE IF NOT EXISTS loop_quality_snapshots (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          run_id TEXT NOT NULL,
+          iteration INTEGER NOT NULL,
+          build_ok INTEGER NOT NULL DEFAULT 1,
+          tests_ok INTEGER NOT NULL DEFAULT 1,
+          lint_ok INTEGER NOT NULL DEFAULT 1,
+          error_count INTEGER NOT NULL DEFAULT 0,
+          test_pass_count INTEGER NOT NULL DEFAULT 0,
+          test_fail_count INTEGER NOT NULL DEFAULT 0,
+          files_changed INTEGER NOT NULL DEFAULT 0,
+          tokens_used INTEGER NOT NULL DEFAULT 0,
+          summary TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_lqs_project_run ON loop_quality_snapshots(project_id, run_id);
+        CREATE INDEX IF NOT EXISTS idx_lqs_iteration ON loop_quality_snapshots(run_id, iteration);
+
+        -- God Factory autonomous loop singleton state.
+        -- Tracks whether the GF loop is processing the suggested-jobs queue.
+        CREATE TABLE IF NOT EXISTS god_factory_loop_state (
+          id TEXT NOT NULL DEFAULT 'singleton' PRIMARY KEY,
+          state TEXT NOT NULL DEFAULT 'idle'
+            CHECK (state IN ('idle','running','paused','stopping')),
+          current_job_id TEXT,
+          current_run_id TEXT,
+          jobs_completed INTEGER NOT NULL DEFAULT 0,
+          jobs_failed INTEGER NOT NULL DEFAULT 0,
+          jobs_skipped INTEGER NOT NULL DEFAULT 0,
+          started_at TEXT,
+          last_active_at TEXT,
+          config TEXT NOT NULL DEFAULT '{}'
+        );
+        INSERT OR IGNORE INTO god_factory_loop_state (id) VALUES ('singleton');
+
+        -- Import analysis cache — expensive crawl results keyed by folder hash.
+        CREATE TABLE IF NOT EXISTS import_analyses (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          folder_path TEXT NOT NULL,
+          folder_hash TEXT NOT NULL,
+          file_count INTEGER NOT NULL DEFAULT 0,
+          language_breakdown TEXT NOT NULL DEFAULT '{}',
+          tech_stack TEXT NOT NULL DEFAULT '[]',
+          dependency_managers TEXT NOT NULL DEFAULT '[]',
+          todo_count INTEGER NOT NULL DEFAULT 0,
+          fixme_count INTEGER NOT NULL DEFAULT 0,
+          test_file_count INTEGER NOT NULL DEFAULT 0,
+          estimated_loc INTEGER NOT NULL DEFAULT 0,
+          health_score INTEGER NOT NULL DEFAULT 50,
+          issues TEXT NOT NULL DEFAULT '[]',
+          recommended_workflow_mode TEXT NOT NULL DEFAULT 'import_refactor',
+          recommended_strategy_template TEXT NOT NULL DEFAULT 'fullstack-balanced',
+          analysis_report TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_ia_project ON import_analyses(project_id);
+        CREATE INDEX IF NOT EXISTS idx_ia_folder_hash ON import_analyses(folder_hash);
+      `);
+    },
+  },
+
+  // ──────────────────────────────────────────
   // Future migrations go here
   // ──────────────────────────────────────────
+
+  // ──────────────────────────────────────────
+  // Migration vN: Forensic composite indexes
+  // Cross-table Gap Analysis queries require
+  // composite indexes to stay fast as tables grow
+  // ──────────────────────────────────────────
+  {
+    version: 100,
+    name: 'forensic_composite_indexes',
+    up(db: Database.Database) {
+      // Add agent_class to agent_performance if not already present
+      try {
+        db.exec(`ALTER TABLE agent_performance ADD COLUMN agent_class TEXT NOT NULL DEFAULT 'unknown';`);
+      } catch { /* column already exists — safe to ignore */ }
+      db.exec(`
+        -- blame_records: composite for "all records from model X in period Y"
+        CREATE INDEX IF NOT EXISTS idx_blame_model_created ON blame_records(model, created_at);
+        -- blame_records: composite for project + time range (agent run history)
+        CREATE INDEX IF NOT EXISTS idx_blame_project_created ON blame_records(project_id, created_at);
+
+        -- tag_mismatches: composite for per-agent mismatch history
+        CREATE INDEX IF NOT EXISTS idx_tag_mismatches_agent_created ON tag_mismatches(agent_id, created_at);
+        -- tag_mismatches: composite for cycle + severity (build health per cycle)
+        CREATE INDEX IF NOT EXISTS idx_tag_mismatches_cycle_severity ON tag_mismatches(cycle_id, severity);
+
+        -- agent_performance: composite for class + time (agent class trend analysis)
+        CREATE INDEX IF NOT EXISTS idx_agent_perf_class_created ON agent_performance(agent_class, created_at);
+
+        -- regression_history: composite for file + time (file stability tracking)
+        CREATE INDEX IF NOT EXISTS idx_regression_file_created ON regression_history(file_path, created_at);
+        -- regression_history: composite for cycle + build_phase
+        CREATE INDEX IF NOT EXISTS idx_regression_cycle_phase ON regression_history(cycle_id, build_phase);
+
+        -- model_registry: composite for provider + tier (provider comparison)
+        CREATE INDEX IF NOT EXISTS idx_model_registry_provider_tier ON model_registry(provider, model_tier);
+
+        -- quality_records: composite for blame_id lookup (used in join queries)
+        CREATE INDEX IF NOT EXISTS idx_quality_blame_model ON quality_records(blame_id, tag_conformance);
+      `);
+    },
+  },
+  {
+    version: 101,
+    name: 'job_evidence_summary',
+    up(db: Database.Database) {
+      // Add evidence_summary to job_records so every generated job is traceable
+      // to the "why was this job generated?" question with a human-readable audit trail.
+      try {
+        db.exec(`ALTER TABLE job_records ADD COLUMN evidence_summary TEXT NOT NULL DEFAULT '';`);
+      } catch { /* column may already exist in a fresh schema */ }
+      // Add an index to find jobs by their forensic source record IDs quickly
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_job_records_source_ids
+          ON job_records(source, implementation_status);
+      `);
+    },
+  },
+  {
+    version: 102,
+    name: 'stability_snapshots',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS stability_snapshots (
+          cycle                   INTEGER PRIMARY KEY,
+          timestamp               TEXT NOT NULL DEFAULT (datetime('now')),
+          process_alive           INTEGER NOT NULL DEFAULT 1,
+          tests_failed            INTEGER NOT NULL DEFAULT 0,
+          tests_total             INTEGER NOT NULL DEFAULT 0,
+          avg_blame_score         REAL NOT NULL DEFAULT 0,
+          loop_detected           INTEGER NOT NULL DEFAULT 0,
+          buildtag_rejection_rate REAL NOT NULL DEFAULT 0,
+          rollback_triggered      INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_stability_snapshots_cycle
+          ON stability_snapshots(cycle DESC);
+      `);
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────

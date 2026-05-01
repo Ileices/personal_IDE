@@ -19,9 +19,9 @@ import {
 } from 'lucide-react';
 import { useProjectStore } from '../stores/projectStore';
 import { useChatStore } from '../stores/chatStore';
+import { useModelStore } from '../stores/modelStore';
 import { ModelDropdown } from './UniversalModelPicker';
 import { API_BASE } from '../config.js';
-import { MODELS } from '@personal-ide/shared';
 import { GodFactoryRightPanel } from './godFactory/GodFactoryRightPanel.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -134,7 +134,26 @@ To call a tool, output a fenced code block with language \`tool_call\` containin
 | pattern_trend | Get trend data for a recurring pattern | \`pattern_id\` (required), \`limit?\` |
 | agent_conformance_report | Get agent performance/conformance report | \`agent_id?\` |
 | implementation_pipeline_status | Get staged pipeline progress for an implementing job | \`job_id\` (required) |
-| spawn_authority_check | Check if a sub-agent spawn is authorized | \`requesting_agent_id\`, \`requesting_agent_type\`, \`requested_sub_agent\` |
+| spawn_authority_check | Request/validate sub-agent spawn with Tier 3+ confirmation gating | \`requesting_agent_id\`, \`requesting_agent_type\`, \`requested_sub_agent\` |
+| silicon_factory_status | Read Silicon Factory supervisor, queue, and task ledger status | _(no params)_ |
+| silicon_factory_enqueue_task | Enqueue one atomic task in the Silicon Factory task ledger | \`instruction\` (required), \`agent_type?\`, \`next_step_hint?\` |
+| silicon_factory_resume | Run cold-boot resume to re-queue interrupted ACTIVE tasks | _(no params)_ |
+| silicon_factory_lock_acquire | Acquire a Sync-Lock for a critical shard | \`lock_key\` (required), \`owner_agent\` (required), \`ttl_seconds?\` |
+| silicon_factory_lock_release | Release a Sync-Lock | \`lock_key\` (required), \`owner_agent?\` |
+| silicon_factory_snapshot | Create a Deep-State snapshot | \`reason?\` |
+| silicon_factory_iap_send | Send an Inter-Agent Protocol message | \`from_agent\`, \`to_agent\`, \`message_type\`, \`payload?\` |
+| silicon_factory_spec_validate | Validate code against the active spec contract | \`code?\`, \`task_id?\`, \`fail_task_on_violation?\` |
+| silicon_project_context | Set/get active project context for Silicon tooling | \`project_id?\`, \`project_root?\`, \`mode?\` (\`get\` or \`set\`) |
+| silicon_symbol_read | Symbol-level read for function/class API/struct/signature | \`symbol_name\` (required), \`read_type?\`, \`file_path?\`, \`project_id?\` |
+| silicon_graph_query | Navigate symbol graph callers/callees/usages/includes | \`mode\` (required), \`symbol?\`, \`file_path?\`, \`project_id?\`, \`limit?\` |
+| silicon_semantic_find | Semantic-like code retrieval by concept | \`query\` (required), \`project_id?\`, \`limit?\` |
+| silicon_task_context | Build compressed context for one task | \`task_id\` (required), \`project_id?\`, \`budget_tokens?\`, \`diagnostics_raw?\` |
+| silicon_context_delta | Delta-encode context sections | \`previous_sections\` (object), \`current_sections\` (object) |
+| silicon_compress_diagnostics | Compress verbose compiler/linter output | \`raw\` (required), \`max_items?\` |
+| silicon_compress_test_output | Compress verbose test output | \`raw\` (required), \`max_failures?\` |
+| silicon_test_discovery | Find tests covering a symbol or file | \`symbol?\`, \`file_path?\`, \`project_id?\`, \`limit?\` |
+| silicon_reindex_tests | Scan project test files and build test-coverage index | \`project_id?\`, \`project_root?\` |
+| silicon_reindex_embeddings | Rebuild TF-IDF symbol embeddings for stronger semantic find | \`project_id?\` |
 
 ### Tool Rules
 - Use ONE tool call per response turn
@@ -193,7 +212,26 @@ function formatToolSummary(call: ToolCall): string {
     case 'pattern_trend': return `pattern_trend(${p.pattern_id})`;
     case 'agent_conformance_report': return `agent_conformance_report(${p.agent_id || 'all'})`;
     case 'implementation_pipeline_status': return `implementation_pipeline_status(${p.job_id})`;
-    case 'spawn_authority_check': return `spawn_authority_check(${p.requested_sub_agent})`;
+    case 'spawn_authority_check': return `spawn_authority_request(${p.requested_sub_agent})`;
+    case 'silicon_factory_status': return 'silicon_factory_status()';
+    case 'silicon_factory_enqueue_task': return `silicon_factory_enqueue_task(${String(p.instruction || '').slice(0, 28)}...)`;
+    case 'silicon_factory_resume': return 'silicon_factory_resume()';
+    case 'silicon_factory_lock_acquire': return `silicon_factory_lock_acquire(${p.lock_key})`;
+    case 'silicon_factory_lock_release': return `silicon_factory_lock_release(${p.lock_key})`;
+    case 'silicon_factory_snapshot': return `silicon_factory_snapshot(${p.reason || 'manual'})`;
+    case 'silicon_factory_iap_send': return `silicon_factory_iap_send(${p.from_agent}→${p.to_agent})`;
+    case 'silicon_factory_spec_validate': return `silicon_factory_spec_validate(${p.task_id || 'code'})`;
+    case 'silicon_project_context': return `silicon_project_context(${p.mode || 'get'})`;
+    case 'silicon_symbol_read': return `silicon_symbol_read(${p.symbol_name}, ${p.read_type || 'signature'})`;
+    case 'silicon_graph_query': return `silicon_graph_query(${p.mode})`;
+    case 'silicon_semantic_find': return `silicon_semantic_find(${String(p.query || '').slice(0, 24)}...)`;
+    case 'silicon_task_context': return `silicon_task_context(${p.task_id})`;
+    case 'silicon_context_delta': return 'silicon_context_delta()';
+    case 'silicon_compress_diagnostics': return 'silicon_compress_diagnostics()';
+    case 'silicon_compress_test_output': return 'silicon_compress_test_output()';
+    case 'silicon_test_discovery': return `silicon_test_discovery(${p.symbol || p.file_path || '?'})`;
+    case 'silicon_reindex_tests': return 'silicon_reindex_tests()';
+    case 'silicon_reindex_embeddings': return 'silicon_reindex_embeddings()';
     default:             return `${call.tool}(${JSON.stringify(p).slice(0, 60)})`;
   }
 }
@@ -293,6 +331,7 @@ function SocialBar() {
 export function TheGodFactory() {
   const { activeProject } = useProjectStore();
   const { selectedModel, setModel } = useChatStore();
+  const { allModels, fetchModels } = useModelStore();
 
   // Use the chatStore's model as default, but allow local override
   const [localModel, setLocalModel] = useState(selectedModel || 'gemini/gemini-2.5-flash-lite');
@@ -308,7 +347,6 @@ export function TheGodFactory() {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [showFileSelector, setShowFileSelector] = useState(false);
   const [copied, setCopied]               = useState<string | null>(null);
-  const [showModelPicker, setShowModelPicker] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [godFactorySessionId, setGodFactorySessionId] = useState<string | null>(null);
   const [sessionEpoch, setSessionEpoch] = useState(0);
@@ -332,6 +370,13 @@ export function TheGodFactory() {
 
   // Keep local model in sync with global if global changes and we haven't overridden
   useEffect(() => { if (selectedModel && !localModel) setLocalModel(selectedModel); }, [selectedModel]);
+  useEffect(() => { void fetchModels(); }, [fetchModels]);
+  useEffect(() => {
+    if (allModels.length === 0 || !localModel) return;
+    if (allModels.some(model => model.id === localModel)) return;
+    const nextModel = allModels.find(model => model.id === selectedModel)?.id || allModels[0].id;
+    setLocalModel(nextModel);
+  }, [allModels, localModel, selectedModel]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => { saveConv(messages); }, [messages]);
   useEffect(() => { saveHistory(history); }, [history]);
@@ -424,7 +469,7 @@ export function TheGodFactory() {
     return () => { active = false; };
   }, [activeProject?.rootPath]);
 
-  const selectedModelDef = MODELS.find(m => m.id === localModel);
+  const selectedModelDef = allModels.find(m => m.id === localModel);
 
   const addToHistory = useCallback((prompt: string, model?: string) => {
     setHistory(prev => {
@@ -844,7 +889,7 @@ export function TheGodFactory() {
           return safePretty(data);
         }
         case 'spawn_authority_check': {
-          const res = await fetch(`${API_BASE}/api/spawn/check`, {
+          const res = await fetch(`${API_BASE}/api/spawn/request`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               requesting_agent_id: params.requesting_agent_id,
@@ -854,10 +899,242 @@ export function TheGodFactory() {
           });
           const data = await res.json();
           if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          if (data?.status === 'pending_confirmation' && data?.confirmationId) {
+            return safePretty({
+              ...data,
+              guidance: 'Tier 3+ spawn is pending confirmation. Approve via /api/spawn/confirmation/:id/approve, then execute via /api/spawn/execute with confirmation_id.',
+            });
+          }
+          return safePretty(data);
+        }
+        case 'silicon_factory_status': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/dashboard`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_factory_enqueue_task': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/tasks`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              instruction: params.instruction,
+              agent_type: params.agent_type,
+              next_step_hint: params.next_step_hint,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}${data.ambiguity?.clarification_request ? `\n${data.ambiguity.clarification_request}` : ''}`;
+          return safePretty(data);
+        }
+        case 'silicon_factory_resume': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/cold-boot-resume`, {
+            method: 'POST',
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_factory_lock_acquire': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/locks/acquire`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lock_key: params.lock_key,
+              owner_agent: params.owner_agent,
+              ttl_seconds: params.ttl_seconds,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_factory_lock_release': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/locks/release`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lock_key: params.lock_key,
+              owner_agent: params.owner_agent,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_factory_snapshot': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/snapshots`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: params.reason }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_factory_iap_send': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/iap/messages`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from_agent: params.from_agent,
+              to_agent: params.to_agent,
+              message_type: params.message_type,
+              payload: params.payload || {},
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_factory_spec_validate': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/validate-requirements`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: params.code,
+              task_id: params.task_id,
+              fail_task_on_violation: params.fail_task_on_violation,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_project_context': {
+          const mode = String(params.mode || 'get').toLowerCase();
+          if (mode === 'set') {
+            const res = await fetch(`${API_BASE}/api/silicon-factory/project-context`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                project_id: params.project_id,
+                project_root: params.project_root,
+              }),
+            });
+            const data = await res.json();
+            if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+            return safePretty(data);
+          }
+          const qp = new URLSearchParams();
+          if (params.project_id) qp.set('project_id', String(params.project_id));
+          if (params.project_root) qp.set('project_root', String(params.project_root));
+          const res = await fetch(`${API_BASE}/api/silicon-factory/project-context?${qp.toString()}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_symbol_read': {
+          const qp = new URLSearchParams();
+          qp.set('symbol_name', String(params.symbol_name || ''));
+          if (params.read_type) qp.set('read_type', String(params.read_type));
+          if (params.file_path) qp.set('file_path', String(params.file_path));
+          if (params.project_id) qp.set('project_id', String(params.project_id));
+          if (params.project_root) qp.set('project_root', String(params.project_root));
+          const res = await fetch(`${API_BASE}/api/silicon-factory/symbol-read?${qp.toString()}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_graph_query': {
+          const qp = new URLSearchParams();
+          qp.set('mode', String(params.mode || ''));
+          if (params.symbol) qp.set('symbol', String(params.symbol));
+          if (params.file_path) qp.set('file_path', String(params.file_path));
+          if (params.project_id) qp.set('project_id', String(params.project_id));
+          if (params.limit) qp.set('limit', String(params.limit));
+          const res = await fetch(`${API_BASE}/api/silicon-factory/graph-query?${qp.toString()}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_semantic_find': {
+          const qp = new URLSearchParams();
+          qp.set('query', String(params.query || ''));
+          if (params.project_id) qp.set('project_id', String(params.project_id));
+          if (params.limit) qp.set('limit', String(params.limit));
+          const res = await fetch(`${API_BASE}/api/silicon-factory/semantic-find?${qp.toString()}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_task_context': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/task-context`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              task_id: params.task_id,
+              project_id: params.project_id,
+              budget_tokens: params.budget_tokens,
+              diagnostics_raw: params.diagnostics_raw,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_context_delta': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/context-delta`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              previous_sections: params.previous_sections || {},
+              current_sections: params.current_sections || {},
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_compress_diagnostics': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/compress-diagnostics`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              raw: params.raw,
+              max_items: params.max_items,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_compress_test_output': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/compress-test-output`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              raw: params.raw,
+              max_failures: params.max_failures,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_test_discovery': {
+          const sp = new URLSearchParams();
+          if (params.symbol) sp.set('symbol', String(params.symbol));
+          if (params.file_path) sp.set('file_path', String(params.file_path));
+          if (params.project_id) sp.set('project_id', String(params.project_id));
+          if (params.limit) sp.set('limit', String(params.limit));
+          const res = await fetch(`${API_BASE}/api/silicon-factory/test-discovery?${sp}`);
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_reindex_tests': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/reindex-tests`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              project_id: params.project_id,
+              project_root: params.project_root,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
+          return safePretty(data);
+        }
+        case 'silicon_reindex_embeddings': {
+          const res = await fetch(`${API_BASE}/api/silicon-factory/reindex-embeddings`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project_id: params.project_id }),
+          });
+          const data = await res.json();
+          if (!res.ok) return `Error: ${data.error || 'Failed'}`;
           return safePretty(data);
         }
         default:
-          return `Unknown tool: ${tool}. Available: list_files, read_file, search_code, get_docs, get_notification_queue, get_idle_suggestions, find_suggested_jobs, get_job_detail, create_brainstorm_job, read_sandbox_status, read_forensic_entries, read_blame_records, inspect_devtag, live_debt_check, live_coverage_check, live_pattern_query, patch_file, write_file, run_command, resolve_devtag, tag_vocabulary_diff, orphan_scan, conflict_scan, gap_scan, regression_index, debt_heatmap, pattern_trend, agent_conformance_report, implementation_pipeline_status, spawn_authority_check`;
+          return `Unknown tool: ${tool}. Available: list_files, read_file, search_code, get_docs, get_notification_queue, get_idle_suggestions, find_suggested_jobs, get_job_detail, create_brainstorm_job, read_sandbox_status, read_forensic_entries, read_blame_records, inspect_devtag, live_debt_check, live_coverage_check, live_pattern_query, patch_file, write_file, run_command, resolve_devtag, tag_vocabulary_diff, orphan_scan, conflict_scan, gap_scan, regression_index, debt_heatmap, pattern_trend, agent_conformance_report, implementation_pipeline_status, spawn_authority_check, silicon_factory_status, silicon_factory_enqueue_task, silicon_factory_resume, silicon_factory_lock_acquire, silicon_factory_lock_release, silicon_factory_snapshot, silicon_factory_iap_send, silicon_factory_spec_validate, silicon_project_context, silicon_symbol_read, silicon_graph_query, silicon_semantic_find, silicon_task_context, silicon_context_delta, silicon_compress_diagnostics, silicon_compress_test_output, silicon_test_discovery, silicon_reindex_tests, silicon_reindex_embeddings`;
       }
     } catch (err: any) {
       return `Tool error (${tool}): ${err.message}`;
@@ -870,19 +1147,22 @@ export function TheGodFactory() {
     systemContext: string,
     abortCtrl: AbortController,
   ): Promise<{ content: string; msgId: string }> => {
+    const requestModel = allModels.some(model => model.id === localModel)
+      ? localModel
+      : (allModels[0]?.id || localModel);
     const msgId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
     setMessages(prev => [...prev, {
       id: msgId, role: 'assistant', content: '', timestamp: new Date().toISOString(),
-      model: localModel, status: 'streaming',
+      model: requestModel, status: 'streaming',
     }]);
     const res = await fetch(`${API_BASE}/api/chat/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       signal: abortCtrl.signal,
       body: JSON.stringify({
         message: prompt,
-        model: localModel,
+        model: requestModel,
         mode: 'agent',
-        projectId: activeProject?.id,
+        projectId: activeProject?.id || 'default',
         conversationId: conversationId || undefined,
         contextFiles: selectedFiles.length > 0 ? selectedFiles : undefined,
         systemPrompt: systemContext,
@@ -925,7 +1205,7 @@ export function TheGodFactory() {
     }
     setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', content: fullContent || m.content } : m));
     return { content: fullContent, msgId };
-  }, [localModel, activeProject]);
+  }, [localModel, allModels, activeProject, conversationId, selectedFiles]);
 
   const takeBackup = async (): Promise<string | null> => {
     if (!autoBackup || !activeProject?.rootPath) return null;
@@ -965,7 +1245,20 @@ export function TheGodFactory() {
     let finalAssistantContent = '';
 
     const buildSystemCtx = (toolHistory: Array<{ role: string; content: string }>) => {
+      // CONSTITUTION header — always injected so the model knows its operational boundaries
+      const CONSTITUTION_HEADER = [
+        `## SYSTEM CONSTITUTION (immutable — read-only for all agents)`,
+        `You are operating under a constitutional constraint layer. The following invariants MUST NOT be violated:`,
+        `1. Never modify these files: apps/server/src/routes/godFactory.ts, apps/web/src/components/TheGodFactory.tsx, CONSTITUTION.md, apps/server/src/services/spawnAuthority/index.ts`,
+        `2. Never drop, truncate, or delete rows from any forensic table. Rollbacks set rolled_back=true only.`,
+        `3. Never spawn Tier 4+ agents without surfacing a human confirmation in the notification queue.`,
+        `4. Never disable the training observation hook in enhancedLoop.ts or chat.ts.`,
+        `5. Never remove the regression floor from computeCompositeQuality in blame.ts.`,
+        `6. Never weaken buildtag structural validation in tagRegistry/index.ts.`,
+        `Any patch_file call targeting the files in rule 1 must be rejected and logged.`,
+      ].join('\n');
       const lines = [
+        CONSTITUTION_HEADER,
         `You are THE GOD FACTORY — a Principal Software Architect AI integrated into Personal IDE.`,
         `Your job is to improve Personal IDE itself — its built-in features, UX, architecture, models, onboarding, docs, and developer tooling.`,
         `Do NOT behave like a generic external project builder unless the user explicitly asks you to inspect an imported project. Your default scope is the Personal IDE application codebase and help/documentation system.`,
@@ -989,8 +1282,13 @@ export function TheGodFactory() {
       return `${lines}\n\n## Current Tool Loop History\n${histStr}`;
     };
 
+    const requiresCodebaseGrounding = /\b(codebase|entire app|entire ide|everything you know|analyze the entire|scan.*codebase|tell me about.*codebase)\b/i.test(trimmed);
+    const firstTurnPrompt = (toolsEnabled && requiresCodebaseGrounding)
+      ? `${trimmed}\n\nGrounding requirement: Before your final answer, call at least one codebase tool (for example: list_files, read_file, search_code, get_docs) and cite what you found from those results.`
+      : trimmed;
+
     try {
-      const { content: firstContent } = await streamTurn(trimmed, buildSystemCtx([]), abort);
+      const { content: firstContent } = await streamTurn(firstTurnPrompt, buildSystemCtx([]), abort);
       finalAssistantContent = firstContent;
 
       if (!toolsEnabled || abort.signal.aborted) { setIsStreaming(false); abortRef.current = null; return; }

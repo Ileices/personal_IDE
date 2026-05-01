@@ -234,6 +234,46 @@ interface ImplementingJob {
   sandbox_spec: Record<string, unknown>;
 }
 
+interface SiliconFactoryTask {
+  id: string;
+  status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'ESCALATED';
+  agent_type: string;
+  instruction: string;
+  attempt_count: number;
+  created_at: number;
+  completed_at: number | null;
+}
+
+interface SiliconFactoryDashboard {
+  supervisor: {
+    running: boolean;
+    paused: boolean;
+    heartbeatSec: number;
+    lastHeartbeatAt: string | null;
+    queue: {
+      pending: number;
+      active: number;
+      completed: number;
+      failed: number;
+      escalated: number;
+    };
+    resources: {
+      checkedAt: string;
+      memoryPercent: number;
+      load1m: number;
+      vramPercent: number | null;
+      throttleRecommended: boolean;
+    };
+  };
+  active_tasks: SiliconFactoryTask[];
+  pending_tasks: SiliconFactoryTask[];
+  escalated_tasks: SiliconFactoryTask[];
+  recent_tasks: SiliconFactoryTask[];
+  iap_queue_depth: number;
+  lock_count: number;
+  snapshot_count: number;
+}
+
 const SUBSYSTEM_META: Record<SubsystemId, { label: string; description: string; scope: 'ide_app' | 'user_projects' | 'global' }> = {
   ide_codebase_crawler: {
     label: 'IDE Codebase Crawler',
@@ -257,6 +297,144 @@ const SUBSYSTEM_META: Record<SubsystemId, { label: string; description: string; 
   },
 };
 
+// ─── God Factory Autonomous Loop Panel ────────────────────────────────────────
+
+interface GfLoopStatus {
+  state: string;
+  current_job_id: string | null;
+  current_run_id: string | null;
+  jobs_completed: number;
+  jobs_failed: number;
+  jobs_skipped: number;
+  started_at: string | null;
+  isRunning: boolean;
+  pendingJobs: number;
+  inProgressJobs: number;
+  currentJob: { job_id: string; title: string; priority: number } | null;
+}
+
+function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<GfLoopStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/god-factory/loop/status`);
+      if (res.ok) setStatus(await res.json());
+    } catch { /* best-effort */ }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    fetchStatus();
+    const id = window.setInterval(fetchStatus, 3_000);
+    return () => window.clearInterval(id);
+  }, [open, fetchStatus]);
+
+  const start = async () => {
+    setBusy(true);
+    try {
+      await fetch(`${API_BASE}/api/god-factory/loop/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, maxIterations: 100 }),
+      });
+      await fetchStatus();
+    } catch { /* best-effort */ }
+    finally { setBusy(false); }
+  };
+
+  const stop = async () => {
+    setBusy(true);
+    try {
+      await fetch(`${API_BASE}/api/god-factory/loop/stop`, { method: 'POST' });
+      await fetchStatus();
+    } catch { /* best-effort */ }
+    finally { setBusy(false); }
+  };
+
+  const isRunning = status?.isRunning ?? false;
+
+  return (
+    <div className="border-t border-ide-border/40">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30"
+      >
+        <div className="flex items-center gap-1.5">
+          <Zap className={`w-3 h-3 ${isRunning ? 'text-yellow-400 animate-pulse' : 'text-ide-text-dim'}`} />
+          God Factory Loop
+          {isRunning && <span className="text-[9px] px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-medium">RUNNING</span>}
+        </div>
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+      </button>
+      {open && (
+        <div className="px-2 pb-2 space-y-2">
+          <p className="text-[9px] text-ide-text-dim leading-relaxed">
+            Automatically processes your highest-priority <em>Suggested Jobs</em> queue — building IDE enhancements autonomously, 24/7.
+          </p>
+
+          {/* Status grid */}
+          {status && (
+            <div className="grid grid-cols-2 gap-1 text-[9px]">
+              <div className="bg-ide-bg/40 rounded px-2 py-1 flex flex-col items-center">
+                <span className="text-green-300 font-bold text-sm">{status.jobs_completed}</span>
+                <span className="text-ide-text-dim">Completed</span>
+              </div>
+              <div className="bg-ide-bg/40 rounded px-2 py-1 flex flex-col items-center">
+                <span className="text-red-300 font-bold text-sm">{status.jobs_failed}</span>
+                <span className="text-ide-text-dim">Failed</span>
+              </div>
+              <div className="bg-ide-bg/40 rounded px-2 py-1 flex flex-col items-center">
+                <span className="text-yellow-300 font-bold text-sm">{status.pendingJobs}</span>
+                <span className="text-ide-text-dim">Pending</span>
+              </div>
+              <div className="bg-ide-bg/40 rounded px-2 py-1 flex flex-col items-center">
+                <span className={`font-bold text-sm ${isRunning ? 'text-blue-300' : 'text-ide-text-dim'}`}>
+                  {status.state}
+                </span>
+                <span className="text-ide-text-dim">State</span>
+              </div>
+            </div>
+          )}
+
+          {/* Current job */}
+          {status?.currentJob && (
+            <div className="text-[9px] text-ide-text bg-blue-500/10 border border-blue-500/20 rounded px-2 py-1.5">
+              <span className="text-blue-300 font-medium">Working on:</span>{' '}
+              {status.currentJob.title}
+            </div>
+          )}
+
+          {/* Controls */}
+          <div className="flex gap-1">
+            {!isRunning ? (
+              <button
+                onClick={start}
+                disabled={busy || (status?.pendingJobs ?? 0) === 0}
+                className="flex-1 py-1.5 text-[10px] rounded bg-green-500/15 text-green-300 border border-green-500/30 hover:bg-green-500/25 disabled:opacity-40 flex items-center justify-center gap-1"
+              >
+                {busy ? <RefreshCw className="w-3 h-3 animate-spin" /> : <PlayCircle className="w-3 h-3" />}
+                {status?.pendingJobs === 0 ? 'No pending jobs' : 'Start Loop'}
+              </button>
+            ) : (
+              <button
+                onClick={stop}
+                disabled={busy}
+                className="flex-1 py-1.5 text-[10px] rounded bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 disabled:opacity-40 flex items-center justify-center gap-1"
+              >
+                {busy ? <RefreshCw className="w-3 h-3 animate-spin" /> : <PauseCircle className="w-3 h-3" />}
+                Stop Loop
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot, projectId, projectName, onSendToBrainstorm }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [notifications, setNotifications] = useState<IntelNotification[]>([]);
@@ -271,10 +449,18 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [jobs, setJobs] = useState<SuggestedJob[]>([]);
   const [externalJobs, setExternalJobs] = useState<SuggestedJob[]>([]);
   const [implementingJobs, setImplementingJobs] = useState<ImplementingJob[]>([]);
+  const [siliconDashboard, setSiliconDashboard] = useState<SiliconFactoryDashboard | null>(null);
+  const [siliconBusy, setSiliconBusy] = useState<string | null>(null);
+  const [siliconTaskInput, setSiliconTaskInput] = useState('');
+  const [siliconLockKey, setSiliconLockKey] = useState('codebase:main');
+  const [siliconSymbolInput, setSiliconSymbolInput] = useState('');
+  const [siliconSemanticQuery, setSiliconSemanticQuery] = useState('');
+  const [siliconTestTarget, setSiliconTestTarget] = useState('');
+  const [siliconTestMode, setSiliconTestMode] = useState<'symbol' | 'file'>('symbol');
   const [totalJobs, setTotalJobs] = useState(0);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [brainstorm, setBrainstorm] = useState('');
-  const [sections, setSections] = useState({ notifications: true, idleSuggestions: true, jobs: true, externalProjects: false, implementingPipeline: false, health: true, modelHealth: true, background: false, subsystems: false, brainstorm: false });
+  const [sections, setSections] = useState({ notifications: true, idleSuggestions: true, jobs: true, externalProjects: false, implementingPipeline: false, health: true, modelHealth: true, background: false, subsystems: false, siliconFactory: false, brainstorm: false });
   const [blameStats, setBlameStats] = useState<any[]>([]);
   const [subsystems, setSubsystems] = useState<Record<SubsystemId, SubsystemConfig>>({
     ide_codebase_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 60, maxDepth: 5, manualOnly: false },
@@ -353,6 +539,15 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       .catch(() => {});
   }, []);
 
+  const loadSiliconDashboard = useCallback(() => {
+    fetch(`${API_BASE}/api/silicon-factory/dashboard`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: SiliconFactoryDashboard | null) => {
+        if (d) setSiliconDashboard(d);
+      })
+      .catch(() => {});
+  }, []);
+
   const loadSuggestedJobs = useCallback(() => {
     setJobsLoading(true);
     fetch(`${API_BASE}/api/suggested-jobs/jobs?limit=10&status=suggested`)
@@ -395,34 +590,24 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   }, []);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/blame/records?limit=5`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.stats) setBlameStats(d.stats.slice(0, 4)); })
-      .catch(() => {});
+    let cancelled = false;
+    let jobsTimer: number | undefined;
+    let gfTimer: number | undefined;
+    let refreshTimer: number | undefined;
 
-    // Load real suggested jobs
-    loadSuggestedJobs();
-    loadExternalJobs();
-    loadImplementingJobs();
-    loadQueue();
-    loadIdleSuggestions();
-    loadModelHealth();
-    loadCodebaseHealth();
-    loadBackgroundStatus();
-    loadRecentActions();
-    const jobsTimer = window.setInterval(() => {
-      loadSuggestedJobs();
-      loadExternalJobs();
-      loadImplementingJobs();
-    }, 30_000);
-    const gfTimer = window.setInterval(() => {
-      loadQueue();
-      loadIdleSuggestions();
-      loadModelHealth();
-      loadCodebaseHealth();
-      loadBackgroundStatus();
-      loadRecentActions();
-    }, 20_000);
+    const waitForApiReady = async () => {
+      const maxAttempts = 8;
+      for (let i = 0; i < maxAttempts && !cancelled; i++) {
+        try {
+          const res = await fetch(`${API_BASE}/api/health`);
+          if (res.ok) return true;
+        } catch {
+          // Retry until server is up.
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 700));
+      }
+      return false;
+    };
 
     const loadSubsystemSettings = () => fetch(`${API_BASE}/api/subsystems/settings`)
       .then(r => r.ok ? r.json() : null)
@@ -433,10 +618,47 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       })
       .catch(() => {});
 
-    void loadSubsystemSettings();
-    const refreshTimer = window.setInterval(() => {
+    (async () => {
+      const ready = await waitForApiReady();
+      if (!ready || cancelled) return;
+
+      fetch(`${API_BASE}/api/blame/records?limit=5`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.stats) setBlameStats(d.stats.slice(0, 4)); })
+        .catch(() => {});
+
+      // Load real suggested jobs
+      loadSuggestedJobs();
+      loadExternalJobs();
+      loadImplementingJobs();
+      loadQueue();
+      loadIdleSuggestions();
+      loadModelHealth();
+      loadCodebaseHealth();
+      loadBackgroundStatus();
+      loadRecentActions();
+      loadSiliconDashboard();
+
+      jobsTimer = window.setInterval(() => {
+        loadSuggestedJobs();
+        loadExternalJobs();
+        loadImplementingJobs();
+      }, 30_000);
+      gfTimer = window.setInterval(() => {
+        loadQueue();
+        loadIdleSuggestions();
+        loadModelHealth();
+        loadCodebaseHealth();
+        loadBackgroundStatus();
+        loadRecentActions();
+        loadSiliconDashboard();
+      }, 20_000);
+
       void loadSubsystemSettings();
-    }, 15000);
+      refreshTimer = window.setInterval(() => {
+        void loadSubsystemSettings();
+      }, 15000);
+    })();
 
     if (codebaseReady) {
       setNotifications(prev => [{
@@ -449,11 +671,12 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     }
 
     return () => {
-      window.clearInterval(refreshTimer);
-      window.clearInterval(jobsTimer);
-      window.clearInterval(gfTimer);
+      cancelled = true;
+      if (refreshTimer) window.clearInterval(refreshTimer);
+      if (jobsTimer) window.clearInterval(jobsTimer);
+      if (gfTimer) window.clearInterval(gfTimer);
     };
-  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions]);
+  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard]);
 
   const toggleSection = (key: keyof typeof sections) =>
     setSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -525,7 +748,385 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     }
   };
 
+  const runSiliconControl = async (action: 'pause' | 'resume') => {
+    setSiliconBusy(action);
+    try {
+      await fetch(`${API_BASE}/api/silicon-factory/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      loadSiliconDashboard();
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const enqueueSiliconTask = async () => {
+    const instruction = siliconTaskInput.trim();
+    if (!instruction) return;
+    setSiliconBusy('enqueue');
+    try {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction, agent_type: 'coder' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotifications(prev => [{
+          id: `${Date.now()}-silicon-err`,
+          type: 'warning' as const,
+          source: 'silicon factory',
+          message: data?.ambiguity?.clarification_request || data?.error || 'Could not enqueue task',
+          timestamp: new Date().toISOString(),
+        }, ...prev].slice(0, 20));
+      } else {
+        setSiliconTaskInput('');
+      }
+      loadSiliconDashboard();
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runSiliconColdBoot = async () => {
+    setSiliconBusy('resume');
+    try {
+      await fetch(`${API_BASE}/api/silicon-factory/cold-boot-resume`, {
+        method: 'POST',
+      });
+      loadSiliconDashboard();
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runSiliconSnapshot = async () => {
+    setSiliconBusy('snapshot');
+    try {
+      await fetch(`${API_BASE}/api/silicon-factory/snapshots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'manual_gui_snapshot' }),
+      });
+      loadSiliconDashboard();
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runSiliconLock = async (action: 'acquire' | 'release') => {
+    if (!siliconLockKey.trim()) return;
+    setSiliconBusy(`lock_${action}`);
+    try {
+      const endpoint = action === 'acquire' ? 'acquire' : 'release';
+      const body = action === 'acquire'
+        ? { lock_key: siliconLockKey.trim(), owner_agent: 'god_factory_ui', ttl_seconds: 180 }
+        : { lock_key: siliconLockKey.trim(), owner_agent: 'god_factory_ui' };
+      await fetch(`${API_BASE}/api/silicon-factory/locks/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      loadSiliconDashboard();
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runSiliconSpecValidate = async () => {
+    const code = siliconTaskInput.trim();
+    if (!code) return;
+    setSiliconBusy('validate');
+    try {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/validate-requirements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, fail_task_on_violation: false }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setNotifications(prev => [{
+        id: `${Date.now()}-silicon-validate`,
+        type: (data?.pass ? 'success' : 'warning') as IntelNotification['type'],
+        source: 'silicon factory',
+        message: data?.pass ? 'Spec contract check passed for current draft.' : `Spec contract violations: ${(data?.violated_requirements || []).join(', ') || 'unknown'}`,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 20));
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runSiliconIapPing = async () => {
+    setSiliconBusy('iap');
+    try {
+      await fetch(`${API_BASE}/api/silicon-factory/iap/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_agent: 'god_factory_ui',
+          to_agent: 'architect',
+          message_type: 'heartbeat_ping',
+          payload: { issued_at: new Date().toISOString(), note: 'ui_ping' },
+        }),
+      });
+      loadSiliconDashboard();
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const syncSiliconProjectContext = async () => {
+    setSiliconBusy('project_context');
+    try {
+      await fetch(`${API_BASE}/api/silicon-factory/project-context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          project_root: projectRoot,
+        }),
+      });
+      loadSiliconDashboard();
+      setNotifications(prev => [{
+        id: `${Date.now()}-silicon-project-context`,
+        type: 'success' as const,
+        source: 'silicon factory',
+        message: 'Silicon active project context synced from current workspace.',
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 20));
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runSiliconSemanticFind = async () => {
+    const query = siliconSemanticQuery.trim();
+    if (!query) return;
+    setSiliconBusy('semantic_find');
+    try {
+      const qp = new URLSearchParams({ query });
+      if (projectId) qp.set('project_id', projectId);
+      qp.set('limit', '6');
+      const res = await fetch(`${API_BASE}/api/silicon-factory/semantic-find?${qp.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotifications(prev => [{
+          id: `${Date.now()}-silicon-semantic-err`,
+          type: 'warning' as const,
+          source: 'silicon factory',
+          message: data?.error || 'Semantic find failed',
+          timestamp: new Date().toISOString(),
+        }, ...prev].slice(0, 20));
+        return;
+      }
+
+      const results = Array.isArray(data?.results) ? data.results : [];
+      setNotifications(prev => [{
+        id: `${Date.now()}-silicon-semantic-ok`,
+        type: 'info' as const,
+        source: 'silicon factory',
+        message: `Semantic search found ${results.length} match${results.length === 1 ? '' : 'es'} for "${query}".`,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 20));
+
+      if (results.length) {
+        onSendToBrainstorm(`Silicon semantic results for "${query}":\n\n${JSON.stringify(results, null, 2)}`);
+      }
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runSiliconSymbolRead = async (readType: 'signature' | 'function' | 'class_api' | 'struct') => {
+    const symbol = siliconSymbolInput.trim();
+    if (!symbol) return;
+    setSiliconBusy(`symbol_${readType}`);
+    try {
+      const qp = new URLSearchParams({ symbol_name: symbol, read_type: readType });
+      if (projectId) qp.set('project_id', projectId);
+      const res = await fetch(`${API_BASE}/api/silicon-factory/symbol-read?${qp.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotifications(prev => [{
+          id: `${Date.now()}-silicon-symbol-err`,
+          type: 'warning' as const,
+          source: 'silicon factory',
+          message: data?.error || `Could not read symbol ${symbol}`,
+          timestamp: new Date().toISOString(),
+        }, ...prev].slice(0, 20));
+        return;
+      }
+      onSendToBrainstorm(`Silicon symbol read (${readType}) for ${symbol}:\n\n${JSON.stringify(data, null, 2)}`);
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runSiliconTaskContext = async () => {
+    const latestTaskId = siliconDashboard?.recent_tasks?.[0]?.id;
+    if (!latestTaskId) return;
+    setSiliconBusy('task_context');
+    try {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/task-context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task_id: latestTaskId,
+          project_id: projectId,
+          budget_tokens: 2000,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotifications(prev => [{
+          id: `${Date.now()}-silicon-task-context-err`,
+          type: 'warning' as const,
+          source: 'silicon factory',
+          message: data?.error || 'Task context build failed',
+          timestamp: new Date().toISOString(),
+        }, ...prev].slice(0, 20));
+        return;
+      }
+      onSendToBrainstorm(`Silicon task context for ${latestTaskId}:\n\n${data.context || ''}`);
+      setNotifications(prev => [{
+        id: `${Date.now()}-silicon-task-context-ok`,
+        type: 'success' as const,
+        source: 'silicon factory',
+        message: `Built task context for ${latestTaskId} using ${data.used_tokens || 0}/${data.budget_tokens || 0} tokens.`,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 20));
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
   const treeLineCount = codebaseTree.split('\n').length;
+
+  const runTestDiscovery = async () => {
+    const target = siliconTestTarget.trim();
+    if (!target) return;
+    setSiliconBusy('test_discovery');
+    try {
+      const sp = new URLSearchParams();
+      sp.set(siliconTestMode === 'symbol' ? 'symbol' : 'file_path', target);
+      if (projectId) sp.set('project_id', projectId);
+      const res = await fetch(`${API_BASE}/api/silicon-factory/test-discovery?${sp}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotifications(prev => [{
+          id: `${Date.now()}-silicon-test-disc-err`,
+          type: 'warning' as const,
+          source: 'silicon factory',
+          message: data?.error || 'Test discovery failed',
+          timestamp: new Date().toISOString(),
+        }, ...prev].slice(0, 20));
+        return;
+      }
+      const count = data.total ?? 0;
+      onSendToBrainstorm(`Test discovery for ${siliconTestMode}="${target}" (${count} results):\n\n${JSON.stringify(data.results, null, 2)}`);
+      setNotifications(prev => [{
+        id: `${Date.now()}-silicon-test-disc-ok`,
+        type: 'success' as const,
+        source: 'silicon factory',
+        message: `Found ${count} test(s) for ${siliconTestMode} "${target}".`,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 20));
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runReindexTests = async () => {
+    setSiliconBusy('reindex_tests');
+    try {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/reindex-tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotifications(prev => [{
+          id: `${Date.now()}-silicon-reindex-tests-err`,
+          type: 'warning' as const,
+          source: 'silicon factory',
+          message: data?.error || 'Test reindex failed',
+          timestamp: new Date().toISOString(),
+        }, ...prev].slice(0, 20));
+        return;
+      }
+      setNotifications(prev => [{
+        id: `${Date.now()}-silicon-reindex-tests-ok`,
+        type: 'success' as const,
+        source: 'silicon factory',
+        message: `Test index rebuilt: ${data.indexed ?? 0} entries from ${data.test_files_found ?? 0} test files.`,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 20));
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
+
+  const runReindexEmbeddings = async () => {
+    setSiliconBusy('reindex_embeddings');
+    try {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/reindex-embeddings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotifications(prev => [{
+          id: `${Date.now()}-silicon-reindex-emb-err`,
+          type: 'warning' as const,
+          source: 'silicon factory',
+          message: data?.error || 'Embedding reindex failed',
+          timestamp: new Date().toISOString(),
+        }, ...prev].slice(0, 20));
+        return;
+      }
+      setNotifications(prev => [{
+        id: `${Date.now()}-silicon-reindex-emb-ok`,
+        type: 'success' as const,
+        source: 'silicon factory',
+        message: `Symbol embeddings rebuilt: ${data.updated ?? 0} symbols indexed.`,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 20));
+    } catch {
+      // no-op
+    } finally {
+      setSiliconBusy(null);
+    }
+  };
 
   const archiveJob = async (jobId: string) => {
     await fetch(`${API_BASE}/api/suggested-jobs/jobs/${jobId}/archive`, { method: 'POST' }).catch(() => {});
@@ -1338,6 +1939,272 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           )}
         </div>
 
+        {/* ── Silicon Factory ── */}
+        <div className="border-b border-ide-border/50">
+          <button onClick={() => toggleSection('siliconFactory')}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
+            <div className="flex items-center gap-1.5">
+              <Zap className="w-3 h-3 text-amber-400" />
+              Silicon Factory
+            </div>
+            {sections.siliconFactory ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          {sections.siliconFactory && (
+            <div className="px-2 pb-2 space-y-1.5">
+              <div className="rounded border border-ide-border/30 bg-ide-panel/50 px-2 py-1.5 text-[9px] text-ide-text-dim space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <span>Supervisor</span>
+                  <span className={siliconDashboard?.supervisor?.running && !siliconDashboard?.supervisor?.paused ? 'text-green-400' : 'text-yellow-400'}>
+                    {siliconDashboard?.supervisor?.running ? (siliconDashboard?.supervisor?.paused ? 'Paused' : 'Running') : 'Stopped'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Heartbeat</span>
+                  <span className="text-ide-text">{siliconDashboard?.supervisor?.heartbeatSec ?? 60}s</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Last pulse</span>
+                  <span className="text-ide-text">{siliconDashboard?.supervisor?.lastHeartbeatAt ? new Date(siliconDashboard.supervisor.lastHeartbeatAt).toLocaleTimeString() : 'Never'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Queue</span>
+                  <span className="text-ide-text font-mono">
+                    P:{siliconDashboard?.supervisor?.queue?.pending ?? 0} A:{siliconDashboard?.supervisor?.queue?.active ?? 0} E:{siliconDashboard?.supervisor?.queue?.escalated ?? 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>IAP / Locks / Snapshots</span>
+                  <span className="text-ide-text font-mono">
+                    {siliconDashboard?.iap_queue_depth ?? 0} / {siliconDashboard?.lock_count ?? 0} / {siliconDashboard?.snapshot_count ?? 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Memory / VRAM</span>
+                  <span className="text-ide-text font-mono">
+                    {siliconDashboard?.supervisor?.resources?.memoryPercent?.toFixed(1) ?? '0.0'}% /
+                    {siliconDashboard?.supervisor?.resources?.vramPercent != null ? ` ${siliconDashboard.supervisor.resources.vramPercent.toFixed(1)}%` : ' n/a'}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  <button
+                    onClick={() => void runSiliconControl(siliconDashboard?.supervisor?.paused ? 'resume' : 'pause')}
+                    disabled={siliconBusy === 'pause' || siliconBusy === 'resume'}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 disabled:opacity-40"
+                  >
+                    {siliconDashboard?.supervisor?.paused ? 'Resume supervisor' : 'Pause supervisor'}
+                  </button>
+                  <button
+                    onClick={() => void runSiliconColdBoot()}
+                    disabled={siliconBusy === 'resume'}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 disabled:opacity-40"
+                  >
+                    Cold-boot resume
+                  </button>
+                  <button
+                    onClick={() => void runSiliconSnapshot()}
+                    disabled={siliconBusy === 'snapshot'}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 disabled:opacity-40"
+                  >
+                    Deep snapshot
+                  </button>
+                  <button
+                    onClick={() => void runSiliconIapPing()}
+                    disabled={siliconBusy === 'iap'}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40"
+                  >
+                    IAP ping
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded border border-ide-border/30 bg-ide-bg/30 px-2 py-1.5 space-y-1">
+                <div className="text-[9px] text-ide-text-dim">Enqueue Atomic Task</div>
+                <textarea
+                  rows={3}
+                  value={siliconTaskInput}
+                  onChange={e => setSiliconTaskInput(e.target.value)}
+                  placeholder="Define one atomic task for the task ledger..."
+                  className="w-full bg-ide-panel border border-ide-border/50 rounded px-2 py-1 text-[10px] text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-amber-400/50"
+                />
+                <button
+                  onClick={() => void enqueueSiliconTask()}
+                  disabled={!siliconTaskInput.trim() || siliconBusy === 'enqueue'}
+                  className="w-full text-[10px] py-1 rounded bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 disabled:opacity-40"
+                >
+                  Add to Task Ledger
+                </button>
+                <button
+                  onClick={() => void runSiliconSpecValidate()}
+                  disabled={!siliconTaskInput.trim() || siliconBusy === 'validate'}
+                  className="w-full text-[10px] py-1 rounded bg-blue-500/15 text-blue-300 hover:bg-blue-500/25 disabled:opacity-40"
+                >
+                  Validate Draft vs Spec Contract
+                </button>
+              </div>
+
+              <div className="rounded border border-ide-border/30 bg-ide-bg/20 px-2 py-1.5 space-y-1">
+                <div className="text-[9px] text-ide-text-dim">Sync-Lock Manager</div>
+                <input
+                  value={siliconLockKey}
+                  onChange={e => setSiliconLockKey(e.target.value)}
+                  placeholder="lock key"
+                  className="w-full bg-ide-panel border border-ide-border/50 rounded px-2 py-1 text-[10px] text-ide-text placeholder-ide-text-dim focus:outline-none focus:border-cyan-400/50"
+                />
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => void runSiliconLock('acquire')}
+                    disabled={!siliconLockKey.trim() || siliconBusy === 'lock_acquire'}
+                    className="flex-1 text-[10px] py-1 rounded bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 disabled:opacity-40"
+                  >
+                    Acquire
+                  </button>
+                  <button
+                    onClick={() => void runSiliconLock('release')}
+                    disabled={!siliconLockKey.trim() || siliconBusy === 'lock_release'}
+                    className="flex-1 text-[10px] py-1 rounded bg-slate-500/15 text-slate-300 hover:bg-slate-500/25 disabled:opacity-40"
+                  >
+                    Release
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded border border-ide-border/30 bg-ide-bg/20 px-2 py-1.5 space-y-1">
+                <div className="text-[9px] text-ide-text-dim">Small-Context Tooling</div>
+                <button
+                  onClick={() => void syncSiliconProjectContext()}
+                  disabled={siliconBusy === 'project_context'}
+                  className="w-full text-[10px] py-1 rounded bg-teal-500/15 text-teal-300 hover:bg-teal-500/25 disabled:opacity-40"
+                >
+                  Sync Active Project Context
+                </button>
+
+                <input
+                  value={siliconSemanticQuery}
+                  onChange={e => setSiliconSemanticQuery(e.target.value)}
+                  placeholder="semantic query"
+                  className="w-full bg-ide-panel border border-ide-border/50 rounded px-2 py-1 text-[10px] text-ide-text placeholder-ide-text-dim focus:outline-none focus:border-teal-400/50"
+                />
+                <button
+                  onClick={() => void runSiliconSemanticFind()}
+                  disabled={!siliconSemanticQuery.trim() || siliconBusy === 'semantic_find'}
+                  className="w-full text-[10px] py-1 rounded bg-teal-500/15 text-teal-300 hover:bg-teal-500/25 disabled:opacity-40"
+                >
+                  Semantic Find
+                </button>
+
+                <input
+                  value={siliconSymbolInput}
+                  onChange={e => setSiliconSymbolInput(e.target.value)}
+                  placeholder="symbol name"
+                  className="w-full bg-ide-panel border border-ide-border/50 rounded px-2 py-1 text-[10px] text-ide-text placeholder-ide-text-dim focus:outline-none focus:border-violet-400/50"
+                />
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    onClick={() => void runSiliconSymbolRead('signature')}
+                    disabled={!siliconSymbolInput.trim() || siliconBusy === 'symbol_signature'}
+                    className="text-[9px] py-1 rounded bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 disabled:opacity-40"
+                  >
+                    Read Signature
+                  </button>
+                  <button
+                    onClick={() => void runSiliconSymbolRead('function')}
+                    disabled={!siliconSymbolInput.trim() || siliconBusy === 'symbol_function'}
+                    className="text-[9px] py-1 rounded bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 disabled:opacity-40"
+                  >
+                    Read Function
+                  </button>
+                  <button
+                    onClick={() => void runSiliconSymbolRead('class_api')}
+                    disabled={!siliconSymbolInput.trim() || siliconBusy === 'symbol_class_api'}
+                    className="text-[9px] py-1 rounded bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 disabled:opacity-40"
+                  >
+                    Read Class API
+                  </button>
+                  <button
+                    onClick={() => void runSiliconTaskContext()}
+                    disabled={!siliconDashboard?.recent_tasks?.length || siliconBusy === 'task_context'}
+                    className="text-[9px] py-1 rounded bg-blue-500/15 text-blue-300 hover:bg-blue-500/25 disabled:opacity-40"
+                  >
+                    Build Task Context
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Test Discovery ── */}
+              <div className="rounded border border-ide-border/30 bg-ide-panel/40 px-2 py-1.5">
+                <div className="text-[9px] text-ide-text-dim uppercase tracking-wider mb-1">Test Discovery</div>
+                <div className="flex gap-1 mb-1">
+                  <button
+                    onClick={() => setSiliconTestMode('symbol')}
+                    className={`text-[9px] px-2 py-0.5 rounded ${siliconTestMode === 'symbol' ? 'bg-teal-500/30 text-teal-200' : 'bg-ide-border/20 text-ide-text-dim'}`}
+                  >symbol</button>
+                  <button
+                    onClick={() => setSiliconTestMode('file')}
+                    className={`text-[9px] px-2 py-0.5 rounded ${siliconTestMode === 'file' ? 'bg-teal-500/30 text-teal-200' : 'bg-ide-border/20 text-ide-text-dim'}`}
+                  >file</button>
+                </div>
+                <input
+                  type="text"
+                  placeholder={siliconTestMode === 'symbol' ? 'symbolName' : 'src/foo.ts'}
+                  value={siliconTestTarget}
+                  onChange={e => setSiliconTestTarget(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && void runTestDiscovery()}
+                  className="w-full text-[9px] bg-ide-bg/40 border border-ide-border/40 rounded px-1.5 py-1 text-ide-text placeholder:text-ide-text-dim/50 mb-1"
+                />
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    onClick={() => void runTestDiscovery()}
+                    disabled={!siliconTestTarget.trim() || siliconBusy === 'test_discovery'}
+                    className="text-[9px] py-1 rounded bg-teal-500/15 text-teal-300 hover:bg-teal-500/25 disabled:opacity-40"
+                  >
+                    Find Tests
+                  </button>
+                  <button
+                    onClick={() => void runReindexTests()}
+                    disabled={siliconBusy === 'reindex_tests'}
+                    className="text-[9px] py-1 rounded bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 disabled:opacity-40"
+                  >
+                    Reindex Tests
+                  </button>
+                  <button
+                    onClick={() => void runReindexEmbeddings()}
+                    disabled={siliconBusy === 'reindex_embeddings'}
+                    className="text-[9px] py-1 rounded bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 disabled:opacity-40"
+                  >
+                    Rebuild Embeddings
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded border border-ide-border/30 bg-ide-panel/40 px-2 py-1.5">
+                <div className="text-[9px] text-ide-text-dim uppercase tracking-wider mb-1">Recent Tasks</div>
+                {!siliconDashboard?.recent_tasks?.length ? (
+                  <div className="text-[9px] text-ide-text-dim">No tasks in ledger yet</div>
+                ) : (
+                  <div className="space-y-1">
+                    {siliconDashboard.recent_tasks.slice(0, 6).map((task) => (
+                      <div key={task.id} className="text-[9px] leading-snug rounded border border-ide-border/30 bg-ide-bg/20 px-1.5 py-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-ide-text truncate" title={task.instruction}>{task.instruction}</span>
+                          <span className={
+                            task.status === 'COMPLETED' ? 'text-green-400 font-mono' :
+                            task.status === 'FAILED' || task.status === 'ESCALATED' ? 'text-red-400 font-mono' :
+                            task.status === 'ACTIVE' ? 'text-cyan-400 font-mono' :
+                            'text-yellow-400 font-mono'
+                          }>
+                            {task.status}
+                          </span>
+                        </div>
+                        <div className="text-ide-text-dim">{task.agent_type} · attempts {task.attempt_count}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* ── Brainstorm Pad ── */}
         <div>
           <button onClick={() => toggleSection('brainstorm')}
@@ -1379,6 +2246,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
             </div>
           )}
         </div>
+
+        {/* ── God Factory Autonomous Loop ── */}
+        <GodFactoryLoopPanel projectId={projectId} />
       </div>
     </div>
   );

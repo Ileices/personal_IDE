@@ -5,7 +5,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { useProjectStore } from '../stores/projectStore';
-import { MODELS } from '@personal-ide/shared';
 import {
   LogOut, User, ChevronDown, MessageSquare, Pencil, ListChecks, Bot,
   Zap, Gauge, Settings, Waves, Bird
@@ -13,7 +12,9 @@ import {
 import { ProviderSettings } from './ProviderSettings';
 import { NanoSeaControls } from './NanoSeaControls';
 import { MidwifePanel } from './MidwifePanel';
-import { API_BASE } from '../config.js';
+import { ModelDropdown } from './UniversalModelPicker';
+import { useModelStore } from '../stores/modelStore';
+import { HelpTip } from './HelpTip';
 
 const MODE_CONFIG = [
   { id: 'ask' as const, label: 'Ask', icon: MessageSquare, desc: 'Ask questions about code', color: 'text-blue-400' },
@@ -21,15 +22,6 @@ const MODE_CONFIG = [
   { id: 'plan' as const, label: 'Plan', icon: ListChecks, desc: 'Plan a task step-by-step', color: 'text-yellow-400' },
   { id: 'agent' as const, label: 'Agent', icon: Bot, desc: 'Autonomous coding loop', color: 'text-purple-400' },
 ];
-
-interface DynamicModel {
-  id: string;
-  name: string;
-  provider: string;
-  description: string;
-  contextWindow: number;
-  isFree?: boolean;
-}
 
 interface TopBarProps {
   onNewProject?: () => void;
@@ -39,66 +31,22 @@ export function TopBar({ onNewProject }: TopBarProps) {
   const { user, logout } = useAuthStore();
   const { mode, setMode, selectedModel, setModel } = useChatStore();
   const { activeProject } = useProjectStore();
+  const { allModels, providerErrors, fetchModels } = useModelStore();
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showModelMenu, setShowModelMenu] = useState(false);
   const [showProviderSettings, setShowProviderSettings] = useState(false);
   const [showNanoSea, setShowNanoSea] = useState(false);
   const [showMidwife, setShowMidwife] = useState(false);
-  const [dynamicModels, setDynamicModels] = useState<DynamicModel[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [providerErrors, setProviderErrors] = useState<{ provider: string; error: string }[]>([]);
 
-  // Fetch models from all providers on mount (once — cached on server for 5 min)
   useEffect(() => {
-    fetchAllModels();
+    void fetchModels();
   }, []);
 
-  async function fetchAllModels() {
-    setModelsLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/providers/all-models`);
-      const data = await res.json();
-      if (data.models?.length > 0) {
-        setDynamicModels(data.models);
-
-        // Auto-fallback when current model is unavailable (common in guest mode).
-        const modelIds = new Set<string>(data.models.map((m: DynamicModel) => m.id));
-        if (!modelIds.has(selectedModel)) {
-          setModel(data.models[0].id);
-        }
-      }
-      // Surface errors so user knows which providers failed
-      if (data.errors?.length > 0) {
-        setProviderErrors(data.errors);
-      } else {
-        setProviderErrors([]);
-      }
-    } catch {
-      // Fall back to static models
-    } finally {
-      setModelsLoading(false);
+  useEffect(() => {
+    if (allModels.length === 0) return;
+    if (!allModels.some(model => model.id === selectedModel)) {
+      setModel(allModels[0].id);
     }
-  }
-
-  // Use dynamic models if available, otherwise static
-  const allModels = dynamicModels.length > 0
-    ? dynamicModels
-    : MODELS.map(m => ({
-        id: m.id,
-        name: m.name,
-        provider: m.publisher || 'github',
-        description: m.description,
-        contextWindow: 128000,
-        isFree: false,
-      }));
-
-  // Group models by provider
-  const modelsByProvider = allModels.reduce((acc, m) => {
-    const key = m.provider;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(m);
-    return acc;
-  }, {} as Record<string, DynamicModel[]>);
+  }, [allModels, selectedModel, setModel]);
 
   const currentModel = allModels.find(m => m.id === selectedModel);
 
@@ -115,32 +63,37 @@ export function TopBar({ onNewProject }: TopBarProps) {
           </span>
         )}
         {onNewProject && (
-          <button
-            onClick={onNewProject}
-            className="text-xs text-ide-text-dim hover:text-ide-accent px-1.5 py-0.5 rounded hover:bg-ide-accent/10 transition-colors"
-            title="New Project"
-          >
-            + New
-          </button>
+          <div className="flex items-center gap-1" data-help-id="top.new-project">
+            <button
+              onClick={onNewProject}
+              className="text-xs text-ide-text-dim hover:text-ide-accent px-1.5 py-0.5 rounded hover:bg-ide-accent/10 transition-colors"
+              title="New Project"
+            >
+              + New
+            </button>
+            <HelpTip helpId="top.new-project" />
+          </div>
         )}
       </div>
 
       {/* Mode Tabs */}
       <div className="flex items-center gap-0.5 bg-ide-bg rounded-lg p-0.5">
         {MODE_CONFIG.map(m => (
-          <button
-            key={m.id}
-            onClick={() => setMode(m.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              mode === m.id
-                ? 'bg-ide-sidebar text-ide-text shadow-sm'
-                : 'text-ide-text-dim hover:text-ide-text'
-            }`}
-            title={m.desc}
-          >
-            <m.icon className={`w-3.5 h-3.5 ${mode === m.id ? m.color : ''}`} />
-            <span className="hidden md:inline">{m.label}</span>
-          </button>
+          <div key={m.id} className="flex items-center" data-help-id={`top.mode.${m.id}`}>
+            <button
+              onClick={() => setMode(m.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                mode === m.id
+                  ? 'bg-ide-sidebar text-ide-text shadow-sm'
+                  : 'text-ide-text-dim hover:text-ide-text'
+              }`}
+              title={m.desc}
+            >
+              <m.icon className={`w-3.5 h-3.5 ${mode === m.id ? m.color : ''}`} />
+              <span className="hidden md:inline">{m.label}</span>
+            </button>
+            <HelpTip helpId={`top.mode.${m.id}`} className="ml-0.5" />
+          </div>
         ))}
       </div>
 
@@ -148,127 +101,76 @@ export function TopBar({ onNewProject }: TopBarProps) {
       <div className="flex-1" />
 
       {/* Model Selector */}
-      <div className="relative">
-        <button
-          onClick={() => setShowModelMenu(!showModelMenu)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-ide-bg rounded text-xs hover:bg-ide-border transition-colors"
-        >
-          <Gauge className="w-3.5 h-3.5 text-ide-accent" />
-          <span className="hidden sm:inline max-w-[140px] truncate">{currentModel?.name || selectedModel}</span>
-          {currentModel?.provider && (
-            <span className="text-[9px] text-ide-text-dim">({currentModel.provider})</span>
-          )}
-          <ChevronDown className="w-3 h-3 text-ide-text-dim" />
-        </button>
-
-        {showModelMenu && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setShowModelMenu(false)} />
-            <div className="absolute right-0 top-full mt-1 w-80 bg-ide-sidebar border border-ide-border rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
-              {/* Refresh button */}
-              <div className="flex items-center justify-between px-3 py-2 border-b border-ide-border">
-                <span className="text-[10px] text-ide-text-dim">{allModels.length} models available</span>
-                <button
-                  onClick={fetchAllModels}
-                  className="text-[10px] text-ide-accent hover:underline"
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {/* Provider errors — show user why some providers are missing */}
-              {providerErrors.length > 0 && (
-                <div className="px-3 py-2 border-b border-ide-border bg-yellow-500/5">
-                  <div className="text-[10px] font-semibold text-yellow-400 mb-1">⚠ Some providers unavailable:</div>
-                  {providerErrors.map((e, i) => (
-                    <div key={i} className="text-[9px] text-ide-text-dim flex items-start gap-1 mb-0.5">
-                      <span className="text-yellow-500 font-medium capitalize shrink-0">{e.provider}:</span>
-                      <span className="truncate">{e.error}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {Object.entries(modelsByProvider).map(([provider, models]) => (
-                <div key={provider}>
-                  <div className="px-3 py-1.5 text-[10px] font-semibold text-ide-text-dim uppercase bg-ide-bg/50 border-b border-ide-border sticky top-0">
-                    {provider} ({models.length})
-                  </div>
-                  {models.map(m => (
-                    <button
-                      key={m.id}
-                      onClick={() => { setModel(m.id); setShowModelMenu(false); }}
-                      className={`w-full text-left px-3 py-2 hover:bg-ide-bg/50 flex items-start gap-2 ${
-                        selectedModel === m.id ? 'bg-ide-accent/10' : ''
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium flex items-center gap-1.5">
-                          {m.name}
-                          {m.isFree && (
-                            <span className="text-[9px] text-green-400 bg-green-500/10 px-1 rounded">free</span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-ide-text-dim mt-0.5 truncate">
-                          {m.description}
-                          {m.contextWindow && (
-                            <span className="ml-1 text-[9px]">· {Math.round(m.contextWindow / 1000)}K ctx</span>
-                          )}
-                        </div>
-                      </div>
-                      {selectedModel === m.id && (
-                        <div className="w-1.5 h-1.5 bg-ide-accent rounded-full mt-1.5" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </>
+      <div className="flex items-center gap-2" data-help-id="top.model-picker">
+        <Gauge className="w-3.5 h-3.5 text-ide-accent" />
+        <div className="w-72 min-w-[13rem]">
+          <ModelDropdown
+            value={selectedModel}
+            onChange={setModel}
+            placeholder={currentModel?.name || selectedModel || 'Select model…'}
+          />
+        </div>
+        <HelpTip helpId="top.model-picker" />
+        {providerErrors.length > 0 && (
+          <span
+            className="hidden lg:inline text-[10px] px-2 py-1 rounded border border-yellow-500/30 bg-yellow-500/10 text-yellow-300 max-w-40 truncate"
+            title={providerErrors.map(error => `${error.provider}: ${error.error}`).join('\n')}
+          >
+            {providerErrors.length} provider issue{providerErrors.length === 1 ? '' : 's'}
+          </span>
         )}
       </div>
 
       {/* Nano Sea Controls */}
-      <button
-        onClick={() => setShowNanoSea(true)}
-        className="p-1.5 hover:bg-ide-bg rounded text-ide-text-dim hover:text-cyan-400 transition-colors"
-        title="Nano Sea Controls"
-      >
-        <Waves className="w-4 h-4" />
-      </button>
+      <div className="flex items-center" data-help-id="top.nano-controls">
+        <button
+          onClick={() => setShowNanoSea(true)}
+          className="p-1.5 hover:bg-ide-bg rounded text-ide-text-dim hover:text-cyan-400 transition-colors"
+          title="Nano Sea Controls"
+        >
+          <Waves className="w-4 h-4" />
+        </button>
+        <HelpTip helpId="top.nano-controls" />
+      </div>
 
       {showNanoSea && (
         <NanoSeaControls onClose={() => setShowNanoSea(false)} />
       )}
 
       {/* Midwife Bird-Feeding */}
-      <button
-        onClick={() => setShowMidwife(true)}
-        className="p-1.5 hover:bg-ide-bg rounded text-ide-text-dim hover:text-amber-400 transition-colors"
-        title="Midwife Bird-Feeding"
-      >
-        <Bird className="w-4 h-4" />
-      </button>
+      <div className="flex items-center" data-help-id="top.midwife-controls">
+        <button
+          onClick={() => setShowMidwife(true)}
+          className="p-1.5 hover:bg-ide-bg rounded text-ide-text-dim hover:text-amber-400 transition-colors"
+          title="Midwife Bird-Feeding"
+        >
+          <Bird className="w-4 h-4" />
+        </button>
+        <HelpTip helpId="top.midwife-controls" />
+      </div>
 
       {showMidwife && (
         <MidwifePanel onClose={() => setShowMidwife(false)} />
       )}
 
       {/* Provider Settings */}
-      <button
-        onClick={() => setShowProviderSettings(true)}
-        className="p-1.5 hover:bg-ide-bg rounded text-ide-text-dim hover:text-ide-text transition-colors"
-        title="AI Provider Settings"
-      >
-        <Settings className="w-4 h-4" />
-      </button>
+      <div className="flex items-center" data-help-id="top.provider-settings">
+        <button
+          onClick={() => setShowProviderSettings(true)}
+          className="p-1.5 hover:bg-ide-bg rounded text-ide-text-dim hover:text-ide-text transition-colors"
+          title="AI Provider Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+        <HelpTip helpId="top.provider-settings" />
+      </div>
 
       {showProviderSettings && (
-        <ProviderSettings onClose={() => { setShowProviderSettings(false); fetchAllModels(); }} />
+        <ProviderSettings onClose={() => { setShowProviderSettings(false); void fetchModels(true); }} />
       )}
 
       {/* User Menu */}
-      <div className="relative">
+      <div className="relative flex items-center" data-help-id="top.user-menu">
         <button
           onClick={() => setShowUserMenu(!showUserMenu)}
           className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-ide-bg transition-colors"
@@ -280,6 +182,7 @@ export function TopBar({ onNewProject }: TopBarProps) {
           )}
           <ChevronDown className="w-3 h-3 text-ide-text-dim" />
         </button>
+        <HelpTip helpId="top.user-menu" className="ml-1" />
 
         {showUserMenu && (
           <>

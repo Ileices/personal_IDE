@@ -4,12 +4,13 @@
 // verbosity modes, expandable entries,
 // copy feed, message queue during runs
 // ============================================
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getPreset } from '@personal-ide/shared';
 import { useAgentStore, type VerbosityLevel } from '../stores/agentStore';
 import { useFleetStore, type FleetAgentInfo } from '../stores/fleetStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useChatStore } from '../stores/chatStore';
+import { useModelStore } from '../stores/modelStore';
 import { API_BASE } from '../config.js';
 import {
   Play, Square, Pause, SkipForward, Settings, Clock,
@@ -21,12 +22,88 @@ import {
 import { AgentSettings } from './agent/AgentSettings';
 import { AgentEventFeed } from './agent/AgentEventFeed';
 import { MegaPromptsPanel } from './agent/MegaPromptsPanel';
+import { MilestonePanel } from './projectFactory/MilestonePanel';
+import { QualityTrend } from './projectFactory/QualityTrend';
+import { ProjectFactoryWizard, type WorkflowMode } from './projectFactory/ProjectFactoryWizard';
 
 // Prompt history persistence
 const AGENT_HIST_KEY = 'agent_loop_prompt_history';
 interface AgentHistoryItem { id: string; prompt: string; usedAt: string; timesUsed: number; }
 const loadAgentHistory  = (): AgentHistoryItem[] => { try { return JSON.parse(localStorage.getItem(AGENT_HIST_KEY) || '[]'); } catch { return []; } };
 const saveAgentHistory  = (v: AgentHistoryItem[]) => { try { localStorage.setItem(AGENT_HIST_KEY, JSON.stringify(v.slice(0, 200))); } catch {} };
+
+type UnifiedModelLike = {
+  id: string;
+  name?: string;
+  provider?: string;
+  description?: string;
+  contextWindow?: number;
+  supportsVision?: boolean;
+  isFree?: boolean;
+};
+
+type StrategyTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  categories: string[];
+};
+
+const STRATEGY_TEMPLATES: StrategyTemplate[] = [
+  {
+    id: 'fullstack-balanced',
+    name: 'Full-Stack Balanced',
+    description: 'Best default for app/game/web build loops using coding + reasoning + long context.',
+    categories: ['coding', 'reasoning', 'general', 'long_context'],
+  },
+  {
+    id: 'reasoning-first',
+    name: 'Reasoning First',
+    description: 'Use planning-heavy stacks for architecture, decomposition, and hard debugging.',
+    categories: ['reasoning', 'general'],
+  },
+  {
+    id: 'specialized-boost',
+    name: 'Specialized Boost',
+    description: 'Inject specialized models (sql/medical/embedding/vision) into fallback chain automatically.',
+    categories: ['specialized', 'embedding', 'vision', 'coding', 'general'],
+  },
+  {
+    id: 'local-only-247',
+    name: 'Local-Only 24/7',
+    description: 'Run continuously on local providers first (Ollama/Nano/LMStudio).',
+    categories: ['local_only', 'coding', 'reasoning', 'general'],
+  },
+  {
+    id: 'cloud-burst-local-sustain',
+    name: 'Cloud Burst + Local Sustain',
+    description: 'Start with strongest cloud model, then sustain with local fallback chain for long runs.',
+    categories: ['cloud_first', 'coding', 'reasoning', 'general'],
+  },
+];
+
+function inferModelTags(model: UnifiedModelLike): string[] {
+  const raw = `${model.id} ${model.name || ''} ${model.description || ''}`.toLowerCase();
+  const tags = new Set<string>();
+
+  if (/coder|code|codellama|starcoder|codegemma|program/.test(raw)) tags.add('coding');
+  if (/reason|r1|qwq|think|logic|math/.test(raw)) tags.add('reasoning');
+  if (/vision|llava|moondream|image|multimodal/.test(raw) || model.supportsVision) tags.add('vision');
+  if (/embed|embedding|mxbai|nomic/.test(raw)) tags.add('embedding');
+  if (/sql|medical|med|special/.test(raw)) tags.add('specialized');
+  if (/128k|200k|long[-_ ]?context|yarn/.test(raw)) tags.add('long_context');
+  if (/uncensored|dolphin|hermes|mythomax/.test(raw)) tags.add('uncensored');
+  if (tags.size === 0) tags.add('general');
+
+  const provider = (model.provider || '').toLowerCase();
+  if (provider === 'ollama' || provider === 'nano' || provider === 'lmstudio') {
+    tags.add('local');
+  } else {
+    tags.add('cloud');
+  }
+
+  return [...tags];
+}
 
 export function AgentControls() {
   const {
@@ -42,12 +119,16 @@ export function AgentControls() {
     setContinuousMode, setCooldownMs, setBypassRateLimits, setEnableSmartChunking,
     setVerbosity, sendQueuedMessage, toggleEventExpanded, copyEventsToClipboard,
   } = useAgentStore();
+  const latestQualityEvent = useAgentStore(s => s.latestQualityEvent);
   const { activeProject } = useProjectStore();
   const { selectedModel, setModel } = useChatStore();
+  const { allModels } = useModelStore();
   const [task, setTask] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [promptHistory, setPromptHistory] = useState<AgentHistoryItem[]>(loadAgentHistory);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
+  const [megaPromptModelSource, setMegaPromptModelSource] = useState<'auto' | 'cloud' | 'local'>('auto');
   const [histSearch, setHistSearch] = useState('');
   const [queueInput, setQueueInput] = useState('');
   const [queuePriority, setQueuePriority] = useState<'normal' | 'high'>('normal');
@@ -60,12 +141,134 @@ export function AgentControls() {
   const [failedModelCount, setFailedModelCount] = useState(0);
   const [cleanupFailedModelsBusy, setCleanupFailedModelsBusy] = useState(false);
   const [analyzeCodebase, setAnalyzeCodebase] = useState(true);
+  const [availableModels, setAvailableModels] = useState<UnifiedModelLike[]>([]);
+  const [templateBusy, setTemplateBusy] = useState<string | null>(null);
+  const [useCorpusManifesto, setUseCorpusManifesto] = useState(true);
+  const [autoIngestCorpus, setAutoIngestCorpus] = useState(true);
+  const [autoProjectIntel, setAutoProjectIntel] = useState(true);
+  const [corpusPath, setCorpusPath] = useState('');
+  const [corpusStats, setCorpusStats] = useState<{ file_count?: number; total_tokens?: number; updated_at?: string } | null>(null);
+  const [manifestoPreview, setManifestoPreview] = useState('');
+  const [corpusBusy, setCorpusBusy] = useState<string | null>(null);
+  const [projectIntel, setProjectIntel] = useState<{
+    runs?: { total?: number; complete?: number; error?: number; runningLike?: number };
+    suggestedJobs?: { suggested?: number; implementing?: number; implemented?: number };
+    blame?: { failures24h?: number; successes24h?: number };
+  } | null>(null);
+  const [intelBusy, setIntelBusy] = useState(false);
   const [timingData, setTimingData] = useState<{
     lastCallMs: number; avgCallMs: number; totalCalls: number; tokPerSec: number; activeMs: number;
   } | null>(null);
   const [datasetStats, setDatasetStats] = useState<{
     total: number; success: number; failures: number; avgQuality: number;
   } | null>(null);
+  const [runtimeTelemetry, setRuntimeTelemetry] = useState<{
+    selectedModel?: string;
+    rateLimiter?: {
+      selectedModel?: {
+        usage?: {
+          serverRemaining?: number | null;
+          serverLimit?: number | null;
+          backoffMs?: number;
+          consecutiveFailures?: number;
+        };
+      } | null;
+      deadModels?: { count?: number };
+    };
+    quality?: {
+      stats?: {
+        buildPassRate?: number;
+        testPassRate?: number;
+        avgErrors?: number;
+        recentFailures?: number;
+      };
+      recommendedCooldownMs?: number;
+    } | null;
+  } | null>(null);
+
+  // Project Factory: workflow mode, quality gate, wizard
+  const [workflowMode, setWorkflowMode] = useState<WorkflowMode>('build_new');
+  const [strictQualityGate, setStrictQualityGate] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+
+  const filteredHistory = useMemo(() => (
+    promptHistory.filter(h => !histSearch || h.prompt.toLowerCase().includes(histSearch.toLowerCase()))
+  ), [promptHistory, histSearch]);
+
+  const estimateTokens = useCallback((text: string) => {
+    return Math.max(1, Math.round(text.length / 3.5));
+  }, []);
+
+  const resolveSelectedModelContextWindow = useCallback(() => {
+    const byUnifiedModel = allModels.find(m => m.id === selectedModel)?.maxInputTokens;
+    if (byUnifiedModel && Number.isFinite(byUnifiedModel) && byUnifiedModel > 0) return byUnifiedModel;
+    const byProviderModel = availableModels.find(m => m.id === selectedModel)?.contextWindow;
+    if (byProviderModel && Number.isFinite(byProviderModel) && byProviderModel > 0) return byProviderModel;
+    return 128000;
+  }, [allModels, availableModels, selectedModel]);
+
+  const generateMegaPromptFromHistory = useCallback(() => {
+    const selected = promptHistory.filter(h => selectedHistoryIds.has(h.id));
+    const baseItems = selected.length > 0 ? selected : promptHistory.slice(0, 30);
+    if (baseItems.length === 0) return;
+
+    const ctxWindow = resolveSelectedModelContextWindow();
+    const maxPromptBudget = Math.max(2000, Math.floor(ctxWindow * 0.35));
+    const header = [
+      'Create a comprehensive implementation plan and execution strategy using the task history below.',
+      `Preferred model source: ${megaPromptModelSource}.`,
+      `Current model context window: ${ctxWindow.toLocaleString()} tokens; history budget target (35%): ${maxPromptBudget.toLocaleString()} tokens.`,
+      'Prioritize unresolved items, deduplicate overlapping requests, and preserve chronology where it affects implementation order.',
+    ].join('\n');
+
+    const renderedItems = baseItems.map((item, idx) => {
+      const stamp = new Date(item.usedAt).toLocaleString();
+      return `(${idx + 1}) [used ${stamp}, x${item.timesUsed}] ${item.prompt}`;
+    });
+
+    const totalHistoryTokens = estimateTokens(renderedItems.join('\n'));
+    if (totalHistoryTokens <= maxPromptBudget) {
+      const compact = `${header}\n\nTask History:\n- ${renderedItems.join('\n- ')}`;
+      setTask(compact);
+      setShowHistory(false);
+      return;
+    }
+
+    const chunkBudget = Math.max(800, maxPromptBudget - 400);
+    const chunks: string[][] = [];
+    let currentChunk: string[] = [];
+    let currentTokens = 0;
+    for (const line of renderedItems) {
+      const lineTokens = estimateTokens(line) + 4;
+      if (currentChunk.length > 0 && currentTokens + lineTokens > chunkBudget) {
+        chunks.push(currentChunk);
+        currentChunk = [line];
+        currentTokens = lineTokens;
+      } else {
+        currentChunk.push(line);
+        currentTokens += lineTokens;
+      }
+    }
+    if (currentChunk.length > 0) chunks.push(currentChunk);
+
+    const chunked = [
+      header,
+      '',
+      `History was chunked into ${chunks.length} sections to stay within the 35% context budget.`,
+      'Process chunks in order. Build a single coherent plan that references cross-chunk dependencies explicitly.',
+      '',
+      ...chunks.map((chunk, idx) => `### History Chunk ${idx + 1}\n- ${chunk.join('\n- ')}`),
+    ].join('\n');
+
+    setTask(chunked);
+    setShowHistory(false);
+  }, [
+    promptHistory,
+    selectedHistoryIds,
+    resolveSelectedModelContextWindow,
+    megaPromptModelSource,
+    estimateTokens,
+  ]);
 
   // Sync timing/dataset from store events
   useEffect(() => {
@@ -131,6 +334,151 @@ export function AgentControls() {
     return () => window.clearInterval(timer);
   }, [refreshStrategy]);
 
+  const refreshCorpus = useCallback(async () => {
+    if (!activeProject?.id) {
+      setCorpusStats(null);
+      setManifestoPreview('');
+      return;
+    }
+    try {
+      const statsRes = await fetch(`${API_BASE}/api/corpus/stats?projectId=${encodeURIComponent(activeProject.id)}`);
+      const statsData = await statsRes.json().catch(() => null);
+      setCorpusStats(statsData?.corpus || null);
+    } catch {
+      setCorpusStats(null);
+    }
+    try {
+      const manRes = await fetch(`${API_BASE}/api/corpus/manifesto?projectId=${encodeURIComponent(activeProject.id)}`);
+      const manData = await manRes.json().catch(() => null);
+      setManifestoPreview((manData?.manifesto || '').slice(0, 800));
+    } catch {
+      setManifestoPreview('');
+    }
+  }, [activeProject?.id]);
+
+  const refreshProjectIntel = useCallback(async () => {
+    if (!activeProject?.id) {
+      setProjectIntel(null);
+      return;
+    }
+    setIntelBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/project-intel/${encodeURIComponent(activeProject.id)}`);
+      const data = await res.json().catch(() => null);
+      if (!data) return;
+      setProjectIntel({
+        runs: data.runs,
+        suggestedJobs: data.suggestedJobs,
+        blame: data.blame,
+      });
+    } finally {
+      setIntelBusy(false);
+    }
+  }, [activeProject?.id]);
+
+  const refreshRuntimeTelemetry = useCallback(async () => {
+    if (!activeProject?.id) {
+      setRuntimeTelemetry(null);
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ projectId: activeProject.id });
+      if (currentModel) params.set('model', currentModel);
+      const res = await fetch(`${API_BASE}/api/agent/telemetry?${params.toString()}`);
+      const data = await res.json().catch(() => null);
+      if (!data) return;
+      setRuntimeTelemetry(data);
+    } catch {
+      // best-effort polling
+    }
+  }, [activeProject?.id, currentModel]);
+
+  useEffect(() => {
+    void refreshCorpus();
+  }, [refreshCorpus]);
+
+  useEffect(() => {
+    void refreshProjectIntel();
+  }, [refreshProjectIntel]);
+
+  useEffect(() => {
+    void refreshRuntimeTelemetry();
+    const intervalMs = isRunning || isFleetRunning ? 4000 : 12000;
+    const id = window.setInterval(() => {
+      void refreshRuntimeTelemetry();
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [refreshRuntimeTelemetry, isRunning, isFleetRunning]);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!activeProject?.id) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/agent/project-settings/${encodeURIComponent(activeProject.id)}`);
+        const data = await res.json().catch(() => null);
+        if (!data?.settings) return;
+        setUseCorpusManifesto(!!data.settings.useCorpusManifesto);
+        setAutoIngestCorpus(!!data.settings.autoIngestCorpus);
+        setAutoProjectIntel(!!data.settings.autoProjectIntel);
+        setCorpusPath(String(data.settings.corpusPath || ''));
+      } catch {
+        // no-op
+      }
+    };
+    void loadSettings();
+  }, [activeProject?.id]);
+
+  useEffect(() => {
+    if (!activeProject?.id) return;
+    const timer = window.setTimeout(() => {
+      void fetch(`${API_BASE}/api/agent/project-settings/${encodeURIComponent(activeProject.id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          useCorpusManifesto,
+          autoIngestCorpus,
+          autoProjectIntel,
+          corpusPath,
+        }),
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [activeProject?.id, useCorpusManifesto, autoIngestCorpus, autoProjectIntel, corpusPath]);
+
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/providers/all-models`);
+        const data = await res.json().catch(() => null);
+        if (data?.models?.length) {
+          setAvailableModels(data.models);
+        }
+      } catch {
+        setAvailableModels([]);
+      }
+    };
+    void loadModels();
+  }, []);
+
+  const capabilityCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      coding: 0,
+      reasoning: 0,
+      vision: 0,
+      embedding: 0,
+      specialized: 0,
+      local: 0,
+      cloud: 0,
+    };
+    for (const model of availableModels) {
+      const tags = inferModelTags(model);
+      tags.forEach((tag) => {
+        if (counts[tag] !== undefined) counts[tag] += 1;
+      });
+    }
+    return counts;
+  }, [availableModels]);
+
   const handlePresetChange = (presetId: string) => {
     setSelectedPresetId(presetId);
     const preset = getPreset(presetId);
@@ -140,6 +488,110 @@ export function AgentControls() {
     setStrategyFallbackModels(fallbackModels);
     setModel(preset.primaryModel);
     void persistStrategy({ presetId, primaryModel: preset.primaryModel, fallbackModels });
+  };
+
+  const applyStrategyTemplate = async (templateId: string) => {
+    setTemplateBusy(templateId);
+    try {
+      const template = STRATEGY_TEMPLATES.find(t => t.id === templateId);
+      if (!template || availableModels.length === 0) return;
+
+      const scored = availableModels
+        .map((m) => {
+          const tags = inferModelTags(m);
+          let score = 0;
+
+          for (const tag of template.categories) {
+            if (tag === 'local_only') {
+              if (tags.includes('local')) score += 4;
+              if (tags.includes('cloud')) score -= 3;
+              continue;
+            }
+            if (tag === 'cloud_first') {
+              if (tags.includes('cloud')) score += 4;
+              if (tags.includes('local')) score += 1;
+              continue;
+            }
+            if (tags.includes(tag)) score += 3;
+          }
+
+          if ((m.provider || '').toLowerCase() === 'github' || (m.provider || '').toLowerCase() === 'openai') score += 1;
+          if ((m.id || '').includes('gpt-5') || (m.id || '').includes('o3') || (m.id || '').includes('r1')) score += 1;
+          return { model: m.id, score };
+        })
+        .filter((s) => s.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      const selected = scored.slice(0, 12).map(s => s.model);
+      if (selected.length === 0) return;
+
+      const primaryModel = selected[0];
+      const fallbackModels = selected.slice(1);
+      setStrategyPrimaryModel(primaryModel);
+      setStrategyFallbackModels(fallbackModels);
+      setModel(primaryModel);
+      await persistStrategy({
+        presetId: 'all-models-balanced',
+        primaryModel,
+        fallbackModels,
+      });
+    } finally {
+      setTemplateBusy(null);
+    }
+  };
+
+  const ingestCorpus = async () => {
+    if (!activeProject?.id) return;
+    setCorpusBusy('ingest');
+    try {
+      await fetch(`${API_BASE}/api/corpus/ingest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: activeProject.id,
+          folderPath: corpusPath.trim() || undefined,
+          maxFilesPerDir: 120,
+        }),
+      });
+      await refreshCorpus();
+    } finally {
+      setCorpusBusy(null);
+    }
+  };
+
+  const generateManifesto = async (): Promise<string> => {
+    if (!activeProject?.id) return '';
+    setCorpusBusy('manifesto');
+    try {
+      await fetch(`${API_BASE}/api/corpus/manifesto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: activeProject.id }),
+      });
+      const res = await fetch(`${API_BASE}/api/corpus/manifesto?projectId=${encodeURIComponent(activeProject.id)}`);
+      const data = await res.json().catch(() => null);
+      const manifesto = data?.manifesto || '';
+      setManifestoPreview(manifesto.slice(0, 800));
+      await refreshCorpus();
+      return manifesto;
+    } finally {
+      setCorpusBusy(null);
+    }
+  };
+
+  const runProjectIntelPreflight = async () => {
+    await Promise.allSettled([
+      fetch(`${API_BASE}/api/silicon-factory/reindex-tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: activeProject?.id }),
+      }),
+      fetch(`${API_BASE}/api/silicon-factory/reindex-embeddings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: activeProject?.id }),
+      }),
+    ]);
   };
 
   // Fetch max agents on mount
@@ -157,6 +609,39 @@ export function AgentControls() {
   const handleStart = async () => {
     if (!task.trim() || !activeProject) return;
     const trimmed = task.trim();
+    let runTask = trimmed;
+
+    // Append workflow mode directive
+    if (workflowMode === 'import_refactor') {
+      runTask += '\n\nWORKFLOW MODE: IMPORT_REFACTOR_AND_EXPAND\nTreat this as an imported codebase migration/refactor. First map architecture, run diagnostics/tests, then fix, harden, and expand features without regressing behavior.';
+    } else if (workflowMode === 'code_review') {
+      runTask += '\n\nWORKFLOW MODE: CODE_REVIEW\nPrioritize bug/risk/regression discovery, then apply fixes with tests. Produce strict review findings before implementation.';
+    } else if (workflowMode === 'scale_research') {
+      runTask += '\n\nWORKFLOW MODE: SCALE_RESEARCH\nPrioritize architecture scalability, distributed execution, observability, and reproducible experiment pipelines.';
+    }
+    if (strictQualityGate) {
+      runTask += '\n\nQUALITY GATE (STRICT): A change is not complete until build passes, relevant tests pass, and high-severity diagnostics are addressed. Avoid speculative/sloppy code.';
+    }
+
+    // For fleet mode we still pre-compose corpus context client-side (fleet route parity).
+    if (fleetMode) {
+      if (useCorpusManifesto) {
+        if (autoIngestCorpus) {
+          await ingestCorpus();
+        }
+        let manifesto = manifestoPreview;
+        if (!manifesto.trim()) {
+          manifesto = await generateManifesto();
+        }
+        if (manifesto.trim()) {
+          runTask = `${trimmed}\n\n--- PROJECT CORPUS MANIFESTO ---\n${manifesto}\n--- END PROJECT CORPUS MANIFESTO ---\n\nUse this manifesto as the source-of-truth planning corpus. Generate a full roadmap with build/test/run steps and keep iterating 24/7.`;
+        }
+      }
+      if (autoProjectIntel) {
+        await runProjectIntelPreflight();
+      }
+    }
+
     const latest = await refreshStrategy();
     const latestSettings = latest?.settings;
     const preset = getPreset(latestSettings?.presetId || selectedPresetId);
@@ -174,7 +659,7 @@ export function AgentControls() {
       return updated;
     });
     if (fleetMode) {
-      startFleet(activeProject.id, trimmed, runModel, {
+      startFleet(activeProject.id, runTask, runModel, {
         continuousMode,
         cooldownMs,
         bypassRateLimits,
@@ -182,16 +667,44 @@ export function AgentControls() {
         analyzeCodebase,
         maxIterationsPerAgent: maxIterations,
         fallbackModels,
+        useCorpusManifesto,
+        autoProjectIntel,
+        autoIngestCorpus,
       });
       setTask('');
     } else {
-      startAgent(activeProject.id, trimmed, runModel, {
+      startAgent(activeProject.id, runTask, runModel, {
         fallbackModels,
         analyzeCodebase,
+        useCorpusManifesto,
+        autoProjectIntel,
       });
       setTask('');
     }
   };
+
+  // Wizard → applies settings + optionally starts the loop
+  const handleWizardLaunch = useCallback(async (result: { workflowMode: WorkflowMode; strategyTemplate: string; taskPrompt: string; autoStart: boolean }) => {
+    setWorkflowMode(result.workflowMode);
+    setTask(result.taskPrompt);
+    // Apply strategy template if one was selected
+    if (result.strategyTemplate) {
+      void applyStrategyTemplate(result.strategyTemplate);
+    }
+    if (result.autoStart && activeProject) {
+      // Brief delay so strategy applies first
+      setTimeout(() => {
+        if (!task && result.taskPrompt) {
+          // Task state might not have updated yet — call startAgent directly
+          startAgent(activeProject.id, result.taskPrompt, strategyPrimaryModel || 'openai/gpt-4.1', {
+            analyzeCodebase,
+            useCorpusManifesto,
+            autoProjectIntel,
+          });
+        }
+      }, 200);
+    }
+  }, [activeProject, applyStrategyTemplate, strategyPrimaryModel, analyzeCodebase, useCorpusManifesto, autoProjectIntel, startAgent, task]);
 
   const handleCleanupFailedModels = async () => {
     setCleanupFailedModelsBusy(true);
@@ -237,7 +750,7 @@ export function AgentControls() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-ide-border">
         <div className="flex items-center gap-2">
           <Bot className="w-4 h-4 text-purple-400" />
-          <span className="text-xs font-medium">{fleetMode ? 'Agent Fleet' : 'Agent Loop'}</span>
+          <span className="text-xs font-medium">{fleetMode ? 'Project Factory Fleet' : 'The Project Factory'}</span>
           <div className="flex items-center gap-1 text-[10px] text-ide-text-dim">
             {fleetMode ? (
               <>
@@ -363,13 +876,26 @@ export function AgentControls() {
               className="w-full bg-ide-bg border border-ide-border rounded px-2 py-0.5 text-[11px] focus:outline-none focus:border-ide-accent" />
           </div>
           <div className="overflow-y-auto flex-1">
-            {promptHistory.filter(h => !histSearch || h.prompt.toLowerCase().includes(histSearch.toLowerCase())).length === 0 && (
+            {filteredHistory.length === 0 && (
               <div className="px-3 py-3 text-[10px] text-ide-text-dim text-center">No history yet — start the agent to record prompts</div>
             )}
-            {promptHistory
-              .filter(h => !histSearch || h.prompt.toLowerCase().includes(histSearch.toLowerCase()))
+            {filteredHistory
               .map(h => (
               <div key={h.id} className="flex items-start gap-1.5 px-2 py-1.5 border-b border-ide-border/30 group hover:bg-ide-bg/30">
+                <input
+                  type="checkbox"
+                  checked={selectedHistoryIds.has(h.id)}
+                  onChange={(e) => {
+                    setSelectedHistoryIds(prev => {
+                      const next = new Set(prev);
+                      if (e.target.checked) next.add(h.id);
+                      else next.delete(h.id);
+                      return next;
+                    });
+                  }}
+                  className="mt-1 h-3 w-3 rounded border-ide-border bg-ide-bg"
+                  title="Select for mega-prompt"
+                />
                 <div className="flex-1 min-w-0">
                   <button onClick={() => { setTask(h.prompt); setShowHistory(false); }}
                     className="w-full text-left text-[11px] text-ide-text line-clamp-2">{h.prompt}</button>
@@ -390,11 +916,41 @@ export function AgentControls() {
             ))}
           </div>
           <div className="p-2 border-t border-ide-border/50">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <div className="text-[9px] text-ide-text-dim">
+                {selectedHistoryIds.size > 0
+                  ? `${selectedHistoryIds.size} selected`
+                  : 'No selection (uses top recent prompts)'}
+              </div>
+              <div className="flex items-center gap-1">
+                <label className="text-[9px] text-ide-text-dim">Model source</label>
+                <select
+                  value={megaPromptModelSource}
+                  onChange={(e) => setMegaPromptModelSource(e.target.value as 'auto' | 'cloud' | 'local')}
+                  className="text-[9px] bg-ide-bg border border-ide-border rounded px-1 py-0.5"
+                >
+                  <option value="auto">Auto</option>
+                  <option value="cloud">Cloud</option>
+                  <option value="local">Local</option>
+                </select>
+              </div>
+            </div>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <button
+                onClick={() => setSelectedHistoryIds(new Set(filteredHistory.map(h => h.id)))}
+                className="text-[9px] px-1.5 py-0.5 rounded border border-ide-border text-ide-text-dim hover:text-ide-text"
+              >
+                Select Visible
+              </button>
+              <button
+                onClick={() => setSelectedHistoryIds(new Set())}
+                className="text-[9px] px-1.5 py-0.5 rounded border border-ide-border text-ide-text-dim hover:text-ide-text"
+              >
+                Clear Selection
+              </button>
+            </div>
             <button
-              onClick={() => {
-                const top = promptHistory.slice(0, 15).map(h => h.prompt).join('\n- ');
-                if (top) { setTask(`Create a comprehensive improvement plan combining these past tasks:\n- ${top}`); setShowHistory(false); }
-              }}
+              onClick={generateMegaPromptFromHistory}
               className="w-full text-[10px] py-1 bg-purple-500/10 text-purple-400 rounded hover:bg-purple-500/20 flex items-center justify-center gap-1"
             >
               <Zap className="w-3 h-3" /> Generate Mega-Prompt from History
@@ -405,6 +961,135 @@ export function AgentControls() {
       {/* Task Input + Controls */}
       {!isRunning && !isFleetRunning && (
         <div className="p-2">
+          <div className="mb-2 rounded border border-ide-border/60 bg-ide-panel/50 p-2 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] font-semibold text-ide-text uppercase tracking-wide">The Project Factory — 24/7 Build Pipeline</div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowWizard(true)}
+                  disabled={!activeProject}
+                  className="text-[9px] px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 disabled:opacity-40 flex items-center gap-1"
+                  title="Open Project Factory Wizard"
+                >
+                  <Zap className="w-2.5 h-2.5" /> Wizard
+                </button>
+                <div className="text-[9px] text-ide-text-dim">
+                  code {capabilityCounts.coding} · reason {capabilityCounts.reasoning}
+                </div>
+              </div>
+            </div>
+
+            {/* Workflow mode selector */}
+            <div className="flex gap-1 flex-wrap">
+              {(['build_new', 'import_refactor', 'code_review', 'scale_research'] as WorkflowMode[]).map(mode => {
+                const labels: Record<WorkflowMode, string> = { build_new: '🏗 Build New', import_refactor: '🔧 Import', code_review: '🔍 Review', scale_research: '🧠 Research' };
+                return (
+                  <button
+                    key={mode}
+                    onClick={() => setWorkflowMode(mode)}
+                    className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${
+                      workflowMode === mode
+                        ? 'border-purple-500 bg-purple-500/20 text-purple-200'
+                        : 'border-ide-border/50 text-ide-text-dim hover:text-ide-text'
+                    }`}
+                  >
+                    {labels[mode]}
+                  </button>
+                );
+              })}
+              <label className="flex items-center gap-1 text-[9px] text-ide-text-dim ml-auto">
+                <input type="checkbox" checked={strictQualityGate} onChange={e => setStrictQualityGate(e.target.checked)} className="accent-orange-500" />
+                Strict QA
+              </label>
+            </div>
+
+            <div className="rounded border border-cyan-500/25 bg-cyan-500/5 px-2 py-1.5 text-[9px] text-cyan-100/90">
+              <div className="font-semibold text-cyan-200">Memory Surface Map</div>
+              <div className="mt-0.5 text-cyan-100/80">Ask/Edit/Plan (Chat tab) and Ask/Edit/Plan (Agent Loop) are distinct interaction memories in the unified spec.</div>
+              <div className="mt-0.5 text-cyan-100/80">This panel is the Agent Loop surface. Shared memory scope policy: Agent Loop and Fleet default to SELF/CUSTOM/PRESET constraints.</div>
+            </div>
+
+            <div className="flex flex-wrap gap-1">
+              {STRATEGY_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => void applyStrategyTemplate(template.id)}
+                  disabled={templateBusy !== null}
+                  title={template.description}
+                  className="text-[9px] px-1.5 py-0.5 rounded border border-ide-border/60 text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/40 disabled:opacity-40"
+                >
+                  {templateBusy === template.id ? 'Applying…' : template.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-1 text-[10px]">
+              <label className="flex items-center gap-1 text-ide-text-dim">
+                <input type="checkbox" checked={useCorpusManifesto} onChange={e => setUseCorpusManifesto(e.target.checked)} className="accent-purple-500" />
+                Use Corpus Manifesto
+              </label>
+              <label className="flex items-center gap-1 text-ide-text-dim">
+                <input type="checkbox" checked={autoIngestCorpus} onChange={e => setAutoIngestCorpus(e.target.checked)} className="accent-purple-500" />
+                Auto Ingest Corpus
+              </label>
+              <label className="flex items-center gap-1 text-ide-text-dim col-span-2">
+                <input type="checkbox" checked={autoProjectIntel} onChange={e => setAutoProjectIntel(e.target.checked)} className="accent-cyan-500" />
+                Auto Project Intel Preflight (tests + embeddings)
+              </label>
+            </div>
+
+            <div className="flex gap-1">
+              <input
+                value={corpusPath}
+                onChange={(e) => setCorpusPath(e.target.value)}
+                placeholder="Corpus folder path (optional, defaults to project root)"
+                className="flex-1 bg-ide-bg border border-ide-border rounded px-2 py-1 text-[10px] focus:outline-none focus:border-ide-accent"
+              />
+              <button
+                onClick={() => void ingestCorpus()}
+                disabled={!activeProject || corpusBusy !== null}
+                className="px-2 py-1 text-[10px] rounded bg-blue-500/15 text-blue-300 hover:bg-blue-500/25 disabled:opacity-40"
+              >
+                {corpusBusy === 'ingest' ? 'Ingest…' : 'Ingest'}
+              </button>
+              <button
+                onClick={() => void generateManifesto()}
+                disabled={!activeProject || corpusBusy !== null}
+                className="px-2 py-1 text-[10px] rounded bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 disabled:opacity-40"
+              >
+                {corpusBusy === 'manifesto' ? 'Build…' : 'Manifesto'}
+              </button>
+            </div>
+
+            <div className="text-[9px] text-ide-text-dim">
+              Corpus files: {corpusStats?.file_count ?? 0} · tokens: {corpusStats?.total_tokens ?? 0}
+            </div>
+            <div className="rounded border border-ide-border/40 bg-ide-bg/30 p-1.5 text-[9px] text-ide-text-dim">
+              <div className="flex items-center justify-between">
+                <span>Project Intel</span>
+                <button
+                  onClick={() => void refreshProjectIntel()}
+                  className="text-[9px] px-1 py-0.5 rounded border border-ide-border/50 hover:bg-ide-bg/40"
+                  disabled={intelBusy}
+                >
+                  {intelBusy ? 'Refreshing…' : 'Refresh'}
+                </button>
+              </div>
+              <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5">
+                <span>Runs</span><span className="text-right">{projectIntel?.runs?.total ?? 0}</span>
+                <span>Completed</span><span className="text-right text-green-300">{projectIntel?.runs?.complete ?? 0}</span>
+                <span>Errors</span><span className="text-right text-red-300">{projectIntel?.runs?.error ?? 0}</span>
+                <span>Jobs</span><span className="text-right">{projectIntel?.suggestedJobs?.suggested ?? 0} pending</span>
+                <span>Blame 24h</span><span className="text-right">{projectIntel?.blame?.failures24h ?? 0} fail / {projectIntel?.blame?.successes24h ?? 0} ok</span>
+              </div>
+            </div>
+            {manifestoPreview && (
+              <div className="rounded border border-ide-border/40 bg-ide-bg/40 p-1.5 text-[9px] text-ide-text-dim max-h-20 overflow-y-auto whitespace-pre-wrap">
+                {manifestoPreview}
+              </div>
+            )}
+          </div>
+
           {/* Mega-Prompt Presets — extracted component */}
           <MegaPromptsPanel
             maxAgents={maxAgents}
@@ -622,6 +1307,38 @@ export function AgentControls() {
         </div>
       )}
 
+      {/* Runtime Telemetry */}
+      {activeProject && runtimeTelemetry && (
+        <div className="border-t border-ide-border p-2 bg-ide-bg/20">
+          <div className="text-[10px] font-medium text-ide-text mb-1">Runtime Telemetry</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-ide-text-dim">
+            <span>Model</span>
+            <span className="text-right text-ide-text truncate" title={runtimeTelemetry.selectedModel || ''}>{runtimeTelemetry.selectedModel || 'n/a'}</span>
+            <span>Server quota</span>
+            <span className="text-right">
+              {runtimeTelemetry.rateLimiter?.selectedModel?.usage?.serverRemaining ?? '-'}
+              /
+              {runtimeTelemetry.rateLimiter?.selectedModel?.usage?.serverLimit ?? '-'}
+            </span>
+            <span>Backoff</span>
+            <span className="text-right">{Math.round((runtimeTelemetry.rateLimiter?.selectedModel?.usage?.backoffMs || 0) / 1000)}s</span>
+            <span>Recent build pass</span>
+            <span className="text-right">{Math.round((runtimeTelemetry.quality?.stats?.buildPassRate || 0) * 100)}%</span>
+            <span>Recent test pass</span>
+            <span className="text-right">{Math.round((runtimeTelemetry.quality?.stats?.testPassRate || 0) * 100)}%</span>
+            <span>Avg errors/iter</span>
+            <span className="text-right">{(runtimeTelemetry.quality?.stats?.avgErrors || 0).toFixed(1)}</span>
+            <span>Suggested cooldown</span>
+            <span className="text-right text-yellow-300">{runtimeTelemetry.quality?.recommendedCooldownMs ?? cooldownMs}ms</span>
+          </div>
+          {!!runtimeTelemetry.rateLimiter?.deadModels?.count && (
+            <div className="text-[9px] text-orange-300 mt-1">
+              Dead models temporarily blacklisted: {runtimeTelemetry.rateLimiter.deadModels.count}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Event Log */}
       <AgentEventFeed
         events={events}
@@ -636,6 +1353,22 @@ export function AgentControls() {
         handleCopyFeed={handleCopyFeed}
         copiedFeed={copiedFeed}
       />
+
+      {/* Milestone + Quality panels — shown during/after a run */}
+      {activeProject && (isRunning || (!isRunning && events.length > 0)) && (
+        <>
+          <MilestonePanel
+            projectId={activeProject.id}
+            isRunning={isRunning || isFleetRunning}
+          />
+          <QualityTrend
+            projectId={activeProject.id}
+            isRunning={isRunning || isFleetRunning}
+            latestQualityEvent={latestQualityEvent}
+          />
+        </>
+      )}
+
       {/* Pending Questions */}
       {questions.length > 0 && (
         <div className="border-t border-ide-border p-2">
@@ -648,6 +1381,14 @@ export function AgentControls() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Project Factory Wizard modal */}
+      {showWizard && (
+        <ProjectFactoryWizard
+          onClose={() => setShowWizard(false)}
+          onLaunch={handleWizardLaunch}
+        />
       )}
     </div>
   );

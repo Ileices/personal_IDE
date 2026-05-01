@@ -10,7 +10,7 @@
 //   - Auto-backup before making edits
 //   - Browse the web for solutions
 // ============================================
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Sparkles, Send, Square, RotateCcw, History, ChevronDown,
   ChevronRight, Copy, Check, Trash2, Download, Upload,
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useProjectStore } from '../stores/projectStore';
 import { useChatStore } from '../stores/chatStore';
+import { useModelStore } from '../stores/modelStore';
 import { API_BASE } from '../config.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -65,12 +66,15 @@ function loadConversation(): StudioMessage[] {
 export function CopilotStudio() {
   const { activeProject } = useProjectStore();
   const { selectedModel } = useChatStore();
+  const { allModels } = useModelStore();
 
   const [messages, setMessages] = useState<StudioMessage[]>(loadConversation);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<PromptHistoryItem[]>(loadHistory);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
+  const [megaPromptModelSource, setMegaPromptModelSource] = useState<'auto' | 'cloud' | 'local'>('auto');
   const [historySearch, setHistorySearch] = useState('');
   const [autoBackup, setAutoBackup] = useState(true);
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
@@ -276,9 +280,77 @@ export function CopilotStudio() {
     }
   };
 
-  const filteredHistory = history.filter(h =>
-    !historySearch || h.prompt.toLowerCase().includes(historySearch.toLowerCase())
-  );
+  const filteredHistory = useMemo(() => (
+    history.filter(h => !historySearch || h.prompt.toLowerCase().includes(historySearch.toLowerCase()))
+  ), [history, historySearch]);
+
+  const estimateTokens = useCallback((text: string) => Math.max(1, Math.round(text.length / 3.5)), []);
+
+  const resolveSelectedModelContextWindow = useCallback(() => {
+    const fromModelStore = allModels.find(m => m.id === selectedModel)?.maxInputTokens;
+    if (fromModelStore && Number.isFinite(fromModelStore) && fromModelStore > 0) return fromModelStore;
+    return 128000;
+  }, [allModels, selectedModel]);
+
+  const generateMegaPromptFromHistory = useCallback(() => {
+    const selected = history.filter(h => selectedHistoryIds.has(h.id));
+    const sourceItems = selected.length > 0 ? selected : history.slice(0, 30);
+    if (sourceItems.length === 0) return;
+
+    const ctxWindow = resolveSelectedModelContextWindow();
+    const maxPromptBudget = Math.max(2000, Math.floor(ctxWindow * 0.35));
+    const header = [
+      'Review the task history and produce one cohesive improvement plan with execution order and risk controls.',
+      `Preferred model source: ${megaPromptModelSource}.`,
+      `Current model context window: ${ctxWindow.toLocaleString()} tokens; history budget target (35%): ${maxPromptBudget.toLocaleString()} tokens.`,
+      'Highlight unresolved work, collapse duplicates, and preserve chronology where order matters.',
+    ].join('\n');
+
+    const renderedItems = sourceItems.map((item, idx) => {
+      const stamp = new Date(item.usedAt).toLocaleString();
+      return `(${idx + 1}) [used ${stamp}, x${item.timesUsed}] ${item.prompt}`;
+    });
+
+    const totalTokens = estimateTokens(renderedItems.join('\n'));
+    if (totalTokens <= maxPromptBudget) {
+      setInput(`${header}\n\nTask History:\n- ${renderedItems.join('\n- ')}`);
+      setShowHistory(false);
+      return;
+    }
+
+    const chunkBudget = Math.max(800, maxPromptBudget - 400);
+    const chunks: string[][] = [];
+    let currentChunk: string[] = [];
+    let currentTokens = 0;
+    for (const line of renderedItems) {
+      const lineTokens = estimateTokens(line) + 4;
+      if (currentChunk.length > 0 && currentTokens + lineTokens > chunkBudget) {
+        chunks.push(currentChunk);
+        currentChunk = [line];
+        currentTokens = lineTokens;
+      } else {
+        currentChunk.push(line);
+        currentTokens += lineTokens;
+      }
+    }
+    if (currentChunk.length > 0) chunks.push(currentChunk);
+
+    setInput([
+      header,
+      '',
+      `History was chunked into ${chunks.length} sections to stay within the 35% context budget.`,
+      'Process chunks in order and return one merged implementation plan with explicit cross-chunk dependencies.',
+      '',
+      ...chunks.map((chunk, idx) => `### History Chunk ${idx + 1}\n- ${chunk.join('\n- ')}`),
+    ].join('\n'));
+    setShowHistory(false);
+  }, [
+    history,
+    selectedHistoryIds,
+    resolveSelectedModelContextWindow,
+    megaPromptModelSource,
+    estimateTokens,
+  ]);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -305,6 +377,22 @@ export function CopilotStudio() {
             )}
             {filteredHistory.map(h => (
               <div key={h.id} className="border-b border-ide-border/50 p-2 group hover:bg-ide-bg/30">
+                <div className="flex items-start gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={selectedHistoryIds.has(h.id)}
+                    onChange={(e) => {
+                      setSelectedHistoryIds(prev => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(h.id);
+                        else next.delete(h.id);
+                        return next;
+                      });
+                    }}
+                    className="mt-0.5 h-3 w-3 rounded border-ide-border bg-ide-bg"
+                    title="Select for mega-prompt"
+                  />
+                  <div className="flex-1 min-w-0">
                 <button
                   onClick={() => { setInput(h.prompt); setShowHistory(false); inputRef.current?.focus(); }}
                   className="w-full text-left text-xs text-ide-text line-clamp-3 mb-1"
@@ -331,17 +419,43 @@ export function CopilotStudio() {
                     </button>
                   </div>
                 </div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
           <div className="p-2 border-t border-ide-border space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-[10px] text-ide-text-dim">
+              <span>{selectedHistoryIds.size > 0 ? `${selectedHistoryIds.size} selected` : 'No selection (uses recent prompts)'}</span>
+              <div className="flex items-center gap-1">
+                <label>Model source</label>
+                <select
+                  value={megaPromptModelSource}
+                  onChange={(e) => setMegaPromptModelSource(e.target.value as 'auto' | 'cloud' | 'local')}
+                  className="text-[10px] bg-ide-bg border border-ide-border rounded px-1 py-0.5"
+                >
+                  <option value="auto">Auto</option>
+                  <option value="cloud">Cloud</option>
+                  <option value="local">Local</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => setSelectedHistoryIds(new Set(filteredHistory.map(h => h.id)))}
+                className="text-[10px] px-1.5 py-0.5 rounded border border-ide-border text-ide-text-dim hover:text-ide-text"
+              >
+                Select Visible
+              </button>
+              <button
+                onClick={() => setSelectedHistoryIds(new Set())}
+                className="text-[10px] px-1.5 py-0.5 rounded border border-ide-border text-ide-text-dim hover:text-ide-text"
+              >
+                Clear Selection
+              </button>
+            </div>
             <button
-              onClick={() => {
-                // Chunk and compress history into a mega-prompt
-                const prompts = history.slice(0, 20).map(h => h.prompt).join('\n- ');
-                setInput(`Review and enhance the following previous prompts, combining them into a comprehensive improvement plan:\n- ${prompts}`);
-                setShowHistory(false);
-              }}
+              onClick={generateMegaPromptFromHistory}
               className="w-full text-xs py-1.5 bg-ide-accent/15 text-ide-accent rounded hover:bg-ide-accent/25 flex items-center justify-center gap-1.5"
             >
               <Zap className="w-3 h-3" />

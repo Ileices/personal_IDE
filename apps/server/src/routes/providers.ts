@@ -13,11 +13,15 @@ import { encrypt } from '../services/crypto/index.js';
 export async function providersRoutes(app: FastifyInstance): Promise<void> {
   const db = (app as any).db;
 
+  const loadProviderConfigMap = () => {
+    const saved = db.prepare('SELECT * FROM provider_configs').all() as any[];
+    return new Map(saved.map((row: any) => [row.provider_id, row]));
+  };
+
   /** GET /api/providers - List all providers with status */
   app.get('/', async () => {
     // Get saved configs from DB
-    const saved = db.prepare('SELECT * FROM provider_configs').all() as any[];
-    const savedMap = new Map(saved.map((s: any) => [s.provider_id, s]));
+    const savedMap = loadProviderConfigMap();
 
     return PROVIDERS.map(p => {
       const config = savedMap.get(p.id);
@@ -143,10 +147,15 @@ export async function providersRoutes(app: FastifyInstance): Promise<void> {
   app.get('/all-models', async () => {
     const allModels: any[] = [];
     const errors: any[] = [];
+    const providerConfigMap = loadProviderConfigMap();
+    const isProviderEnabled = (providerId: string, defaultEnabled = false) => {
+      const config = providerConfigMap.get(providerId);
+      return config ? config.enabled === 1 : defaultEnabled;
+    };
 
     // Only try GitHub if there's actually a valid token — don't waste API calls
     const authRow = db.prepare('SELECT token_encrypted FROM auth_tokens WHERE is_active = 1').get() as any;
-    if (authRow?.token_encrypted) {
+    if (authRow?.token_encrypted && isProviderEnabled('github', true)) {
       try {
         const ghClient = getClientFromDb(db, 'github');
         if (ghClient) {
@@ -156,30 +165,34 @@ export async function providersRoutes(app: FastifyInstance): Promise<void> {
       } catch (err: any) {
         errors.push({ provider: 'github', error: err.message });
       }
-    } else {
+    } else if (isProviderEnabled('github', true)) {
       errors.push({ provider: 'github', error: 'No GitHub token configured. Go to Provider Settings → GitHub to add your PAT.' });
     }
 
-    // Try Ollama (no API key needed)
-    try {
-      const ollamaClient = createOllamaClient();
-      const models = await fetchProviderModels(ollamaClient, 'ollama');
-      allModels.push(...models);
-    } catch (err: any) {
-      errors.push({ provider: 'ollama', error: err.message });
+    // Try Ollama (no API key needed) when enabled in settings
+    if (isProviderEnabled('ollama')) {
+      try {
+        const ollamaClient = createOllamaClient();
+        const models = await fetchProviderModels(ollamaClient, 'ollama');
+        allModels.push(...models);
+      } catch (err: any) {
+        errors.push({ provider: 'ollama', error: err.message });
+      }
     }
 
-    // Try Nano Sea (no API key needed)
-    try {
-      const nanoClient = createNanoClient();
-      const models = await fetchProviderModels(nanoClient, 'nano');
-      allModels.push(...models);
-    } catch (err: any) {
-      errors.push({ provider: 'nano', error: err.message });
+    // Try Nano Sea (no API key needed) when enabled in settings
+    if (isProviderEnabled('nano')) {
+      try {
+        const nanoClient = createNanoClient();
+        const models = await fetchProviderModels(nanoClient, 'nano');
+        allModels.push(...models);
+      } catch (err: any) {
+        errors.push({ provider: 'nano', error: err.message });
+      }
     }
 
     // Try all other enabled providers
-    const enabled = db.prepare('SELECT * FROM provider_configs WHERE enabled = 1').all() as any[];
+    const enabled = Array.from(providerConfigMap.values()).filter((config: any) => config.enabled === 1);
     for (const config of enabled) {
       if (config.provider_id === 'github' || config.provider_id === 'ollama' || config.provider_id === 'nano') continue;
       try {

@@ -161,6 +161,8 @@ class NanoTrainer:
         self._sessions: List[TrainingSession] = []
         self._device = "cpu"
         self._all_devices: List[str] = ["cpu"]  # multi-GPU device list
+        self._use_amp: bool = False          # True when CUDA supports fp16 autocast
+        self._scaler: Any = None             # torch.cuda.amp.GradScaler instance
 
         # Load existing training data
         self._load_archive()
@@ -212,7 +214,31 @@ class NanoTrainer:
     def register_nano(self, nano_type: str, nano: Any) -> None:
         self._nanos[nano_type] = nano
 
-    # ── Data Collection ────────────────────────────────────────
+    # ── RBY Task Classifier ────────────────────────────────────
+    @staticmethod
+    def _classify_rby(query: str, response: str) -> tuple[float, float, float]:
+        """Classify a (query, response) pair into RBY colour-space proportions.
+        R (Red)    = analysis / critique / debugging / review
+        B (Blue)   = generation / creation / output
+        Y (Yellow) = transformation / refactoring / bridging
+        Returns (r, b, y) that sum to 1.0.
+        """
+        text = (query + " " + response).lower()
+        r_words = {"fix", "debug", "error", "issue", "review", "analyse",
+                   "analyze", "check", "why", "problem", "bug", "fail"}
+        b_words = {"create", "generate", "write", "build", "implement",
+                   "make", "add", "new", "feature", "draft", "compose"}
+        y_words = {"refactor", "transform", "convert", "migrate", "move",
+                   "rename", "restructure", "extract", "simplify", "clean"}
+
+        tokens = set(text.split())
+        r_score = len(tokens & r_words) + 1.0
+        b_score = len(tokens & b_words) + 1.0
+        y_score = len(tokens & y_words) + 1.0
+        total = r_score + b_score + y_score
+        return (r_score / total, b_score / total, y_score / total)
+
+
     def add_observation(self, query: str, response: str,
                         source: str = "observation",
                         quality: float = 0.8) -> None:
@@ -370,6 +396,17 @@ class NanoTrainer:
     # ── Training Loop ──────────────────────────────────────────
     async def start(self) -> None:
         self._device = self._detect_device()
+        # Set up mixed-precision if device supports it
+        try:
+            import torch
+            from compute.device_manager import get_device_manager
+            dm = get_device_manager()
+            if dm.supports_fp16 and self._device.startswith("cuda"):
+                self._use_amp = True
+                self._scaler = torch.cuda.amp.GradScaler()
+                logger.info("Mixed-precision (fp16 autocast + GradScaler) ENABLED")
+        except Exception:
+            pass  # fp32 fallback is always safe
         logger.info(f"Nano trainer starting on device: {self._device} "
                      f"({len(self._all_devices)} GPU(s) for distribution)")
 
@@ -461,15 +498,22 @@ class NanoTrainer:
                         tgt = tokenizer.encode_target(pair.target_text).to(device)
 
                         optimizer.zero_grad()
-                        output = nano(inp)
-                        loss = F.mse_loss(output, tgt)
 
-                        # Weight by quality
-                        loss = loss * pair.quality
-
-                        loss.backward()
-                        torch.nn.utils.clip_grad_norm_(nano.parameters(), 1.0)
-                        optimizer.step()
+                        if self._use_amp and self._scaler is not None:
+                            with torch.cuda.amp.autocast():
+                                output = nano(inp)
+                                loss = F.mse_loss(output, tgt) * pair.quality
+                            self._scaler.scale(loss).backward()
+                            self._scaler.unscale_(optimizer)
+                            torch.nn.utils.clip_grad_norm_(nano.parameters(), 1.0)
+                            self._scaler.step(optimizer)
+                            self._scaler.update()
+                        else:
+                            output = nano(inp)
+                            loss = F.mse_loss(output, tgt) * pair.quality
+                            loss.backward()
+                            torch.nn.utils.clip_grad_norm_(nano.parameters(), 1.0)
+                            optimizer.step()
 
                         loss_val = loss.item()
                         epoch_loss += loss_val
@@ -483,6 +527,16 @@ class NanoTrainer:
                         nano.training_loss = loss_val
                         if loss_val < getattr(nano, 'best_loss', float('inf')):
                             nano.best_loss = loss_val
+
+                        # RBY drift — nudge nano's colour vector toward the task's RBY class
+                        if hasattr(nano, 'rby') and hasattr(nano.rby, 'r'):
+                            task_r, task_b, task_y = self._classify_rby(
+                                pair.input_text, pair.target_text
+                            )
+                            alpha = 0.01  # slow EMA — one step should not dominate
+                            nano.rby.r = (1 - alpha) * nano.rby.r + alpha * task_r
+                            nano.rby.b = (1 - alpha) * nano.rby.b + alpha * task_b
+                            nano.rby.y = (1 - alpha) * nano.rby.y + alpha * task_y
 
                         # Lifecycle shift
                         if hasattr(nano, 'rby') and nano.training_steps % 100 == 0:
@@ -586,6 +640,13 @@ class NanoTrainer:
     @property
     def status(self) -> Dict[str, Any]:
         recent_sessions = self._sessions[-5:] if self._sessions else []
+        nanos: Dict[str, Any] = {}
+        for nano_type, nano in self._nanos.items():
+            nanos[nano_type] = {
+                "training_steps": int(getattr(nano, 'training_steps', 0) or 0),
+                "best_loss": None if getattr(nano, 'best_loss', float('inf')) == float('inf') else float(getattr(nano, 'best_loss', 0.0)),
+                "last_loss": None if getattr(nano, 'training_loss', float('inf')) == float('inf') else float(getattr(nano, 'training_loss', 0.0)),
+            }
         return {
             "running": self._running,
             "device": self._device,
@@ -598,6 +659,7 @@ class NanoTrainer:
             "training_interval_s": self._training_interval,
             "checkpoint_every": self._checkpoint_every,
             "checkpoint_dir": str(self._checkpoint_dir.resolve()),
+            "nanos": nanos,
             "recent_sessions": [
                 {
                     "id": s.session_id,

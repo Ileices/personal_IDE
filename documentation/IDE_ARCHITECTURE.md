@@ -87,7 +87,7 @@ Fastify 5.2 with:
 |-----------|--------|-----------|-------------|
 | `agent.ts` | `/api/agent` | POST `/start`, `/stop`, `/pause`, `/resume`, `/message`; GET `/status`, `/stream` | Agent loop control + SSE event streaming |
 | `auth.ts` | `/api/auth` | POST `/login`, `/guest`, `/logout`, `/switch`; GET `/me`, `/accounts`, `/token`; DELETE `/account/:id` | GitHub PAT + guest auth |
-| `chat.ts` | `/api/chat` | POST `/send`; GET `/stream`; POST `/stop` | LLM chat with SSE streaming |
+| `chat.ts` | `/api/chat` | POST `/send`; GET `/stream`; POST `/stop` | LLM chat with SSE streaming + nano confidence fallback |
 | `checkpoints.ts` | `/api/checkpoints` | GET `/list`, `/diff`; POST `/create`, `/restore` | Git-based project snapshots |
 | `conversationIndex.ts` | `/api/conversations` | GET, POST, DELETE | Conversation CRUD |
 | `errors.ts` | `/api/errors` | POST `/scan` | Compile/lint error detection |
@@ -101,6 +101,9 @@ Fastify 5.2 with:
 | `ollama.ts` | `/api/ollama` | GET `/models`, `/status`; POST `/pull` | Ollama management |
 | `preview.ts` | `/api/preview` | GET `/serve` | Project preview server |
 | `providers.ts` | `/api/providers` | GET `/list`; POST `/configure`, `/test`; DELETE `/remove` | Provider management |
+| `siliconFactory.ts` | `/api/silicon-factory` | Task lifecycle, IAP messaging, sync locks, state snapshots, symbol graph, test indexing, embeddings | Silicon Factory service layer |
+| `spawnAuthority.ts` | `/api/spawn` | POST `/request`; GET `/confirmation/:id`; POST `/confirmation/:id/approve`, `/confirmation/:id/reject`; POST `/execute`; GET `/check`, `/violations`, `/model-tier`, `/chart` | **Transactional spawn gate** — request → pending → approve/reject → execute (one-time consume); replay denied |
+| `stability.ts` | `/api/stability` | GET `/window`; POST `/record` | Rolling-window stability monitor; triggers auto-rollback on threshold breach |
 | `tiers.ts` | `/api/tiers` | GET `/all` | Rate limit tier definitions |
 
 ### 3.3 Service Directories (9 domains)
@@ -139,11 +142,16 @@ Fastify 5.2 with:
 | Directory | Purpose |
 |-----------|---------|
 | `services/checkpoint/` | Git-based project snapshots |
+| `services/contextWindowManager/` | Priority-ordered context budget enforcement; `fitPrioritySlots()` (priority: system_prompt > task_buildtags > devtags > history > memory > code_content); tier ceilings T1–T5; truncation logged to notification_queue |
 | `services/errors/` | Compile/lint error detection |
 | `services/filesystem/` | File tree listing, read/write operations |
 | `services/memory/` | SQLite-backed project memory notes + search |
 | `services/midwife/` | Training data generator ("bird-feeding") |
 | `services/modes/` | System prompt templates for each mode |
+| `services/nanoLiaison/` | Polls Nano Sea `/v1/training/status` every 15 s; diffs nano states; creates devtag records + forensic entries for anomalies |
+| `services/siliconFactory/` | Task lifecycle, IAP messaging, sync locks, state snapshots, symbol graph, test indexing, embeddings |
+| `services/spawnAuthority/` | **Transactional spawn gate**: `requestSpawn()` → UUID confirmation record; `resolveConfirmation()` → accepted/rejected; `executeSpawn()` → one-time consume; replay denied |
+| `services/stabilityMonitor/` | Rolling 10-cycle window; thresholds: 2 consecutive test failures, blame score drop >0.15/3 cycles, 2 consecutive loops, buildtag rejection spike >0.20; breach triggers rollback notification + forensic job |
 
 ### 3.4 Database Schema
 
@@ -163,6 +171,10 @@ SQLite database at `./data/personal-ide.db`. Key tables:
 | `checkpoints` | Project snapshot metadata |
 | `code_symbols` | Indexed code symbols |
 | `code_relationships` | Symbol relationships |
+| `stability_snapshots` | Rolling stability window records (10-cycle); written by StabilityMonitor |
+| `loop_milestones` | Per-iteration loop progress records; written by milestoneEmitter |
+| `loop_quality_snapshots` | Per-iteration quality signals; written by milestoneEmitter |
+| `notification_queue` | Async event bus: rollback triggers, truncation events, forensic notes |
 
 ---
 
@@ -200,6 +212,7 @@ The `loadConfig()` function returns a typed `AppConfig` object with sections:
 - `agent` — iteration limits, delays
 - `rateLimit` — buffer, paid usage toggle
 - `security` — encryption key
+- `nano` — `confidenceThreshold` (default `0.65`): if nano provider response confidence falls below this value, `chat.ts` and `enhancedLoop.ts` automatically reroute to the next highest-confidence provider
 
 ---
 

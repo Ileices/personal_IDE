@@ -400,6 +400,33 @@ export class RelationshipIndexService {
     this.db.prepare('DELETE FROM code_symbols WHERE project_id = ?').run(projectId);
   }
 
+  /**
+   * Partial re-index for a specific set of changed files.
+   * Removes stale nodes for those paths and re-parses them in place.
+   * Bounded by number of unique files touched — safe to call at iteration boundaries.
+   */
+  reindexFiles(projectId: string, rootPath: string, changedPaths: string[]): void {
+    if (changedPaths.length === 0) return;
+    const tx = this.db.transaction(() => {
+      for (const filePath of changedPaths) {
+        // Remove stale symbol records for this file
+        const staleSymbols = this.db.prepare(
+          'SELECT id FROM code_symbols WHERE project_id = ? AND file_path = ?'
+        ).all(projectId, filePath) as any[];
+        for (const sym of staleSymbols) {
+          this.db.prepare('DELETE FROM code_relationships WHERE source_symbol_id = ? OR target_symbol_id = ?').run(sym.id, sym.id);
+        }
+        this.db.prepare('DELETE FROM code_symbols WHERE project_id = ? AND file_path = ?').run(projectId, filePath);
+      }
+    });
+    tx();
+
+    // Re-parse updated files (reuse scanProject with only the dirty subset)
+    try {
+      this.scanProject(projectId, rootPath, changedPaths);
+    } catch { /* partial re-index is best-effort */ }
+  }
+
   /** Get all symbols for a file */
   getFileSymbols(projectId: string, filePath: string): CodeSymbol[] {
     const rows = this.db.prepare('SELECT * FROM code_symbols WHERE project_id = ? AND file_path = ?').all(projectId, filePath) as any[];

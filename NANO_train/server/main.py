@@ -12,7 +12,7 @@ Endpoints:
   /v1/health             — Health check
 """
 from __future__ import annotations
-import asyncio, json, time, uuid, logging
+import asyncio, json, time, uuid, logging, math
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
 
@@ -416,28 +416,85 @@ class NanoServer:
 
     # ── Response Generation ────────────────────────────────────
     async def _complete_response(self, request: ChatCompletionRequest) -> dict:
-        """Non-streaming response — run inference pipeline."""
+        """Non-streaming response — run inference pipeline with ensemble confidence."""
         user_msg = ""
         for msg in request.messages:
             if msg.role == "user":
                 user_msg = msg.content
 
-        # Try nano pipeline first
-        response_text = await self._run_inference(user_msg)
+        # Gather outputs from multiple nanos for ensemble agreement
+        nano_outputs: List[str] = await self._run_ensemble_inference(user_msg)
+        response_text = nano_outputs[0] if nano_outputs else ""
+        confidence = self._compute_ensemble_confidence(nano_outputs)
 
-        return ChatCompletionResponse(
-            model=request.model,
-            choices=[
-                ChatChoice(
-                    message=ChatMessage(role="assistant", content=response_text),
-                )
-            ],
-            usage=Usage(
-                prompt_tokens=len(user_msg.split()),
-                completion_tokens=len(response_text.split()),
-                total_tokens=len(user_msg.split()) + len(response_text.split()),
-            ),
-        ).model_dump()
+        return {
+            **ChatCompletionResponse(
+                model=request.model,
+                choices=[
+                    ChatChoice(
+                        message=ChatMessage(role="assistant", content=response_text),
+                    )
+                ],
+                usage=Usage(
+                    prompt_tokens=len(user_msg.split()),
+                    completion_tokens=len(response_text.split()),
+                    total_tokens=len(user_msg.split()) + len(response_text.split()),
+                ),
+            ).model_dump(),
+            # Extension fields — callers that understand confidence can use them;
+            # callers that don't (standard OpenAI clients) safely ignore them.
+            "confidence": confidence,
+            "nano_count": len(nano_outputs),
+        }
+
+    # ── Ensemble Helpers ──────────────────────────────────────
+
+    async def _run_ensemble_inference(self, query: str, max_nanos: int = 5) -> List[str]:
+        """Collect up to max_nanos independent nano outputs for the same query.
+        Falls back to a single _run_inference call if no active nano sea exists."""
+        if not self._sea or len(self._sea) < 2:
+            result = await self._run_inference(query)
+            return [result]
+
+        outputs: List[str] = []
+        for name, nano in list(self._sea.items())[:max_nanos]:
+            try:
+                if hasattr(nano, 'generate_text'):
+                    text = nano.generate_text(query)
+                    if text and isinstance(text, str) and len(text.strip()) > 5:
+                        outputs.append(text.strip())
+            except Exception:
+                pass
+
+        if not outputs:
+            result = await self._run_inference(query)
+            return [result]
+
+        return outputs
+
+    def _compute_ensemble_confidence(self, outputs: List[str]) -> float:
+        """Pairwise token-overlap agreement across nano outputs.
+        Returns a float in [0.0, 1.0].  1.0 = all nanos produced identical output.
+        Falls back to 0.0 when fewer than 2 outputs are available."""
+        if len(outputs) < 2:
+            return 0.0
+
+        def token_set(text: str):
+            return set(text.lower().split())
+
+        scores: List[float] = []
+        for i in range(len(outputs)):
+            for j in range(i + 1, len(outputs)):
+                a = token_set(outputs[i])
+                b = token_set(outputs[j])
+                union = a | b
+                if not union:
+                    continue
+                jaccard = len(a & b) / len(union)
+                scores.append(jaccard)
+
+        return round(sum(scores) / len(scores), 4) if scores else 0.0
+
 
     async def _stream_response(self, request: ChatCompletionRequest):
         """SSE streaming response."""

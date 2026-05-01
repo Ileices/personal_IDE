@@ -12,6 +12,7 @@ import {
   detectHardware, recommendModels,
   findOllamaInstall, findOllamaModels, testOllamaConnection, buildActions,
 } from '../services/ollama/index.js';
+import { OllamaHealthMonitor } from '../services/ollama/healthMonitor.js';
 
 export async function ollamaRoutes(app: FastifyInstance): Promise<void> {
 
@@ -195,6 +196,25 @@ export async function ollamaRoutes(app: FastifyInstance): Promise<void> {
 
   /** GET /api/ollama/hardware */
   app.get('/hardware', async () => detectHardware());
+
+  /** GET /api/ollama/gpu-status — per-GPU VRAM across all detected GPUs */
+  app.get('/gpu-status', async () => {
+    const monitor = new OllamaHealthMonitor();
+    const vram = await monitor.getVRAMStatus();
+    if (!vram) {
+      return { available: false, reason: 'nvidia-smi not found or no NVIDIA GPU detected' };
+    }
+    return {
+      available: true,
+      gpuName: vram.gpuName,
+      totalMB: vram.totalMB,
+      usedMB: vram.usedMB,
+      freeMB: vram.freeMB,
+      utilizationPercent: vram.utilizationPercent,
+      critical: vram.critical,
+      allGpus: vram.allGpus,
+    };
+  });
 
   /** GET /api/ollama/recommend */
   app.get('/recommend', async () => {

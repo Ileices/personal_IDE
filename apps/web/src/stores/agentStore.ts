@@ -61,7 +61,28 @@ interface AgentStore {
   currentModel: string | null;
   modelSwitchHistory: Array<{ from: string; to: string; reason: string; timestamp: string }>;
 
-  startAgent: (projectId: string, task: string, model: string, options?: { fallbackModels?: string[]; analyzeCodebase?: boolean }) => Promise<void>;
+  // v5: quality snapshot events from the agent stream
+  latestQualityEvent: {
+    type: 'quality_snapshot';
+    iteration: number;
+    buildOk: boolean;
+    testsOk: boolean;
+    lintOk: boolean;
+    errorCount: number;
+    filesChanged: number;
+  } | null;
+
+  startAgent: (
+    projectId: string,
+    task: string,
+    model: string,
+    options?: {
+      fallbackModels?: string[];
+      analyzeCodebase?: boolean;
+      useCorpusManifesto?: boolean;
+      autoProjectIntel?: boolean;
+    }
+  ) => Promise<void>;
   stopAgent: () => Promise<void>;
   pauseAgent: () => Promise<void>;
   resumeAgent: () => Promise<void>;
@@ -113,6 +134,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   datasetStats: null,
   currentModel: null,
   modelSwitchHistory: [],
+  latestQualityEvent: null,
 
   startAgent: async (projectId, task, model, options) => {
     const { maxIterations, stepDelayMs, autoApprove, autoAnswer, continuousMode, cooldownMs, bypassRateLimits, enableSmartChunking } = get();
@@ -131,6 +153,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       bypassRateLimits,
       enableSmartChunking,
       analyzeCodebase: options?.analyzeCodebase ?? true,
+      useCorpusManifesto: options?.useCorpusManifesto,
+      autoProjectIntel: options?.autoProjectIntel,
     });
 
     set({ isRunning: true, state: 'planning', currentIteration: 0, events: [] });
@@ -276,6 +300,9 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
               timestamp: new Date().toISOString(),
             }],
           }));
+          break;
+        case 'quality_snapshot':
+          set({ latestQualityEvent: event });
           break;
         // Ignore heartbeat / status (initial handshake)
       }

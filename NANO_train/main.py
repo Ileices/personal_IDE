@@ -193,9 +193,9 @@ class NanoSea:
 
     # ── Step 3: Spawn Nanos ────────────────────────────────────
     async def _spawn_nanos(self) -> None:
-        import torch
         # Import triggers all @register_nano decorators
         from nanos import NANO_REGISTRY, create_nano
+        from compute.device_manager import get_device_manager
 
         logger.info(f"  Registry contains {len(NANO_REGISTRY)} nano types")
 
@@ -203,32 +203,34 @@ class NanoSea:
         seed = self._scanner.seed if self._scanner else None
         seed_rby = seed["rby"] if seed else {"r": 0.354, "b": 0.250, "y": 0.396}
 
-        # Determine device
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        if device == "cuda":
-            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            if vram_gb < 4:
-                device = "cpu"  # not enough VRAM for meaningful GPU use
-                logger.info("  GPU VRAM < 4GB, using CPU")
+        # Determine device distribution using the unified device manager so
+        # Windows DirectML, ROCm, and multi-GPU setups don't collapse to CPU.
+        device_manager = get_device_manager()
+        devices = device_manager.all_devices
+        if device_manager.is_gpu and device_manager.active_gpu and device_manager.active_gpu.vram_gb < 4:
+            logger.info("  GPU VRAM < 4GB on primary device, using CPU")
+            devices = ["cpu"]
 
         # Spawn all nanos
-        for nano_type in NANO_REGISTRY:
+        for nano_idx, nano_type in enumerate(NANO_REGISTRY):
             try:
                 nano = create_nano(nano_type)
                 # Apply AE seed modulation to initial weights
+                import torch
                 with torch.no_grad():
                     for param in nano.parameters():
                         # Subtle seed modulation — makes each installation unique
                         r, b, y = seed_rby["r"], seed_rby["b"], seed_rby["y"]
                         param.data *= (1.0 + (r - 0.333) * 0.1)
 
-                nano = nano.to(device)
+                target_device = devices[nano_idx % len(devices)]
+                nano = device_manager.to_device(nano) if target_device == device_manager.device else nano.to(target_device)
                 nano.eval()  # start in inference mode
                 self._nanos[nano_type] = nano
             except Exception as e:
                 logger.warning(f"  Failed to spawn {nano_type}: {e}")
 
-        logger.info(f"  Spawned {len(self._nanos)} nanos on {device}")
+        logger.info(f"  Spawned {len(self._nanos)} nanos across {len(devices)} device(s): {devices}")
 
     # ── Step 3b: AE Framework ──────────────────────────────────
     async def _init_framework(self) -> None:

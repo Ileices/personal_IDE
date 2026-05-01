@@ -8,6 +8,7 @@ import { v4 as uuid } from 'uuid';
 import type Database from 'better-sqlite3';
 import type { TagRegistryService } from '../../tagRegistry/index.js';
 import { SpawnAuthorityService } from '../../spawnAuthority/index.js';
+import { ContextWindowManager } from '../../contextWindowManager/index.js';
 
 // Rough token estimation (4 chars ≈ 1 token)
 function estimateTokens(text: string): number {
@@ -33,10 +34,14 @@ export interface TagChunk {
 }
 
 export class ContextWindowManagerSubAgent {
+  private canonicalManager: ContextWindowManager;
+
   constructor(
     private db: Database.Database,
     private tagRegistry: TagRegistryService
-  ) {}
+  ) {
+    this.canonicalManager = new ContextWindowManager(db);
+  }
 
   /**
    * Chunk a set of tags for delivery to a model tier.
@@ -103,6 +108,26 @@ export class ContextWindowManagerSubAgent {
         ex.rank
       );
     }
+
+    // Canonical manager pass (single source of truth for strategy + forensic logs).
+    // Legacy include/exclude behavior above is preserved for compatibility, but
+    // truncation policy and notifications come from ContextWindowManager.
+    try {
+      this.canonicalManager.assemble([
+        {
+          key: 'task_buildtags',
+          content: priority_tag_keys.join('\n'),
+        },
+        {
+          key: 'devtags',
+          content: relationship_tag_keys.join('\n'),
+        },
+        {
+          key: 'code_content',
+          content: included.map(i => JSON.stringify(i.data)).join('\n'),
+        },
+      ], tier, agent_id);
+    } catch { /* non-critical */ }
 
     return {
       cycle_id,

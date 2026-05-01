@@ -113,7 +113,33 @@ export function readFile(projectRoot: string, filePath: string): FileContent {
 }
 
 /** Write a file with optional backup */
+// ── Constitutional protection list ──────────────────────────────────────────
+// Files that must never be modified by any automated agent.
+// Any write attempt is rejected with an explanatory error.
+const CONSTITUTIONAL_PROTECTED_PATHS = new Set([
+  'CONSTITUTION.md',
+  'apps/server/src/routes/godFactory.ts',
+  'apps/web/src/components/TheGodFactory.tsx',
+  'apps/server/src/services/spawnAuthority/index.ts',
+  'apps/server/src/db/index.ts',
+]);
+
+function isConstitutionallyProtected(filePath: string): boolean {
+  // Normalize to forward slashes for comparison
+  const normalized = filePath.replace(/\\/g, '/').replace(/^\//, '');
+  for (const protected_ of CONSTITUTIONAL_PROTECTED_PATHS) {
+    if (normalized === protected_ || normalized.endsWith('/' + protected_)) return true;
+  }
+  return false;
+}
+
 export function writeFile(projectRoot: string, filePath: string, content: string, backup: boolean = true): void {
+  if (isConstitutionallyProtected(filePath)) {
+    throw new Error(
+      `Constitutional protection: '${filePath}' is in the immutable layer and cannot be modified by agents. ` +
+      `See CONSTITUTION.md for invariants.`
+    );
+  }
   const fullPath = safePath(projectRoot, filePath);
   const dir = dirname(fullPath);
 

@@ -72,6 +72,7 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
     }).catch(() => {});
     clearFailed(modelId);
     fetchInstalledLocalModels();
+    void fetchAllModels(true);
   }
 
   async function checkNanoStatus() {
@@ -120,6 +121,7 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
       body: JSON.stringify({ enabled: enable }),
     });
     fetchProviders();
+    void fetchAllModels(true);
   }
 
   async function saveApiKey(id: string) {
@@ -132,6 +134,7 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
     });
     setApiKeys(prev => ({ ...prev, [id]: '' }));
     fetchProviders();
+    void fetchAllModels(true);
   }
 
   async function testProvider(id: string) {
@@ -170,6 +173,7 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
       if (data.success) {
         setGithubResult({ success: true, message: `Token updated for @${data.user.login}${data.user.hasCopilot ? ' (Copilot ✓)' : ''}` });
         setGithubPat('');
+        void fetchAllModels(true);
       } else {
         setGithubResult({ success: false, message: data.error || 'Invalid token' });
       }

@@ -6,7 +6,7 @@ import { v4 as uuid } from 'uuid';
 import { estimateTokens } from '../../llm/providers.js';
 import { parseStructuredOutput, parseFileChanges } from '../../modes/prompts.js';
 import { writeFile } from '../../filesystem/index.js';
-import { runAllLintChecks, runTests, formatErrorsForLLM, formatTestsForLLM } from '../../errors/detector.js';
+import { runAllLintChecks, runTests, runBuild, formatBuildForLLM, formatErrorsForLLM, formatTestsForLLM } from '../../errors/detector.js';
 import type { StructuredAgentOutput } from '@personal-ide/shared';
 import type Database from 'better-sqlite3';
 import type { MemoryService } from '../../memory/index.js';
@@ -16,6 +16,7 @@ import type { ConversationIndexer } from '../../analysis/conversationIndexer.js'
 import type { LoopDetector } from '../loopDetector.js';
 import type { LogWriter } from '../logWriter.js';
 import { appConfig } from '../../../config.js';
+import { emitIterationMilestones, writeQualitySnapshot, inferQualityFromContext } from './milestoneEmitter.js';
 
 type EmitFn = (event: any) => void;
 
@@ -50,6 +51,7 @@ export interface ResponseServices {
 export interface ResponseResult {
   structured: StructuredAgentOutput | null;
   fileChangesCount: number;
+  lastBuildContext: string;
   lastErrorContext: string;
   lastTestContext: string;
   conversationIndexContext: string;
@@ -67,6 +69,7 @@ export function processResponse(
   services: ResponseServices,
   emit: EmitFn,
 ): ResponseResult {
+  let lastBuildContext = '';
   let lastErrorContext = '';
   let lastTestContext = '';
   let conversationIndexContext = '';
@@ -157,6 +160,18 @@ export function processResponse(
 
   // Apply file changes
   let fileChangesCount = 0;
+  // ── Smart Checkpoint: pre_write — snapshot BEFORE any file changes ──────────
+  // This gives us a clean rollback point regardless of the checkpointEvery cadence.
+  if (fileChanges.length > 0) {
+    try {
+      const preWriteLabel = `pre_write: ${fileChanges.map(f => f.path).join(', ').slice(0, 120)}`;
+      services.checkpoint.createCheckpoint(
+        ctx.config.projectRoot, ctx.projectId, ctx.runId,
+        ctx.currentIteration, preWriteLabel, 'auto:pre_write',
+      );
+      emit({ type: 'checkpoint_created', iteration: ctx.currentIteration, trigger: 'pre_write', description: preWriteLabel });
+    } catch { /* non-critical */ }
+  }
   for (const change of fileChanges) {
     try {
       writeFile(ctx.config.projectRoot, change.path, change.content, true);
@@ -190,12 +205,40 @@ export function processResponse(
     }
   }
 
+  // Auto Build Verification
+  if ((ctx.config.autoFixErrors || ctx.config.autoRunTests) && fileChangesCount > 0) {
+    try {
+      const buildResult = runBuild(ctx.config.projectRoot);
+      lastBuildContext = formatBuildForLLM(buildResult);
+      emit({
+        type: 'runtime_check',
+        stage: 'build',
+        success: buildResult.success,
+        command: buildResult.command,
+        exitCode: buildResult.exitCode,
+        durationMs: buildResult.duration,
+      });
+      if (!buildResult.success) {
+        // Treat build failures as high-priority error context for the next iteration.
+        lastErrorContext = [
+          'Build failed. Fix this before continuing.',
+          lastBuildContext,
+        ].join('\n\n');
+      }
+    } catch (err: any) {
+      emit({ type: 'info', message: 'Build verification failed: ' + err.message });
+    }
+  }
+
   // Auto Error Detection
   if (ctx.config.autoFixErrors && fileChangesCount > 0) {
     try {
       const errors = runAllLintChecks(ctx.config.projectRoot);
       if (errors.length > 0) {
-        lastErrorContext = formatErrorsForLLM(errors);
+        const lintContext = formatErrorsForLLM(errors);
+        lastErrorContext = lastErrorContext
+          ? `${lastErrorContext}\n\n${lintContext}`
+          : lintContext;
         emit({ type: 'errors_detected', count: errors.length, errors: errors.slice(0, 10) });
       } else {
         emit({ type: 'info', message: 'No lint errors detected' });
@@ -211,10 +254,27 @@ export function processResponse(
       const testResult = runTests(ctx.config.projectRoot);
       if (testResult.total > 0) {
         lastTestContext = formatTestsForLLM(testResult);
+        emit({
+          type: 'runtime_check',
+          stage: 'tests',
+          success: testResult.failed === 0,
+          total: testResult.total,
+          failed: testResult.failed,
+          passed: testResult.passed,
+        });
         if (testResult.failed > 0) {
           emit({ type: 'tests_failed', count: testResult.failed, result: testResult });
         } else {
           emit({ type: 'info', message: 'All tests passed (' + testResult.total + ' tests)' });
+          // ── Smart Checkpoint: post_test — mark a known-good state ───────────
+          try {
+            const postTestLabel = `post_test: ${testResult.total} tests passing — iter ${ctx.currentIteration}`;
+            services.checkpoint.createCheckpoint(
+              ctx.config.projectRoot, ctx.projectId, ctx.runId,
+              ctx.currentIteration, postTestLabel, 'auto:post_test',
+            );
+            emit({ type: 'checkpoint_created', iteration: ctx.currentIteration, trigger: 'post_test', description: postTestLabel });
+          } catch { /* non-critical */ }
         }
       }
     } catch (err: any) {
@@ -233,9 +293,58 @@ export function processResponse(
     }
   }
 
+  // ── Milestone + Quality Tracking ───────────────────────────────────────────
+  // Persist structured progress to the DB so the UI can render a milestone tree
+  // and quality trend charts independent of the SSE event stream.
+  const summary = structured?.summary || ('Iteration ' + ctx.currentIteration);
+  const totalTokensThisStep =
+    (response?.usage?.total_tokens ?? 0) ||
+    estimateTokens(currentTask) + estimateTokens(content);
+
+  try {
+    emitIterationMilestones(
+      ctx.db,
+      ctx.projectId,
+      ctx.runId,
+      ctx.currentIteration,
+      summary,
+      fileChangesCount,
+    );
+  } catch { /* best-effort */ }
+
+  try {
+    const quality = inferQualityFromContext(lastErrorContext, lastTestContext, lastBuildContext);
+    writeQualitySnapshot(ctx.db, {
+      id: `${ctx.runId}:q:${ctx.currentIteration}`,
+      projectId: ctx.projectId,
+      runId: ctx.runId,
+      iteration: ctx.currentIteration,
+      buildOk: quality.buildOk,
+      testsOk: quality.testsOk,
+      lintOk: quality.lintOk,
+      errorCount: quality.errorCount,
+      testPassCount: quality.testPassCount,
+      testFailCount: quality.testFailCount,
+      filesChanged: fileChangesCount,
+      tokensUsed: totalTokensThisStep,
+      summary: summary.slice(0, 200),
+    });
+    // Emit the quality snapshot as an event so the frontend can render it
+    emit({
+      type: 'quality_snapshot',
+      iteration: ctx.currentIteration,
+      buildOk: quality.buildOk,
+      testsOk: quality.testsOk,
+      lintOk: quality.lintOk,
+      errorCount: quality.errorCount,
+      filesChanged: fileChangesCount,
+    });
+  } catch { /* best-effort */ }
+
   return {
     structured,
     fileChangesCount,
+    lastBuildContext,
     lastErrorContext,
     lastTestContext,
     conversationIndexContext,

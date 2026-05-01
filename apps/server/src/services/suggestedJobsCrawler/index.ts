@@ -10,6 +10,7 @@
 // ============================================
 import { randomUUID } from 'crypto';
 import type Database from 'better-sqlite3';
+import { StabilityMonitor } from '../stabilityMonitor/index.js';
 
 // ── Priority helpers ────────────────────────
 const PRIORITY_ORDER: Record<string, number> = {
@@ -71,6 +72,8 @@ function insertJobRecord(
     job_category: string;
     source: string;
     source_record_ids: string[];
+    /** Human-readable "why was this generated?" string for audit traceability */
+    evidence_summary?: string;
     priority: string;
     title: string;
     affected_files: string[];
@@ -99,17 +102,18 @@ function insertJobRecord(
 
   db.prepare(`
     INSERT OR IGNORE INTO job_records
-      (id, job_id, job_category, source, source_record_ids, priority, title,
+      (id, job_id, job_category, source, source_record_ids, evidence_summary, priority, title,
        affected_files, affected_devtags, affected_plantags, required_buildtags,
        blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
        implementation_status, created_cycle, last_updated_cycle, timestamp, created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
   `).run(
     randomUUID(),
     job.job_id,
     job.job_category,
     job.source,
     JSON.stringify(job.source_record_ids),
+    job.evidence_summary ?? '',
     job.priority,
     job.title,
     JSON.stringify(job.affected_files),
@@ -162,6 +166,80 @@ function getCrawlerState(db: Database.Database) {
   } | undefined;
 }
 
+function isPipelineHaltedByRollback(db: Database.Database): boolean {
+  try {
+    const row = db.prepare(`
+      SELECT COUNT(*) as c
+      FROM notification_queue
+      WHERE category = 'stability_rollback'
+        AND user_acknowledged = 0
+    `).get() as { c: number };
+    return (row?.c || 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+function recordStabilitySnapshot(
+  db: Database.Database,
+  cycle: number,
+  loopDetected: boolean,
+): { triggered: boolean; reason?: string } {
+  let avgBlameScore = 0.5;
+  let testsFailed = 0;
+  let testsTotal = 0;
+  let buildtagRejectionRate = 0;
+
+  try {
+    const q = db.prepare(`
+      SELECT AVG(tag_conformance) as avg_conf
+      FROM quality_records
+      WHERE created_at >= datetime('now', '-6 hours')
+    `).get() as { avg_conf?: number };
+    if (typeof q?.avg_conf === 'number') {
+      avgBlameScore = Math.max(0, Math.min(1, q.avg_conf));
+    }
+  } catch { /* ignore */ }
+
+  try {
+    const t = db.prepare(`
+      SELECT
+        SUM(CASE WHEN stage IN ('testing','review','ready','failed') THEN 1 ELSE 0 END) as total,
+        SUM(CASE WHEN stage = 'failed' THEN 1 ELSE 0 END) as failed
+      FROM sandbox_runs
+      WHERE timestamp >= datetime('now', '-3 hours')
+    `).get() as { total?: number; failed?: number };
+    testsTotal = Number(t?.total || 0);
+    testsFailed = Number(t?.failed || 0);
+  } catch { /* ignore */ }
+
+  try {
+    const mismatches = db.prepare(`
+      SELECT COUNT(*) as c FROM tag_mismatches
+      WHERE created_at >= datetime('now', '-3 hours')
+    `).get() as { c?: number };
+    const totalTags = db.prepare(`
+      SELECT COUNT(*) as c FROM snapshot_devtags
+      WHERE created_at >= datetime('now', '-3 hours')
+    `).get() as { c?: number };
+    buildtagRejectionRate = Number(mismatches?.c || 0) / Math.max(1, Number(totalTags?.c || 0));
+  } catch { /* ignore */ }
+
+  const monitor = new StabilityMonitor(db);
+  const rollback = monitor.record({
+    cycle,
+    timestamp: new Date().toISOString(),
+    processAlive: true,
+    testsFailed,
+    testsTotal,
+    avgBlameScore,
+    loopDetected,
+    buildtagRejectionRate,
+  });
+
+  return { triggered: rollback.triggered, reason: rollback.reason };
+}
+
 // ── BLAME-DRIVEN MODE ──────────────────────────
 // Reads unprocessed blame records (tool_criticisms + model_performance)
 // and generates job records for each.
@@ -194,6 +272,7 @@ function processBlameDrivenMode(db: Database.Database, cycleCount: number): numb
         : 'model_tool_enhancement',
       source: 'blame_crawler',
       source_record_ids: [c.entry_id || ''],
+      evidence_summary: `tool_criticisms row ${c.entry_id}: agent=${c.agent_id || 'unknown'}, issue_type=${issueType}, severity=${severity}, file=${file || 'n/a'}`,
       priority: priorityFromSeverity(severity),
       title: `[Blame] ${issueType} on ${devtag}`,
       affected_files: file ? [file] : [],
@@ -239,6 +318,7 @@ function processBlameDrivenMode(db: Database.Database, cycleCount: number): numb
       job_category: 'anti_pattern_mitigation',
       source: 'blame_crawler',
       source_record_ids: [m.entry_id || ''],
+      evidence_summary: `tag_mismatches row ${m.entry_id}: mismatch_type=${m.mismatch_type || 'unknown'}, devtag=${devtag}, severity=${m.severity || 'warning'}, file=${m.file || 'n/a'}`,
       priority: priorityFromSeverity(m.severity || 'warning'),
       title: `[Mismatch] ${m.mismatch_type} — ${devtag}`,
       affected_files: m.file ? [m.file] : [],
@@ -305,6 +385,7 @@ function protocol1MissingTests(db: Database.Database, cycleCount: number): numbe
         job_category: 'test_missing',
         source: 'suggested_jobs_crawler',
         source_record_ids: ['protocol:1:test_missing'],
+        evidence_summary: `Protocol 1 (test_missing): snapshot_devtags scan found no test for devtag '${dt.devtag_name}' (type=${dt.devtag_type}) in file ${dt.file_path}`,
         priority: 'medium',
         title: `Missing test for ${dt.devtag_type}:${dt.devtag_name}`,
         affected_files: [dt.file_path],
@@ -345,8 +426,9 @@ function protocol2DeadCode(db: Database.Database, cycleCount: number): number {
       job_category: 'dead_code_removal',
       source: 'suggested_jobs_crawler',
       source_record_ids: ['protocol:2:dead_code', d.entry_id],
+      evidence_summary: `Protocol 2 (dead_code): dead_tag_records row ${d.entry_id} — devtag '${d.devtag}' has no live references (file=${d.file_path || 'n/a'})`,
       priority: 'low',
-      title: `Remove dead code: ${d.devtag}`,
+      title: `Remove dead code: ${d.devtag}`,  
       affected_files: d.file_path ? [d.file_path] : [],
       affected_devtags: [d.devtag],
       affected_plantags: [],
@@ -388,6 +470,7 @@ function protocol3DebtViolations(db: Database.Database, cycleCount: number): num
       job_category: 'debt_reduction',
       source: 'suggested_jobs_crawler',
       source_record_ids: ['protocol:3:debt_threshold'],
+      evidence_summary: `Protocol 3 (debt_threshold): debt_history record for ${d.file_path} — debt_score=${d.debt_score} exceeds ceiling=${d.ceiling}`,
       priority: d.debt_score > d.ceiling * 2 ? 'high' : 'medium',
       title: `Reduce debt in ${d.file_path} (score ${d.debt_score} > ceiling ${d.ceiling})`,
       affected_files: [d.file_path],
@@ -426,6 +509,7 @@ function protocol4RegressionClusters(db: Database.Database, cycleCount: number):
       job_category: 'regression_hardening',
       source: 'suggested_jobs_crawler',
       source_record_ids: ['protocol:4:regression_cluster'],
+      evidence_summary: `Protocol 4 (regression_cluster): regression_history shows devtag '${c.devtag}' regressed ${c.cnt} times (file=${c.file_path || 'n/a'})`,
       priority: c.cnt >= 5 ? 'high' : 'medium',
       title: `Regression hardening: ${c.devtag} (${c.cnt} regressions)`,
       affected_files: c.file_path ? [c.file_path] : [],
@@ -465,6 +549,7 @@ function protocol5IntegrationFailures(db: Database.Database, cycleCount: number)
       job_category: 'integration_repair',
       source: 'suggested_jobs_crawler',
       source_record_ids: ['protocol:5:integration_failure', f.entry_id],
+      evidence_summary: `Protocol 5 (integration_failure): integration_failures row ${f.entry_id} — component=${f.component}, type=${f.failure_type}, cycle=${f.cycle_id || 'unknown'}, file=${f.file_path || 'n/a'}`,
       priority: 'high',
       title: `Integration repair: ${f.failure_type} in ${f.component}`,
       affected_files: f.file_path ? [f.file_path] : [],
@@ -510,6 +595,7 @@ function protocol6AntiPatterns(db: Database.Database, cycleCount: number): numbe
       job_category: 'anti_pattern_mitigation',
       source: 'suggested_jobs_crawler',
       source_record_ids: ['protocol:6:anti_pattern', p.entry_id],
+      evidence_summary: `Protocol 6 (anti_pattern): patterns row ${p.entry_id} — systemic pattern_type=${p.pattern_type}, severity=${p.severity || 'warning'}, file=${p.file_path || 'n/a'}`,
       priority: priorityFromSeverity(p.severity || 'warning'),
       title: `Mitigate anti-pattern: ${p.pattern_type}`,
       affected_files: p.file_path ? [p.file_path] : [],
@@ -549,6 +635,7 @@ function protocol7VocabGaps(db: Database.Database, cycleCount: number): number {
       job_category: 'tag_schema_extension',
       source: 'suggested_jobs_crawler',
       source_record_ids: ['protocol:7:vocab_gap', g.entry_id],
+      evidence_summary: `Protocol 7 (vocab_gap): vocabulary_gaps row ${g.entry_id} — untagged type '${g.untagged_structure_type}' appears ${g.occurrence_count}× in ${g.file_path}`,
       priority: 'low',
       title: `Extend tag schema: missing type ${g.untagged_structure_type} (${g.occurrence_count}× in ${g.file_path})`,
       affected_files: [g.file_path],
@@ -598,6 +685,7 @@ function protocol8PerfGaps(db: Database.Database, cycleCount: number): number {
         job_category: 'performance_test_missing',
         source: 'suggested_jobs_crawler',
         source_record_ids: ['protocol:8:perf_gap'],
+        evidence_summary: `Protocol 8 (perf_gap): snapshot_devtags shows ${pt.devtag_type}:${pt.devtag_name} in ${pt.file_path} has no performance test`,
         priority: 'medium',
         title: `Add performance test for ${pt.devtag_type}:${pt.devtag_name}`,
         affected_files: [pt.file_path],
@@ -648,6 +736,7 @@ function protocol9SecurityGaps(db: Database.Database, cycleCount: number): numbe
         job_category: 'security_gap',
         source: 'suggested_jobs_crawler',
         source_record_ids: ['protocol:9:security_gap'],
+        evidence_summary: `Protocol 9 (security_gap): snapshot_devtags shows ${st.devtag_type}:${st.devtag_name} in ${st.file_path} has no security test`,
         priority: 'high',
         title: `Security test missing for ${st.devtag_type}:${st.devtag_name}`,
         affected_files: [st.file_path],
@@ -697,6 +786,7 @@ function protocol10NanoCoverage(db: Database.Database, cycleCount: number): numb
         job_category: 'nano_coverage_gap',
         source: 'suggested_jobs_crawler',
         source_record_ids: ['protocol:10:nano_coverage'],
+        evidence_summary: `Protocol 10 (nano_coverage): snapshot_devtags shows nano '${n.devtag_name}' in ${n.file_path} has no training_target or fitness tag`,
         priority: 'low',
         title: `Nano coverage gap: ${n.devtag_name} missing training target or fitness tag`,
         affected_files: [n.file_path],
@@ -726,6 +816,13 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
 } {
   const state = getCrawlerState(db);
   if (!state) return { mode: 'idle', generated: 0 };
+  if (isPipelineHaltedByRollback(db)) {
+    updateCrawlerState(db, {
+      mode: 'rollback_halt',
+      status_message: 'Pipeline halted due to active stability rollback notification',
+    });
+    return { mode: 'rollback_halt', generated: 0 };
+  }
 
   const cycleCount = (state.cycle_count || 0) + 1;
   updateCrawlerState(db, { cycle_count: cycleCount });
@@ -779,7 +876,25 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       status_message: `Protocol ${currentProtocol} complete — generated ${generated} jobs`,
     });
 
+    const stability = recordStabilitySnapshot(db, cycleCount, false);
+    if (stability.triggered) {
+      updateCrawlerState(db, {
+        mode: 'rollback_halt',
+        status_message: `Stability rollback triggered (${stability.reason || 'unknown'}) — halting pipeline`,
+      });
+      return { mode: 'rollback_halt', generated: 0, protocol: currentProtocol };
+    }
+
     return { mode, generated, protocol: currentProtocol };
+  }
+
+  const stability = recordStabilitySnapshot(db, cycleCount, false);
+  if (stability.triggered) {
+    updateCrawlerState(db, {
+      mode: 'rollback_halt',
+      status_message: `Stability rollback triggered (${stability.reason || 'unknown'}) — halting pipeline`,
+    });
+    return { mode: 'rollback_halt', generated: 0 };
   }
 
   return { mode, generated };
@@ -788,6 +903,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
 // ── Sandbox loop tick ──────────────────────────
 // Advances sandbox state for the oldest building/testing job.
 export function runSandboxTick(db: Database.Database): void {
+  if (isPipelineHaltedByRollback(db)) return;
   // Find next job needing sandbox work
   let job: { job_id: string; sandbox_spec: string; implementation_status: string } | undefined;
   try {

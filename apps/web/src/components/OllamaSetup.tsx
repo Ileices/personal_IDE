@@ -38,11 +38,33 @@ interface DiagResult {
   actions: string[];
 }
 
+interface SingleGpuVram {
+  index: number;
+  gpuName: string;
+  totalMB: number;
+  usedMB: number;
+  freeMB: number;
+  utilizationPercent: number;
+}
+
+interface GpuStatus {
+  available: boolean;
+  reason?: string;
+  gpuName?: string;
+  totalMB?: number;
+  usedMB?: number;
+  freeMB?: number;
+  utilizationPercent?: number;
+  critical?: boolean;
+  allGpus?: SingleGpuVram[];
+}
+
 type Step = 'diagnose' | 'results' | 'pick_model' | 'downloading' | 'done';
 
 export function OllamaSetup({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<Step>('diagnose');
   const [diag, setDiag] = useState<DiagResult | null>(null);
+  const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
@@ -58,10 +80,18 @@ export function OllamaSetup({ onClose }: { onClose: () => void }) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/api/ollama/diagnose`);
-      const data: DiagResult = await res.json();
+      const [diagRes, gpuRes] = await Promise.all([
+        fetch(`${API_BASE}/api/ollama/diagnose`),
+        fetch(`${API_BASE}/api/ollama/gpu-status`).catch(() => null),
+      ]);
+      const data: DiagResult = await diagRes.json();
       setDiag(data);
       setStep('results');
+
+      if (gpuRes?.ok) {
+        const gs: GpuStatus = await gpuRes.json();
+        setGpuStatus(gs);
+      }
 
       // Auto-select best model
       if (data.recommendations.length > 0) {
@@ -204,11 +234,22 @@ export function OllamaSetup({ onClose }: { onClose: () => void }) {
                   <div>RAM: <span className="text-ide-text">{diag.hardware.totalRamGB}GB</span> (free: {diag.hardware.freeRamGB}GB)</div>
                   <div>Platform: <span className="text-ide-text">{diag.hardware.platform}/{diag.hardware.arch}</span></div>
                   {diag.hardware.gpus.length > 0 ? (
-                    diag.hardware.gpus.map((g, i) => (
-                      <div key={i} className="col-span-2">
-                        GPU: <span className="text-ide-text">{g.name}</span> ({g.vramGB}GB VRAM)
-                      </div>
-                    ))
+                    diag.hardware.gpus.map((g, i) => {
+                      const liveGpu = gpuStatus?.allGpus?.[i];
+                      return (
+                        <div key={i} className="col-span-2">
+                          <span className="text-ide-text-dim">GPU{i}: </span>
+                          <span className="text-ide-text">{g.name}</span>
+                          <span className="text-ide-text-dim"> ({g.vramGB}GB VRAM</span>
+                          {liveGpu && (
+                            <span className={liveGpu.utilizationPercent >= 90 ? 'text-red-400' : 'text-green-400'}>
+                              {' — '}{liveGpu.utilizationPercent}% used, {Math.round(liveGpu.freeMB / 1024 * 10) / 10}GB free
+                            </span>
+                          )}
+                          <span className="text-ide-text-dim">)</span>
+                        </div>
+                      );
+                    })
                   ) : (
                     <div className="col-span-2 text-yellow-400">No dedicated GPU detected — will use CPU inference</div>
                   )}

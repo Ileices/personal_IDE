@@ -19,6 +19,7 @@ import { SetupWizard } from './components/wizards/SetupWizard';
 import { NewProjectWizard } from './components/wizards/NewProjectWizard';
 import { FirstRunWizard, useFirstRunWizard } from './components/wizards/FirstRunWizard';
 import { TheGodFactory } from './components/TheGodFactory';
+import { HelpProvider } from './help/helpContext';
 import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { API_BASE } from './config.js';
 
@@ -40,6 +41,7 @@ export default function App() {
   const [termOpen,   setTermOpen]       = useState<boolean>(() => getStored('ide_term_open', true));
   const [draggingSide, setDraggingSide] = useState(false);
   const [draggingTerm, setDraggingTerm] = useState(false);
+  const [helpFocus, setHelpFocus] = useState<{ helpId: string; nonce: number } | null>(null);
 
   const { events: agentEvents } = useAgentStore();
   const [previewUrl, setPreviewUrl] = useState('http://localhost:5173');
@@ -119,6 +121,12 @@ export default function App() {
   if (!user) return <LoginPage />;
 
   return (
+    <HelpProvider
+      focus={helpFocus}
+      setFocus={setHelpFocus}
+      setActiveView={setActiveView}
+      setActiveTab={setActiveTab}
+    >
     <div className="h-screen flex flex-col bg-ide-bg text-ide-text overflow-hidden select-none">
       {showSetupWizard && <SetupWizard onComplete={() => setShowSetupWizard(false)} />}
       {showFirstRun && <FirstRunWizard onClose={completeFirstRun} />}
@@ -182,6 +190,7 @@ export default function App() {
       </div>
       <StatusBar />
     </div>
+    </HelpProvider>
   );
 }
 

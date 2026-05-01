@@ -16,6 +16,15 @@ export interface OllamaHealthStatus {
   errors: string[];
 }
 
+export interface SingleGPUVRAM {
+  index: number;
+  gpuName: string;
+  totalMB: number;
+  usedMB: number;
+  freeMB: number;
+  utilizationPercent: number;
+}
+
 export interface VRAMStatus {
   totalMB: number;
   usedMB: number;
@@ -24,6 +33,8 @@ export interface VRAMStatus {
   /** True when VRAM usage exceeds 90% — risk of OOM */
   critical: boolean;
   gpuName: string;
+  /** Per-GPU breakdown when multiple GPUs are present */
+  allGpus: SingleGPUVRAM[];
 }
 
 export interface HealthEvent {
@@ -183,33 +194,55 @@ export class OllamaHealthMonitor {
   }
 
   /**
-   * Get GPU VRAM status via nvidia-smi.
+   * Get GPU VRAM status via nvidia-smi — reads ALL GPUs and aggregates.
    */
   async getVRAMStatus(): Promise<VRAMStatus | null> {
     try {
       const { stdout } = await execAsync(
-        'nvidia-smi --query-gpu=name,memory.total,memory.used,memory.free,utilization.gpu --format=csv,noheader,nounits',
+        'nvidia-smi --query-gpu=name,memory.total,memory.used,memory.free --format=csv,noheader,nounits',
         { timeout: 5000 }
       );
 
-      const lines = stdout.trim().split('\n');
+      const lines = stdout.trim().split('\n').filter(l => l.trim());
       if (lines.length === 0) return null;
 
-      const parts = lines[0].split(',').map(s => s.trim());
-      if (parts.length < 5) return null;
+      const allGpus: SingleGPUVRAM[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const parts = lines[i].split(',').map(s => s.trim());
+        if (parts.length < 4) continue;
+        const totalMB = parseInt(parts[1]) || 0;
+        const usedMB = parseInt(parts[2]) || 0;
+        const freeMB = parseInt(parts[3]) || 0;
+        allGpus.push({
+          index: i,
+          gpuName: parts[0],
+          totalMB,
+          usedMB,
+          freeMB,
+          utilizationPercent: totalMB > 0 ? Math.round((usedMB / totalMB) * 100) : 0,
+        });
+      }
 
-      const totalMB = parseInt(parts[1]) || 0;
-      const usedMB = parseInt(parts[2]) || 0;
-      const freeMB = parseInt(parts[3]) || 0;
+      if (allGpus.length === 0) return null;
+
+      // Aggregate across all GPUs
+      const totalMB = allGpus.reduce((s, g) => s + g.totalMB, 0);
+      const usedMB = allGpus.reduce((s, g) => s + g.usedMB, 0);
+      const freeMB = allGpus.reduce((s, g) => s + g.freeMB, 0);
       const utilizationPercent = totalMB > 0 ? Math.round((usedMB / totalMB) * 100) : 0;
+      // gpuName: first GPU name, or list when multiple
+      const gpuName = allGpus.length === 1
+        ? allGpus[0].gpuName
+        : allGpus.map((g, i) => `GPU${i}: ${g.gpuName}`).join(', ');
 
       return {
-        gpuName: parts[0],
+        gpuName,
         totalMB,
         usedMB,
         freeMB,
         utilizationPercent,
         critical: utilizationPercent >= VRAM_CRITICAL_PERCENT,
+        allGpus,
       };
     } catch {
       return null;

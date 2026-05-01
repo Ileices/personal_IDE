@@ -7,6 +7,7 @@ import { apiPost, apiGet, apiStreamGet } from '../api/client';
 
 export type AgentRole = 'lead' | 'implementer' | 'debugger' | 'tester' | 'reviewer' | 'documenter';
 export type FleetExecutionMode = 'local' | 'cloud' | 'hybrid';
+export type ProjectFactoryWorkflowMode = 'build_new' | 'import_refactor' | 'code_review' | 'scale_research';
 
 export interface FleetCapacitySnapshot {
   maxAgents: number;
@@ -74,6 +75,11 @@ interface FleetStore {
     analyzeCodebase?: boolean;
     maxIterationsPerAgent?: number;
     fallbackModels?: string[];
+    useCorpusManifesto?: boolean;
+    autoProjectIntel?: boolean;
+    autoIngestCorpus?: boolean;
+    workflowMode?: ProjectFactoryWorkflowMode;
+    strictQualityGate?: boolean;
   }) => Promise<void>;
   stopFleet: () => Promise<void>;
   pauseFleet: () => Promise<void>;
@@ -142,6 +148,11 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
       enableSmartChunking: options?.enableSmartChunking ?? true,
       analyzeCodebase: options?.analyzeCodebase ?? true,
       maxIterationsPerAgent: options?.maxIterationsPerAgent,
+      useCorpusManifesto: options?.useCorpusManifesto,
+      autoProjectIntel: options?.autoProjectIntel,
+      autoIngestCorpus: options?.autoIngestCorpus,
+      workflowMode: options?.workflowMode,
+      strictQualityGate: options?.strictQualityGate,
       executionMode,
     };
 

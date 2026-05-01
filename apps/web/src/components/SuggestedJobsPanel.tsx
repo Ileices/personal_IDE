@@ -1125,9 +1125,9 @@ export function SuggestedJobsPanel() {
     }
   }, [loadJobs, offset, selectedJobId]);
 
-  const handleJobSelect = (jobId: string) => {
+  const handleJobSelect = (jobId: string | null) => {
     setSelectedJobId(jobId);
-    if (activeTab === 'jobs') setActiveTab('detail');
+    if (jobId && activeTab === 'jobs') setActiveTab('detail');
   };
 
   const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [

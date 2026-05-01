@@ -80,74 +80,122 @@ export class GapAnalysisAgent {
     const cycle_id = String(cycle_range[1]);
     const reports: GapReport[] = [];
 
-    // ── 1. Coverage Analysis ──────────────────────────────────────────────
-    const coverageMatrix = this.coverage.run(cycle_id);
-    const coverageGaps = [...coverageMatrix.plan, ...coverageMatrix.test, ...coverageMatrix.nano]
-      .filter(r => r.coverage_state !== 'covered' && r.coverage_state !== 'not_required');
+    // ── Crawler Supervisor: run all 5 sub-analyses concurrently with allSettled ──
+    // Fault model:
+    //   • Any individual failure → degrade gracefully, log warning, continue
+    //   • No single crawler failure aborts the full analysis
+    // The one exception (mirroring the WAITING state logic) is that if ALL
+    // crawlers fail, we return an empty result rather than garbage.
+    const TIMEOUT_MS = 30_000;
+    const withTimeout = <T>(p: Promise<T>, label: string): Promise<T> => {
+      return Promise.race([
+        p,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(`${label} timed out after ${TIMEOUT_MS}ms`)), TIMEOUT_MS)
+        ),
+      ]);
+    };
 
-    if (coverageGaps.length > 0) {
-      const severity = coverageGaps.some(r => r.coverage_percent === 0) ? 'error' : 'warning';
-      const report = this.buildReport({
-        session_id, cycle_range, gap_category: 'coverage', severity,
-        affected_tags: coverageGaps.map(r => r.plantag_or_devtag),
-        affected_agents: [],
-        affected_files: [],
-        forensic_entry_ids: coverageGaps.map(r => r.entry_id),
-        recommended_action_tags: ['plantag:investigate:coverage_gap', 'buildtag:create:missing_devtag'],
-      });
-      reports.push(report);
+    const [coverageResult, patternResult, debtResult, tagResult, perfResult] = await Promise.allSettled([
+      withTimeout(Promise.resolve().then(() => this.coverage.run(cycle_id)), 'CoverageAnalysis'),
+      withTimeout(Promise.resolve().then(() => this.patterns.crawl(cycle_range[1])), 'PatternRecognition'),
+      withTimeout(Promise.resolve().then(() => this.debt.computeAll(cycle_id)), 'DebtTracking'),
+      withTimeout(Promise.resolve().then(() => this.tagSystem.runAll(project_root, cycle_id)), 'TagSystemAnalysis'),
+      withTimeout(Promise.resolve().then(() => this.agentPerf.getPerformanceSummary(cycle_id)), 'AgentPerformance'),
+    ]);
+
+    const successCount = [coverageResult, patternResult, debtResult, tagResult, perfResult].filter(r => r.status === 'fulfilled').length;
+    if (successCount === 0) {
+      // All crawlers failed — return empty result rather than corrupt data
+      return { session_id, cycle_range, reports: [], coverage_summary: null, pattern_crawl: null, debt_summary: null, tag_analysis: null, performance_summary: null, flagged_to_god_factory: 0, total_reports: 0 };
     }
 
-    // ── 2. Pattern Recognition ────────────────────────────────────────────
-    const patternCrawl = this.patterns.crawl(cycle_range[1]);
+    // Log degraded crawlers
+    const crawlerNames = ['CoverageAnalysis', 'PatternRecognition', 'DebtTracking', 'TagSystemAnalysis', 'AgentPerformance'];
+    [coverageResult, patternResult, debtResult, tagResult, perfResult].forEach((r, i) => {
+      if (r.status === 'rejected') {
+        try {
+          this.db.prepare(
+            "INSERT INTO notification_queue (notification_id, severity, category, natural_language_summary, timestamp) VALUES (?, 'warning', 'gap_analysis', ?, datetime('now'))"
+          ).run(
+            require('crypto').randomUUID(),
+            `Gap Analysis: ${crawlerNames[i]} failed — ${(r as PromiseRejectedResult).reason?.message || 'unknown error'}. Analysis proceeding with degraded data.`
+          );
+        } catch { /* non-critical */ }
+      }
+    });
 
-    // Anti-patterns → structural gaps
-    for (const ap of patternCrawl.anti_patterns) {
-      if (ap.severity === 'error' || ap.severity === 'critical') {
+    const coverageMatrix = coverageResult.status === 'fulfilled' ? coverageResult.value : null;
+    const patternCrawl  = patternResult.status  === 'fulfilled' ? patternResult.value  : null;
+    const debtSummary   = debtResult.status     === 'fulfilled' ? debtResult.value     : null;
+    const tagAnalysis   = tagResult.status      === 'fulfilled' ? tagResult.value      : null;
+    const perfSummary   = perfResult.status     === 'fulfilled' ? perfResult.value     : null;
+
+    // ── 1. Coverage Analysis ──────────────────────────────────────────────
+    if (coverageMatrix) {
+      const coverageGaps = [...coverageMatrix.plan, ...coverageMatrix.test, ...coverageMatrix.nano]
+        .filter(r => r.coverage_state !== 'covered' && r.coverage_state !== 'not_required');
+
+      if (coverageGaps.length > 0) {
+        const severity = coverageGaps.some(r => r.coverage_percent === 0) ? 'error' : 'warning';
         const report = this.buildReport({
-          session_id, cycle_range, gap_category: 'structural',
-          severity: ap.severity,
-          affected_tags: ap.devtag ? [ap.devtag] : [],
+          session_id, cycle_range, gap_category: 'coverage', severity,
+          affected_tags: coverageGaps.map(r => r.plantag_or_devtag),
           affected_agents: [],
           affected_files: [],
-          forensic_entry_ids: [ap.pattern_id],
-          recommended_action_tags: [`plantag:investigate:${ap.anti_pattern_type}`],
-          pattern_id: ap.pattern_id,
+          forensic_entry_ids: coverageGaps.map(r => r.entry_id),
+          recommended_action_tags: ['plantag:investigate:coverage_gap', 'buildtag:create:missing_devtag'],
         });
         reports.push(report);
       }
     }
 
-    // Check for god-factory flagged patterns (recurrence 10+)
-    const godPatterns = this.db.prepare(
-      'SELECT * FROM patterns WHERE recurrence_count >= 10 AND flagged_to_god_factory = 0'
-    ).all() as any[];
-    for (const p of godPatterns) {
-      this.db.prepare('UPDATE patterns SET flagged_to_god_factory = 1 WHERE pattern_id = ?').run(p.pattern_id);
-      const report = this.buildReport({
-        session_id, cycle_range, gap_category: 'process',
-        severity: 'critical',
-        affected_tags: [p.devtag_type],
-        affected_agents: [p.agent_category],
-        affected_files: [],
-        forensic_entry_ids: JSON.parse(p.contributing_forensic_ids ?? '[]'),
-        recommended_action_tags: ['plantag:escalate:god_factory', 'buildtag:investigate:systemic_failure'],
-        pattern_id: p.pattern_id,
-        flagged_to_god_factory: true,
-      });
-      reports.push(report);
+    // ── 2. Pattern Recognition ────────────────────────────────────────────
+    if (patternCrawl) {
+      for (const ap of patternCrawl.anti_patterns) {
+        if (ap.severity === 'error' || ap.severity === 'critical') {
+          const report = this.buildReport({
+            session_id, cycle_range, gap_category: 'structural',
+            severity: ap.severity,
+            affected_tags: ap.devtag ? [ap.devtag] : [],
+            affected_agents: [],
+            affected_files: [],
+            forensic_entry_ids: [ap.pattern_id],
+            recommended_action_tags: [`plantag:investigate:${ap.anti_pattern_type}`],
+            pattern_id: ap.pattern_id,
+          });
+          reports.push(report);
+        }
+      }
+
+      const godPatterns = this.db.prepare(
+        'SELECT * FROM patterns WHERE recurrence_count >= 10 AND flagged_to_god_factory = 0'
+      ).all() as any[];
+      for (const p of godPatterns) {
+        this.db.prepare('UPDATE patterns SET flagged_to_god_factory = 1 WHERE pattern_id = ?').run(p.pattern_id);
+        const report = this.buildReport({
+          session_id, cycle_range, gap_category: 'process',
+          severity: 'critical',
+          affected_tags: [p.devtag_type],
+          affected_agents: [p.agent_category],
+          affected_files: [],
+          forensic_entry_ids: JSON.parse(p.contributing_forensic_ids ?? '[]'),
+          recommended_action_tags: ['plantag:escalate:god_factory', 'buildtag:investigate:systemic_failure'],
+          pattern_id: p.pattern_id,
+          flagged_to_god_factory: true,
+        });
+        reports.push(report);
+      }
     }
 
     // ── 3. Debt Analysis ──────────────────────────────────────────────────
-    const debtSummary = this.debt.computeAll(cycle_id);
-
-    if (debtSummary.health_warning) {
+    if (debtSummary?.health_warning) {
       const report = this.buildReport({
         session_id, cycle_range, gap_category: 'process',
         severity: 'warning',
         affected_tags: ['devtag:codebase_health'],
         affected_agents: [],
-        affected_files: debtSummary.scores.filter(s => s.ceiling_exceeded).map(s => s.file_path),
+        affected_files: debtSummary.scores.filter((s: any) => s.ceiling_exceeded).map((s: any) => s.file_path),
         forensic_entry_ids: [],
         recommended_action_tags: ['plantag:address:technical_debt'],
         flagged_to_god_factory: debtSummary.total_normalized > 0.5,
@@ -156,50 +204,48 @@ export class GapAnalysisAgent {
     }
 
     // ── 4. Tag System Analysis ────────────────────────────────────────────
-    const tagAnalysis = this.tagSystem.runAll(project_root, cycle_id);
+    if (tagAnalysis) {
+      if (tagAnalysis.collisions.length > 0) {
+        const report = this.buildReport({
+          session_id, cycle_range, gap_category: 'tag_system',
+          severity: 'warning',
+          affected_tags: tagAnalysis.collisions.map((c: any) => c.devtag_name),
+          affected_agents: [],
+          affected_files: [...new Set([
+            ...tagAnalysis.collisions.map((c: any) => c.file_a),
+            ...tagAnalysis.collisions.map((c: any) => c.file_b),
+          ])] as string[],
+          forensic_entry_ids: tagAnalysis.collisions.map((c: any) => c.entry_id),
+          recommended_action_tags: ['plantag:resolve:tag_collision'],
+        });
+        reports.push(report);
+      }
 
-    if (tagAnalysis.collisions.length > 0) {
-      const report = this.buildReport({
-        session_id, cycle_range, gap_category: 'tag_system',
-        severity: 'warning',
-        affected_tags: tagAnalysis.collisions.map(c => c.devtag_name),
-        affected_agents: [],
-        affected_files: [...new Set([
-          ...tagAnalysis.collisions.map(c => c.file_a),
-          ...tagAnalysis.collisions.map(c => c.file_b),
-        ])],
-        forensic_entry_ids: tagAnalysis.collisions.map(c => c.entry_id),
-        recommended_action_tags: ['plantag:resolve:tag_collision'],
-      });
-      reports.push(report);
-    }
-
-    if (tagAnalysis.resolution_latency_flags.length > 0) {
-      const report = this.buildReport({
-        session_id, cycle_range, gap_category: 'tag_system',
-        severity: 'info',
-        affected_tags: tagAnalysis.resolution_latency_flags.map(r => r.tag_type),
-        affected_agents: [],
-        affected_files: [],
-        forensic_entry_ids: [],
-        recommended_action_tags: ['plantag:optimize:tag_resolution_index'],
-      });
-      reports.push(report);
+      if (tagAnalysis.resolution_latency_flags.length > 0) {
+        const report = this.buildReport({
+          session_id, cycle_range, gap_category: 'tag_system',
+          severity: 'info',
+          affected_tags: tagAnalysis.resolution_latency_flags.map((r: any) => r.tag_type),
+          affected_agents: [],
+          affected_files: [],
+          forensic_entry_ids: [],
+          recommended_action_tags: ['plantag:optimize:tag_resolution_index'],
+        });
+        reports.push(report);
+      }
     }
 
     // ── 5. Agent Performance Analysis ────────────────────────────────────
-    const perfSummary = this.agentPerf.getPerformanceSummary(cycle_id);
-
-    if (perfSummary.flagged_for_review.length > 0) {
+    if (perfSummary && (perfSummary.flagged_for_review?.length ?? 0) > 0) {
       const report = this.buildReport({
         session_id, cycle_range, gap_category: 'agent_performance',
         severity: 'warning',
         affected_tags: [],
         affected_agents: perfSummary.flagged_for_review,
         affected_files: [],
-        forensic_entry_ids: perfSummary.low_conformance.map(r => r.entry_id),
+        forensic_entry_ids: (perfSummary.low_conformance ?? []).map((r: any) => r.entry_id),
         recommended_action_tags: ['plantag:review:agent_performance', 'buildtag:reassign:model_tier'],
-        flagged_to_god_factory: perfSummary.flagged_for_review.length > 3,
+        flagged_to_god_factory: (perfSummary.flagged_for_review?.length ?? 0) > 3,
       });
       reports.push(report);
     }
@@ -211,25 +257,25 @@ export class GapAnalysisAgent {
       session_id,
       cycle_range,
       reports,
-      coverage_summary: coverageMatrix.summary,
-      pattern_crawl: { ...patternCrawl, anti_patterns: patternCrawl.anti_patterns },
-      debt_summary: {
+      coverage_summary: coverageMatrix?.summary ?? null,
+      pattern_crawl: patternCrawl ? { ...patternCrawl, anti_patterns: patternCrawl.anti_patterns } : null,
+      debt_summary: debtSummary ? {
         total_normalized: debtSummary.total_normalized,
         health_warning: debtSummary.health_warning,
-        files_exceeding_ceiling: debtSummary.scores.filter(s => s.ceiling_exceeded).length,
-      },
-      tag_analysis: {
+        files_exceeding_ceiling: debtSummary.scores.filter((s: any) => s.ceiling_exceeded).length,
+      } : null,
+      tag_analysis: tagAnalysis ? {
         vocabulary_gaps: tagAnalysis.vocabulary.length,
         collisions: tagAnalysis.collisions.length,
         utilization: tagAnalysis.utilization,
         slow_resolution_types: tagAnalysis.resolution_latency_flags.length,
-      },
-      performance_summary: {
+      } : null,
+      performance_summary: perfSummary ? {
         total_agents: perfSummary.total_agents,
         flagged: perfSummary.flagged_for_review,
         low_conformance_count: perfSummary.low_conformance.length,
         high_escalation_count: perfSummary.high_escalation.length,
-      },
+      } : null,
       flagged_to_god_factory: reports.filter(r => r.flagged_to_god_factory).length,
       total_reports: reports.length,
     };

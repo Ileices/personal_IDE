@@ -13,6 +13,7 @@ import type Database from 'better-sqlite3';
 import { userRateLimiter } from '../services/llm/userRateLimiter.js';
 import { destroyActiveAgent } from '../routes/agent.js';
 import { stopSubsystemScheduler } from '../services/subsystemScheduler.js';
+import { stopSiliconFactorySupervisor } from '../services/siliconFactory/index.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10_000; // force-kill after 10s
 
@@ -48,6 +49,11 @@ export function registerGracefulShutdown(app: FastifyInstance): void {
         stopSubsystemScheduler();
         console.log('  ✓ Subsystem scheduler cleaned up');
       } catch { /* no scheduler */ }
+
+      try {
+        stopSiliconFactorySupervisor();
+        console.log('  ✓ Silicon Factory supervisor cleaned up');
+      } catch { /* no supervisor */ }
 
       // 3. Close WebSocket connections
       try {

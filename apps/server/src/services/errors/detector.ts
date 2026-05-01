@@ -12,12 +12,14 @@ import type { CodeError, TestResult, TestFailure } from '@personal-ide/shared';
 export function detectProjectStack(rootPath: string): {
   languages: string[];
   tools: Record<string, string>;
+  buildCommands: string[];
   testCommands: string[];
   lintCommands: string[];
 } {
   const result = {
     languages: [] as string[],
     tools: {} as Record<string, string>,
+    buildCommands: [] as string[],
     testCommands: [] as string[],
     lintCommands: [] as string[],
   };
@@ -36,6 +38,7 @@ export function detectProjectStack(rootPath: string): {
     // Test detection
     try {
       const pkg = JSON.parse(require('fs').readFileSync(join(rootPath, 'package.json'), 'utf8'));
+      if (pkg.scripts?.build) result.buildCommands.push('npm run build 2>&1');
       if (pkg.scripts?.test) result.testCommands.push('npm test 2>&1');
       if (pkg.scripts?.['test:unit']) result.testCommands.push('npm run test:unit 2>&1');
       if (pkg.devDependencies?.vitest || pkg.dependencies?.vitest) result.testCommands.push('npx vitest run 2>&1');
@@ -46,6 +49,7 @@ export function detectProjectStack(rootPath: string): {
   // Python
   if (existsSync(join(rootPath, 'requirements.txt')) || existsSync(join(rootPath, 'pyproject.toml')) || existsSync(join(rootPath, 'setup.py'))) {
     result.languages.push('python');
+    result.buildCommands.push('python -m py_compile main.py 2>&1');
     result.lintCommands.push('python -m py_compile 2>&1');
     if (existsSync(join(rootPath, 'pyproject.toml'))) {
       result.lintCommands.push('python -m mypy . --ignore-missing-imports 2>&1');
@@ -56,6 +60,7 @@ export function detectProjectStack(rootPath: string): {
   // Rust
   if (existsSync(join(rootPath, 'Cargo.toml'))) {
     result.languages.push('rust');
+    result.buildCommands.push('cargo build 2>&1');
     result.lintCommands.push('cargo check --message-format=json 2>&1');
     result.testCommands.push('cargo test 2>&1');
   }
@@ -63,6 +68,7 @@ export function detectProjectStack(rootPath: string): {
   // Go
   if (existsSync(join(rootPath, 'go.mod'))) {
     result.languages.push('go');
+    result.buildCommands.push('go build ./... 2>&1');
     result.lintCommands.push('go vet ./... 2>&1');
     result.testCommands.push('go test ./... 2>&1');
   }
@@ -78,6 +84,7 @@ export function detectProjectStack(rootPath: string): {
   // C# / .NET
   if (existsSync(join(rootPath, '*.csproj')) || existsSync(join(rootPath, '*.sln'))) {
     result.languages.push('csharp');
+    result.buildCommands.push('dotnet build 2>&1');
     result.lintCommands.push('dotnet build 2>&1');
     result.testCommands.push('dotnet test 2>&1');
   }
@@ -86,9 +93,11 @@ export function detectProjectStack(rootPath: string): {
   if (existsSync(join(rootPath, 'pom.xml')) || existsSync(join(rootPath, 'build.gradle'))) {
     result.languages.push('java');
     if (existsSync(join(rootPath, 'pom.xml'))) {
+      result.buildCommands.push('mvn package -DskipTests 2>&1');
       result.lintCommands.push('mvn compile 2>&1');
       result.testCommands.push('mvn test 2>&1');
     } else {
+      result.buildCommands.push('gradle build -x test 2>&1');
       result.lintCommands.push('gradle build 2>&1');
       result.testCommands.push('gradle test 2>&1');
     }
@@ -264,6 +273,64 @@ export function runTests(rootPath: string, command?: string, timeoutMs: number =
 
   const duration = Date.now() - start;
   return parseTestOutput(output, cmd, duration, exitCode);
+}
+
+export interface BuildResult {
+  command: string;
+  success: boolean;
+  exitCode: number;
+  duration: number;
+  output: string;
+}
+
+/** Run a project build command and capture output */
+export function runBuild(rootPath: string, command?: string, timeoutMs: number = 120_000): BuildResult {
+  const stack = detectProjectStack(rootPath);
+  const cmd = command || stack.buildCommands[0];
+
+  if (!cmd) {
+    return {
+      command: '',
+      success: true,
+      exitCode: 0,
+      duration: 0,
+      output: 'No explicit build command detected for this project.',
+    };
+  }
+
+  const start = Date.now();
+  let output = '';
+  let exitCode = 0;
+
+  try {
+    output = execSync(cmd, {
+      cwd: rootPath,
+      timeout: timeoutMs,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (err: any) {
+    output = (err.stdout || '') + '\n' + (err.stderr || '');
+    exitCode = err.status || 1;
+  }
+
+  return {
+    command: cmd,
+    success: exitCode === 0,
+    exitCode,
+    duration: Date.now() - start,
+    output: String(output || '').slice(-5000),
+  };
+}
+
+export function formatBuildForLLM(result: BuildResult): string {
+  const status = result.success ? 'BUILD PASS' : 'BUILD FAIL';
+  return [
+    `Build command: ${result.command || 'none'}`,
+    `Status: ${status} (exit=${result.exitCode}, ${result.duration}ms)`,
+    'Output:',
+    result.output || '(no output)',
+  ].join('\n');
 }
 
 /** Parse test output into structured result */

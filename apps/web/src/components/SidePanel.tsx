@@ -28,6 +28,7 @@ import { ProjectStateCrawlerPanel } from './ProjectStateCrawlerPanel';
 import { SuggestedJobsPanel } from './SuggestedJobsPanel';
 import { ProviderSetupWizard } from './wizards/ProviderSetupWizard';
 import { ModelStrategyWizard } from './wizards/ModelStrategyWizard';
+import { HelpTip } from './HelpTip';
 
 interface SidePanelProps {
   view: ActivityView;
@@ -96,16 +97,20 @@ export function SidePanel({ view, width, onClose, onNewProject }: SidePanelProps
 function ExplorerView({ onNewProject }: { onNewProject?: () => void }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center h-9 px-3 border-b border-ide-border flex-shrink-0">
+      <div className="flex items-center h-9 px-3 border-b border-ide-border flex-shrink-0" data-help-id="panel.explorer">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-ide-text-dim flex-1">Explorer</span>
+        <HelpTip helpId="panel.explorer" className="mr-1" />
         {onNewProject && (
-          <button
-            onClick={onNewProject}
-            className="text-[10px] text-ide-text-dim hover:text-ide-accent px-1.5 py-0.5 rounded hover:bg-ide-accent/10 transition-colors"
-            title="New Project"
-          >
-            + New
-          </button>
+          <div className="flex items-center gap-1" data-help-id="top.new-project">
+            <button
+              onClick={onNewProject}
+              className="text-[10px] text-ide-text-dim hover:text-ide-accent px-1.5 py-0.5 rounded hover:bg-ide-accent/10 transition-colors"
+              title="New Project"
+            >
+              + New
+            </button>
+            <HelpTip helpId="top.new-project" />
+          </div>
         )}
       </div>
       <div className="flex-shrink-0 overflow-y-auto border-b border-ide-border" style={{ maxHeight: '40%' }}>
@@ -122,7 +127,7 @@ function ExplorerView({ onNewProject }: { onNewProject?: () => void }) {
 function ChatSidebarView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Conversations" />
+      <PanelHeader title="Conversations" helpId="panel.chat" />
       <div className="flex-1 overflow-y-auto">
         <ConversationSidebar />
       </div>
@@ -137,7 +142,7 @@ function ChatSidebarView() {
 function AgentSidebarView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Agent" />
+      <PanelHeader title="Agent" helpId="panel.agent" />
       <div className="flex-1 overflow-y-auto">
         <AgentControls />
       </div>
@@ -157,7 +162,7 @@ function FleetView() {
   }, []);
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Agent Fleet" />
+      <PanelHeader title="Agent Fleet" helpId="panel.fleet" />
       <div className="flex-1 overflow-y-auto p-2">
         {Panel ? <Panel /> : <LoadingPlaceholder label="Loading fleet…" />}
       </div>
@@ -170,7 +175,7 @@ function NanoSidebarView() {
   const [show, setShow] = useState(false);
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Nano Sea" />
+      <PanelHeader title="Nano Sea" helpId="activity.nano" />
       <div className="flex-1 overflow-y-auto p-3">
         <p className="text-xs text-ide-text-dim mb-3">
           The Nano Sea is the distributed compute mesh of small trained models.
@@ -192,7 +197,7 @@ function MidwifeSidebarView() {
   const [show, setShow] = useState(false);
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Midwife Trainer" />
+      <PanelHeader title="Midwife Trainer" helpId="activity.midwife" />
       <div className="flex-1 overflow-y-auto p-3">
         <p className="text-xs text-ide-text-dim mb-3">
           The Midwife system feeds training examples to Nano models, improving
@@ -214,7 +219,7 @@ function MidwifeSidebarView() {
 function MemoryView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Memory" />
+      <PanelHeader title="Memory" helpId="panel.memory" />
       <div className="flex-1 overflow-y-auto">
         <MemoryPanel />
       </div>
@@ -226,7 +231,7 @@ function MemoryView() {
 function CheckpointsView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Checkpoints" />
+      <PanelHeader title="Checkpoints" helpId="panel.checkpoints" />
       <div className="flex-1 overflow-y-auto">
         <CheckpointViewer />
       </div>
@@ -238,7 +243,7 @@ function CheckpointsView() {
 function PreviewSidebarView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Preview" />
+      <PanelHeader title="Preview" helpId="panel.preview" />
       <div className="p-3 text-xs text-ide-text-dim space-y-2">
         <p>Use the Preview tab in the editor area to view a running app.</p>
         <p>The agent will automatically open the dev server URL when it starts one.</p>
@@ -253,7 +258,7 @@ function ProvidersSidebarView() {
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Providers & Settings" />
+      <PanelHeader title="Providers & Settings" helpId="panel.providers" />
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         <p className="text-xs text-ide-text-dim">
           Configure AI providers: GitHub Copilot, Ollama (local models), Nano Sea, and more.
@@ -291,7 +296,7 @@ function StrategyView() {
   const [showWizard, setShowWizard] = useState(false);
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Model Strategy & Fallbacks" />
+      <PanelHeader title="Model Strategy & Fallbacks" helpId="panel.strategy" />
       <div className="flex-shrink-0 p-3 border-b border-ide-border">
         <button
           onClick={() => setShowWizard(true)}
@@ -312,7 +317,7 @@ function StrategyView() {
 function RatesView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Rate Limits & Usage" />
+      <PanelHeader title="Rate Limits & Usage" helpId="panel.rates" />
       <div className="flex-1 overflow-y-auto p-3">
         <RateLimitDashboard />
       </div>
@@ -342,6 +347,10 @@ function LocalModelCatalogView() {
 function HelpView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      <div className="px-3 py-1 border-b border-ide-border flex items-center gap-1" data-help-id="panel.help">
+        <span className="text-[10px] uppercase tracking-wider text-ide-text-dim">Help Tools</span>
+        <HelpTip helpId="panel.help" />
+      </div>
       <HelpPanel />
     </div>
   );
@@ -369,7 +378,7 @@ function ForensicView() {
 function SecurityView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <PanelHeader title="Security & Auth" />
+      <PanelHeader title="Security & Auth" helpId="panel.security" />
       <div className="p-3 text-xs text-ide-text-dim space-y-2">
         <p>Auth is handled via GitHub OAuth.</p>
         <p>API keys for cloud providers are stored encrypted in the local database.</p>
@@ -380,12 +389,13 @@ function SecurityView() {
 }
 
 // ── Helpers ──────────────────────────────────────
-function PanelHeader({ title }: { title: string }) {
+function PanelHeader({ title, helpId }: { title: string; helpId?: string }) {
   return (
-    <div className="flex items-center h-9 px-3 border-b border-ide-border flex-shrink-0">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-ide-text-dim">
+    <div className="flex items-center h-9 px-3 border-b border-ide-border flex-shrink-0" data-help-id={helpId}>
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-ide-text-dim flex-1">
         {title}
       </span>
+      {helpId && <HelpTip helpId={helpId} />}
     </div>
   );
 }

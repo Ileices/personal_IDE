@@ -163,7 +163,12 @@ function computeCompositeQuality(signals: {
     QUALITY_WEIGHTS.outputEfficiency * signals.outputEfficiencyScore +
     QUALITY_WEIGHTS.contextUtilization * signals.contextUtilizationScore +
     QUALITY_WEIGHTS.regressionRiskInverted * (1 - signals.regressionRiskScore);
-  return clamp01(score);
+  const raw = clamp01(score);
+  // Hard floor: a detected regression overrides all other quality signals.
+  // Even perfect tag conformance cannot mask a correctness failure.
+  // Threshold 0.8 = high-confidence regression detection.
+  if (signals.regressionRiskScore > 0.8) return Math.min(raw, 0.50);
+  return raw;
 }
 
 function writeOutputCaptureEvent(db: any, blameId: string, eventType: string, payload: Record<string, unknown>) {

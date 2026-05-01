@@ -10,6 +10,7 @@ import {
   ShieldCheck, Zap, HelpCircle, BarChart2, Sparkles, Fingerprint, Cpu,
   Tag, AlertTriangle, Scan, Layers, Briefcase,
 } from 'lucide-react';
+import { HelpTip } from './HelpTip';
 
 export type ActivityView =
   | 'explorer'
@@ -49,35 +50,36 @@ interface NavItem {
   icon: React.ElementType;
   label: string;
   badge?: number;
+  helpId: string;
 }
 
 export function ActivityBar({ active, onChange, fleetBadge, nanoBadge }: ActivityBarProps) {
   const items: NavItem[] = [
-    { id: 'studio',      icon: Sparkles,       label: 'THE GOD FACTORY — AI Architect' },
-    { id: 'explorer',    icon: FolderOpen,     label: 'Explorer' },
-    { id: 'chat',        icon: MessageSquare,  label: 'Chat' },
-    { id: 'agent',       icon: Bot,            label: 'Agent' },
-    { id: 'preview',     icon: Globe,          label: 'Preview & Test' },
-    { id: 'fleet',       icon: Network,        label: 'Agent Fleet', badge: fleetBadge },
-    { id: 'nano',        icon: Waves,          label: 'Nano Sea',    badge: nanoBadge },
-    { id: 'midwife',     icon: Bird,           label: 'Midwife Trainer' },
-    { id: 'memory',      icon: Database,       label: 'Memory' },
-    { id: 'checkpoints', icon: Clock,          label: 'Checkpoints' },
-    { id: 'strategy',    icon: Zap,            label: 'Model Strategy & Fallbacks' },
-    { id: 'rates',       icon: BarChart2,      label: 'Rate Limits & Usage' },
-    { id: 'blame',       icon: Fingerprint,    label: 'BLAME — Model Quality Tracking' },
-    { id: 'local-models', icon: Cpu,             label: 'Local Model Catalog (Ollama)' },
-    { id: 'tags',        icon: Tag,            label: 'Tag Registry — Devtags / Plantags / Buildtags' },
-    { id: 'forensic',    icon: AlertTriangle,  label: 'Forensic Database — Agent Audit Tables' },
-    { id: 'gap',         icon: Scan,           label: 'Gap Analysis — Coverage, Debt, Patterns' },
-    { id: 'project-state-crawler', icon: Layers, label: 'Project State Crawler — Devtag Extraction & Drift' },
-    { id: 'suggested-jobs', icon: Briefcase, label: 'Suggested Jobs — Codebase Review & Implementation Pipeline' },
+    { id: 'studio',      icon: Sparkles,       label: 'THE GOD FACTORY — AI Architect', helpId: 'activity.studio' },
+    { id: 'explorer',    icon: FolderOpen,     label: 'Explorer', helpId: 'activity.explorer' },
+    { id: 'chat',        icon: MessageSquare,  label: 'Chat', helpId: 'activity.chat' },
+    { id: 'agent',       icon: Bot,            label: 'The Project Factory', helpId: 'activity.agent' },
+    { id: 'preview',     icon: Globe,          label: 'Preview & Test', helpId: 'activity.preview' },
+    { id: 'fleet',       icon: Network,        label: 'Project Factory Fleet', badge: fleetBadge, helpId: 'activity.fleet' },
+    { id: 'nano',        icon: Waves,          label: 'Nano Sea', badge: nanoBadge, helpId: 'activity.nano' },
+    { id: 'midwife',     icon: Bird,           label: 'Midwife Trainer', helpId: 'activity.midwife' },
+    { id: 'memory',      icon: Database,       label: 'Memory', helpId: 'activity.memory' },
+    { id: 'checkpoints', icon: Clock,          label: 'Checkpoints', helpId: 'activity.checkpoints' },
+    { id: 'strategy',    icon: Zap,            label: 'Model Strategy & Fallbacks', helpId: 'activity.strategy' },
+    { id: 'rates',       icon: BarChart2,      label: 'Rate Limits & Usage', helpId: 'activity.rates' },
+    { id: 'blame',       icon: Fingerprint,    label: 'BLAME — Model Quality Tracking', helpId: 'activity.blame' },
+    { id: 'local-models', icon: Cpu,           label: 'Local Model Catalog (Ollama)', helpId: 'activity.local-models' },
+    { id: 'tags',        icon: Tag,            label: 'Tag Registry — Devtags / Plantags / Buildtags', helpId: 'activity.tags' },
+    { id: 'forensic',    icon: AlertTriangle,  label: 'Forensic Database — Agent Audit Tables', helpId: 'activity.forensic' },
+    { id: 'gap',         icon: Scan,           label: 'Gap Analysis — Coverage, Debt, Patterns', helpId: 'activity.gap' },
+    { id: 'project-state-crawler', icon: Layers, label: 'Project State Crawler — Devtag Extraction & Drift', helpId: 'activity.project-state-crawler' },
+    { id: 'suggested-jobs', icon: Briefcase, label: 'Suggested Jobs — Codebase Review & Implementation Pipeline', helpId: 'activity.suggested-jobs' },
   ];
 
   const bottomItems: NavItem[] = [
-    { id: 'help',        icon: HelpCircle,     label: 'Help & Documentation' },
-    { id: 'providers',   icon: Settings,       label: 'Providers & Settings' },
-    { id: 'security',    icon: ShieldCheck,    label: 'Security & Auth' },
+    { id: 'help',        icon: HelpCircle,     label: 'Help & Documentation', helpId: 'activity.help' },
+    { id: 'providers',   icon: Settings,       label: 'Providers & Settings', helpId: 'activity.providers' },
+    { id: 'security',    icon: ShieldCheck,    label: 'Security & Auth', helpId: 'activity.security' },
   ];
 
   return (
@@ -119,23 +121,25 @@ function NavButton({ item, isActive, onClick }: {
 }) {
   const Icon = item.icon;
   return (
-    <button
-      title={item.label}
-      onClick={onClick}
-      className={[
-        'relative w-10 h-10 flex items-center justify-center rounded-md transition-all',
-        isActive
-          ? 'text-ide-accent bg-ide-accent/15 border-l-2 border-ide-accent -ml-px rounded-l-none'
-          : 'text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/50',
-      ].join(' ')}
-    >
-      <Icon className="w-5 h-5" />
-      {/* Badge */}
-      {item.badge != null && item.badge > 0 && (
-        <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-0.5 text-[9px] font-bold bg-ide-accent text-ide-panel rounded-full flex items-center justify-center leading-none">
-          {item.badge > 99 ? '99+' : item.badge}
-        </span>
-      )}
-    </button>
+    <div className="relative group" data-help-id={item.helpId}>
+      <button
+        title={item.label}
+        onClick={onClick}
+        className={[
+          'relative w-10 h-10 flex items-center justify-center rounded-md transition-all',
+          isActive
+            ? 'text-ide-accent bg-ide-accent/15 border-l-2 border-ide-accent -ml-px rounded-l-none'
+            : 'text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/50',
+        ].join(' ')}
+      >
+        <Icon className="w-5 h-5" />
+        {item.badge != null && item.badge > 0 && (
+          <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-0.5 text-[9px] font-bold bg-ide-accent text-ide-panel rounded-full flex items-center justify-center leading-none">
+            {item.badge > 99 ? '99+' : item.badge}
+          </span>
+        )}
+      </button>
+      <HelpTip helpId={item.helpId} className="absolute -right-1 -bottom-1 opacity-0 group-hover:opacity-100" />
+    </div>
   );
 }

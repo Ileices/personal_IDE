@@ -62,6 +62,8 @@ export interface AppConfig {
     contextFloor: number;
     /** Default output token reserve */
     defaultOutputReserve: number;
+    /** If nano confidence falls below this, prefer fallback model chain */
+    nanoConfidenceThreshold: number;
   };
 }
 
@@ -166,6 +168,7 @@ export function loadConfig(): AppConfig {
       unknownModelContext: envInt('UNKNOWN_MODEL_CONTEXT', 128000),
       contextFloor: envInt('CONTEXT_FLOOR', 2048),
       defaultOutputReserve: envInt('DEFAULT_OUTPUT_RESERVE', 4096),
+      nanoConfidenceThreshold: Number(process.env['NANO_CONFIDENCE_THRESHOLD'] || '0.3'),
     },
   };
 }

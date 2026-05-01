@@ -259,6 +259,46 @@ export class TagRegistryService {
 
   // ── Buildtag Operations ──
 
+  /**
+   * Validate that a buildtag references at least one existing (non-retired) devtag
+   * AND at least one unfulfilled plantag before allowing registration.
+   * This is the structural integrity guarantee: agents cannot emit buildtags
+   * that float free of actual code structure or already-closed requirements.
+   */
+  validateBuildtag(opts: { target_devtag_id?: string; plantag_id?: string }): ValidationResult {
+    const errors: string[] = [];
+
+    // Rule 1: Must reference at least one existing, non-retired devtag
+    if (!opts.target_devtag_id) {
+      errors.push('buildtag must reference at least one devtag (target_devtag_id required)');
+    } else {
+      const devtag = this.db.prepare(
+        "SELECT id, status FROM devtags WHERE id = ?"
+      ).get(opts.target_devtag_id) as any;
+      if (!devtag) {
+        errors.push(`referenced devtag does not exist: ${opts.target_devtag_id}`);
+      } else if (devtag.status === 'retired') {
+        errors.push(`referenced devtag is retired and cannot be targeted: ${opts.target_devtag_id}`);
+      }
+    }
+
+    // Rule 2: Must reference at least one unfulfilled plantag
+    if (!opts.plantag_id) {
+      errors.push('buildtag must reference at least one plantag (plantag_id required)');
+    } else {
+      const plantag = this.db.prepare(
+        "SELECT id, status FROM plantags WHERE id = ?"
+      ).get(opts.plantag_id) as any;
+      if (!plantag) {
+        errors.push(`referenced plantag does not exist: ${opts.plantag_id}`);
+      } else if (plantag.status === 'done') {
+        errors.push(`referenced plantag is already fulfilled: ${opts.plantag_id}`);
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
   registerBuildtag(opts: {
     tag_key: string;
     tag_type: string;
@@ -268,7 +308,20 @@ export class TagRegistryService {
     cycle_id?: string;
     plantag_id?: string;
     metadata?: Record<string, unknown>;
-  }): { success: boolean; id?: string; error?: string } {
+    /** Skip structural validation — only use in migration or test contexts */
+    skipValidation?: boolean;
+  }): { success: boolean; id?: string; error?: string; validationErrors?: string[] } {
+    // Enforce structural integrity unless explicitly bypassed
+    if (!opts.skipValidation) {
+      const validation = this.validateBuildtag({
+        target_devtag_id: opts.target_devtag_id,
+        plantag_id: opts.plantag_id,
+      });
+      if (!validation.valid) {
+        return { success: false, error: 'Buildtag validation failed', validationErrors: validation.errors };
+      }
+    }
+
     const id = uuid();
     try {
       this.db.prepare(`

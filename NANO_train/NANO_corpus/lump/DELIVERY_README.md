@@ -17,11 +17,18 @@ This package contains:
 
 ### MANDATORY (Read these before writing any code)
 
-| Priority | File | What It Contains |
-|----------|------|-----------------|
-| **1** | `NANO_SEA_V2_BUILD_SPEC.md` | The DEFINITIVE build specification. Every component, every interface, every file, build order. START HERE. |
-| **2** | `nano_sea_v2_reference.py` | Working PyTorch reference implementations for all hard problems. Copy/adapt these — do NOT re-derive the math. |
-| **3** | `agent_meta_architecture_action_plan.json` | The META-AGENT shell (memory fabric, script executor, CLI). This wraps AROUND the nano sea. Build the nano sea first, then integrate. |
+| Priority | File                                       | What It Contains     |
+|----------|--------------------------------------------|----------------------|
+| **1**    | `NANO_SEA_V2_BUILD_SPEC.md`                | DESCRIPTION &        |
+| **2**    | `nano_sea_v2_reference.py`                 | DESCRIPTION &&       |
+| **3**    | `agent_meta_architecture_action_plan.json` | DESCRIPTION &&&      |
+                                                                               |
+                                                                               |
+DESCRIPTION: _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ | _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+& = The DEFINITIVE build specification. Every component, every interface, every file, build order. START HERE.
+&& = Working PyTorch reference implementations for all hard problems. Copy/adapt these — do NOT re-derive the math.
+&&& = The META-AGENT shell (memory fabric, script executor, CLI). This wraps AROUND the nano sea. Build the nano sea first, then integrate.
+
 
 ### CONTEXT (Read if you need background on WHY decisions were made)
 

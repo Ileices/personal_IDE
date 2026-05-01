@@ -75,10 +75,12 @@ export async function corpusRoutes(app: FastifyInstance) {
 
   // ── POST /api/corpus/ingest — scan a folder and build corpus index ──
   app.post('/ingest', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { projectId, folderPath, maxFilesPerDir = 50 } = req.body as {
+    const { projectId, folderPath, maxFilesPerDir = 50, filePaths = [], inlineDocs = [] } = req.body as {
       projectId: string;
       folderPath?: string;
       maxFilesPerDir?: number;
+      filePaths?: string[];
+      inlineDocs?: Array<{ name?: string; type?: string; content?: string }>;
     };
 
     if (!projectId) return reply.status(400).send({ error: 'projectId required' });
@@ -110,14 +112,32 @@ export async function corpusRoutes(app: FastifyInstance) {
     }
     walk(scanRoot);
 
+    // Add explicit user file dumps (single files) on top of folder scan.
+    // This allows "drop these docs" workflows without requiring whole-folder crawls.
+    for (const raw of filePaths) {
+      const resolved = path.resolve(String(raw || ''));
+      if (!resolved || !fs.existsSync(resolved)) continue;
+      try {
+        const st = fs.statSync(resolved);
+        if (!st.isFile()) continue;
+        if (!isTextFile(resolved)) continue;
+        files.push(resolved);
+      } catch {
+        // ignore invalid paths
+      }
+    }
+
+    const uniqueFiles = [...new Set(files)].slice(0, 4000);
+
     // Build a compact structural summary (no full file content — just headers/signatures)
     const summaryLines: string[] = [`# Project Corpus: ${path.basename(scanRoot)}`];
-    summaryLines.push(`Files: ${files.length}`);
+    summaryLines.push(`Files: ${uniqueFiles.length}`);
+    summaryLines.push(`Inline docs: ${inlineDocs.length}`);
     summaryLines.push('');
 
     // Group by directory
     const byDir = new Map<string, string[]>();
-    for (const f of files) {
+    for (const f of uniqueFiles) {
       const rel = path.relative(scanRoot, f);
       const dir = path.dirname(rel);
       if (!byDir.has(dir)) byDir.set(dir, []);
@@ -134,6 +154,22 @@ export async function corpusRoutes(app: FastifyInstance) {
       }
     }
 
+    if (inlineDocs.length > 0) {
+      summaryLines.push('');
+      summaryLines.push('## Inline Spec Documents');
+      for (const doc of inlineDocs.slice(0, 200)) {
+        const name = String(doc?.name || 'inline_doc').slice(0, 120);
+        const type = String(doc?.type || 'text').slice(0, 40);
+        const content = String(doc?.content || '').trim();
+        if (!content) continue;
+        summaryLines.push(`### ${name} (${type})`);
+        summaryLines.push(content.slice(0, 1200));
+        if (content.length > 1200) {
+          summaryLines.push(`... (${content.length - 1200} chars truncated)`);
+        }
+      }
+    }
+
     const summary = summaryLines.join('\n');
     const totalTokens = estimateTokens(summary);
 
@@ -146,11 +182,12 @@ export async function corpusRoutes(app: FastifyInstance) {
         total_tokens = excluded.total_tokens,
         ingest_path = excluded.ingest_path,
         updated_at = datetime('now')
-    `).run(projectId, projectId, files.length, totalTokens, scanRoot);
+    `).run(projectId, projectId, uniqueFiles.length, totalTokens, scanRoot);
 
     return {
       ok: true,
-      fileCount: files.length,
+      fileCount: uniqueFiles.length,
+      inlineDocCount: inlineDocs.length,
       totalTokens,
       scanRoot,
       preview: summary.slice(0, 500),

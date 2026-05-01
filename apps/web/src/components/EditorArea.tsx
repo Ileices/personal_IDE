@@ -14,6 +14,7 @@ import { ErrorPanel } from './ErrorPanel';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
 import { useProjectStore } from '../stores/projectStore';
 import { API_BASE } from '../config.js';
+import { HelpTip } from './HelpTip';
 
 export type EditorTab = 'code' | 'chat' | 'agent' | 'preview';
 
@@ -29,6 +30,13 @@ const TAB_DEFS: { id: EditorTab; icon: React.ElementType; label: string }[] = [
   { id: 'agent',   icon: Bot,            label: 'Agent' },
   { id: 'preview', icon: Globe,          label: 'Preview' },
 ];
+
+const TAB_HELP_IDS: Record<EditorTab, string> = {
+  code: 'editor.tab.code',
+  chat: 'editor.tab.chat',
+  agent: 'editor.tab.agent',
+  preview: 'editor.tab.preview'
+};
 
 export function EditorArea({ activeTab, onTabChange, previewUrl }: EditorAreaProps) {
   const { activeProject } = useProjectStore();
@@ -81,45 +89,51 @@ export function EditorArea({ activeTab, onTabChange, previewUrl }: EditorAreaPro
         {TAB_DEFS.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
+          const helpId = TAB_HELP_IDS[tab.id];
           return (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              className={[
-                'flex items-center gap-1.5 px-4 h-full text-xs border-r border-ide-border whitespace-nowrap transition-colors',
-                isActive
-                  ? 'bg-ide-bg text-ide-text border-t-2 border-t-ide-accent'
-                  : 'text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/50',
-              ].join(' ')}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {tab.label}
-            </button>
+            <div key={tab.id} className="flex items-center border-r border-ide-border px-1" data-help-id={helpId}>
+              <button
+                onClick={() => onTabChange(tab.id)}
+                className={[
+                  'flex items-center gap-1.5 px-3 h-full text-xs whitespace-nowrap transition-colors',
+                  isActive
+                    ? 'bg-ide-bg text-ide-text border-t-2 border-t-ide-accent'
+                    : 'text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/50',
+                ].join(' ')}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {tab.label}
+              </button>
+              <HelpTip helpId={helpId} className="ml-1" />
+            </div>
           );
         })}
         <div className="flex-1" />
         {/* Build & Run button */}
         {activeProject && (
-          <button
-            onClick={handleBuildRun}
-            title={activeProject ? `Project: ${activeProject.name}` : ''}
-            className={[
-              'flex items-center gap-1.5 px-3 h-full text-xs font-medium transition-colors mr-1',
-              runState === 'running'
-                ? 'text-red-400 hover:text-red-300'
-                : runState === 'error'
-                ? 'text-yellow-400'
-                : 'text-green-400 hover:text-green-300',
-            ].join(' ')}
-          >
-            {runState === 'running' ? (
-              <><Square className="w-3 h-3" /> {runLabel}</>
-            ) : runState === 'error' ? (
-              <span>{runLabel}</span>
-            ) : (
-              <><Play className="w-3 h-3" /> {runLabel}</>
-            )}
-          </button>
+          <div className="flex items-center mr-1" data-help-id="editor.build-run">
+            <button
+              onClick={handleBuildRun}
+              title={activeProject ? `Project: ${activeProject.name}` : ''}
+              className={[
+                'flex items-center gap-1.5 px-3 h-full text-xs font-medium transition-colors',
+                runState === 'running'
+                  ? 'text-red-400 hover:text-red-300'
+                  : runState === 'error'
+                  ? 'text-yellow-400'
+                  : 'text-green-400 hover:text-green-300',
+              ].join(' ')}
+            >
+              {runState === 'running' ? (
+                <><Square className="w-3 h-3" /> {runLabel}</>
+              ) : runState === 'error' ? (
+                <span>{runLabel}</span>
+              ) : (
+                <><Play className="w-3 h-3" /> {runLabel}</>
+              )}
+            </button>
+            <HelpTip helpId="editor.build-run" />
+          </div>
         )}
       </div>
 

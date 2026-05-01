@@ -8,7 +8,7 @@ import type { ChatRequest, ProviderType } from '@personal-ide/shared';
 import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
 import { getClientFromDb as getGitHubClient } from '../services/llm/client.js';
 import { getClientFromDb as getProviderClient } from '../services/llm/providers.js';
-import { streamChatResponse } from '../services/llm/streaming.js';
+import { streamChatResponse, completeChatResponse } from '../services/llm/streaming.js';
 import { rateLimiter } from '../services/llm/rateLimiter.js';
 import { userRateLimiter } from '../services/llm/userRateLimiter.js';
 import { MemoryService } from '../services/memory/index.js';
@@ -179,6 +179,7 @@ export async function chatRoutes(app: FastifyInstance) {
 
     for (let i = 0; i < modelsToTry.length; i++) {
       const modelId = modelsToTry[i];
+      const modelProvider = extractProviderFromModelId(modelId) as ProviderType;
       const modelClient = getClientForModel(db, modelId);
       if (!modelClient) continue; // provider not configured — skip
 
@@ -209,6 +210,99 @@ export async function chatRoutes(app: FastifyInstance) {
             to: modelId,
             reason: String(lastError?.message || 'previous model unavailable'),
           })}\n\n`);
+        }
+
+        // Nano-specific path: call non-stream endpoint so we can read confidence
+        // and route to fallback models when agreement is too low.
+        if (modelProvider === 'nano') {
+          const completion = await completeChatResponse(modelClient, modelId, messages, {
+            temperature: body.mode === 'agent' ? 0.3 : 0.7,
+            maxTokens: modelDef?.maxOutputTokens || 4096,
+          });
+
+          const threshold = appConfig.contextDefaults.nanoConfidenceThreshold;
+          if (typeof completion.confidence === 'number' && completion.confidence < threshold && i < modelsToTry.length - 1) {
+            lastError = new Error(
+              `Low nano confidence (${completion.confidence.toFixed(3)} < ${threshold})`
+            );
+            continue;
+          }
+
+          // Emit synthetic SSE stream for non-stream completion path
+          if (!reply.raw.headersSent) {
+            reply.raw.writeHead(200, {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              Connection: 'keep-alive',
+              'X-Accel-Buffering': 'no',
+            });
+          }
+
+          const fullContent = completion.content || '';
+          reply.raw.write(`data: ${JSON.stringify({
+            type: 'message_start',
+            conversationId,
+            messageId: userMessageId,
+          })}\n\n`);
+          if (fullContent) {
+            reply.raw.write(`data: ${JSON.stringify({ type: 'content_delta', delta: fullContent })}\n\n`);
+          }
+          reply.raw.write(`data: ${JSON.stringify({ type: 'content_done', fullContent })}\n\n`);
+          reply.raw.write(`data: ${JSON.stringify({
+            type: 'done',
+            usage: completion.usage ? {
+              promptTokens: completion.usage.prompt_tokens || 0,
+              completionTokens: completion.usage.completion_tokens || 0,
+              totalTokens: completion.usage.total_tokens || 0,
+            } : undefined,
+            confidence: completion.confidence,
+            nanoCount: completion.nanoCount,
+          })}\n\n`);
+
+          rateLimiter.recordEnd(modelId);
+          const latencyMs = Date.now() - callStartMs;
+          const structured = parseStructuredOutput(fullContent);
+
+          writeBlameRecord(db, {
+            model: modelId,
+            mode: body.mode,
+            interactionType: body.mode,
+            buildPhase: 'chat_response',
+            projectId: body.projectId,
+            conversationId: conversationId || undefined,
+            taskType: body.mode,
+            quality: structured?.confidence ?? undefined,
+            success: true,
+            latencyMs,
+            durationMs: latencyMs,
+            tokenCount: completion.usage?.total_tokens,
+            promptTokens: completion.usage?.prompt_tokens,
+            completionTokens: completion.usage?.completion_tokens,
+            contextWindowTokens: (modelDef as any)?.maxInputTokens,
+            outputTokensAllowed: modelDef?.maxOutputTokens,
+            outputText: fullContent,
+            cycleId: new Date().toISOString().slice(0, 10),
+            tagValidationResult: structured ? 'pass' : 'partial',
+            tagValidationFailureCodes: structured ? [] : ['unstructured_output'],
+          });
+
+          memory.addMessage(conversationId!, 'assistant', fullContent, modelId, body.mode, structured);
+          if (structured?.summary) {
+            memory.addNote(effectiveProjectId || body.projectId, {
+              projectId: effectiveProjectId || body.projectId,
+              source: 'auto_summary',
+              category: body.mode,
+              title: `${body.mode}: ${structured.summary.slice(0, 100)}`,
+              content: structured.summary,
+              tags: [body.mode, modelId],
+              relatedFiles: structured.filesChanged?.map((f: any) => f.path) || [],
+              importance: 50,
+              conversationId,
+            });
+          }
+
+          reply.raw.end();
+          break;
         }
 
         await streamChatResponse(modelClient, modelId, messages, reply, {

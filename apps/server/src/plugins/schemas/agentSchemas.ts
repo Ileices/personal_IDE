@@ -42,12 +42,15 @@ export const authSchemas: Record<string, z.ZodType> = {
 export const chatSchemas: Record<string, z.ZodType> = {
   'POST /send': z.object({
     conversationId: z.string().optional(),
-    projectId: projectIdStr,
+    // Allow projectless sessions (server falls back to "default" internally).
+    projectId: projectIdStr.optional(),
     message: z.string().min(1, 'message is required'),
     model: z.string().min(1, 'model is required'),
     mode: z.string().min(1, 'mode is required'),
+    fallbackModels: z.array(z.string().min(1)).optional(),
     contextFiles: z.array(z.string()).optional(),
     contextMemoryIds: z.array(z.string()).optional(),
+    systemPrompt: z.string().optional(),
     autoInjectMemory: z.boolean().optional(),
   }),
 };

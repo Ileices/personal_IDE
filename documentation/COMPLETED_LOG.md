@@ -433,3 +433,135 @@ Created 9-document documentation suite in `documentation/` directory.
 | `apps/server/src/services/agent/enhancedLoop.ts` | History filtering/condensation, conditional memory storage, schema reminder suffix, context-aware auto-answers with task injection, non-adversarial schema miss handler, buildAutoAnswer method |
 | `apps/server/src/services/agent/loopDetector.ts` | startMinimalPrompt + formatSuffix methods, 4-strategy rotation, anti-apology language |
 | `apps/server/src/services/modes/prompts.ts` | Brace-matching JSON extraction replaces regex fallback |
+
+---
+
+## Session: Integration Hardening — Transactional Spawn, Stability Monitor, Context Budget, Nano Confidence (2026-05-02)
+
+**Purpose**: Close 6 integration cohesion gaps identified in GitHub discussion #2 hardening checklist.  
+All builds clean (server `tsc`, web `tsc && vite build`). Spawn + agent/fleet lifecycle verified end-to-end.
+
+### Fix 38: Transactional Spawn Confirmation Model
+**Problem**: `POST /api/spawn/check` was a stateless single-shot authorization call with no audit trail or replay protection. The `spawn_authority_check` tool in TheGodFactory bypassed the confirmation flow entirely.
+
+**Fix** (`apps/server/src/services/spawnAuthority/index.ts`, `apps/server/src/routes/spawnAuthority.ts`, `apps/web/src/components/TheGodFactory.tsx`):
+- `requestSpawn()` inserts a `pending_confirmation` record and returns a `confirmationId` UUID
+- `resolveConfirmation(id, 'accepted'|'rejected')` updates the record status
+- `executeSpawn(confirmationId)` checks status is `accepted`, marks it `consumed` (one-time only), returns `{allowed:true}`
+- Replay on a consumed or rejected confirmation returns `{allowed:false, reason:'Confirmation not approved, expired, or already consumed'}`
+- Five new endpoints: `POST /request`, `GET /confirmation/:id`, `POST /confirmation/:id/approve`, `POST /confirmation/:id/reject`, `POST /execute`
+- TheGodFactory `spawn_authority_check` tool updated to route through confirmation-aware flow
+
+### Fix 39: Stability Monitor with Auto-Rollback
+**Problem**: No mechanism to detect stability regressions (cascading test failures, blame score drops, loop spikes, buildtag rejection bursts) and trigger rollback automatically.
+
+**Fix** (`apps/server/src/services/stabilityMonitor/index.ts` — new file, `apps/server/src/routes/stability.ts` — new file):
+- `StabilityMonitor` class maintains a rolling 10-cycle `StabilitySnapshot[]` window
+- Threshold checks: 2 consecutive test failures, blame score drop >0.15 over 3 cycles, 2 consecutive loops, buildtag rejection spike >0.20
+- Breach triggers: `notification_queue` rollback entry + forensic suggested job creation
+- `healthStatus()` → `'healthy' | 'degraded' | 'critical'`
+- REST: `GET /api/stability/window`, `POST /api/stability/record`
+
+### Fix 40: Stability Monitor Wired into Suggested Jobs Crawler
+**Problem**: Suggested jobs crawler had no awareness of system stability — continued queuing jobs even during active stability regressions.
+
+**Fix** (`apps/server/src/services/suggestedJobsCrawler/index.ts`):
+- `StabilityMonitor.record()` called on each crawler sandbox tick
+- If rollback is triggered by the stability check, current tick pipeline is aborted and a forensic note is written
+- Prevents job queueing during active regression
+
+### Fix 41: Context Window Manager Integrated into Agent Loop
+**Problem**: `contextAssembly.ts` assembled prompts without structured priority ordering or token ceiling enforcement per tier. The legacy `contextWindow.ts` sub-agent had drifted from the canonical manager.
+
+**Fix** (`apps/server/src/services/agent/loop/contextAssembly.ts`, `apps/server/src/services/agent/enhancedLoop.ts`, `apps/server/src/services/agent/subagents/contextWindow.ts`):
+- `ContextWindowManager.fitPrioritySlots()` integrated into `contextAssembly.ts`
+- Priority: `system_prompt > task_buildtags > devtags > history > memory > code_content`
+- Tier ceilings: T1 2k, T2 6k, T3 16k, T4 80k, T5 160k tokens
+- Truncation events logged to `notification_queue`
+- Shaped locals used in `contextAssembly.ts` (no mutation of input config)
+- `contextWindow.ts` sub-agent realigned to canonical manager
+
+### Fix 42: Nano Confidence Threshold + Provider Fallback
+**Problem**: When the nano provider returned low-confidence responses, the system silently served degraded output with no fallback path.
+
+**Fix** (`apps/server/src/config.ts`, `apps/server/src/services/llm/streaming.ts`, `apps/server/src/routes/chat.ts`, `apps/server/src/services/agent/enhancedLoop.ts`):
+- `appConfig.nano.confidenceThreshold` added (default `0.65`)
+- `streaming.ts` non-stream path now returns provider metadata including `confidence` in return value
+- `chat.ts` and `enhancedLoop.ts` check confidence against threshold; if below → reroute to next-highest-confidence provider
+- Prevents silent degraded responses when nano is under-trained
+
+### Fix 43: Nano Liaison Telemetry Payload Alignment
+**Problem**: Python trainer status payload nested per-nano metrics under internal tracking fields, requiring the liaison to post-process before usable telemetry could be created.
+
+**Fix** (`NANO_train/training/trainer.py`, `apps/server/src/services/nanoLiaison/index.ts` — new file):
+- `trainer.py` status payload exposes `training_steps`, `best_loss`, `last_loss` at top level per nano entry
+- New `NanoLiaisonAgent` class: polls `/v1/training/status` every 15 s, diffs nano states, creates `devtag` records for changed nanos, writes forensic entries for anomalies
+- `startNanoLiaisonAgent(db)` singleton wired into server startup
+
+### Fix 44: Loop Milestone Emitter
+**Problem**: No structured recording of per-iteration loop progress for later forensic inspection.
+
+**Fix** (`apps/server/src/services/agent/loop/milestoneEmitter.ts` — new file):
+- `writeMilestone()`: persists `loop_milestones` record with iteration, status, context shape
+- `writeQualitySnapshot()`: persists `loop_quality_snapshots` record
+- `emitIterationMilestones()`: called at end of each agent loop iteration
+- `inferQualityFromContext()`: derives quality signal from available context
+
+### Fix 45: Silicon Factory Service
+**Problem**: Task lifecycle, IAP messaging, sync locks, state snapshots, symbol graph, test indexing, and embeddings had no dedicated service layer.
+
+**Fix** (`apps/server/src/services/siliconFactory/index.ts` — new 1821-line file, `apps/server/src/routes/siliconFactory.ts` — new 627-line file):
+- Full task lifecycle management
+- IAP messaging bus
+- Sync locks for concurrent agent access
+- State snapshots (versioned)
+- Symbol graph indexing
+- Test index + embeddings pipeline
+
+---
+
+## Runtime Verification (2026-05-02)
+
+All checks run against clean server restart after builds passed:
+
+| Check | Outcome |
+|---|---|
+| `tsc` server build | ✅ clean |
+| `tsc && vite build` web build | ✅ clean |
+| `GET /api/health` | ✅ 200 |
+| Spawn: `POST /request` | ✅ `{status:pending_confirmation, confirmationId, tier, agent_class}` |
+| Spawn: `POST /approve` | ✅ `{resolved:true, status:accepted}` |
+| Spawn: `POST /execute` ×1 | ✅ `{allowed:true, status:approved, tier:3}` |
+| Spawn: `POST /execute` ×2 (replay) | ✅ `{allowed:false, reason:Confirmation not approved, expired, or already consumed}` |
+| Agent start / status / pause / resume / stop | ✅ all HTTP 200 (confirmed from server request log) |
+| Fleet start / pause / resume / stop | ✅ all HTTP 200 (confirmed from server request log) |
+| Chat SSE + conversation CRUD | ✅ HTTP 200 |
+| Ollama proxy routes | ✅ HTTP 200 |
+| Nano payload routes (Nano Sea offline) | ✅ graceful 200 |
+| Migration 100 `forensic_composite_indexes` | ⚠️ non-blocking FAIL — `agent_class` column missing in `blame_records` |
+| `nanoTelemetryShape` | ⚠️ expected fail — Nano Sea not running |
+
+---
+
+## Files Modified (Integration Hardening Session)
+
+| File | Changes |
+|------|---------|
+| `apps/server/src/services/spawnAuthority/index.ts` | Full transactional confirmation model (request/pending/approve/reject/consume) |
+| `apps/server/src/routes/spawnAuthority.ts` | 5 new endpoints for transactional spawn flow |
+| `apps/server/src/services/stabilityMonitor/index.ts` | **New file** — rolling-window stability monitor with auto-rollback |
+| `apps/server/src/routes/stability.ts` | **New file** — REST API for stability window and record |
+| `apps/server/src/services/contextWindowManager/index.ts` | `fitPrioritySlots()` API for structured prompt channels |
+| `apps/server/src/services/agent/loop/contextAssembly.ts` | ContextWindowManager.fitPrioritySlots() integrated |
+| `apps/server/src/services/agent/enhancedLoop.ts` | Context manager wired; nano confidence check + fallback |
+| `apps/server/src/services/agent/subagents/contextWindow.ts` | Aligned to canonical manager |
+| `apps/server/src/services/llm/streaming.ts` | Non-stream path returns provider metadata + confidence |
+| `apps/server/src/config.ts` | `nano.confidenceThreshold` field (default 0.65) |
+| `apps/server/src/routes/chat.ts` | Confidence-aware provider fallback |
+| `apps/server/src/services/suggestedJobsCrawler/index.ts` | StabilityMonitor.record() + rollback gating |
+| `apps/web/src/components/TheGodFactory.tsx` | spawn_authority_check tool → confirmation-aware flow |
+| `NANO_train/training/trainer.py` | Per-nano training_steps, best_loss, last_loss at top level |
+| `apps/server/src/services/nanoLiaison/index.ts` | **New file** — NanoLiaisonAgent, startNanoLiaisonAgent singleton |
+| `apps/server/src/services/agent/loop/milestoneEmitter.ts` | **New file** — loop milestone + quality snapshot emitter |
+| `apps/server/src/services/siliconFactory/index.ts` | **New file** — Silicon Factory service (1821 lines) |
+| `apps/server/src/routes/siliconFactory.ts` | **New file** — Silicon Factory routes (627 lines) |

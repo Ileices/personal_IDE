@@ -206,7 +206,7 @@ export async function tagRegistryRoutes(app: FastifyInstance) {
 
   app.get('/vocabulary-diff', safeRoute(async (req: FastifyRequest) => {
     const q = req.query as { version_a?: string; version_b?: string; project_id?: string };
-    const projectId = q.project_a ?? q.project_id;
+    const projectId = q.project_id;
 
     // Collect all unique tag_types currently in registry
     const devtagTypes = (db.prepare('SELECT DISTINCT tag_type FROM devtags').all() as Array<{ tag_type: string }>).map(r => r.tag_type);

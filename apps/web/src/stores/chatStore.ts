@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import type { AssistantMode, ChatMessage } from '@personal-ide/shared';
 import { apiStream, apiGet, apiPut, apiDelete } from '../api/client';
+import { API_BASE } from '../config';
 
 interface ModelStrategyResponse {
   settings?: {
@@ -90,7 +91,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // Auto-inject file context from project tree if none explicitly set
     if (contextFiles.length === 0 && projectId) {
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:3001'}/api/files/tree?projectId=${projectId}`);
+        const res = await fetch(`${API_BASE}/api/files/tree?projectId=${projectId}`);
         if (res.ok) {
           const tree = await res.json();
           // Collect top-level and immediate children (non-recursive, limit 30 files)

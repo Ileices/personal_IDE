@@ -503,7 +503,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         CASE severity WHEN 'fatal' THEN 0 WHEN 'critical' THEN 1 WHEN 'error' THEN 2 WHEN 'warning' THEN 3 ELSE 4 END,
         datetime(timestamp) DESC
       LIMIT ?
-    `).all(limit) as Array<Record<string, unknown>>;
+    `).all(limit) as Array<Record<string, unknown> & { notification_id: string }>;
 
     const notifications = rows.map((r) => ({
       ...r,
@@ -549,7 +549,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       ${includeResponded ? '' : 'WHERE user_response IS NULL'}
       ORDER BY datetime(timestamp) DESC
       LIMIT ?
-    `).all(limit) as Array<Record<string, unknown>>;
+    `).all(limit) as Array<Record<string, unknown> & { suggestion_id: string }>;
 
     const suggestions = rows.map((r) => ({
       ...r,
@@ -1012,5 +1012,215 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     setKv(db, `${kvBase}:status`, String(body.status || 'idle'));
 
     return reply.send({ ok: true, agent_key, recorded_at: now });
+  });
+
+  // ── God Factory Autonomous Loop ─────────────────────────────────────────────
+  // The God Factory has its own 24/7 loop that continuously processes
+  // suggested_jobs records — building IDE enhancements autonomously.
+  //
+  // The loop state is persisted in god_factory_loop_state (singleton row).
+  // A single EnhancedAgentLoop is instantiated per start; stop() is idempotent.
+
+  let _gfLoopInstance: { stop: () => void; isRunning: () => boolean } | null = null;
+
+  function _ensureGfLoopState(db: Db) {
+    const existing = db.prepare('SELECT id FROM god_factory_loop_state LIMIT 1').get();
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO god_factory_loop_state
+          (id, state, jobs_completed, jobs_failed, jobs_skipped, started_at)
+        VALUES ('singleton', 'idle', 0, 0, 0, NULL)
+      `).run();
+    }
+  }
+
+  function _updateGfLoopState(db: Db, patch: Record<string, unknown>) {
+    const sets = Object.keys(patch).map(k => `${k} = ?`).join(', ');
+    const vals = Object.values(patch);
+    db.prepare(`UPDATE god_factory_loop_state SET ${sets} WHERE id = 'singleton'`).run(...vals);
+  }
+
+  // POST /api/god-factory/loop/start
+  // Body: { projectId, model?, maxIterations? }
+  app.post('/loop/start', async (req: FastifyRequest, reply: FastifyReply) => {
+    _ensureGfLoopState(db);
+    const state = db.prepare('SELECT state FROM god_factory_loop_state WHERE id = \'singleton\'').get() as { state: string } | undefined;
+    if (state?.state === 'running') {
+      return reply.status(409).send({ error: 'God Factory loop is already running' });
+    }
+
+    const { projectId, model, maxIterations = 50 } = req.body as {
+      projectId?: string;
+      model?: string;
+      maxIterations?: number;
+    };
+
+    // Pick the best available suggested job to work on
+    function pickNextJob(): { job_id: string; title: string; atomic_steps: unknown; affected_files: unknown } | null {
+      const job = db.prepare(`
+        SELECT job_id, title, atomic_steps, affected_files
+        FROM job_records
+        WHERE implementation_status = 'suggested'
+        ORDER BY priority DESC, created_at ASC
+        LIMIT 1
+      `).get() as { job_id: string; title: string; atomic_steps: string; affected_files: string } | null;
+      if (!job) return null;
+      return {
+        job_id: job.job_id,
+        title: job.title,
+        atomic_steps: JSON.parse(job.atomic_steps || '[]'),
+        affected_files: JSON.parse(job.affected_files || '[]'),
+      };
+    }
+
+    const runId = randomUUID();
+    _updateGfLoopState(db, { state: 'running', current_run_id: runId, started_at: new Date().toISOString() });
+
+    // Lazy-import to avoid circular deps at module load time
+    let stopped = false;
+    let iterationCount = 0;
+
+    const tick = async () => {
+      if (stopped || iterationCount >= maxIterations) {
+        stopped = true;
+        _updateGfLoopState(db, { state: 'idle', current_job_id: null });
+        return;
+      }
+
+      const job = pickNextJob();
+      if (!job) {
+        _updateGfLoopState(db, { state: 'idle', current_job_id: null });
+        stopped = true;
+        return;
+      }
+
+      _updateGfLoopState(db, { current_job_id: job.job_id });
+
+      // Mark job as in-progress
+      db.prepare(`UPDATE job_records SET implementation_status = 'in_progress', updated_at = datetime('now') WHERE job_id = ?`).run(job.job_id);
+
+      // Build task prompt from job details
+      const stepsText = Array.isArray(job.atomic_steps)
+        ? (job.atomic_steps as string[]).map((s, i) => `${i + 1}. ${s}`).join('\n')
+        : String(job.atomic_steps);
+      const filesText = Array.isArray(job.affected_files)
+        ? (job.affected_files as string[]).slice(0, 10).join(', ')
+        : String(job.affected_files);
+
+      const taskPrompt = [
+        `## God Factory Job: ${job.title}`,
+        '',
+        'You are implementing a specific IDE enhancement. Complete ALL steps below before stopping.',
+        'Write real, working code. Do not leave TODOs.',
+        '',
+        '### Steps to implement:',
+        stepsText,
+        filesText ? `\n### Affected files:\n${filesText}` : '',
+      ].filter(Boolean).join('\n');
+
+      try {
+        // Dynamically import to avoid loading agent runtime at route registration time
+        const { EnhancedAgentLoop } = await import('../services/agent/enhancedLoop.js');
+        const { appConfig } = await import('../config.js');
+        const { getModel, extractProviderFromModelId } = await import('@personal-ide/shared');
+
+        const chosenModel = model || 'openai/gpt-4.1';
+        const provider = extractProviderFromModelId(chosenModel) as any;
+        const loopConfig = {
+          maxIterations: 10, // per job
+          stepDelayMs: appConfig.agent.stepDelayMs,
+          maxTokensPerStep: appConfig.agent.maxTokensPerStep,
+          autoApproveChanges: true,
+          autoAnswerQuestions: true,
+          model: chosenModel,
+          projectRoot: projectId
+            ? (db.prepare('SELECT root_path FROM projects WHERE id = ?').get(projectId) as { root_path?: string } | undefined)?.root_path ?? process.cwd()
+            : process.cwd(),
+          continuousMode: false,
+          cooldownMs: 2000,
+          bypassRateLimits: false,
+          enableSmartChunking: true,
+          provider,
+          contextWindow: getModel(chosenModel)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
+          checkpointEvery: 0,
+          autoFixErrors: true,
+          autoRunTests: true,
+          analyzeCodebase: false, // skip scan on GF jobs — already has context
+        };
+
+        const loop = new EnhancedAgentLoop(db, loopConfig);
+
+        _gfLoopInstance = {
+          stop: () => loop.stop(),
+          isRunning: () => {
+            const s = loop.getStatus().state;
+            return s !== 'idle' && s !== 'complete' && s !== 'error';
+          },
+        };
+
+        await loop.start(projectId || 'god-factory', taskPrompt);
+
+        // Mark complete if no errors thrown
+        db.prepare(`UPDATE job_records SET implementation_status = 'complete', updated_at = datetime('now') WHERE job_id = ?`).run(job.job_id);
+        db.prepare(`UPDATE god_factory_loop_state SET jobs_completed = jobs_completed + 1 WHERE id = 'singleton'`).run();
+      } catch (err: any) {
+        db.prepare(`UPDATE job_records SET implementation_status = 'failed', updated_at = datetime('now') WHERE job_id = ?`).run(job.job_id);
+        db.prepare(`UPDATE god_factory_loop_state SET jobs_failed = jobs_failed + 1 WHERE id = 'singleton'`).run();
+      }
+
+      iterationCount++;
+      _gfLoopInstance = null;
+
+      // Brief pause between jobs, then process next
+      if (!stopped) {
+        setTimeout(() => { tick().catch(() => {}); }, 2_000);
+      }
+    };
+
+    _gfLoopInstance = {
+      stop: () => { stopped = true; },
+      isRunning: () => !stopped,
+    };
+
+    // Start async — don't await
+    tick().catch(() => {
+      _updateGfLoopState(db, { state: 'idle', current_job_id: null });
+    });
+
+    return reply.send({ ok: true, runId, message: 'God Factory loop started' });
+  });
+
+  // POST /api/god-factory/loop/stop
+  app.post('/loop/stop', async (_req: FastifyRequest, reply: FastifyReply) => {
+    _ensureGfLoopState(db);
+    if (_gfLoopInstance) {
+      _gfLoopInstance.stop();
+      _gfLoopInstance = null;
+    }
+    _updateGfLoopState(db, { state: 'idle', current_job_id: null });
+    return reply.send({ ok: true, message: 'God Factory loop stopped' });
+  });
+
+  // GET /api/god-factory/loop/status
+  app.get('/loop/status', async (_req: FastifyRequest, reply: FastifyReply) => {
+    _ensureGfLoopState(db);
+    const row = db.prepare('SELECT * FROM god_factory_loop_state WHERE id = \'singleton\'').get() as Record<string, unknown> | undefined;
+
+    // Pending job count
+    const pendingCount = (db.prepare('SELECT COUNT(*) AS c FROM job_records WHERE implementation_status = \'suggested\'').get() as { c: number }).c;
+    const inProgressCount = (db.prepare('SELECT COUNT(*) AS c FROM job_records WHERE implementation_status = \'in_progress\'').get() as { c: number }).c;
+
+    let currentJob: unknown = null;
+    if (row?.current_job_id) {
+      currentJob = db.prepare('SELECT job_id, title, priority FROM job_records WHERE job_id = ?').get(row.current_job_id as string);
+    }
+
+    return reply.send({
+      ...row,
+      isRunning: _gfLoopInstance?.isRunning() ?? false,
+      pendingJobs: pendingCount,
+      inProgressJobs: inProgressCount,
+      currentJob,
+    });
   });
 }

@@ -108,7 +108,7 @@ interface ModelStore {
   bulkTestInProgress: boolean;
   bulkTestProgress: { completed: number; total: number };
 
-  fetchModels: () => Promise<void>;
+  fetchModels: (force?: boolean) => Promise<void>;
   fetchInstalledLocalModels: () => Promise<void>;
   markCooldown: (modelId: string, durationMs?: number) => void;
   clearCooldown: (modelId: string) => void;
@@ -168,7 +168,7 @@ function inferTier(provider: string): ModelDefinition['tier'] {
 let _dynamicCache: DynamicModel[] = [];
 
 export const useModelStore = create<ModelStore>((set, get) => ({
-  allModels: [...MODELS], // start with static models immediately
+  allModels: _dynamicCache.map(dynamicToDefinition),
   providerErrors: [],
   isLoading: false,
   lastFetchAt: null,
@@ -181,11 +181,11 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   bulkTestInProgress: false,
   bulkTestProgress: { completed: 0, total: 0 },
 
-  fetchModels: async () => {
+  fetchModels: async (force = false) => {
     // Don't re-fetch within 5 minutes unless forced
     const { lastFetchAt, isLoading } = get();
     if (isLoading) return;
-    if (lastFetchAt && Date.now() - lastFetchAt < 5 * 60_000) return;
+    if (!force && lastFetchAt && Date.now() - lastFetchAt < 5 * 60_000) return;
 
     set({ isLoading: true });
 
@@ -194,33 +194,25 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      const dynamic: DynamicModel[] = data.models || [];
-      _dynamicCache = dynamic;
-
-      // Build merged model list: start with static, then add dynamic-only IDs
-      const staticIds = new Set(MODELS.map(m => m.id));
-      const extraFromDynamic = dynamic
-        .filter(d => !staticIds.has(d.id))
-        .map(dynamicToDefinition);
-
-      // Also update static models that appear in dynamic (mark them as confirmed available)
-      const merged = [...MODELS, ...extraFromDynamic];
+      const dynamic: DynamicModel[] = Array.isArray(data.models) ? data.models : [];
+      const dedupedDynamic = Array.from(new Map(dynamic.map(model => [model.id, model])).values());
+      _dynamicCache = dedupedDynamic;
+      const liveModels = dedupedDynamic.map(dynamicToDefinition);
 
       set({
-        allModels: merged,
+        allModels: liveModels,
         providerErrors: data.errors || [],
         isLoading: false,
         lastFetchAt: Date.now(),
       });
       void get().fetchInstalledLocalModels();
     } catch (err) {
-      // Fall back to static + cached dynamic
-      const staticIds = new Set(MODELS.map(m => m.id));
-      const extra = _dynamicCache
-        .filter(d => !staticIds.has(d.id))
-        .map(dynamicToDefinition);
+      // Fall back to the last known dynamic inventory, or static models if the API is unavailable.
+      const fallback = _dynamicCache.length > 0
+        ? _dynamicCache.map(dynamicToDefinition)
+        : [...MODELS];
       set({
-        allModels: [...MODELS, ...extra],
+        allModels: fallback,
         isLoading: false,
         providerErrors: [{ provider: 'all', error: String(err) }],
       });

@@ -9,6 +9,8 @@ import { getModel, extractProviderFromModelId, PROVIDERS } from '@personal-ide/s
 import { appConfig } from '../config.js';
 import { MemoryService } from '../services/memory/index.js';
 import { resolveModelStrategy } from '../services/modelStrategy.js';
+import { reindexSiliconTests, rebuildSymbolEmbeddings } from '../services/siliconFactory/index.js';
+import { listAllFiles } from '../services/filesystem/index.js';
 
 let activeFleet: AgentFleet | null = null;
 
@@ -64,6 +66,38 @@ export async function fleetRoutes(app: FastifyInstance) {
   const db = (app as any).db;
   const memory = new MemoryService(db);
 
+  type AgentProjectSettings = {
+    useCorpusManifesto: boolean;
+    autoIngestCorpus: boolean;
+    autoProjectIntel: boolean;
+    corpusPath: string;
+    strategyTemplate: string;
+    workflowMode: 'build_new' | 'import_refactor' | 'code_review' | 'scale_research';
+    strictQualityGate: boolean;
+  };
+
+  const DEFAULT_PROJECT_SETTINGS: AgentProjectSettings = {
+    useCorpusManifesto: true,
+    autoIngestCorpus: true,
+    autoProjectIntel: true,
+    corpusPath: '',
+    strategyTemplate: 'fullstack-balanced',
+    workflowMode: 'build_new',
+    strictQualityGate: true,
+  };
+
+  const getSettingsKey = (projectId: string) => `agent_loop:project_settings:${projectId}`;
+  const loadProjectSettings = (projectId: string): AgentProjectSettings => {
+    try {
+      const row = db.prepare('SELECT value FROM app_kv WHERE key = ?').get(getSettingsKey(projectId)) as { value?: string } | undefined;
+      if (!row?.value) return DEFAULT_PROJECT_SETTINGS;
+      const parsed = JSON.parse(row.value) as Partial<AgentProjectSettings>;
+      return { ...DEFAULT_PROJECT_SETTINGS, ...parsed };
+    } catch {
+      return DEFAULT_PROJECT_SETTINGS;
+    }
+  };
+
   // --- POST /api/fleet/start — Launch a multi-agent fleet ---
   app.post('/start', async (req: FastifyRequest, reply: FastifyReply) => {
     if (activeFleet && activeFleet.getStatus().state === 'running') {
@@ -89,6 +123,11 @@ export async function fleetRoutes(app: FastifyInstance) {
       maxIterationsPerAgent?: number;
       enableSubAgents?: boolean;
       fallbackModels?: string[];
+      useCorpusManifesto?: boolean;
+      autoProjectIntel?: boolean;
+      autoIngestCorpus?: boolean;
+      workflowMode?: AgentProjectSettings['workflowMode'];
+      strictQualityGate?: boolean;
     };
 
     if (!body.projectId || !body.task) {
@@ -99,6 +138,13 @@ export async function fleetRoutes(app: FastifyInstance) {
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
+
+    const savedSettings = loadProjectSettings(body.projectId);
+    const useCorpusManifesto = body.useCorpusManifesto ?? savedSettings.useCorpusManifesto;
+    const autoIngestCorpus = body.autoIngestCorpus ?? savedSettings.autoIngestCorpus;
+    const autoProjectIntel = body.autoProjectIntel ?? savedSettings.autoProjectIntel;
+    const workflowMode = body.workflowMode ?? savedSettings.workflowMode;
+    const strictQualityGate = body.strictQualityGate ?? savedSettings.strictQualityGate;
 
     const modelStr = body.model || 'openai/gpt-4.1';
     const strategy = resolveModelStrategy(db, modelStr, body.fallbackModels);
@@ -115,10 +161,76 @@ export async function fleetRoutes(app: FastifyInstance) {
     const requestedAgents = body.agentCount || maxAgents;
     const agentCount = Math.min(requestedAgents, maxAgents);
 
+    let masterTask = body.task;
+
+    if (autoIngestCorpus) {
+      try {
+        const existing = db.prepare('SELECT manifesto FROM project_corpus WHERE project_id = ?').get(body.projectId) as { manifesto?: string } | undefined;
+        const hasManifesto = String(existing?.manifesto || '').trim().length > 0;
+        if (!hasManifesto) {
+          const scanRoot = savedSettings.corpusPath?.trim() ? savedSettings.corpusPath.trim() : project.rootPath;
+          const relFiles = listAllFiles(scanRoot, { maxFiles: 2500, maxMs: 3000 });
+          const summary = [
+            `Project: ${project.name}`,
+            `Root: ${scanRoot}`,
+            `Discovered files: ${relFiles.length}`,
+            '',
+            'Top-level file sample:',
+            ...relFiles.slice(0, 120).map(f => `- ${f}`),
+          ].join('\n');
+          db.prepare(
+            `INSERT INTO project_corpus (id, project_id, manifesto, file_count, total_tokens, ingest_path, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+             ON CONFLICT(id) DO UPDATE SET manifesto = excluded.manifesto, file_count = excluded.file_count, total_tokens = excluded.total_tokens, ingest_path = excluded.ingest_path, updated_at = datetime('now')`
+          ).run(body.projectId, body.projectId, summary, relFiles.length, Math.ceil(summary.length / 4), scanRoot);
+        }
+      } catch {
+        // best-effort bootstrap only
+      }
+    }
+
+    if (useCorpusManifesto) {
+      const row = db.prepare('SELECT manifesto FROM project_corpus WHERE project_id = ?').get(body.projectId) as { manifesto?: string } | undefined;
+      const manifesto = String(row?.manifesto || '').trim();
+      if (manifesto) {
+        masterTask = `${masterTask}\n\n--- PROJECT CORPUS MANIFESTO ---\n${manifesto}\n--- END PROJECT CORPUS MANIFESTO ---\n\nUse this manifesto as the source-of-truth planning corpus and execute full build/test/run cycles.`;
+      }
+    }
+
+    if (workflowMode === 'import_refactor') {
+      masterTask += '\n\nWORKFLOW MODE: IMPORT_REFACTOR_AND_EXPAND\nTreat this as an imported codebase migration/refactor. First map architecture, run diagnostics/tests, then fix, harden, and expand features without regressing behavior.';
+    } else if (workflowMode === 'code_review') {
+      masterTask += '\n\nWORKFLOW MODE: CODE_REVIEW\nPrioritize bug/risk/regression discovery, then apply fixes with tests. Produce strict review findings before implementation.';
+    } else if (workflowMode === 'scale_research') {
+      masterTask += '\n\nWORKFLOW MODE: SCALE_RESEARCH\nPrioritize architecture scalability, distributed execution, observability, and reproducible experiment pipelines.';
+    }
+
+    if (strictQualityGate) {
+      masterTask += '\n\nQUALITY GATE (STRICT): A change is not complete until build passes, relevant tests pass, and high-severity diagnostics are addressed. Avoid speculative/sloppy code.';
+    }
+
+    if (autoProjectIntel) {
+      try {
+        reindexSiliconTests(db, {
+          project_id: body.projectId,
+          project_root: project.rootPath,
+        });
+      } catch {
+        // preflight best-effort
+      }
+      try {
+        rebuildSymbolEmbeddings(db, {
+          project_id: body.projectId,
+        });
+      } catch {
+        // preflight best-effort
+      }
+    }
+
     const fleetConfig: FleetConfig = {
       projectId: body.projectId,
       projectRoot: project.rootPath,
-      masterTask: body.task,
+      masterTask,
       model: strategy.primaryModel,
       provider,
       agentCount,
