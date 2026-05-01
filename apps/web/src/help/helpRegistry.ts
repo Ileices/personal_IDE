@@ -560,6 +560,569 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Integration concept: meta-agent shell wraps nano sea and progressively replaces external LLM dependency where feasible.',
       'Reference context: see the lump delivery package for build-order constraints and hardware-targeted rollout assumptions.'
     ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // COMPREHENSIVE SPEC EXPANSION — ALL UNIFIED ARCHITECTURE CONCEPTS
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'build-layer-overview',
+    title: 'Build Layer: Pre-Edit Pipeline (COMING SOON)',
+    summary: 'Mandatory ground-truth crawls, WAITING state, Skeptic refinement, Command voting, and Builder execution gates.',
+    tags: ['coming-soon', 'build-layer', 'pipeline', 'waiting-state', 'validation', 'unified-spec'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Full Build Layer flowchart accessible from this section.',
+      'Phase 0 - Pre-Edit Protocol: Every file write requires outputs from three crawlers: Memory Crawler (agent context state), Project Description Crawler (plan scope clarity), and Project State Crawler (ground-truth file snapshot).',
+      'Phase 1 - WAITING State: Agent outputs are held in WAITING until all three crawler signals arrive. Waiting subsystems monitor crawler progress.',
+      'Phase 2 - Skeptic Sub-Agent: Evaluates the proposed edit against ground truth, context, and forensic records. Can request refinement or escalation.',
+      'Phase 3 - Command Sub-Agent: Votes on next action using tally system. Can propose alternative approaches or request additional context.',
+      'Phase 4 - Builder Sub-Agent: Executes a single decided command (file write, test run, etc). One atomic step per loop iteration.',
+      'Phase 5 - Post-Commit Validation: Drift detection, regression check, tag validator runs, forensic record creation.',
+      'Invariants: No write is allowed until WAITING signals clear. No step is taken without Command voting. No step is final until post-commit validation passes.',
+      'See Project State Crawler, Memory Panel, and Forensic Database sections for related observability.'
+    ]
+  },
+  {
+    id: 'memory-crawler-detail',
+    title: 'Memory Crawler (COMING SOON)',
+    summary: 'Pre-edit crawler that snapshots agent context state and memory scope satisfaction.',
+    tags: ['coming-soon', 'build-layer', 'crawlers', 'memory', 'pre-edit-protocol', 'waiting-state'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Memory Crawler integration panel showing real-time crawler status during loops.',
+      'Responsibility: Capture the current memory state (user notes, agent logs, decision history) and validate that all required memory scopes are populated.',
+      'Triggers: On every Agent Agent-Loop iteration before the Builder step.',
+      'Output: Memory snapshot with scope satisfaction score; written to WAITING signal queue.',
+      'Enforcement: Loop cannot proceed to Skeptic evaluation until Memory Crawler output is ready.',
+      'Related: Memory Panel, Build Layer, Unified Spec Memory Interactions.'
+    ]
+  },
+  {
+    id: 'project-description-crawler-detail',
+    title: 'Project Description Crawler (COMING SOON)',
+    summary: 'Pre-edit crawler that clarifies plan scope from agent outputs and memory.',
+    tags: ['coming-soon', 'build-layer', 'crawlers', 'project-plan', 'pre-edit-protocol', 'waiting-state'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Project Description Crawler integration panel for plan scope visibility.',
+      'Responsibility: Extract and validate the declared scope of the proposed action (which files, which changes, what dependencies).',
+      'Triggers: Before Builder execution in each Agent Agent-Loop iteration.',
+      'Output: Structured plan scope with identified files, risks, and coverage assessment; written to WAITING signal queue.',
+      'Enforcement: Builder cannot run until Project Description output is in WAITING queue.',
+      'Related: Agent Agent-Loop, Build Layer, Unified Spec Project State Crawler.'
+    ]
+  },
+  {
+    id: 'waiting-state-detail',
+    title: 'WAITING State Machine (COMING SOON)',
+    summary: 'Holds proposed edits until all three crawler signals (Memory, Project Description, Project State) are ready.',
+    tags: ['coming-soon', 'build-layer', 'waiting-state', 'crawlers', 'signal-queue', 'enforcement'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: WAITING state machine timeline view showing signal arrival order and gate clearance.',
+      'States: CRAWLING (awaiting signals) → TAG_GENERATION (crawlers done, tags synthesized) → REFINING (Skeptic runs) → VOTING (Command tallies) → SENT_TO_COMMAND (ready for execution).',
+      'Gate Conditions: Cannot proceed until all three crawler outputs are enqueued.',
+      'Timeout: If any crawler exceeds time budget, escalation to God Factory for intervention.',
+      'Monitoring: Forensic database logs every WAITING transition and crawler latency.',
+      'Related: Memory Crawler, Project Description Crawler, Project State Crawler, Skeptic Agent, Command Agent.'
+    ]
+  },
+  {
+    id: 'skeptic-agent-detail',
+    title: 'Skeptic Sub-Agent (COMING SOON)',
+    summary: 'Evaluates proposed edits against ground truth, memory state, and forensic records before Builder executes.',
+    tags: ['coming-soon', 'build-layer', 'agents', 'validation', 'error-detection', 'skepticism'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Skeptic evaluation logs and reasoning transparency in the forensic database.',
+      'Responsibility: Challenge the proposed edit and recommend alternatives or rejections.',
+      'Input: Command proposal, WAITING signal outputs, ground truth snapshot, recent blame records, tag registry state.',
+      'Output: Approval, conditional approval with refinement requests, or rejection with reasoning.',
+      'Anti-Patterns Detected: Regression risk (model quality history), tag conflicts (devtag/buildtag mismatch), coverage holes (tests missing), structural debt (compounding complexity).',
+      'Escalation: If confident rejection, escalates to God Factory for policy override.',
+      'Related: Command Agent, Tag Validator, Forensic Database, Blame Crawler.'
+    ]
+  },
+  {
+    id: 'command-agent-detail',
+    title: 'Command Sub-Agent (COMING SOON)',
+    summary: 'Voting agent that decides next action after Skeptic review — proposes alternatives or confirms Builder step.',
+    tags: ['coming-soon', 'build-layer', 'agents', 'voting', 'decision', 'orchestration'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Command voting ledger and decision rationale logs accessible from forensic database.',
+      'Responsibility: Decide the next single atomic step (file write, test run, refactor, etc.).',
+      'Input: Skeptic output, user task statement, milestone breakdown, current code state.',
+      'Voting Process: Tally votes from Skeptic, Gap Analysis, and Blame sub-agents on proposed action. Can propose alternatives.',
+      'Output: Decided action with prioritization rationale.',
+      'Constraints: Single action per loop iteration; each action must reference required devtags and buildtags.',
+      'Related: Skeptic Agent, Builder Agent, Tag System, Unified Spec voting model.'
+    ]
+  },
+  {
+    id: 'builder-agent-detail',
+    title: 'Builder Sub-Agent (COMING SOON)',
+    summary: 'Executes a single decided command (file write, terminal command, test, etc) with atomic guarantees.',
+    tags: ['coming-soon', 'build-layer', 'agents', 'execution', 'atomic-steps', 'transactions'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Builder execution ledger showing file writes, command runs, and rollback history.',
+      'Responsibility: Perform the exact action decided by Command agent.',
+      'Actions: File creation/modification/deletion, terminal command execution, test suite runs, format/lint passes.',
+      'Atomicity: One step per loop iteration. If step fails, full rollback available.',
+      'Backup: Pre-execution backup taken automatically via Checkpoints system.',
+      'Monitoring: Output streams logged to event feed. Exit code and state changes written to forensic database.',
+      'Related: Command Agent, Post-Commit Validation, Checkpoints, Forensic Database.'
+    ]
+  },
+  {
+    id: 'post-commit-validation-detail',
+    title: 'Post-Commit Validation Chain (COMING SOON)',
+    summary: 'Drift detection, regression check, tag validation, and forensic recording after every Builder execution.',
+    tags: ['coming-soon', 'build-layer', 'validation', 'forensic', 'tag-system', 'post-step'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Post-commit validation results dashboard integrated into Agent event feed.',
+      'Step 1 - Drift Detection: Compare post-commit file state against ground truth snapshot. Flag registry surplus/deficit/content/location drift.',
+      'Step 2 - Regression Check: Run test suite. Check for newly-broken tests or coverage loss.',
+      'Step 3 - Tag Validation: Verify all created/modified code is tagged with appropriate devtags. Check plantag dependencies.',
+      'Step 4 - Forensic Recording: Create dated record linking this step to buildtags, devtags, model used, builder rationale.',
+      'Halt Condition: If validation fails, loop pauses and Suggested Jobs generator is triggered.',
+      'Related: Project State Crawler, Tag Validator, Blame Crawler, Forensic Database, Suggested Jobs.'
+    ]
+  },
+  {
+    id: 'meta-layer-overview',
+    title: 'Meta Layer: Continuous Observation and Planning (COMING SOON)',
+    summary: 'Blame, Gap Analysis, Suggested Jobs, and God Factory monitors all run concurrently with Build Layer.',
+    tags: ['coming-soon', 'meta-layer', 'pipeline', 'concurrent', 'crawlers', 'unified-spec'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Meta Layer process map showing Blame Crawler, Gap Analysis agents, Suggested Jobs crawlers, and God Factory background scan running in parallel.',
+      'Purpose: Continuous observation of code quality, coverage gaps, technical debt, and autonomous suggestion generation.',
+      'Relationships: Meta Layer feeds forensic signals to Build Layer (via Skeptic/Command evaluation). Build Layer feeds outputs to Meta Layer (via Blame Crawler).',
+      'Crawlers: Blame Crawler (model quality), Gap Analysis (coverage/debt/patterns), Project State Crawler (ground truth), Suggested Jobs (next actions).',
+      'God Factory: Converged persistent agent with highest authority to inspect, question, and override Build Layer decisions.',
+      'Isolated Processes: Meta Layer processes run independently and can be enabled/disabled per Unified Spec policy.',
+      'See: THE GOD FACTORY, BLAME, Gap Analysis, Suggested Jobs, Project State Crawler sections.'
+    ]
+  },
+  {
+    id: 'blame-quality-dimensions',
+    title: 'Quality Dimensions Framework (COMING SOON)',
+    summary: 'Seven measured dimensions guide model evaluation: tag conformance, hallucination, instruction adherence, structural integrity, efficiency, context use, regression risk.',
+    tags: ['coming-soon', 'blame', 'quality', 'metrics', 'model-registry', 'evaluation'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Quality dashboard with dimension breakdown per model.',
+      'Dimension 1 - Tag Conformance (weight 0.30): Output tagging matches devtag/buildtag schema. High conformance = good.',
+      'Dimension 2 - Hallucination Rate (weight 0.20): False/fabricated content likelihood. Low rate = good (inverted).',
+      'Dimension 3 - Instruction Adherence (weight 0.15): Output follows agent directives and task constraints.',
+      'Dimension 4 - Structural Integrity (weight 0.15): Code quality, syntax, no breaking changes introduced.',
+      'Dimension 5 - Output Efficiency (weight 0.10): Token usage, latency, resource efficiency.',
+      'Dimension 6 - Context Utilization (weight 0.05): Relevant use of provided memory, ground truth, and project state.',
+      'Dimension 7 - Regression Risk (weight 0.05): Likelihood of introducing bugs or breaking existing functionality (inverted).',
+      'Composite Score: Weighted sum of all dimensions. Score < 0.65 for 3+ consecutive outputs triggers Tool Criticism.',
+      'See: BLAME panel, Blame Crawler Deep Dive, Forensic Database.'
+    ]
+  },
+  {
+    id: 'tool-criticism-mechanism',
+    title: 'Tool Criticism and Model Adjustment (COMING SOON)',
+    summary: 'Automatic corrective feedback triggered when a model quality composite score drops below 0.65 for 3+ consecutive outputs.',
+    tags: ['coming-soon', 'blame', 'quality-gate', 'tool-criticism', 'feedback-loop', 'self-improvement'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Tool Criticism event log in the forensic database showing activations and recommended fixes.',
+      'Trigger Condition: Model composite quality < 0.65 for 3 or more consecutive outputs.',
+      'Output: Structured critique message forwarded to Suggested Jobs as a priority remediation job.',
+      'Feedback Content: Specific quality dimensions failing, examples of poor outputs, recommended strategies for improvement.',
+      'Model Response: Model receives critique in next interaction context to adapt behavior.',
+      'Prevention: Can trigger automatic fallback to higher-tier model or escalation to God Factory.',
+      'Related: Quality Dimensions Framework, BLAME panel, Blame Crawler, Suggested Jobs, Model Strategy.'
+    ]
+  },
+  {
+    id: 'gap-analysis-detail',
+    title: 'Gap Analysis Five-Agent System (COMING SOON)',
+    summary: 'Five concurrent agents analyze coverage, patterns, debt, tag-system health, and agent performance.',
+    tags: ['coming-soon', 'gap-analysis', 'meta-layer', 'crawlers', 'agents', 'holistic'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Gap Analysis five-agent orchestration map and result aggregation.',
+      'Agent 1 - Coverage Analysis Agent: Compares implemented plan vs actual code. Identifies missing tests, missing types, missing documentation.',
+      'Agent 2 - Pattern Recognition Agent: Detects recurring structural problems (AI slop, hallucination loops, context loss patterns).',
+      'Agent 3 - Debt Tracking Agent: Per-file technical debt calculation. Identifies files exceeding debt ceiling.',
+      'Agent 4 - Tag System Analysis Agent: Vocabulary gap detection. Finds unused tags, colliding tags, and missing tag assignments.',
+      'Agent 5 - Agent Performance Analysis Agent: Measures Build Layer agent conformance (retry rate, escalation rate, contribution quality).',
+      'Output: Five independent gap reports merged into holistic Gap Report.',
+      'Related: Gap Analysis Panel, Forensic Database, Suggested Jobs (which consume gap signals).'
+    ]
+  },
+  {
+    id: 'suggested-jobs-protocol-suite',
+    title: 'Suggested Jobs: 10 Codebase Review Protocols (COMING SOON)',
+    summary: 'Independent crawlers scanning for missing tests, dead code, debt violations, regression clusters, integration gaps, anti-patterns, vocabulary gaps, performance, security, and nano coverage.',
+    tags: ['coming-soon', 'suggested-jobs', 'protocols', 'scanners', 'meta-layer', 'implementation-pipeline'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Protocol runner dashboard with per-protocol enable/disable toggles and result inspection.',
+      'Protocol 1 - Missing Tests: Coverage analyzer finds functions/files with <80% test coverage.',
+      'Protocol 2 - Dead Code: Unused functions, dead branches, orphaned modules.',
+      'Protocol 3 - Debt Ceiling Violations: Files exceeding per-file technical debt limit.',
+      'Protocol 4 - Regression Clusters: Historical pattern of regressions in specific areas (strong signal for remediation).',
+      'Protocol 5 - Integration Failures: Failed handshakes between agents or subsystems.',
+      'Protocol 6 - Anti-Pattern Detection: Known AI slop patterns, context collapse signatures, hallucination indicators.',
+      'Protocol 7 - Vocabulary Gaps: Devtags used but not defined in schema, or schema tags never used.',
+      'Protocol 8 - Performance Sensitivity: Identified hot paths with degradation risk if not carefully maintained.',
+      'Protocol 9 - Security Gaps: Input validation gaps, permission checks, dependency vulnerabilities.',
+      'Protocol 10 - Nano Coverage Gaps: Functions not yet covered by Nano Sea training or specialty nanos.',
+      'Execution: Blame-Driven mode always runs first. Independent protocols run after in priority order.',
+      'Related: Suggested Jobs Panel, Blamed-Driven Jobs, Sandbox Pipeline.'
+    ]
+  },
+  {
+    id: 'sandbox-atomic-steps',
+    title: 'Suggested Jobs: Atomic Steps and Sandbox Execution (COMING SOON)',
+    summary: 'Jobs decomposed into atomic steps with buildtag dependencies, sandbox execution loops, and staged implementation.',
+    tags: ['coming-soon', 'suggested-jobs', 'sandbox', 'implementation', 'stages', 'execution-plan'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Job sandbox runner with stage visualization and sandbox cycle counter.',
+      'Atomic Step Schema: Each step includes devtag dependencies, required buildtags, token budget, minimum model tier, parallelization allowance.',
+      'Sandbox Execution: Each step runs in an isolated sandbox with cycle limits and optional human review gate.',
+      'Sandbox Cycle Concept: Pre-scan (identify impact), Build (execute change), Test (verify), Review (human or auto), Decide (rollback or commit), Stabilize (wait for dependent tests).',
+      'Staged Implementation: Multi-stage jobs can be paused/resumed between stages. Supports gradual rollout of complex changes.',
+      'Backoff: If a stage fails, sandbox suggests rollback or alternative approaches via Suggested Jobs refinement.',
+      'Related: Suggested Jobs Panel, Sandbox Cycle Visibility, Builder Agent, Checkpoint Rollback.'
+    ]
+  },
+  {
+    id: 'ask-chat-memory',
+    title: 'Ask-Chat Interaction Memory Surface (COMING SOON)',
+    summary: 'Dedicated memory area for conversational question-answer interactions via Chat Agent.',
+    tags: ['coming-soon', 'memory', 'ask', 'chat', 'lvm-interaction', 'memory-surface'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Ask-Chat memory surface integrated into Memory Panel with "Ask-Chat" preset filter.',
+      'Purpose: Capture user queries, Chat Agent responses, and question-answer chains during conversational workflows.',
+      'Scope: TOTAL access (visible to all agents) per Unified Spec.',
+      'Content: Q/A pairs with timestamps, model used, context injected, user satisfaction feedback.',
+      'Persistence: Scoped to active project; queryable by tag, date, keyword.',
+      'Related: Memory Panel, Unified Spec Memory Interactions, Chat Tab.'
+    ]
+  },
+  {
+    id: 'edit-chat-memory',
+    title: 'Edit-Chat Interaction Memory Surface (COMING SOON)',
+    summary: 'Dedicated memory area for file-editing focused interactions via Chat Agent with patch history.',
+    tags: ['coming-soon', 'memory', 'edit', 'chat', 'lvm-interaction', 'memory-surface'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Edit-Chat memory surface integrated into Memory Panel with "Edit-Chat" preset filter.',
+      'Purpose: Record every chat-driven edit with before/after state, model rationale, user acceptance/rejection.',
+      'Scope: TOTAL access per Unified Spec.',
+      'Content: File diffs, edit reasoning, model quality score for that edit, build/test results post-edit.',
+      'Persistence: Scoped to active project; editable by user to mark good/bad edits for future reference.',
+      'Related: Memory Panel, Unified Spec Memory Interactions, Edit Mode, Blame Crawler.'
+    ]
+  },
+  {
+    id: 'plan-chat-memory',
+    title: 'Plan-Chat Interaction Memory Surface (COMING SOON)',
+    summary: 'Dedicated memory area for planning and sequencing interactions via Chat Agent.',
+    tags: ['coming-soon', 'memory', 'plan', 'chat', 'lvm-interaction', 'memory-surface'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Plan-Chat memory surface integrated into Memory Panel with "Plan-Chat" preset filter.',
+      'Purpose: Store structured plans, sequencing decisions, milestone breakdowns discussed in chat.',
+      'Scope: TOTAL access per Unified Spec.',
+      'Content: Chat-generated plans, user refinements, plantag decisions, milestone tracking.',
+      'Persistence: Scoped to active project; user-editable for manual refinements.',
+      'Related: Memory Panel, Unified Spec Memory Interactions, Plan Mode, Milestone Panel.'
+    ]
+  },
+  {
+    id: 'ask-agent-loop-memory',
+    title: 'Ask-Agent Loop Interaction Memory Surface (COMING SOON)',
+    summary: 'Dedicated memory area for autonomous question-driven loops in Agent Agent-Loop with SELF/CUSTOM/PRESET scoping.',
+    tags: ['coming-soon', 'memory', 'ask', 'agent-loop', 'lvm-interaction', 'memory-surface'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Ask-Agent Loop memory surface integrated into Memory Panel with source-filtering.',
+      'Purpose: Capture autonomous question cycles where Agent Agent-Loop explores project state and learns.',
+      'Scope: SELF (agent-only) memory per Unified Spec. Not visible to Chat Agent or other Loop siblings.',
+      'Content: Questions asked, ground truth answers, context injected, learning records.',
+      'Persistence: Scoped to active project and to this agent instance.',
+      'Related: Memory Panel, Unified Spec Memory Interactions, Agent Agent-Loop, Agent Architecture.'
+    ]
+  },
+  {
+    id: 'edit-agent-loop-memory',
+    title: 'Edit-Agent Loop Interaction Memory Surface (COMING SOON)',
+    summary: 'Dedicated memory area for autonomous edit sequences in Agent Agent-Loop with SELF/CUSTOM/PRESET scoping.',
+    tags: ['coming-soon', 'memory', 'edit', 'agent-loop', 'lvm-interaction', 'memory-surface'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Edit-Agent Loop memory surface integrated into Memory Panel with source-filtering.',
+      'Purpose: Record autonomous edit sequences executed by Agent Agent-Loop.',
+      'Scope: SELF memory per Unified Spec. Not visible to Chat Agent or parent agents.',
+      'Content: Edits decided and executed, buildtags created, post-commit validation results.',
+      'Persistence: Scoped to active project and to this agent instance.',
+      'Related: Memory Panel, Unified Spec Memory Interactions, Agent Agent-Loop, Build Layer.'
+    ]
+  },
+  {
+    id: 'plan-agent-loop-memory',
+    title: 'Plan-Agent Loop Interaction Memory Surface (COMING SOON)',
+    summary: 'Dedicated memory area for autonomous planning sequences in Agent Agent-Loop with SELF/CUSTOM/PRESET scoping.',
+    tags: ['coming-soon', 'memory', 'plan', 'agent-loop', 'lvm-interaction', 'memory-surface'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Plan-Agent Loop memory surface integrated into Memory Panel with source-filtering.',
+      'Purpose: Record autonomous planning decisions and milestone breakdowns by Agent Agent-Loop.',
+      'Scope: SELF memory per Unified Spec. Not visible to Chat Agent or parent agents.',
+      'Content: Autonomous plans generated, plantag decisions, milestone checkpoint decisions.',
+      'Persistence: Scoped to active project and to this agent instance.',
+      'Related: Memory Panel, Unified Spec Memory Interactions, Agent Agent-Loop, Milestone Panel.'
+    ]
+  },
+  {
+    id: 'memory-scope-enforcement',
+    title: 'Memory Scope Enforcement (COMING SOON)',
+    summary: 'TOTAL vs SELF vs CUSTOM vs PRESET access control preventing information leakage and ensuring agent isolation.',
+    tags: ['coming-soon', 'memory', 'scopes', 'access-control', 'isolation', 'policy'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Memory scope audit log showing which agents accessed which memory areas in each loop.',
+      'TOTAL Scope: God Factory, Chat Agent, Blame Crawler, Help Agent read all memory areas.',
+      'SELF Scope: Agent Agent-Loop and Fleet Agents can only read their own self-instance memory. No cross-agent visibility.',
+      'CUSTOM Scope: Agents can request specific named memory areas via tagged queries.',
+      'PRESET Scope: Predefined memory filters (recent decisions, user notes, architecture, system health) for quick access.',
+      'Enforcement Point: Memory retrieval interceptor checks agent ID, interaction type, and enforces scope at read time.',
+      'Violation Logging: Unauthorized access attempts are logged as forensic security events.',
+      'Related: Memory Panel, Agent Architecture, Unified Spec Memory Interactions, Forensic Database.'
+    ]
+  },
+  {
+    id: 'ground-truth-snapshot',
+    title: 'Ground Truth File Snapshot (COMING SOON)',
+    summary: 'Real-time tree-sitter parsed snapshot of all project files used as authoritative baseline for WAITING state and drift detection.',
+    tags: ['coming-soon', 'project-state-crawler', 'ground-truth', 'parser', 'snapshot', 'baseline'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Ground truth snapshot viewer showing parsed file structure, extracted devtags, and file statistics.',
+      'Source: Tree-sitter parsers per language (TypeScript, Python, Go, Rust, C, Java, etc).',
+      'Frequency: Snapshot taken at the start of each Agent Agent-Loop iteration and on-demand via Project State Crawler button.',
+      'Content: File tree, file-level devtags, function/class/method boundaries, line-count statistics, language distribution.',
+      'Skipped Files: Large files (>10K lines), binary files, dependency directories logged with skip reason.',
+      'Usage: WAITING state requires Project State Crawler output. Pre-commit validation compares post-build state against snapshot to detect drift.',
+      'Related: Project State Crawler, WAITING State, Drift Events, Post-Commit Validation.'
+    ]
+  },
+  {
+    id: 'drift-event-taxonomy',
+    title: 'Drift Event Taxonomy: Four Drift Types (COMING SOON)',
+    summary: 'Registry Surplus, Registry Deficit, Content Drift, and Location Drift detected by comparing snapshot to ground truth.',
+    tags: ['coming-soon', 'project-state-crawler', 'drift', 'forensic', 'validation', 'reconciliation'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Drift event categorizer and severity assessment tool.',
+      'Drift Type 1 - Registry Surplus: Devtag registered in tag registry but file/function not found in ground truth snapshot. Indicates stale tagging.',
+      'Drift Type 2 - Registry Deficit: Code file/function exists in snapshot but no corresponding devtag registered. Indicates under-tagging.',
+      'Drift Type 3 - Content Drift: File content changed (line hashes differ) but devtag position/count unchanged. Indicates tag misalignment.',
+      'Drift Type 4 - Location Drift: Function/method exists but moved to different file or different line range than tagged. Indicates refactoring without tag update.',
+      'Severity Scoring: Based on affected file count, tag chain dependencies, and regression history.',
+      'Reconciliation: WAITING state reconciler must resolve conflicts before Builder execution.',
+      'Related: Project State Crawler, Ground Truth Snapshot, Forensic Database, Post-Commit Validation.'
+    ]
+  },
+  {
+    id: 'nano-swarm-layers',
+    title: 'Nano Sea v2: Swarm Layer Architecture (COMING SOON)',
+    summary: '2000-5000 tiny nanos per layer, soft-k routing, expert crosstalk, chromatic indexing, and output aggregation.',
+    tags: ['coming-soon', 'nano-sea-v2', 'architecture', 'routing', 'swarm', 'scaling'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Interactive swarm layer visualization showing nano positions, routing decisions, and crosstalk activity.',
+      'Layer Structure: 3 identical swarm layers (input → layer1 → layer2 → layer3 → output).',
+      'Nanos per Layer: 2000-5000 experts, each 1K-50K parameters. Total ~500K params for full system.',
+      'Routing: ChromaticIndex router scores nanos using RBY-simplex positions, selects top ~8 per token (soft, learnable k).',
+      'Activation: Soft-k routing enables gradient flow to all nanos, preventing dead nanos. ~8 nanos activate per token on average.',
+      'Expert Crosstalk: Cross-attention between selected nanos in same layer (learned gate determines if beneficial).',
+      'Aggregation: Weighted sum of nano outputs per layer.',
+      'Inference Speed: 10-100x faster than 7B-70B cloud models. Can run on CPU/GPU/mobile.',
+      'Related: NERDS_ASSEMBLE.txt, Nano Sea v2 Roadmap, Cosmic Cycles, Deposits.'
+    ]
+  },
+  {
+    id: 'chromatic-routing',
+    title: 'Chromatic Index Routing (RBY-Simplex) (COMING SOON)',
+    summary: 'Geometric routing where Red=abstraction/complexity, Blue=domain, Yellow=style assigns nanos to positions.',
+    tags: ['coming-soon', 'nano-sea-v2', 'routing', 'chromatic', 'geometry', 'specialization'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: RBY-simplex navigator showing nano positions and query routing decisions in 3D space.',
+      'Simplex Basis: Red, Blue, Yellow orthogonal axes.',
+      'Red Dimension: Abstraction level and computational complexity. High red = abstract reasoning, low red = concrete detail.',
+      'Blue Dimension: Domain specialization. Different domains occupy different positions.',
+      'Yellow Dimension: Style and presentation. Code style, documentation style, error message tone.',
+      'Distance Metric: Aitchison distance for simplex points.',
+      'Router Behavior: Query is embedded, distance computed to all nanos, top-k selected based on learnable thresholds.',
+      'Specialization: Over time, nanos cluster in regions of simplex based on training signals.',
+      'Reference: NANO_SEA_V2_BUILD_SPEC.md, nano_sea_v2_reference.py.',
+      'Related: Nano Sea v2 Roadmap, Swarm Layer Architecture, Soft-k Routing.'
+    ]
+  },
+  {
+    id: 'soft-k-routing',
+    title: 'Soft-k Routing vs Hard Top-k (COMING SOON)',
+    summary: '30 validated experiments prove soft-k differentiable routing beats hard top-k selection by 8-10% at same parameters.',
+    tags: ['coming-soon', 'nano-sea-v2', 'routing', 'soft-selection', 'expert-mixture', 'validated'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Soft-k vs hard-k comparison dashboard with training curves from all 30 validation experiments.',
+      'Hard Top-k: Select exactly top-k nanos (discrete, no gradient through unchosen nanos). Kills weak nanos.',
+      'Soft-k: Learned differentiable selection with smooth gradients. All nanos receive gradient signals.',
+      'Advantage: Weak nanos get training signal instead of zero gradient. Nanos that could specialize survive.',
+      'Performance: Soft-k achieves 8-10% improvement in perplexity/BLEU/F1 vs hard-k at same parameter budget.',
+      'Implementation: Gumbel-max trick or temperature-scaled softmax for differentiable selection.',
+      'Learnability: k value per query type is learned, not fixed. Some query types activate 4 nanos, others 12.',
+      'Touch Tensor Logging: Records which nanos actually received gradient per batch.',
+      'See: DELIVERY_README.md, 30 validated experiments, nano_sea_v2_reference.py.',
+      'Related: Nano Sea v2 Roadmap, Swarm Layer Architecture, Cosmic Cycles.'
+    ]
+  },
+  {
+    id: 'cosmic-cycles-lifecycle',
+    title: 'Cosmic Cycles: Train → Compress → Deposit → Rebuild (COMING SOON)',
+    summary: 'Iterative nano improvement cycles where dead nanos are pruned, high-performers saved, new nanos spawned with warm-start.',
+    tags: ['coming-soon', 'nano-sea-v2', 'lifecycle', 'cycles', 'evolution', 'warm-start'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Cosmic cycle timeline showing multi-cycle nano population evolution.',
+      'Cycle Phase 1 - Train: Run nano sea on real workloads. Nanos learn. Touch tensor logs nano activations.',
+      'Cycle Phase 2 - Compress: Analyze touch tensors and fitness signals. Dead nanos pruned. Weak nanos marked.',
+      'Cycle Phase 3 - Deposit: High-fitness nanos serialized to disk (deposits are searchable by signature/fitness/domain).',
+      'Cycle Phase 4 - Rebuild: New nanos spawn to fill pruned positions. Warm-start from deposits beats random by ~25%.',
+      'Iteration: After K cycles, sea has evolved K times. Dead weight removed, specializations deepened, warm-start improves convergence.',
+      'Compound Growth: Each cycle builds on previous specializations. Performance improves monotonically if feedback signals are good.',
+      'Touch Tensor: Fitness signal vector (activation frequency, loss contribution, gradient magnitude per nano).',
+      'Deposit Signature: (domain_tags, quality_metrics, nano_weights, architecture_snapshot).',
+      'Related: NERDS_ASSEMBLE.txt, Fleet Agents-Nano, Nano Sea v2 Roadmap.'
+    ]
+  },
+  {
+    id: 'deposits-warm-start',
+    title: 'Nano Deposits and Warm-Start Initialization (COMING SOON)',
+    summary: 'Serialized high-fitness nanos from prior cycles enable 25% faster convergence over random initialization.',
+    tags: ['coming-soon', 'nano-sea-v2', 'deposits', 'warm-start', 'initialization', 'reuse'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Deposit browser and warm-start strategy inspector.',
+      'Deposit Storage: High-performing nanos from cycle N stored with metadata (fitness score, domain tags, training epoch, loss record).',
+      'Searchability: Deposits indexed by domain tag, fitness tier, and nano signature for quick lookup.',
+      'Warm-Start Strategy: New nanos in cycle N+1 initialized from deposits matching their intended domain.',
+      'Convergence Advantage: Warm-start nanos converge ~25% faster (fewer epochs to target loss) vs random initialization.',
+      'Adoption: Every cycle, high-fitness deposits are reused. Low-deposit cycles still benefit from prior domain specializations.',
+      'Evolutionary Path: Nanos evolve incrementally from good deposits instead of always starting from scratch.',
+      'Scaling: Deposit library grows over time. Oldest/lowest-fitness deposits are retired.',
+      'See: DELIVERY_README.md, cosmic_cycles section in NERDS_ASSEMBLE.txt.',
+      'Related: Cosmic Cycles, Touch Tensor Logging, Fleet Agents-Nano.'
+    ]
+  },
+  {
+    id: 'touch-tensor-fitness',
+    title: 'Touch Tensor Logging and Nano Fitness (COMING SOON)',
+    summary: 'Per-nano activation frequency, loss contribution, and gradient magnitude tracked for compression and deposit decisions.',
+    tags: ['coming-soon', 'nano-sea-v2', 'fitness', 'logging', 'selection', 'evolution'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Touch tensor dashboard showing nano fitness scores and selection pressure over cycles.',
+      'Touch Tensor: Vector per nano tracking (activation_count, loss_contribution, gradient_magnitude, last_improved_epoch).',
+      'Logging: Recorded during forward/backward pass, updated per batch, dumped per epoch.',
+      'Activation Frequency: How often nano was selected by router. High = in-demand, Low = redundant.',
+      'Loss Contribution: How much this nano\'s output affects final loss. High = critical, Low = decorative.',
+      'Gradient Magnitude: Average gradient norm flowing through this nano. Zero = dead zone, High = learning active.',
+      'Compression Signal: Nanos with low activation + low loss contrib + zero gradient are pruned.',
+      'Deposit Signal: Nanos with high activation + positive loss contribution + stable gradients become deposits.',
+      'Specialization: Over cycles, activation distribution tightens. Fewer nanos activate for each query type.',
+      'See: nano_sea_v2_reference.py fitness module, DELIVERY_README.md.',
+      'Related: Cosmic Cycles, Nano Deposits, Swarm Layer Architecture.'
+    ]
+  },
+  {
+    id: 'fleet-agents-nano',
+    title: 'Fleet Agents-Nano: Parallel Nano Sea Improvement Workers (COMING SOON)',
+    summary: 'Sub-agent pool that runs cosmic cycles, manages deposits, analyzes touch tensors, and reports nano health.',
+    tags: ['coming-soon', 'nano-sea-v2', 'fleet', 'lifecycle', 'workers', 'parallel'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Fleet Agents-Nano orchestration panel showing active workers and task assignments.',
+      'Purpose: Autonomous nano sea lifecycle management running in parallel with Build Layer.',
+      'Tasks: Cosmic cycle orchestration, deposit serialization, touch tensor analysis, RBY position adjustment, nano health monitoring, Midwife dataset generation.',
+      'Parallelism: Multiple Fleet Agents-Nano run simultaneously, each managing a subset of the nano pool.',
+      'Communication: Agents report fitness signals, deposit candidates, and health alerts to God Factory and Meta Layer.',
+      'Feedback Loop: Blame Crawler quality scores + Touch tensor fitness → Fleet Agents-Nano decisions on compression/deposit/rebuild.',
+      'Output: Improved nano sea health, new deposits, specialized nano populations.',
+      'Related: Cosmic Cycles, Nano Sea v2 Roadmap, THE GOD FACTORY, Meta Layer.'
+    ]
+  },
+  {
+    id: 'agent-spawn-authority',
+    title: 'Agent Spawn Authority and Guard Conditions (COMING SOON)',
+    summary: 'Policy-driven gating for sub-agent spawning ensures only authorized agents activate and logs unauthorized attempts.',
+    tags: ['coming-soon', 'agents', 'authority', 'policy', 'security', 'forensic'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Agent spawn authority matrix showing roles, spawn conditions, and veto criteria.',
+      'Authority Chart: Hierarchical agent permissions (God Factory can spawn all; Agent Agent-Loop can only spawn Fleet; Chat Agent cannot spawn).',
+      'Guard Conditions: Spawn gate checks — memory state, project state, current load, security policy, tag schema version.',
+      'Spawn Request: Agent issues request with (requester_id, agent_type, initial_context, required_resources).',
+      'Validation: Authority checker verifies requester authorization, guard conditions pass, forensic linkage valid.',
+      'Grant or Deny: Approve = agent spawns with ID and audit link. Deny = logged as unauthorized_spawn_attempt.',
+      'Enforcement: Denied spawn attempts block agent creation and trigger forensic alerts.',
+      'God Factory Override: God Factory can override deny decisions with explicit justification tag.',
+      'Related: Unified Spec Agent Registry, Forensic Database, THE GOD FACTORY.'
+    ]
+  },
+  {
+    id: 'blame-feedback-loop-nano',
+    title: 'Blame Crawler + Nano Sea Feedback Loop (COMING SOON)',
+    summary: 'Model quality scores from Blame feed specialization signals to Nano Sea, creating virtuous improvement cycle.',
+    tags: ['coming-soon', 'nano-sea-v2', 'blame', 'feedback', 'specialization', 'integration'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Feedback loop visualization showing Blame → Fleet Agents-Nano → Nano Improvement → Better Responses.',
+      'Signal Flow: (1) Agent query → (2) Nano Sea response, (3) Blame Crawler scores output quality, (4) Quality dimensions computed, (5) Model-specific fitness profile updated.',
+      'Nano Feedback: Quality scores binned by query type/domain. Nano Sea sees: "codings queries=0.85, reasoning_queries=0.62".',
+      'Specialization: Fleet Agents-Nano use quality signals to adjust RBY positions. Nanos specializing in high-quality domains get protected.',
+      'Retraining: Domains with low quality scores trigger retraining rounds focused on that domain.',
+      'Suggested Jobs: Blame → Gap Analysis → Suggested Jobs can recommend "retrain nanos for coding domain".',
+      'Virtuous Loop: Better nanos → better responses → higher Blame scores → more specialized nanos.',
+      'See: NERDS_ASSEMBLE.txt blame_feedback_loop section, Fleet Agents-Nano, BLAME panel.',
+      'Related: Quality Dimensions, Cosmic Cycles, Specialization.'
+    ]
+  },
+  {
+    id: 'pre-edit-protocol-complete',
+    title: 'Pre-Edit Protocol: Three-Crawler Enforcement (COMING SOON)',
+    summary: 'Memory Crawler + Project Description Crawler + Project State Crawler all must complete before any file write is authorized.',
+    tags: ['coming-soon', 'build-layer', 'pre-edit-protocol', 'crawlers', 'waiting-state', 'validation'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Pre-Edit Protocol monitor showing real-time crawler progress and gate clearance status.',
+      'Requirement 1 - Memory Crawler Signal: Agent context memory complete and scopes satisfied.',
+      'Requirement 2 - Project Description Crawler Signal: Plan scope clearly declared and files identified.',
+      'Requirement 3 - Project State Crawler Signal: Ground truth snapshot current and devtag registry synchronized.',
+      'Enforcement: Loop holds in WAITING state until all three signals enqueued.',
+      'Timeout: If any crawler exceeds time budget (configurable per crawler), escalate to God Factory.',
+      'Visibility: All three crawler statuses shown in Agent event feed and Waiting State Machine view.',
+      'Forensic Record: Every pre-edit cycle logs crawler latencies and gate clearance times.',
+      'Related: WAITING State Detail, Memory Crawler, Project Description Crawler, Project State Crawler, Build Layer.'
+    ]
   }
 ];
 

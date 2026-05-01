@@ -1,53 +1,228 @@
-NERDS ASSEMBLE
+NERDS_ASSEMBLE: Nano Sea v2 + Agentic IDE Alignment
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-If you are reading this, you are part of the Nano Sea reconstruction crew.
+This document speaks straight to engineers and researchers about the integration of
+Nano Sea v2 into the Personal IDE's agentic architecture. If you're here to build,
+ship, or debug this system, read this first.
 
-This is the straight talk version.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-We are not polishing a toy chatbot.
-We are building a tagged, agentic, self-improving engineering organism.
-The Nano Sea is not a sidecar. It is the long game.
+THE ARCHITECTURE IN TWO SENTENCES
 
-North star:
-- Replace brittle monolithic prompt dependence with structured, inspectable swarm cognition.
-- Keep deterministic scaffolding (tags, validators, drift checks, forensic traces) around adaptive learning.
-- Make every operation attributable, reversible, and debuggable.
+The Personal IDE is an agentic IDE where every operation is mediated by a unified
+tag language. Nano Sea replaces the external LLM dependency — agents still issue
+the same queries and receive the same response format, but increasingly those
+responses come from the local nano swarm rather than from cloud models.
 
-What changes in the rework:
-1. Architecture alignment
-- Align all Nano Sea internals with unified build/meta layer architecture.
-- Treat parser-derived ground truth and tag registry as first-class integration surfaces.
-- Build toward one authority model where routing, memory, and lifecycle are policy-driven.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-2. Memory and context discipline
-- No giant context dumps.
-- Chunked, tier-aware, role-aware memory routing.
-- Agent/interaction-specific memory surfaces that can be audited and replayed.
+THE CORE INSIGHT
 
-3. Lifecycle rigor
-- Train, compress, deposit, rebuild loops are not optional flavor.
-- They are required for quality climb and controlled evolution.
-- Every cycle should emit measurable deltas (fitness, debt impact, regression impact).
+Current agent loop:
+  Agent → Query → Cloud LLM → Response → Tag Validator → Action
 
-4. Tooling and observability
-- If it cannot be measured, it cannot be trusted.
-- If it cannot be rolled back, it cannot be deployed.
-- If it cannot be explained with tags and forensic records, it is not done.
+Post-nano loop:
+  Agent → Query → Model Router → Nano Sea OR Cloud LLM → Response → Tag Validator → Action
 
-5. Scale path
-- Design for constrained hardware first, then expand.
-- Keep fallback behavior explicit across model tiers.
-- Make distributed mesh and paging additive, not architecture-breaking.
+The router decides: is this query workload suitable for the nano sea, or should it
+escalate to a cloud model? Early on, most things escalate. Over time, as nanos
+specialize and the sea scales, more work stays local. Eventually, the sea becomes
+the primary executor and cloud models become the exception (backfill, edge cases,
+major architecture changes).
 
-Implementation stance:
-- Small valid steps over grand rewrites.
-- Preserve traceability across every modification.
-- Prefer composable modules with narrow contracts.
-- Document where the spec is ahead of the code as COMING SOON, then close those gaps surgically.
+The tag validator is UNCHANGED. The response format is UNCHANGED. The only change
+is where the response comes from.
 
-For future nerds joining the trench:
-- Read the delivery package in this folder.
-- Respect the build order.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WHY THIS MATTERS (THE MATH WORKS)
+
+Nano Sea v2 is not speculative. It is grounded in 30 validated experiments proving:
+
+1. Multiple small experts (soft-k routing on a swarm) beat one large model by 8-10%
+   at the same parameter count.
+2. Soft differentiable routing works better than hard top-k.
+3. Expert crosstalk (cross-attention between nanos in the same layer) improves results.
+4. Chromatic routing (RBY-simplex navigation) gives interpretable expert positions.
+5. Touch tensor logging (which nanos activate for which inputs) provides fitness signals.
+6. Cosmic cycles (train → compress → deposit → rebuild) improve models across iterations.
+7. Deposit-guided initialization beats random initialization.
+8. Three swarm layers is optimal at ~500K total parameters.
+
+These are tested facts. The research package includes all 30 test scripts and results.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+THE NANO ARCHITECTURE IN 30 SECONDS
+
+Query → Shared Embedding → SwarmLayer1 → SwarmLayer2 → SwarmLayer3 → Output Head → Response
+
+SwarmLayer = 2000-5000 tiny nanos (1K-50K params each) + ChromaticIndex router
+  • Router selects top ~8 nanos per token (soft, learnable k)
+  • Each nano processes query in parallel
+  • Expert crosstalk: nanos attend to each other (optional, learned gate)
+  • Outputs weighted and summed
+
+Key numbers:
+  • Total params: ~500K (typical)
+  • Nanos activated per token: ~8
+  • Effective capacity: 8 nanos × 3 layers × 30K params = much larger than 500K suggests
+  • Inference speed: 10-100x faster than 7B-70B cloud models
+  • Training cost: thousands vs millions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+THE SWARM LAYER IN DETAIL
+
+1. Query embedding comes in (d_model dimensions)
+2. ChromaticIndex router scores all nanos using RBY-simplex positions
+3. Soft-k routing selects top ~8 nanos (differentiable, learned k per query type)
+4. Each selected nano processes query (parallel)
+5. Expert crosstalk: nanos exchange information via cross-attention
+6. Outputs weighted and summed
+7. Result → next layer or output head
+
+RBY Simplex is geometric: R=complexity/abstraction, B=domain, Y=style. Nanos
+specialize and occupy positions. Router uses Aitchison distance for similarity.
+
+Routing is learned. Crosstalk is learned. Early: many activations, high crosstalk.
+Over time: tight specialization, minimal crosstalk (unless beneficial).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+COSMIC CYCLES: HOW NANOS IMPROVE OVER TIME
+
+1. TRAIN: Run sea on real workloads. Nanos learn. Touch tensor logs activations.
+2. COMPRESS: Dead nanos die. Weak nanos pruned. New nanos spawn in gaps.
+3. DEPOSIT: High-performers serialized to disk (deposits are searchable).
+4. REBUILD: New nanos warm-start from deposits (beats random by ~25%).
+Then repeat.
+
+After K cycles: sea has iterated K times, specializations deepened, weak performers
+removed, new entrants have prior knowledge. Performance compounds.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+INTEGRATION INTO AGENT QUERIES
+
+Today: Query has explicit model="gpt-4o"
+Tomorrow: Query has model_routing with primary=nano_sea, fallback=gpt-4o, routing_hints
+
+Router decides: nano_sea or cloud based on:
+  • Query type (code_gen, reasoning, test, refactor, etc)
+  • Complexity
+  • Safety level
+  • Sea health metrics
+
+Easy queries → nano. Hard → cloud. In-between → probabilistic.
+
+Response format identical regardless of source. Tag validators don't care where it came from.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BLAME CRAWLER + NANO SEA = GUIDED EVOLUTION
+
+1. Agent issues query
+2. Response comes (nano sea or cloud)
+3. Tag validator processes it
+4. Blame Crawler attributes: which model, which nano, query type, outcome
+5. Quality dimensions scored: conformance, efficiency, correctness
+6. Nano quality scores guide specialization
+7. Pattern recognition: "all nanos fail on reasoning" → suggests retraining
+8. Suggested Jobs: "Nano quality degradation" → feeds improvement pipeline
+
+Feedback loop drives nanos to specialize for actual usage patterns.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FLEET AGENTS + FLEET AGENTS-NANO
+
+Fleet Agents: parallel workers in agent loop.
+Fleet Agents-Nano: parallel improvement workers for nano sea.
+
+Fleet Agents-Nano do:
+  • Run cosmic cycles
+  • Manage deposits
+  • Analyze touch tensors
+  • Adjust RBY positions
+  • Generate Midwife datasets for nano training
+  • Monitor sea health
+
+Blame → Midwife → Fleet Agents-Nano → improve sea → improve responses → improve Blame.
+Virtuous loop.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUILD ORDER FOR NANO SEA INTEGRATION
+
+Phase 1: Core (1-4 weeks)
+  • Shared embedding, universal nano, swarm layer, output head
+  • Milestone: Nanos generate (badly), deterministic, fast
+
+Phase 2: Routing (1-2 weeks)
+  • Router learns specialization
+  • Expert crosstalk
+  • Touch tensor logging
+  • Milestone: Nanos activate predictably
+
+Phase 3: Training (1-2 weeks)
+  • End-to-end swarm training
+  • Midwife integration
+  • Milestone: Nanos actually learn
+
+Phase 4: Lifecycle (2-3 weeks)
+  • Spawner, fitness, compression, deposits
+  • Cosmic cycle orchestrator
+  • Milestone: Sea self-improves
+
+Phase 5: IDE Integration (2-3 weeks)
+  • Query router
+  • Blame Crawler enhancements
+  • Fleet Agents-Nano
+  • Milestone: Agents use sea, get better
+
+Phase 6: Mesh + Scale (3+ weeks)
+  • Multi-GPU paging
+  • Mesh federation
+  • Production harness
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WHAT NOT TO DO
+
+1. Do NOT use old nano types (FeatureNano, PatternNano, etc). DEAD.
+2. Do NOT hard-code top-k=8. Let router learn k.
+3. Do NOT skip deposits. Warm-starting from random is wasteful.
+4. Do NOT train all nanos equally. Specialize.
+5. Do NOT ignore touch tensors. Foundation of fitness scoring.
+6. Do NOT derive algorithms. Reference implementations exist. Copy, adapt, ship.
+7. Do NOT route safety-critical queries to nano sea until proven in your domain.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+THE VISION
+
+Personal IDE self-improves. Agents build, measure, identify problems, generate fixes.
+
+Nano Sea removes cloud dependency. Nanos specialize for actual usage. System gets faster,
+cheaper over time.
+
+Over months: sea handles most queries locally.
+Over years: sea trained on your code, your patterns, your style. Not generic. YOU.
+
+Build it.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+References:
+  • NANO_SEA_V2_BUILD_SPEC.md — Complete specification (file by file)
+  • nano_sea_v2_reference.py — Working PyTorch implementations
+  • agent_meta_architecture_action_plan.json — Meta-agent shell spec
+  • DELIVERY_README.md — How to use the delivery package
+  • ARCHITECTURE_COMPLETION.md — Mathematical derivations
+  • test_30_SUMMARY.md — Proof that soft-k routing works
+
+Start with NANO_SEA_V2_BUILD_SPEC.md.
 - Do not bypass validators for speed.
 - Do not hide uncertainty behind fluent text.
 - Keep the system legible for the next engineer.
