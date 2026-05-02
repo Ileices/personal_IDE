@@ -2204,6 +2204,325 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Nano Integration: Fleet Agents-Nano operate through same tag validator and forensic database as standard Fleet Agents. Nano Liaison Agent provides translation layer. Nano cycle outputs become devtag:nano entries in the main registry.',
       'Related: Build Layer Overview, Meta Layer Overview, Nano Sea, Forensic Database, Agent Spawn Authority.'
     ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // NANO SEA v2 DEEP-DIVE — Experimental Proof, Deep Router, Meta-Nanos, Global HPC
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'nano-sea-experimental-proof',
+    title: 'Nano Sea v2: Experimental Proof — Handicap Gauntlet Results (COMING SOON)',
+    summary: 'NanoMoE wins FLOP-matched against dense transformers by 8.1%, and fair-fight by 11.2%. Concrete test data: how hard can you nerf it before dense catches up?',
+    tags: ['coming-soon', 'nano-sea-v2', 'experimental', 'proof', 'moe', 'routing', 'benchmarks'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Experimental results viewer in Nano Sea panel showing benchmark history across cosmic cycles.',
+      'Fair Fight Baseline: NanoMoE (16 experts, top-2 routing) achieved PPL 6.11 vs Dense Transformer PPL 6.88. That is an 11.2% improvement. Accuracy 46.8% vs 42.5% (+4.3%). Both trained on 5000 steps, Shakespeare corpus, 1.1M chars.',
+      'FLOP-Matched Test: Same compute budget (FLOP-matched). NanoMoE still wins by 8.1%. Routing intelligence is not just parameter count.',
+      'Handicap 1 — Expert Count: NanoMoE wins at 16, 8, 4, 2 experts. Only loses at 1 expert (barely, +0.04 PPL). MoE advantage requires at least 2 experts.',
+      'Handicap 2 — Top-k: Top-2 routing wins. Top-1 routing loses by 15%. Activating multiple experts per token is critical.',
+      'Handicap 3 — Training Steps: NanoMoE needs >50% of dense training steps to win. At 50% steps it barely loses (7.10 vs 6.88). At 100% it decisively wins.',
+      'Handicap 4 — d_model: NanoMoE wins even at 75% d_model. Loses at 50%. Embedding dimension can be trimmed only so far.',
+      'Handicap 5 — No Load Balancing: Removing load balancing aux loss only costs 0.09 PPL. NanoMoE is robust to balance removal.',
+      'Handicap 6 — Network Latency: Added simulated latency tax (1ms–10ms per forward pass) — PPL unchanged. Quality is latency-independent. Only wall time increases modestly (+10-20%).',
+      'Compound Handicaps: When 3+ handicaps are stacked simultaneously, NanoMoE loses — as expected. No single system survives all nerfs at once.',
+      'Conclusion: Dense catches up only when experts are reduced to 1, training is cut below 50%, or d_model is halved. Under fair conditions, NanoMoE wins every time.',
+      'Reference: RESULTS_TEST20_HANDICAP_GAUNTLET.md in NANO_train/NANO_corpus/lump/'
+    ]
+  },
+  {
+    id: 'nano-sea-deep-router',
+    title: 'Nano Sea v2: Deep Router — 6-Layer Routing Network (COMING SOON)',
+    summary: 'The 6-layer neural router that selects which nanos process each token: 4-level routing pipeline, load-aware dynamic routing, 1.3M parameter router, trained alongside nanos.',
+    tags: ['coming-soon', 'nano-sea-v2', 'router', 'deep-router', 'soft-k', 'load-balancing', 'chromatic-routing'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Router telemetry panel in Nano Sea — expert activation heatmap, routing loss trends, expert load balance chart.',
+      '4-Level Routing Pipeline: Level 0 = Machine Selection (which machine has relevant nanos). Level 1 = Shard Selection (KD-tree, O(log N), narrows to ~50 candidates). Level 2 = Fine Scoring (6-layer neural net scores candidates). Level 3 = Soft-K Selection (reverse cumsum, selects top-k with learned weights).',
+      'Layer 1 — Input Projection: Linear(d_model, 512) + LayerNorm + GELU. Expands token representation to router hidden space.',
+      'Layer 2 — Cross-Attention: MultiHeadAttention(512, heads=8). Token "looks at" candidate expert RBY positions and stats. Computes raw affinity.',
+      'Layer 3 — Load-Aware: Linear(512, 512) + residual. Takes current expert queue depth, recent accuracy, and network latency as input. Adjusts routing dynamically.',
+      'Layer 4 — Specialization: Linear(512, 512) + residual. Deep non-linear feature combination learning which experts handle which patterns.',
+      'Layer 5 — Contrastive: Cosine similarity head. Compares transformed token representation to each expert profile vector.',
+      'Layer 6 — Score + Gate: Linear(512, K) → softmax with auxiliary balance loss. Produces final routing weights. Balance loss prevents expert collapse.',
+      'Parameters: ~1.3M total for the router. Runs on top-50 candidates from KD-tree, not all nanos. Cost per token: ~65K FLOPs (vs ~500K for nanos). Router overhead ~13% of compute.',
+      'Training: Router trains alongside nanos via combined loss: 60% task performance + 20% expert balance + 10% load balance + 10% latency penalty.',
+      'Sync: Router is a shared global model. All machines have a copy, kept in sync via federated averaging every 50 steps.',
+      'Why 6 layers not more: Router runs every token every batch. 100 layers would be slower than the nanos it routes. 6 layers gives non-linear matching + load-awareness + contrastive selection at acceptable cost.',
+      'Reference: SPEC_ADDENDUM_ROUTER_AND_META_NANOS.md in NANO_train/NANO_corpus/lump/'
+    ]
+  },
+  {
+    id: 'nano-sea-meta-nanos',
+    title: 'Nano Sea v2: Meta-Nano Layer — Nanos That Manage the Mesh (COMING SOON)',
+    summary: 'Eight specialized meta-nano types that observe and self-improve the distributed mesh: load prediction, fault prediction, route optimization, bandwidth estimation, reputation scoring, gossip tuning, scheduling, anomaly detection.',
+    tags: ['coming-soon', 'nano-sea-v2', 'meta-nanos', 'hpc', 'mesh', 'self-improving', 'distributed'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Meta-Nano health panel in Nano Sea — one row per meta-nano type showing prediction accuracy and mesh impact.',
+      'Purpose: Static mesh rules (fixed gossip intervals, fixed timeouts, fixed thresholds) break as the network grows. Meta-nanos trained on live telemetry solve this by learning optimal parameters from actual behavior.',
+      'Load Predictor Nanos (8 nanos, 10K params each, LSTM): Input = 60s of per-node GPU%, CPU%, queue depth, memory pressure. Output = predicted load 30s forward. Use: pre-emptive migration BEFORE overload.',
+      'Fault Predictor Nanos (12 nanos, 5K params each, gradient-boosted ensemble): Input = heartbeat patterns, packet loss rates, latency jitter, historical failures. Output = probability each node fails within 5 minutes. Use: preemptive nano replication before node dies.',
+      'Route Optimizer Nanos (4 nanos, 20K params each, RL): Input = routing decisions + outcomes (latency, accuracy). Output = suggested partition map updates. RL reward = low latency + high accuracy. Continuously improve which nanos live where.',
+      'Bandwidth Estimator Nanos (6 nanos, 3K params each, regression): Input = recent transfer sizes + times between node pairs. Output = estimated bandwidth and latency between any two nodes. Use: avoid sending 10GB to 1Mbps nodes.',
+      'Reputation Scorer Nanos (4 nanos, 5K params): Input = node history (accepted nanos, rejected nanos, uptime, response times). Output = trust score 0-1 per node. Use: decide how much to trust a node\'s work products.',
+      'Gossip Tuner Nanos (2 nanos, 2K params): Input = gossip interval, network size, state convergence time, bandwidth usage. Output = optimal gossip interval for current conditions. Control theory approach.',
+      'Scheduler Nanos: Optimize which training jobs to assign to which machines given current load predictions and reputation scores.',
+      'Anomaly Detector Nanos: Catch new attack patterns, hardware degradation signatures, Byzantine behavior — patterns that static rules cannot detect.',
+      'Meta-nanos run in a separate pool from task nanos. They train on mesh telemetry data (not code). They are managed by Fleet Agents-Nano on the same cosmic cycle schedule as task nanos.',
+      'Reference: SPEC_ADDENDUM_ROUTER_AND_META_NANOS.md in NANO_train/NANO_corpus/lump/'
+    ]
+  },
+  {
+    id: 'nano-sea-global-hpc',
+    title: 'Nano Sea v2: AIOS IO Global HPC — Distributed Mesh Architecture (COMING SOON)',
+    summary: 'Peer-to-peer mesh of computers collectively training and serving the Nano Sea — each machine discovers, benchmarks, trains nanos, and earns credit. How it differs from BOINC, Golem, Gensyn, Vast.ai.',
+    tags: ['coming-soon', 'nano-sea-v2', 'hpc', 'distributed', 'mesh', 'p2p', 'aios-io', 'federation'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Mesh status panel in Nano Sea showing connected nodes, active nano assignments, and contribution credits.',
+      'What AIOS IO Is: A peer-to-peer mesh where each computer discovers peers, benchmarks its hardware, receives nano training jobs matched to its capabilities, trains experts, returns trained nanos, serves inference, and earns credit for compute.',
+      'Key Efficiency Insight: NOT all nanos are active simultaneously. Per token = ~8-32 nanos. Per machine = ~20K-200K nanos in GPU memory. Total system = millions across the mesh. Cold nanos live on CPU RAM or disk, hot-swapped via NanoMemoryManager.',
+      'Scaling Solution: Hierarchical routing (ChromaticIndex KD-tree, O(log N)) narrows from millions → 50 candidates. C++/CUDA router kernel scores 50 candidates in parallel. Distributed index: each machine knows local nanos + global RBY partition map.',
+      'Consumer GPU First: GTX 1660 SUPER, RTX 3090 fully supported via PyTorch NCCL (multi-GPU) + Gloo (CPU). No GPUDirect RDMA required. Build the interface for GPUDirect now, swap the implementation when datacenter GPUs arrive.',
+      'vs BOINC: BOINC = CPU-only science tasks, no GPU, no incentive. AIOS IO = GPU nanos + financial credits + ML training.',
+      'vs Golem: Golem = Docker containers, no persistent state, no multi-worker gradient aggregation. AIOS IO = persistent mesh, stateful nanos, federated training.',
+      'vs Gensyn: Gensyn = blockchain overhead, complex proof-of-learning, centralized task submission. AIOS IO = direct P2P, no blockchain, TouchTensor fingerprinting for verification.',
+      'vs Vast.ai: Vast.ai = centralized rental marketplace, whole GPU, no fault tolerance for training. AIOS IO = shard nano pools across heterogeneous hardware, any machine contributes any amount.',
+      'Key Innovation: Verification via TouchTensor fingerprinting + federated nano averaging (mathematical, not cryptographic). No blockchain tax. Stateful. Heterogeneous. Self-improving mesh.',
+      'Hardware Minimum: Any machine with 4GB+ GPU or CPU can contribute. A Raspberry Pi runs CPU nanos. A 3090 runs GPU nanos. Both valued.',
+      'Reference: GLOBAL_HPC_SPEC.md in NANO_train/NANO_corpus/lump/'
+    ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // TAG SYSTEM COMPLETENESS — Addendum Buildtag Vocabulary, Filesystem Tags, Plantag Addendum
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'buildtag-addendum-vocabulary',
+    title: 'Buildtag Addendum Vocabulary: Extended Operations (COMING SOON)',
+    summary: '15 additional buildtag types from the unified spec addendum: test, document, deprecate, revert, optimize, secure, annotate, migrate, retire, register, lock, unlock, checkpoint, claim, release.',
+    tags: ['coming-soon', 'buildtags', 'vocabulary', 'tag-system', 'unified-spec', 'operations'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Full buildtag vocabulary browser in Tag Registry panel.',
+      'buildtag:test:[devtag] — Write or update a test for the specified devtag. Requires devtag:test to not yet exist or to exist as devtag:needs_test.',
+      'buildtag:document:[devtag] — Add or update documentation for the specified devtag.',
+      'buildtag:deprecate:[devtag] — Mark the specified devtag as deprecated. Writes devtag:deprecated attribute. Does NOT remove it.',
+      'buildtag:revert:[buildtag_id] — Undo a specific prior buildtag by ID. Used by Version Control Agent for rollbacks.',
+      'buildtag:optimize:[devtag] — Performance optimization of the specified devtag. Used when devtag:perf_critical or devtag:hot_path is tagged.',
+      'buildtag:secure:[devtag] — Security hardening of the specified devtag. Used when devtag:auth, devtag:permission, or devtag:public_api is tagged.',
+      'buildtag:annotate:[devtag]:[tag] — Attach a structured annotation tag to the specified devtag without modifying code.',
+      'buildtag:migrate:[devtag_old]:[devtag_new] — Migrate data or interface from old devtag to new devtag.',
+      'buildtag:retire:[devtag] — Initiates the Tag Retirement Chart 7-step process for the specified devtag.',
+      'buildtag:register:[devtag] — Register a new devtag in the tag registry (for structure identified by the parsing layer but not yet registered).',
+      'buildtag:lock:[devtag] — Claim exclusive write lock on a devtag for the current build step (Conflict Sub-Agent enforces).',
+      'buildtag:unlock:[devtag] — Release write lock held by current agent on specified devtag.',
+      'buildtag:checkpoint:[plantag] — Mark a plantag milestone checkpoint. Used by Version Control Agent to create permanent rollback points.',
+      'buildtag:claim:[devtag]:[agent_id] — Assign ownership of a devtag to a specific agent for a build step.',
+      'buildtag:release:[devtag]:[agent_id] — Release ownership of a devtag previously claimed by the specified agent.',
+      'All buildtags still subject to the same invariant: must reference at least one existing devtag AND at least one unfulfilled plantag. buildtag:revert and buildtag:retire have special handling in the tag validator.',
+      'Related: Tag Validator, Buildtag Base Vocabulary, Tag Retirement Chart, Conflict Sub-Agent, Version Control Agent.'
+    ]
+  },
+  {
+    id: 'filesystem-structure-tags',
+    title: 'Filesystem Structure Tags: Devtag:Directory, File, and Filesystem Types (COMING SOON)',
+    summary: 'Filesystem-level devtags required by Context Window Manager, Dead Tag Sub-Agent, and Project State Crawler ground truth snapshot directory tree index.',
+    tags: ['coming-soon', 'devtags', 'filesystem', 'project-state-crawler', 'context-window-manager', 'ground-truth'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Filesystem devtag tree in Project State Crawler panel showing directory structure alongside code devtags.',
+      'devtag:directory:[path] — A directory in the project. Produced by the Project State Crawler for every directory traversed (including skipped ones, with skipped attribute).',
+      'devtag:file:[path] — A file in the project. Produced for every file, including those whose content was not parsed (binary, too large, skipped).',
+      'devtag:symlink:[path]:[target] — A symbolic link. Requires parent devtag:file or devtag:directory for the link, and the target must also be registered.',
+      'devtag:generated_file:[path] — A file produced by a build process, not hand-authored. Excluded from most build step assignments.',
+      'devtag:config_file:[path] — A configuration file. Skeptic Agent applies elevated scrutiny to changes involving config files.',
+      'devtag:test_file:[path] — A test file. Tracked separately for coverage analysis.',
+      'devtag:data_file:[path] — A data file (JSON, CSV, fixtures, seeds). Not code-parsed.',
+      'devtag:asset_file:[path] — A static asset (images, fonts, icons). Not code-parsed.',
+      'Purpose: The directory tree index ensures the ground truth snapshot is structurally complete even where code content was not parsed. The Context Window Manager uses this tree to build minimal file inclusion sets.',
+      'Tag Relationship: devtag:file and devtag:directory carry parent-child relationships representing the directory tree.',
+      'Required By: Context Window Manager (file chunking), Dead Tag Sub-Agent (locating orphaned files), Gap Analysis Agent (orphan_scan tool).',
+      'Related: Ground Truth Snapshot, Project State Crawler, Context Window Manager, Dead Tag Sub-Agent, Filesystem Structure Tags.'
+    ]
+  },
+  {
+    id: 'plantag-addendum-vocabulary',
+    title: 'Plantag Addendum Vocabulary: Extended Planning Tags (COMING SOON)',
+    summary: '13 additional plantag types from the unified spec addendum: test_required, performance_target, regression_guard, version_target, security_requirement, nano_required, compatibility, coverage_required, review_required, parallel_safe, parallel_unsafe, rollback_point, debt_ceiling.',
+    tags: ['coming-soon', 'plantags', 'vocabulary', 'tag-system', 'planning', 'unified-spec'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Full plantag vocabulary browser in Tag Registry panel.',
+      'plantag:test_required:[devtag] — Explicitly marks a devtag as requiring a test plantag before this step is done.',
+      'plantag:performance_target:[metric]:[value] — Explicit performance acceptance criterion. Skeptic Agent checks this against benchmarks.',
+      'plantag:regression_guard:[devtag] — Marks a devtag that must NOT regress. Regression Sub-Agent watches it with maximum priority.',
+      'plantag:version_target:[semver] — This step must produce code compatible with the specified semantic version.',
+      'plantag:security_requirement:[name] — Security constraint this step must satisfy. Severity escalation to error if skipped.',
+      'plantag:nano_required:[component] — This step requires a nano sea component. Used by Nano Liaison Agent to verify nano readiness.',
+      'plantag:compatibility:[platform] — This step must produce code compatible with the specified platform (browser, node, python, etc.).',
+      'plantag:coverage_required:[percent] — Minimum test coverage percent required before this step is done. Coverage Analysis Agent checks.',
+      'plantag:review_required:[agent_id] — This step requires review by the specified agent before it can be marked done.',
+      'plantag:parallel_safe — Marks this step as safe to execute in parallel with other currently active steps.',
+      'plantag:parallel_unsafe — Marks this step as NOT safe to parallelize. Parallel Coordinator Agent enforces serialization.',
+      'plantag:rollback_point — Marks this step as a permanent rollback anchor. Version Control Agent creates an indefinitely retained commit.',
+      'plantag:debt_ceiling:[score] — Sets a per-file debt score ceiling override for this step\'s target file.',
+      'Related: Buildtag Addendum, Extended Plantag Vocabulary, Regression Sub-Agent, Coverage Analysis Agent, Parallel Coordinator Agent.'
+    ]
+  },
+  {
+    id: 'agent-loop-live-events',
+    title: 'Agent Loop Live Event Log: Every Event Type Explained',
+    summary: 'What every agent-loop event type in the live log means — from state_change and step_start to loop_detected, schema_miss, and self-reflection.',
+    tags: ['agent', 'agent-loop', 'events', 'build-layer', 'debugging', 'loop-detection', 'schema-miss'],
+    status: 'active',
+    details: [
+      'The Agent Loop event log is the real-time stream of every step the agent takes. Each bracketed label is a structured event type.',
+      '[state_change]: The agent has moved between internal states: idle → evaluating → executing → evaluating → complete (or error). Watch for the evaluating→executing transition to see when a step is being processed.',
+      '[step_start]: A new step has been delivered to the agent for execution. Shows the full step description including target path.',
+      '[step_complete]: The current step was evaluated as complete — the agent produced structured output that the system accepted.',
+      '[step_content]: The raw agent output was captured and stored for this step (separate from evaluation result).',
+      '[timing_update]: Internal timing event — logs execution duration for the current step.',
+      '[dataset_update]: The step result was processed for training dataset generation (Midwife integration).',
+      '[file_changed]: A file was actually written to disk as a result of this step. Only appears when real changes occurred.',
+      '[info]: General informational message — includes schema misses, nano training failures, loop breakout notices, and self-reflection markers.',
+      '[error]: A hard error occurred — most commonly "Agent halted: N consecutive iterations with zero file changes".',
+      '[cooldown]: The agent is pausing between steps (rate limiting or intentional cooldown).',
+      '[loop_detected]: The anti-loop system noticed the agent repeating the same step N times. A breakout attempt will follow.',
+      'Schema Miss: "LLM did not return structured JSON output block. No file changes either." The model output did not include the expected structured_output JSON block. The step will retry. Watch for schema miss #1, #2, #3 — on miss #3 the step is considered failed.',
+      'Self-Reflection: "Self-reflection at iteration N" — The agent stops and reflects on what it has done, then reformulates its next step. Happens at every 10 iterations by default.',
+      'Loop Breakout: "LOOP BREAKOUT (attempt #1)" — The anti-loop system is injecting a fresh approach. The system may do a web search to get external context and reformulate.',
+      'Related: Agent Architecture, Build Layer Overview, Waiting State Machine, Failure Escalation Chart.'
+    ]
+  },
+  {
+    id: 'memory-cross-access-rules',
+    title: 'Memory Cross-Access: Which Agents Can Read Whose Memory',
+    summary: 'Complete access matrix for all agents and all six LLM interaction types — who has TOTAL access, who is excluded from what, and how CUSTOM/PRESET modes work.',
+    tags: ['memory', 'memory-panel', 'access-control', 'agents', 'cross-memory', 'scopes', 'build-layer', 'meta-layer'],
+    status: 'active',
+    details: [
+      'Memory cross-access governs which agent can read which other agent\'s memory. This is enforced at the memory layer and cannot be bypassed by any agent except The God Factory Self-Improvement Agent.',
+      'TOTAL ACCESS (can read all memory from every agent and every LLM interaction): God Factory Self-Improvement Agent, Chat Agent, Midwife Bird-Feeding, Agent Routers, Fleet Agents-Nano, Blame Crawler, The Help Agent, Ask Chat, Edit Chat, Plan Chat, Ask Agent Loop, Edit Agent Loop, Plan Agent Loop.',
+      'RESTRICTED ACCESS — Agent Agent-Loop: Uses SELF, CUSTOM, and PRESET only. Excluded from TOTAL. Cannot read memory from Midwife Bird-Feeding, Agent Routers, or The Help Agent.',
+      'RESTRICTED ACCESS — Fleet Agents: Same restrictions as Agent Agent-Loop. SELF, CUSTOM, PRESET only. Cannot read Midwife, Agent Routers, or Help Agent memory.',
+      'SELF Mode: Access limited to this agent\'s own memory only. No external reads.',
+      'TOTAL Mode: Unrestricted access to all memory sources across the entire system.',
+      'CUSTOM Mode: Access limited to a user-defined subset of memory sources. Subsets stored as TAG QUERIES, not hardcoded source lists. User defines what the agent can see.',
+      'PRESET Mode: Access follows a predefined template. Templates are stored as tag queries. System comes with default presets; God Factory can create new ones.',
+      'How Agents Relay Memories: Agents with TOTAL access can read memory from SELF/CUSTOM/PRESET agents. Restricted agents can share their own memory (writable) — they just can\'t read from excluded sources.',
+      'Why the restrictions exist: Agent Agent-Loop and Fleet Agents are the most constrained because they execute in the build cycle where contaminated context is most dangerous. Restricting them from Midwife and Help memory prevents training noise from entering build decisions.',
+      'Memory Tab: Every agent and every LLM interaction has its own isolated memory tab. The consolidated Memory panel shows all tabs with source-based filtering.',
+      'Related: Memory Panel, Memory Scope Enforcement, Ask/Edit/Plan Memory Surfaces, God Factory Authority, Agent Architecture.'
+    ]
+  },
+  {
+    id: 'nano-sea-build-phases',
+    title: 'Nano Sea v2: 6-Phase Build Order for Implementation (COMING SOON)',
+    summary: 'The verified build sequence for implementing Nano Sea v2 from scratch: core swarm (1-4 weeks), routing (1-2w), training (1-2w), lifecycle (2-3w), IDE integration (2-3w), mesh + scale (3+w).',
+    tags: ['coming-soon', 'nano-sea-v2', 'implementation', 'build-order', 'phases', 'roadmap'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Build progress tracker in Nano Sea panel showing phase completion status.',
+      'Phase 1 — Core (1-4 weeks): Shared Embedding, Universal Nano architecture, SwarmLayer (3 layers), Output Head. Milestone: Nanos generate output (badly), system is deterministic and fast. Do NOT create different nano types — one universal nano class that learns to specialize.',
+      'Phase 2 — Routing (1-2 weeks): ChromaticIndex router, RBY-simplex positions, soft-k selection (proven in test_30v3), expert crosstalk (cross-attention between active nanos), Touch Tensor logging. Milestone: Nanos activate predictably, positions drift toward specialization.',
+      'Phase 3 — Training (1-2 weeks): End-to-end swarm training pipeline, Midwife integration (LLM generates training data → validate by execution → feed to nanos), SwarmTrainer with routing loss + balance loss. Milestone: Nanos actually learn from midwife-generated examples.',
+      'Phase 4 — Lifecycle (2-3 weeks): NanoSpawner (spawn new nanos into gaps), FitnessEvaluator (touch tensor → fitness scores), CompressionEngine (prune dead nanos), DepositStore (serialize high-performers), CosmicCycleManager (orchestrate all lifecycle phases). Milestone: Sea self-improves across cosmic cycles.',
+      'Phase 5 — IDE Integration (2-3 weeks): Query Router (nano_sea or cloud based on query type/complexity/safety), Blame Crawler enhancements (track nano-specific quality), Fleet Agents-Nano (manage cosmic cycles, deposits, touch tensors), Nano Liaison Agent. Milestone: IDE agents use the sea for real queries and get quality results.',
+      'Phase 6 — Mesh + Scale (3+ weeks): Multi-GPU paging via NanoMemoryManager, Mesh federation (peer discovery, gossip protocol), Meta-Nano Layer, Deep Router (6-layer), Production harness. Milestone: Sea runs distributed across multiple machines.',
+      'WHAT NOT TO DO: Do NOT use old nano types (FeatureNano, PatternNano, etc.) — they are dead. Do NOT hard-code top-k=8 — let router learn k. Do NOT skip deposits. Do NOT train all nanos equally. Do NOT ignore touch tensors. Do NOT derive algorithms from scratch — reference implementations exist in nano_sea_v2_reference.py.',
+      'Reference Files: NANO_SEA_V2_BUILD_SPEC.md (complete spec), nano_sea_v2_reference.py (PyTorch implementations), NERDS_ASSEMBLE.txt (architecture overview).'
+    ]
+  },
+  {
+    id: 'god-factory-forensic-tables',
+    title: 'God Factory Forensic Database Tables (COMING SOON)',
+    summary: 'Five forensic tables owned by the God Factory layer: notification_queue, idle_suggestions, brainstorm_records, god_factory_actions, interactive_sessions.',
+    tags: ['coming-soon', 'god-factory', 'forensic', 'database', 'tables', 'schema'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Forensic browser in God Factory screen showing all God Factory table data with cycle-based filtering.',
+      'notification_queue: severity, source_agent_id, source_forensic_ids, notification_type (registry_monitor|idle_scan|debt_monitor|model_monitor|gap_monitor|pattern_watch), source_devtags, source_files, summary, presented_to_user, acknowledged, cycle_id, timestamp.',
+      'idle_suggestions: suggestion_id, category (trivial_enhancement|feature_bridge|performance_opportunity|debt_warning|regression_trend|model_behavior_alert), source_devtags, source_files, source_lines, source_forensic_ids, natural_language_summary, suggested_job_id, presented_to_user, user_response (accept|defer|reject), cycle_id, timestamp.',
+      'brainstorm_records: brainstorm_id, user_input, session_id, cycle_id, system_state_devtags (snapshot of relevant devtags at time of input), job_created_id, timestamp.',
+      'god_factory_actions: action_id, action_type (veto|model_tier_override|model_registry_modify|tag_schema_modify|version_revert|spawn_agent|modify_spawn_authority|modify_escalation_threshold|whitelist_file|pause_sandbox|extend_cycle_limit), justification_tags, affected_ids, cycle_id, session_id, timestamp.',
+      'interactive_sessions: session_id, start_cycle, end_cycle, input_count, sub_agents_spawned, notifications_presented, suggestions_presented, suggestions_accepted, brainstorm_entries, implementations_triggered, summary_tags.',
+      'All tables are write-once, never purged. God Factory actions table supports audit trail for all authority boundary crossings.',
+      'Related: Forensic Database All Tables, System Invariants, God Factory Authority Boundaries, God Factory Screen Layout.'
+    ]
+  },
+  {
+    id: 'suggested-jobs-forensic-tables',
+    title: 'Suggested Jobs Forensic Database Tables (COMING SOON)',
+    summary: 'Six forensic tables owned by the Suggested Jobs system: job_records, sandbox_runs, test_results, debug_records, implementation_log, crash_recovery_log.',
+    tags: ['coming-soon', 'suggested-jobs', 'forensic', 'database', 'tables', 'sandbox', 'implementation'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Forensic drill-down from Suggested Jobs panel into all six table types.',
+      'job_records: Full job record schema — all fields from job category through implementation status. Primary table. Every other Suggested Jobs table references job_id.',
+      'sandbox_runs: sandbox_id, job_id, build_cycle_count, test_cycle_count, review_cycle_count, debug_cycle_count, total_cycles, cycle_limit, status (building|testing|review|ready|failed|abandoned), human_review_required, human_review_completed, current_devtag_state_snapshot.',
+      'test_results: test_id, sandbox_id, job_id, cycle_id, test_name, test_devtag, test_type (existing|new|generated), result (pass|fail|error), failure_message, failure_line, failure_devtag, timestamp.',
+      'debug_records: debug_id, sandbox_id, job_id, cycle_id, failing_test_ids, current_devtag_state, expected_devtag_state, delta_devtags, proposed_buildtag_correction, correction_confidence, timestamp.',
+      'implementation_log: impl_id, job_id, stage (pre_scan|backup|staged_rollout|live_testing|stability|completion), stage_status, rollback_point_id, steps_completed, steps_failed, drift_detected, live_test_results, stability_window_cycles, timestamp.',
+      'crash_recovery_log: recovery_id, job_id, crash_detected_cycle, crash_type (heartbeat_absence|process_error|agent_failure), rollback_point_used, rollback_success, pipeline_stage_at_crash, user_notified, timestamp.',
+      'Related: Suggested Jobs Schema Detail, Sandbox System Detail, Implementation Pipeline, Forensic Database All Tables.'
+    ]
+  },
+  {
+    id: 'blame-forensic-tables',
+    title: 'Blame Crawler Forensic Database Tables (COMING SOON)',
+    summary: 'Five forensic tables owned by the Blame Crawler: blame_records, quality_records, tool_criticism_records, blame_successes, model_registry.',
+    tags: ['coming-soon', 'blame', 'forensic', 'database', 'tables', 'schema', 'quality'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Forensic drill-down in BLAME panel showing all five table types with model and agent filters.',
+      'blame_records: The primary attribution table. Every model output without exception produces one row. All 25+ fields per blame record schema. Never purged.',
+      'quality_records: quality_id, blame_id, model_id, interaction_type, tag_conformance_score, context_utilization_score, instruction_adherence_score, hallucination_score, structural_integrity_score, regression_risk_score, output_efficiency_score, composite_score, below_threshold_flag, consecutive_below_count, timestamp.',
+      'tool_criticism_records: criticism_id, model_id, interaction_type, trigger_blame_ids, failing_quality_dimensions, active_tool_configs, proposed_modifications (JSON array of modification objects), proposed_new_tools (JSON array), forwarded_to_suggested_jobs, suggested_job_id, timestamp.',
+      'blame_successes: success_id, model_id, interaction_type, trigger_blame_ids, quality_dimensions_above_threshold, active_tool_configs, forwarded_to_suggested_jobs_as_promotion, suggested_job_id, timestamp.',
+      'model_registry: model_id, model_name, model_version, provider, all capability fields from model registry schema, strengths, weaknesses, recommended/avoided interaction types, last_updated, updated_by (god_factory|session_end).',
+      'Coverage Invariant: blame_records has one row per model output across ALL agents, ALL cycles, ALL sessions. If any output is missing a blame_record, it is a bug in the output capture layer.',
+      'Related: Blame Record Schema, Blame Quality Dimensions, Model Registry Detail, Output Capture Layer, Forensic Database All Tables.'
+    ]
+  },
+  {
+    id: 'gap-analysis-forensic-tables',
+    title: 'Gap Analysis Forensic Database Tables (COMING SOON)',
+    summary: 'Eight forensic tables owned by Gap Analysis: coverage_matrix, patterns, debt_history, tag_collisions, agent_performance, tag_resolution_log, gap_reports, vocabulary_gaps.',
+    tags: ['coming-soon', 'gap-analysis', 'forensic', 'database', 'tables', 'coverage', 'patterns', 'debt'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Gap Analysis → Forensic tab showing all eight tables with cross-filtering by cycle, agent, and severity.',
+      'coverage_matrix: plantag_id, scope, plan_covered (bool), test_covered (bool), nano_covered (bool), coverage_percent, last_updated_cycle. One row per plantag per scope per cycle.',
+      'patterns: pattern_id, pattern_type (anti_pattern|recurring_failure|structural_signature), signature_tuple (failure_type+devtag_type+agent_id_category+build_phase), recurrence_count, first_seen_cycle, last_seen_cycle, systemic_flag, god_factory_notified.',
+      'debt_history: debt_id, file_path, cycle_id, debt_score, score_breakdown (JSON of contributing factors), ceiling, above_ceiling_flag, assigned_to_job_id.',
+      'tag_collisions: collision_id, devtag_a, devtag_b, collision_type (lock_conflict|dependency_cycle|schema_violation), detected_cycle_id, resolution_status, resolution_buildtag_id.',
+      'agent_performance: perf_id, agent_id, cycle_id, conformance_rate, retry_rate, escalation_rate, cycle_contribution, regression_contribution, spawn_efficiency, context_efficiency, flagged_for_review.',
+      'tag_resolution_log: log_id, calling_agent_id, tool_name, input_params, result_summary, execution_ms, cycle_id, timestamp. Captures every call to every gap analysis callable tool.',
+      'gap_reports: report_id, generating_agent_id, cycle_range, scope, gap_count, critical_count, high_count, medium_count, low_count, top_gap_ids, god_factory_flagged, acknowledged.',
+      'vocabulary_gaps: gap_id, file_path, start_line, end_line, language, structure_description, snapshot_cycles (how many consecutive snapshots it appears in), proposed_new_tag_type, status (pending|proposed|adopted|rejected).',
+      'Related: Gap Analysis Callable Tools, Gap Analysis Sub-Agents, Pattern Recognition Agent, Forensic Database All Tables.'
+    ]
+  },
+  {
+    id: 'psc-forensic-tables',
+    title: 'Project State Crawler Forensic Database Tables (COMING SOON)',
+    summary: 'Five forensic tables owned by the Project State Crawler: ground_truth_snapshots, snapshot_devtags, drift_events, skipped_files, language_registry.',
+    tags: ['coming-soon', 'project-state-crawler', 'forensic', 'database', 'tables', 'ground-truth', 'drift'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Project State Crawler → Forensic tab showing snapshot and drift history.',
+      'ground_truth_snapshots: snapshot_id, cycle_id, session_id, devtag_count, file_count, directory_count, drift_surplus_count, drift_deficit_count, drift_content_count, drift_location_count, systemic_drift_flag, checkpointed (bool), timestamp.',
+      'snapshot_devtags: snap_devtag_id, snapshot_id, tag_type, file_path, start_line, end_line, parent_devtag, language, content_hash, relationship_tags (JSON), skipped (bool).',
+      'drift_events: drift_id, snapshot_id, drift_type (registry_surplus|registry_deficit|content_drift|location_drift), devtag_id, file_path, old_location, new_location, old_hash, new_hash, severity, resolution_status (pending|auto_resolved|queued_for_dead_tag|queued_for_blame_crawler), cycle_id.',
+      'skipped_files: skip_id, snapshot_id, path, skip_reason (gitignore|dependency_dir|size_limit|binary|unregistered_extension), file_size_bytes, cycle_id.',
+      'language_registry: lang_id, file_extension, grammar_name, grammar_version, tree_sitter_module, added_by (god_factory|default), active (bool), last_updated.',
+      'Checkpointing Rule: ground_truth_snapshots are created fresh every cycle. They are NOT persisted between cycles unless the Version Control Agent explicitly checkpoints one.',
+      'Related: Project State Crawler Parsing, Drift Detection Detail, Ground Truth Snapshot, Drift Event Taxonomy, Forensic Database All Tables.'
+    ]
   }
 ];
 
