@@ -83,7 +83,7 @@ Accessible via the Help icon (Activity Bar, bottom left) or `?` keyboard shortcu
 | **Project State Crawler** | Ground truth snapshots, drift event taxonomy (4 types), Tree-sitter parsing per language, reconciliation rules |
 | **Nano Sea v2** | Swarm layer architecture, chromatic routing (RBY-simplex), soft-k routing (8-10% improvement proven), cosmic cycles (train→compress→deposit→rebuild), Fleet Agents-Nano |
 | **Advanced Panels** | Tag Registry, Forensic Database, Gap Analysis, Project State Crawler, Suggested Jobs — all with detailed tab-by-tab guides |
-| **Coming Soon Features** | 20+ specification-defined features marked as `coming_soon` to guide implementation priorities |
+| **Coming Soon Features** | 35+ specification-defined features marked as `coming_soon` to guide implementation priorities |
 
 ### Search and Tags
 
@@ -95,20 +95,23 @@ Accessible via the Help icon (Activity Bar, bottom left) or `?` keyboard shortcu
 
 The Help system marks unimplemented specification concepts with status `coming_soon`:
 
-- **Build Layer**: Complete WAITING state machine timeline, Skeptic/Command/Builder evaluation logs
-- **Meta Layer**: Tool Criticism event log, Gap Analysis result aggregation dashboard
+- **Build Layer**: WAITING state machine 5-state diagram, voting rules detail, tag validator 5-check spec, pre-edit protocol detail
+- **Meta Layer**: Blame Record full schema (25+ fields), Model Registry capability profiles, quality dimensions 7-dimension scoring formulas, Tool Criticism 3-trigger rule, tool modification schema
+- **God Factory**: Interactive state routing, 6 background scan sub-agents + schedules, 6 idle suggestion categories, 8 screen panels detail, complete authority boundary list (may/may not)
+- **Gap Analysis**: 5 anti-patterns (AI Slop, Drift, Spaghetti Growth, Hallucination Loop, Context Loss), debt score formula (step-by-step), 15 deterministic callable tools, 7 agent performance metrics
+- **Project State Crawler**: Tree-sitter parsing layer full mapping, sub-crawler architecture + skip rules, 4 drift types with escalation triggers, WAITING reconciliation rules
+- **Suggested Jobs**: 10 codebase review protocols in sequence, full job record schema (20+ fields), sandbox 5-sub-agent loop, 6-stage implementation pipeline with crash recovery
+- **Unified Spec**: Complete 80+ devtag base vocabulary, voting and command agent decision rules, output capture layer mechanism, unified spec integration points
 - **Memory**: Six dedicated memory surfaces (Ask/Edit/Plan × Chat/Agent Loop) as first-class UI panels
-- **Project State Crawler**: Ground truth snapshot viewer, drift event categorizer with severity scoring
 - **Nano Sea v2**: Architecture map, swarm layer visualizer, cosmic cycle timeline, RBY-simplex navigator
-- **Integration**: Nano Sea feedback loop monitoring, Fleet Agents-Nano orchestration panel
 
 These "coming soon" items serve two purposes:
 1. **User expectations**: Users know what's planned and can navigate to related implemented features
 2. **Implementation roadmap**: Engineers can use tags to identify features ready for surgical implementation
 
-### Unified Spec Alignment
+### Unified Spec Alignment (Fully Indexed)
 
-This pass expands Help coverage based on the 12 specification documents in `build_runs/feedback/`:
+All 12 specification documents in `build_runs/feedback/` are now fully covered by the Help system:
 - `unifi_spec.txt` — Unified Build Layer + Meta Layer architecture
 - `the_god_factory_agent.txt` — God Factory interactive + background scan states
 - `memory_tab_spec.txt` — Six dedicated memory surfaces + 9 agents + scope enforcement

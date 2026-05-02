@@ -1640,6 +1640,570 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Coming Soon — Nano Targeting: Midwife will support targeted nano training — feed only nanos that score low on specific quality dimensions.',
       'Related: Nano Sea, Fleet Agents-Nano, BLAME panel, Cosmic Cycles, Quality Dimensions.'
     ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // GOD FACTORY DETAIL SECTIONS — From the_god_factory_agent.txt spec
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'god-factory-interactive-state',
+    title: 'God Factory: Interactive State — Conversational Operations (COMING SOON)',
+    summary: 'Every type of user input and how the God Factory Agent routes it to a codebase action, on-the-fly sub-agent, or implementation pipeline.',
+    tags: ['coming-soon', 'god-factory', 'interactive', 'routing', 'sub-agents', 'on-the-fly'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Full God Factory conversational interface with on-the-fly sub-agent results displayed inline in chat.',
+      'Feature Request Routing: God Factory checks Suggested Jobs first. If job exists → reports sandbox status and asks whether to proceed or review. If no job exists → spawns Suggested Jobs Crawler in blame-driven mode and builds atomic step breakdown in real time.',
+      'Question Routing: God Factory spawns Memory Crawler sub-agent + Project State Crawler targeted at relevant files → returns answer decoded from tags. Does NOT fabricate. If crawl yields nothing → says so and offers deeper crawl.',
+      'Problem Report Routing: God Factory reads forensic database for recent entries matching the described problem → summarizes in natural language → asks whether to generate a Suggested Job, trigger Skeptic Agent, or investigate further.',
+      'Implement Request Routing: God Factory runs the full implementation pipeline from Stage 1 narrating each stage via its memory tab. Never implements silently.',
+      'Brainstorm Routing: God Factory participates with system-state awareness — responses reference actual devtags, files, debt scores, regression clusters, and model performance data. Never generic suggestions.',
+      'On-The-Fly Sub-Agent: File Inspector — crawls a single file, returns complete devtag set and relationship tags.',
+      'On-The-Fly Sub-Agent: Devtag Resolver — resolves devtag(s) from registry with file/line/parent/content-hash and all relationship tags.',
+      'On-The-Fly Sub-Agent: Forensic Reader — reads all forensic entries for a file/devtag/agent in a cycle range, returns natural-language summaries.',
+      'On-The-Fly Sub-Agent: Blame Reader — reads blame records for a model/agent in a cycle range, returns quality dimension scores and tool criticism records.',
+      'On-The-Fly Sub-Agent: Live Debt Check — calls debt_score on a list of files, returns scores sorted descending.',
+      'On-The-Fly Sub-Agent: Live Coverage Check — calls coverage_check on plantags, returns coverage state.',
+      'On-The-Fly Sub-Agent: Live Pattern Query — calls pattern_query with user-specified filter, returns matching patterns with recurrence and severity trend.',
+      'On-The-Fly Sub-Agent: Sandbox Status Reader — returns sandbox_spec for one or more job IDs including cycle count, test results, and last review findings.',
+      'Token Budgets: File Inspector on small file = Tier 2. Forensic Reader on long cycle range = Tier 4. Context Window Manager manages chunking for all on-the-fly sub-agents.',
+      'Related: God Factory Screen, Background Scan State, Suggested Jobs, Implementation Pipeline.'
+    ]
+  },
+  {
+    id: 'god-factory-background-scan',
+    title: 'God Factory: Background Scan State — Always-On Monitors (COMING SOON)',
+    summary: 'Six sub-agents run continuously in parallel watching registry, debt, model quality, gap reports, patterns, and idle codebase state.',
+    tags: ['coming-soon', 'god-factory', 'background-scan', 'monitors', 'continuous', 'notifications'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Background Scan Status panel on God Factory screen showing each sub-agent\'s last run cycle and current state.',
+      'Background Scan is not a periodic job — it is an always-on indexed crawl system running regardless of whether the user is in conversation.',
+      'Sub-Agent 1 — Continuous Registry Monitor: Runs every cycle. Reads forensic database for new critical/fatal entries. Fatal entries in active build cycle → God Factory immediately invokes veto authority and halts cycle.',
+      'Sub-Agent 2 — Idle Codebase Scanner: Activates when IDE has been idle >3 cycles with no build activity. Scans one file per idle cycle via Project State Crawler single-file mode. Maintains scan position across idle periods to eventually cover entire codebase.',
+      'Sub-Agent 3 — Debt Monitor: Reads debt_history table every 5 cycles. When any file\'s debt score changes by >3 points in either direction since last read → queues notification.',
+      'Sub-Agent 4 — Model Performance Monitor: Reads quality_records table every 3 cycles. When any model\'s rolling composite quality score drops below 0.60 across last 5 outputs → queues notification and recommendation to review model assignment.',
+      'Sub-Agent 5 — Gap Report Monitor: Reads gap_reports table every 10 cycles. When a new gap report has been flagged to God Factory and not acknowledged → queues for next user interaction.',
+      'Sub-Agent 6 — Pattern Watch: Reads patterns table every 5 cycles. When a pattern reaches recurrence count 5 for the first time → queues notification.',
+      'All queued notifications held in notification_queue forensic table. Presented at start of next interactive session or when user explicitly asks.',
+      'Related: God Factory Interactive State, Forensic Database, Debt Tracking Agent, Blame Crawler, Gap Analysis Agent.'
+    ]
+  },
+  {
+    id: 'god-factory-idle-suggestions',
+    title: 'God Factory: Idle Suggestions — Proactive Codebase Observations (COMING SOON)',
+    summary: 'Six idle suggestion categories produced by the Idle Codebase Scanner and surfaced at the start of every interactive session.',
+    tags: ['coming-soon', 'god-factory', 'idle-suggestions', 'proactive', 'codebase-health'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Idle Suggestions panel on God Factory screen with accept/defer/reject per suggestion, and one-click job creation.',
+      'trivial_enhancement: Small improvement achievable in 1-2 atomic steps. God Factory estimates time and offers to add to Suggested Jobs list immediately.',
+      'feature_bridge: Two components exist that could be connected to enable a new capability. God Factory identifies both by devtag and describes what the bridge would do and what new plantag it would satisfy.',
+      'performance_opportunity: A devtag:hot_path or devtag:perf_critical component has a structure that could be optimized based on its current devtag relationship graph.',
+      'debt_warning: A file has crossed its debt threshold since last session. God Factory names file, current debt score, ceiling, and top contributing factors expressed as devtags.',
+      'regression_trend: A devtag has regressed more than twice since last session. God Factory names the devtag, files involved, and buildtags that caused the regressions.',
+      'model_behavior_alert: A model\'s quality score has dropped significantly since last session. God Factory identifies model by name/version, the interaction type where degradation is occurring, and what Blame Crawler has suggested.',
+      'Suggestions are expressed in natural language decoded from underlying tags — always include source devtag, file, and line reference so user can verify.',
+      'Accepting a suggestion creates a Suggested Job immediately. Deferring keeps it in queue for next session. Rejecting removes it.',
+      'Schema includes: suggestion_id, category, source_devtags, source_files, source_lines, source_forensic_ids, natural_language_summary, suggested_job_id, presented_to_user, user_response, cycle_id, timestamp.',
+      'Related: Background Scan State, Suggested Jobs, Debt Tracking Agent, Regression Agent, Blame Crawler.'
+    ]
+  },
+  {
+    id: 'god-factory-authority-boundaries',
+    title: 'God Factory: Authority Boundaries — May and May Not (COMING SOON)',
+    summary: 'Complete list of what the God Factory Agent is and is not permitted to do — including absolute authorities, veto power, and immutable constraints.',
+    tags: ['coming-soon', 'god-factory', 'authority', 'safety', 'policy', 'constraints'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Authority audit log in forensic god_factory_actions table showing every authority action with justification tags.',
+      'MAY: Invoke veto authority over any vote in the system at any time.',
+      'MAY: Instruct implementation pipeline to begin for any Suggested Job.',
+      'MAY: Override any model tier assignment in the Model Size Constraint Chart for a specific operation (logged).',
+      'MAY: Extend sandbox cycle limits on any job.',
+      'MAY: Modify the model registry.',
+      'MAY: Retire or add tag types to the tag schema after running tag_vocabulary_diff to confirm no existing entries are broken.',
+      'MAY: Revert version history to any commit via the Version Control Agent.',
+      'MAY: Spawn any agent or sub-agent in the system.',
+      'MAY: Modify the agent spawn authority chart.',
+      'MAY: Adjust forensic severity escalation thresholds.',
+      'MAY: Whitelist files for the Project State Crawler that would otherwise be skipped.',
+      'MAY: Pause or resume the sandbox system or any Background Scan Sub-Agent.',
+      'MAY NOT: Write to any IDE file without passing the tag validator, Diff Sub-Agent check, and Regression Sub-Agent check.',
+      'MAY NOT: Skip the Version Control Agent rollback point creation before any implementation.',
+      'MAY NOT: Modify the output capture layer.',
+      'MAY NOT: Delete forensic database entries.',
+      'MAY NOT: Override the crash recovery system.',
+      'MAY NOT: Mark a job as implemented without the implementation pipeline completing Stage 4 and Stage 5.',
+      'INVARIANT: God Factory is always the most recently active agent in the system. It cannot be suspended by any other agent.',
+      'INVARIANT: Every action modifying system config, tag schema, model registry, or version history is recorded in god_factory_actions with justification tags.',
+      'INVARIANT: God Factory never tells the user something is in the codebase without first confirming through a crawl sub-agent or forensic database.',
+      'Related: System Invariants, Version Control Agent, Tag Validator, Forensic Database.'
+    ]
+  },
+  {
+    id: 'god-factory-screen-layout',
+    title: 'God Factory Screen: All Eight Panels (COMING SOON)',
+    summary: 'The full screen layout of the God Factory interface: chat, notifications, idle suggestions, suggested jobs, model health, codebase health, background scan status, and brainstorm.',
+    tags: ['coming-soon', 'god-factory', 'ui', 'panels', 'layout', 'screen'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Full God Factory screen with all eight panels. Currently the God Factory panel has chat input, prompt history, and a partial right panel (Intel Panel).',
+      '1. Chat Interface: Primary conversational input — the God Factory Agent reads user intent and routes to the appropriate sub-agent or pipeline. Not constrained to structured commands.',
+      '2. Notification Queue: All queued notifications from Background Scan State in reverse chronological order. Each has a source label, severity badge, and one-line summary. Click to expand with full forensic-decoded detail.',
+      '3. Idle Suggestions Panel: Unacknowledged idle suggestions with accept/defer/reject per suggestion. Accepting creates a Suggested Job immediately.',
+      '4. Suggested Jobs Panel: Full Suggested Jobs list — all active jobs with filtering by category, priority, and implementation status.',
+      '5. Model Health Panel: Summary view of the model registry. Each model shows composite quality score, conformance rate, hallucination rate, and recommended interaction types. Click for full model record and blame records.',
+      '6. Codebase Health Panel: Debt heatmap for full IDE codebase. Files above debt ceiling highlighted. Shows total registered devtag count, registry surplus count, registry deficit count, and systemic drift flag status.',
+      '7. Background Scan Status Panel: Current scan position of Idle Codebase Scanner, last cycle each Background Scan Sub-Agent ran, and whether any sub-agent is currently active.',
+      '8. Brainstorm Input: Separate input area distinct from main chat. Each brainstorm entry stored as user_requested job source and immediately handed to Suggested Jobs Crawler for processing into a job record.',
+      'Current State: The active UI has a partial implementation with chat, prompt history, file selector, and the Intel Panel (subsystem toggles, notifications stub). Panels 2-8 are partially wired; the notification and suggestion data sources require the background loop to be running.',
+      'Related: God Factory Interactive State, Background Scan, Idle Suggestions, Suggested Jobs, Blame Crawler, Model Registry.'
+    ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // BLAME CRAWLER DETAIL SECTIONS — From forensic_database_blame_crawler.txt spec
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'blame-record-schema',
+    title: 'Blame Record Schema: Full Attribution Data Model (COMING SOON)',
+    summary: 'Every model output produces a blame record with 25+ fields capturing model identity, token budgets, tag validation results, and forensic linkage.',
+    tags: ['coming-soon', 'blame', 'schema', 'attribution', 'forensic', 'output-capture'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Blame record explorer with full schema field viewer in BLAME panel.',
+      'Identity Fields: blame_id, model_id, model_provider (cloud|local), model_name, model_version.',
+      'Token Budget Fields: context_window_tokens, prompt_tokens_used, output_tokens_produced, output_tokens_allowed, context_utilization_percent, output_utilization_percent.',
+      'Agent Context Fields: agent_id, agent_role, interaction_type (ask|edit|plan|memory_crawl|project_crawl|state_crawl|waiting|skeptic|command|builder|blame|gap|coverage|pattern|debt|tag_analysis|agent_performance|nano_liaison|version_control|parallel_coord|regression|diff|conflict|integration|context_window_manager|dead_tag).',
+      'Build Context Fields: build_phase, cycle_id, session_id, decided_step_id.',
+      'Tag Reference Fields: plantag_references, devtag_references, buildtag_references, tag_validation_result (pass|fail|partial), tag_validation_failure_codes.',
+      'Quality Fields: retry_count, escalation_level, output_hash, drift_detected, forensic_entry_ids, duration_ms, timestamp.',
+      'Purpose: The output capture layer writes blame records deterministically — no inference, no evaluation, only facts. Quality analysis runs AFTER the blame record is written.',
+      'Output Capture Layer: deterministic interception layer between every model inference call and every downstream consumer. Writes asynchronously AFTER forwarding output to tag validator. No model call waits for blame record.',
+      'Related: Output Capture Layer, Quality Analysis, Model Registry, Blame Panel.'
+    ]
+  },
+  {
+    id: 'blame-model-registry-detail',
+    title: 'Model Registry: Capability Profile and Routing Signals (COMING SOON)',
+    summary: 'The authoritative source of known model capabilities — updated per session, with strengths and weaknesses expressed as devtag families for agent routing decisions.',
+    tags: ['coming-soon', 'blame', 'model-registry', 'routing', 'capabilities', 'strengths-weaknesses'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Model Registry browser in BLAME panel with capability cards and recommended routing per interaction type.',
+      'Identity: model_id, model_name, model_version, provider (cloud|local), context_window_tokens.',
+      'Safe Ceilings: safe_prompt_ceiling_tokens = 80% of context_window_tokens. safe_output_ceiling_tokens = 60% of output limit. These match the Model Size Constraint Chart.',
+      'Observed Metrics: observed_conformance_rate, observed_retry_rate, observed_hallucination_rate, observed_context_loss_threshold_tokens, observed_spaghetti_rate, observed_ai_slop_rate, observed_avg_output_tokens, observed_avg_duration_ms.',
+      'Capability Tags: strengths (devtag types where model reliably produces valid buildtags) and weaknesses (devtag types where model frequently fails validation). Expressed as tag families, not text.',
+      'Routing Signals: recommended_interaction_types, avoided_interaction_types, tool_configs_generated.',
+      'Usage: Parallel Coordinator Agent and Agent Routers use strengths/weaknesses to assign steps to models strong in the required devtag types.',
+      'Update Schedule: Model registry updated at end of every session. Mid-session updates permitted only by God Factory Self-Improvement Agent.',
+      'Related: Blame Record Schema, Parallel Coordinator Agent, Agent Routers, Model Size Constraint Chart, Tool Criticism.'
+    ]
+  },
+  {
+    id: 'blame-quality-dimensions-detail',
+    title: 'Blame Quality Analysis: Seven Dimensions and Scoring (COMING SOON)',
+    summary: 'Seven quality dimensions computed for every blame record, combined into a composite score used to trigger tool criticism or success attribution.',
+    tags: ['coming-soon', 'blame', 'quality-dimensions', 'scoring', 'tool-criticism', 'success-attribution'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Per-dimension score breakdown in BLAME → Quality tab with dimension trend lines per model.',
+      '1. Tag Conformance Quality: % of buildtags valid on first attempt. Failed tag types and structural rejection codes logged.',
+      '2. Context Utilization Quality: % of context ceiling consumed by prompt and % of output limit consumed. Under 30% = prompt under-specified. Over 90% = model overloaded.',
+      '3. Instruction Adherence Quality: Did output produce the tag types requested by the decided step? Mismatched output type (e.g., buildtag:document when buildtag:implement requested) = adherence failure.',
+      '4. Hallucination Quality: Count of output devtag references not found in registry or ground truth snapshot ÷ total devtag references = hallucination rate.',
+      '5. Structural Integrity Quality: Are buildtag chains internally consistent? buildtag:modify + buildtag:delete on same devtag in same output = structural integrity failure.',
+      '6. Regression Risk Quality: Does buildtag set touch devtags in regression_history table? Higher = more regression risk.',
+      '7. Output Efficiency Quality: Ratio of plantags satisfied to total tokens produced. High tokens + zero plantags satisfied = maximum inefficiency.',
+      'Composite Score: Weighted average. Default weights — tag_conformance: 0.30, hallucination_rate inverted: 0.20, instruction_adherence: 0.15, structural_integrity: 0.15, output_efficiency: 0.10, context_utilization: 0.05, regression_risk inverted: 0.05.',
+      'Tool Criticism Trigger: composite score below 0.65 for 3+ consecutive outputs in same interaction type → Tool Criticism Sub-Agent activates.',
+      'Success Attribution Trigger: composite score above 0.85 for 3+ consecutive outputs in same interaction type → success attribution record created and forwarded to Suggested Jobs as model_config_promotion.',
+      'Related: Tool Criticism Mechanism, Success Attribution, Model Registry, Blame Panel.'
+    ]
+  },
+  {
+    id: 'blame-tool-criticism-schema',
+    title: 'Tool Criticism Record: Schema and Proposed Modification Types (COMING SOON)',
+    summary: 'Structured output from the Tool Criticism Sub-Agent with proposed tool modifications and new tool designs targeting the specific failing quality dimensions.',
+    tags: ['coming-soon', 'blame', 'tool-criticism', 'modifications', 'schema', 'suggested-jobs'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Tool Criticism records browser in BLAME → Criticisms tab with proposed tool modifications linked to Suggested Jobs.',
+      'Schema: criticism_id, model_id, interaction_type, failing_quality_dimensions, active_tool_configs, active_prompt_structures, failure_pattern.',
+      'Proposed Tool Modifications: tool_config_id, modification_type (add_constraint|remove_constraint|change_parameter|replace_structure), modification_detail, expected_impact_dimension, expected_impact_direction (improve|reduce), priority (high|medium|low).',
+      'Proposed New Tools: tool_name, tool_purpose, input_schema, output_schema, target_model_tiers, intended_interaction_types.',
+      'Tier Scaling Requirement: All proposed tools MUST include scaling specs for all 5 model tiers. A proposed tool that only addresses one tier is rejected and returned to Tool Criticism Sub-Agent for revision.',
+      'Forwarding: All proposed tool modifications and new tools forwarded to Suggested Jobs as category model_tool_enhancement on The God Factory screen.',
+      'Invariant: Tool Criticism NEVER activates for a single failing output — requires 3 consecutive failures in same interaction type.',
+      'Related: Blame Quality Dimensions, Model Registry, Suggested Jobs, God Factory Screen.'
+    ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // GAP ANALYSIS DETAIL SECTIONS — From gap_analysis_system.txt spec
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'gap-analysis-anti-patterns',
+    title: 'Gap Analysis: LLM-Generated Code Anti-Patterns (COMING SOON)',
+    summary: 'Five structural anti-patterns specific to LLM-generated code detected by the Pattern Recognition Agent across all forensic cycles.',
+    tags: ['coming-soon', 'gap-analysis', 'anti-patterns', 'pattern-recognition', 'llm', 'structural'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Anti-pattern detector results in Gap Analysis → Patterns tab with structural signature breakdowns.',
+      'AI Slop Pattern: Builder produces structurally valid buildtags but Diff Sub-Agent consistently rejects predicted post-edit state. Model is tag-conformant but semantically incorrect.',
+      'Drift Pattern: Same devtag modified by more than 3 different build steps without any satisfying the parent plantag. Plan and implementation are diverging.',
+      'Spaghetti Growth Pattern: devtag:calls and devtag:depends_on relationship graph for a module grows by >2 new edges per build cycle without corresponding growth in devtag:test coverage. Growing complexity without verification.',
+      'Hallucination Loop Pattern: Fleet Agent produces buildtags referencing non-existent devtags → rejected → retries → produces DIFFERENT non-existent devtags on second and third attempts. Model is hallucinating structure that was never built.',
+      'Context Loss Pattern: devtag:needs_refactor or devtag:needs_review written by Memory Crawler in 3+ consecutive cycles without any buildtag:modify or buildtag:replace addressing it. Loop is aware of the problem but action plan is not resolving it.',
+      'Detection: Pattern Recognition Agent checks for these anti-patterns in ALL forensic tables across all recorded cycles, not just current session.',
+      'Escalation: Pattern reaching recurrence count 5 → flagged as systemic to Gap Analysis Agent with severity escalated one level. Recurrence count 10 → auto-elevated to critical, sent directly to God Factory regardless of schedule.',
+      'Related: Debt Tracking Agent, Blame Crawler, Regression Sub-Agent, Skeptic Agent.'
+    ]
+  },
+  {
+    id: 'gap-analysis-debt-formula',
+    title: 'Debt Score Formula: Per-File Technical Debt Computation (COMING SOON)',
+    summary: 'Deterministic per-file debt score computed from forensic table tag density ratios, with ceiling enforcement and build exclusion triggers.',
+    tags: ['coming-soon', 'gap-analysis', 'debt', 'scoring', 'formula', 'ceiling'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Debt heatmap in Gap Analysis panel showing per-file scores with breakdown by contributing factor.',
+      'Formula adds points: +1 per devtag:needs_refactor; +2 per devtag:needs_test; +1 per devtag:dead_code; +3 per devtag:circular_dependency involving the file; +2 per spaghetti_index forensic entry; +1 per under_engineered_regions forensic entry; +1 per over_engineered_regions forensic entry.',
+      'Formula adds more points: +5 per regression_history entry where cause_buildtag is associated with the file; +3 per integration_failures forensic entry for the file.',
+      'Formula subtracts points: -1 per devtag:test covering a component in the file; -1 per plantag:status:done plantag associated with the file.',
+      'Ceiling: Default ceiling = 15 points. Override per-file via plantag:debt_ceiling:[score].',
+      'Enforcement: Files exceeding debt ceiling are marked devtag:needs_review and EXCLUDED from new build step assignments. Parallel Coordinator Agent enforces this exclusion.',
+      'Normalized Codebase Score: Sum of all file scores normalized by total registered devtags. Normalized score above 0.3 → flagged to God Factory as codebase health warning.',
+      'Schedule: Computed per file on schedule AND after every committed build step. History stored in debt_history forensic table.',
+      'Related: Debt Tracking Agent, Parallel Coordinator Agent, God Factory Codebase Health, Forensic Database.'
+    ]
+  },
+  {
+    id: 'gap-analysis-callable-tools',
+    title: 'Gap Analysis Tools: 15 Deterministic Callable Functions (COMING SOON)',
+    summary: 'All gap analysis tools — deterministic, no LLM inference — available to gap agents and sub-agents as callable functions.',
+    tags: ['coming-soon', 'gap-analysis', 'tools', 'deterministic', 'callable', 'api'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Gap Analysis → Tools tab exposing interactive runners for all callable functions.',
+      'gap_scan(scope, depth, tag_filter): Scans tag registry + forensic database for gaps. scope = file|module|phase|total. depth = relationship levels to traverse. Returns gap records sorted by severity.',
+      'coverage_check(plantag_id): Coverage state for one plantag — requires list, registered subset, missing subset, coverage %, produces list.',
+      'debt_score(file_path): Current debt score for a file with score breakdown by contributing factor.',
+      'pattern_query(forensic_table, signature_filter, min_recurrence): Queries pattern registry matching structural signature filter.',
+      'regression_index(devtag): Full regression history for a devtag — cause_buildtag_id, cause_agent_id, cycle_id, timestamps, plus any devtag:needs_review/regression_guard markers.',
+      'orphan_scan(registry_scope): All devtags flagged orphaned or dead — last known location, detection cycle, retirement scheduled status.',
+      'conflict_scan(devtag_list): Checks Conflict Sub-Agent lock registry — which devtags are claimed, by whom, for how many cycles.',
+      'gap_report(agent_id, cycle_range): Structured gap report for all gaps associated with an agent within a cycle range.',
+      'tag_vocabulary_diff(schema_version_a, schema_version_b): Compares two schema versions — added, removed, modified tags. Required before any schema change.',
+      'coverage_matrix(scope, phase_filter): Full coverage matrix for plan|test|nano|total scope.',
+      'debt_heatmap(threshold): All files at or above threshold sorted by score descending with breakdown.',
+      'pattern_trend(pattern_id, cycle_window): Recurrence trend over cycle window — stable|escalating|de-escalating.',
+      'agent_conformance_report(agent_id, cycle_range): Full conformance metrics for an agent: rate, retry, escalation, contribution, regression contribution, spawn efficiency, context efficiency.',
+      'resolution_latency_report(tag_type, model_tier): Average, median, 95th percentile tag resolution latency for a tag type + tier combination.',
+      'All gap analysis tool calls logged to tag_resolution_log with calling agent ID, tool name, and execution time.',
+      'Related: Gap Analysis Agent, Coverage Analysis Agent, Debt Tracking Agent, Pattern Recognition Agent, Tag System Analysis Agent.'
+    ]
+  },
+  {
+    id: 'gap-agent-performance-metrics',
+    title: 'Gap Analysis: Agent Performance Analysis Metrics (COMING SOON)',
+    summary: 'Seven metrics computed per agent per cycle by the Agent Performance Analysis Agent — conformance, retry, escalation, cycle contribution, regression contribution, spawn efficiency, context efficiency.',
+    tags: ['coming-soon', 'gap-analysis', 'agent-performance', 'metrics', 'monitoring', 'forensic'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Agent performance metrics dashboard in Gap Analysis panel.',
+      '1. Conformance Rate: % of outputs passing tag validation on first attempt without rejection.',
+      '2. Retry Rate: % of outputs requiring one or more retries before passing validation.',
+      '3. Escalation Rate: % of assigned tasks escalating beyond Level 2 in the Failure Escalation Chart.',
+      '4. Cycle Contribution: Number of plantags moved from status:active to status:done attributed to this agent per session.',
+      '5. Regression Contribution: Number of regression events in forensic database where cause_agent_id matches this agent.',
+      '6. Spawn Efficiency: Number of sub-agents spawned per completed build step. LOW is better. High spawn efficiency with high cycle contribution = agent working effectively.',
+      '7. Context Efficiency: % of context window actually used vs tier ceiling. Consistently below 40% = over-allocated. Consistently above 90% = under-allocated.',
+      'Flag Thresholds: Conformance rate below 70% OR escalation rate above 20% → agent flagged for review by God Factory Self-Improvement Agent.',
+      'Storage: All metrics written to agent_performance forensic table per cycle.',
+      'Coverage Invariant: No cycle may complete without agent_performance records being written for every active agent in that cycle.',
+      'Related: Gap Analysis Agent, Agent Performance Analysis Agent, Failure Escalation Chart, Forensic Database.'
+    ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // PROJECT STATE CRAWLER DETAIL SECTIONS — From project_state_crawler.txt spec
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'project-state-crawler-parsing',
+    title: 'Project State Crawler: Parsing Layer and Structural Extraction (COMING SOON)',
+    summary: 'Deterministic Tree-sitter parsing layer that extracts devtags from actual files — no LLM inference, all grammar rules.',
+    tags: ['coming-soon', 'project-state-crawler', 'parsing', 'tree-sitter', 'devtags', 'ground-truth'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Parsing layer language registry viewer in Project State Crawler panel.',
+      'Technology: Tree-sitter grammars for all supported languages. Language registry maps file extensions to grammar definitions — maintained by God Factory Self-Improvement Agent.',
+      'Files with unregistered extensions: parsed as plain text; produce only devtag:file and devtag:directory entries.',
+      'Structural Extractions: module/package → devtag:module; class → devtag:class; module-scope function → devtag:function; class method → devtag:method (parent = class); import/require → devtag:import; export → devtag:export; interface/protocol → devtag:interface; type alias → devtag:type; enum → devtag:enum; module-scope constant → devtag:constant.',
+      'Decorator/Annotation applications → recorded as attributes on target devtag.',
+      'Relationship Extractions: inheritance → devtag:inherits; interface impl → devtag:implements; function/method calls in bodies → devtag:calls; import refs in bodies → devtag:depends_on; route decorators → devtag:route; ORM schema defs → devtag:schema; schema fields → devtag:field; test function patterns → devtag:test; worker/job class patterns → devtag:worker/devtag:job.',
+      'Each record includes: file path, start/end line, parent devtag, language, relationship tags, content hash.',
+      'Vocabulary Gap Handling: Unrecognized structure → recorded in vocabulary_gaps forensic table, skip. Tag System Analysis Agent reads vocabulary_gaps to propose new tag types to God Factory.',
+      'Performance: Parses ONE FILE AT A TIME. Never loads entire codebase into memory.',
+      'Related: Ground Truth Snapshot, Drift Detection, Language Registry, Vocabulary Gaps, Tag System Analysis Agent.'
+    ]
+  },
+  {
+    id: 'project-state-crawler-sub-crawlers',
+    title: 'Project State Crawler: Sub-Crawler Architecture and Skip Rules (COMING SOON)',
+    summary: 'One sub-crawler per directory, bounded scope, directory queue management, and configurable skip rules.',
+    tags: ['coming-soon', 'project-state-crawler', 'sub-crawlers', 'skip-rules', 'architecture'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Sub-crawler spawn log and directory queue viewer in Project State Crawler panel.',
+      'Architecture: One sub-crawler spawned per directory. Each receives directory path + language registry. Lists all files, passes each to parsing layer, sends results to Project State Crawler for assembly.',
+      'No Recursion: Sub-crawlers do NOT recurse into subdirectories. Project State Crawler maintains a directory queue and spawns a new sub-crawler per dequeued directory. Keeps each sub-crawler\'s scope bounded regardless of project size.',
+      'Skip Rule 1: Directories listed in project\'s ignore configuration (equivalent to .gitignore rules).',
+      'Skip Rule 2: Common dependency stores — node_modules, venv, .venv, __pycache__, .git, dist, build, target, vendor.',
+      'Skip Rule 3: Files larger than configurable size ceiling (default 500 KB) — whitelistable by God Factory Self-Improvement Agent.',
+      'Skip Rule 4: Binary files (detected by null bytes in first 512 bytes).',
+      'All skipped files/directories are tagged devtag:file or devtag:directory with a skipped attribute so the ground truth snapshot is structurally complete even where content was not parsed.',
+      'On-Demand Mode: Single-file re-parse for Skeptic Agent during REFINING state must complete within the same Skeptic Agent iteration.',
+      'Related: Ground Truth Snapshot, Drift Detection, Waiting State, Skeptic Agent.'
+    ]
+  },
+  {
+    id: 'project-state-crawler-drift-detail',
+    title: 'Project State Crawler: Drift Detection — 4 Types and Escalation (COMING SOON)',
+    summary: 'Four drift types comparing ground truth snapshot to devtag registry, with specific response protocols for each type and systemic drift escalation rules.',
+    tags: ['coming-soon', 'project-state-crawler', 'drift', 'registry-surplus', 'registry-deficit', 'content-drift'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Drift Events tab showing drift type breakdown with per-event resolution status.',
+      'Registry Surplus: Devtag exists in registry but parsing layer finds no corresponding structure at recorded location. File was modified/deleted outside tag system. → Written to forensic as tag_mismatch severity:error. Queued for Dead Tag Sub-Agent.',
+      'Registry Deficit: Parsing layer found code structure with no devtag in registry. Written to vocabulary_gaps forensic table. → Queued for Blame Crawler to assess whether retroactive build step needed.',
+      'Content Drift: Devtag exists in both but content hashes differ. → Written as tag_mismatch severity:warning (upgraded to severity:error if component carries devtag:perf_critical, devtag:security_requirement, or devtag:public_api).',
+      'Location Drift: Devtag exists in both but at different line numbers. → Written as tag_mismatch severity:info. Registry updated automatically with new line numbers. THIS IS THE ONLY REGISTRY UPDATE the Project State Crawler may perform directly.',
+      'Systemic Drift Rule: Registry Surplus count exceeds 5% of total registered devtags → flagged as systemic. God Factory notified immediately. Build cycle NOT halted but Waiting Sub-Agent receives drift severity as input.',
+      'Build Halt Rule 1: Any Registry Surplus entry involves a devtag in the current decided step\'s buildtag set → decided step halted immediately. Command Agent notified. Build cycle frozen until affected devtag is retired or confirmed at new location.',
+      'Build Halt Rule 2: Any Registry Deficit entry in a file the current decided step targets → build step halted. Builder cannot safely modify a file with untagged structure.',
+      'Reconciliation Priority in Waiting State: Ground truth snapshot overrides memory crawl record on conflicts. Registry Deficit for a plantag:requires devtag → plantag treated as incomplete regardless of recorded status.',
+      'Related: Dead Tag Sub-Agent, Blame Crawler, Waiting State, System Invariants, Forensic Database.'
+    ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // SUGGESTED JOBS DETAIL SECTIONS — From suggested_jobs_system.txt spec
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'suggested-jobs-crawler-modes',
+    title: 'Suggested Jobs Crawler: Blame-Driven and Independent Mode (COMING SOON)',
+    summary: 'Two operating modes — blame-driven (high priority, reads snitch data) and independent (codebase review protocols, always runs when idle).',
+    tags: ['coming-soon', 'suggested-jobs', 'crawler', 'blame-driven', 'independent-mode', 'protocols'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Crawler mode indicator and cycle stats in Suggested Jobs → Crawler tab.',
+      'Blame-Driven Mode (unconditional priority): When blame records or tool criticism records are in the queue, Suggested Jobs Crawler processes them first. Reads each record, spawns sub-agents to crawl relevant IDE codebase sections, produces a job record. Priority over ALL other crawl activity.',
+      'Independent Mode (when blame queue empty): Codebase review protocols run in fixed sequence. Processes IDE codebase FIRST, then externally generated codebases. External project jobs are categorized under external_project and do NOT feed the IDE implementation pipeline.',
+      'Protocol 1 — Missing Test Coverage: Crawl all devtag:function/method/handler/route/worker. Each missing devtag:test → job category test_missing.',
+      'Protocol 2 — Dead Code: Crawl devtag:dead_code entries from Dead Tag Sub-Agent → category dead_code_removal.',
+      'Protocol 3 — Debt Threshold Violations: Read debt_history. Files above ceiling without active job → category debt_reduction.',
+      'Protocol 4 — Regression Clusters: Read regression_history. Any devtag with 3+ regression events → category regression_hardening.',
+      'Protocol 5 — Integration Failures: Read integration_failures. Unresolved failures older than 5 cycles → category integration_repair.',
+      'Protocol 6 — Pattern Anti-Patterns: Read patterns. Systemic pattern without active job → category anti_pattern_mitigation.',
+      'Protocol 7 — Vocabulary Gaps: Read vocabulary_gaps. Unresolved gap in 3+ snapshots → category tag_schema_extension.',
+      'Protocol 8 — Performance Sensitivity Gaps: Crawl devtag:perf_critical/latency_sensitive/hot_path. Missing performance tests → category performance_test_missing.',
+      'Protocol 9 — Security Coverage: Crawl devtag:auth/permission/policy/public_api. Missing security tests → category security_gap.',
+      'Protocol 10 — Nano Sea Coverage: Crawl devtag:nano entries. Missing devtag:nano:training_target or devtag:nano:fitness → category nano_coverage_gap.',
+      'Invariant: Every job from a blame record MUST reference the blame_id or criticism_id in source_record_ids. Jobs without source traceability are rejected.',
+      'Related: Blame Crawler, Debt Tracking Agent, Dead Tag Sub-Agent, Pattern Recognition Agent, Suggested Jobs List.'
+    ]
+  },
+  {
+    id: 'suggested-jobs-schema-detail',
+    title: 'Suggested Jobs: Job Record Schema and Atomic Steps (COMING SOON)',
+    summary: 'Full job record schema with 20+ fields, hierarchical organization, and atomic step design guaranteeing that even a 512-token model can execute one step from tag context alone.',
+    tags: ['coming-soon', 'suggested-jobs', 'schema', 'atomic-steps', 'token-budget', 'hierarchy'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Job record detail view with hierarchical overview and atomic step explorer in Suggested Jobs → Detail tab.',
+      'Job Categories: test_missing, dead_code_removal, debt_reduction, regression_hardening, integration_repair, anti_pattern_mitigation, tag_schema_extension, performance_test_missing, security_gap, nano_coverage_gap, model_tool_enhancement, model_config_promotion, external_project, user_requested, god_factory_scan.',
+      'Source Traceability: job_category, source (blame_crawler|suggested_jobs_crawler|user|god_factory_agent), source_record_ids.',
+      'Scope Fields: priority (critical|high|medium|low), title, affected_files, affected_devtags, affected_plantags, required_buildtags.',
+      'Dependency Fields: blocking_jobs, blocked_by_jobs.',
+      'Hierarchy: phase, milestone, parent_job_id, child_job_ids.',
+      'Atomic Step Design: Each step is so fine-grained that even a 512-token model can read one step, understand what it must do from its tag references alone, and produce valid output. No step requires reading more than one step\'s worth of context. No step assumes knowledge of other steps not listed as devtags_required.',
+      'Atomic Step Fields: step_id, step_index, devtags_required, devtags_produced, buildtags_required, plantag_satisfied, token_budget, model_tier_minimum, can_parallelize.',
+      'Token Budget Rule: Steps for Tier 1 models must have token_budget ≤ 400 tokens. Steps for Tier 5 models may have budgets up to 100,000 tokens.',
+      'Sandbox Spec Fields: sandbox_id, status (not_started|building|testing|review|ready|failed|abandoned), cycle_limit, cycles_used, test_results, human_review_required, human_review_completed.',
+      'Lifecycle: implementation_status goes through suggested → sandbox_ready → implementing → implemented|rejected|archived.',
+      'Related: Sandbox System, Implementation Pipeline, Parallel Coordinator Agent, Context Window Manager.'
+    ]
+  },
+  {
+    id: 'suggested-jobs-sandbox-detail',
+    title: 'Suggested Jobs Sandbox: Build-Test-Review-Debug Loop (COMING SOON)',
+    summary: 'Isolated mini-codebase sandbox with five sub-agents running a continuous improvement loop up to the job cycle limit.',
+    tags: ['coming-soon', 'suggested-jobs', 'sandbox', 'sub-agents', 'test-loop', 'isolation'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Sandbox loop viewer in Suggested Jobs → Sandbox tab with cycle-by-cycle build/test/review/debug timeline.',
+      'Isolation: Sandbox is an ACTUAL runnable codebase section, not a simulation. Mirrors only relevant parts of real IDE codebase (affected_files + direct dependencies). Sandbox writes can NEVER reach real IDE files.',
+      'Builder Sub-Agent: Implements atomic steps inside sandbox using same tag validation pipeline as main build system. Every buildtag must pass tag validator before file write.',
+      'Test Sub-Agent: Runs all existing tests covering affected devtags. Writes new tests for new devtags produced. Reports structured test_result records.',
+      'Review Sub-Agent: Crawls sandbox using Suggested Jobs Crawler protocols. Reports new job records if implementation introduces new debt, dead code, missing tests, or integration failures in the sandbox.',
+      'Debug Sub-Agent: On test failure, reads test_result records + sandbox devtag state → produces structured debug records with failing devtag, failing test, expected vs actual devtag state, and proposed buildtag correction.',
+      'Loop Coordinator: Manages build-test-review-debug cycle. Each iteration = one cycle. Default cycle limit = 50. When limit reached without passing tests → sandbox status = failed, flagged for human review.',
+      'Human Testing Interface: When human_review_required = true, sandbox surfaced to user as runnable environment. User marks review complete when satisfied.',
+      'Continuous Operation: Sandboxes run 24/7 while IDE is active. Multiple sandboxes run in parallel, one per active building/testing job. Parallel Coordinator Agent manages sandbox resource allocation.',
+      'Cycle Limit Extension: Only God Factory Self-Improvement Agent or user can extend the cycle limit.',
+      'Related: Implementation Pipeline, Parallel Coordinator Agent, Job Record Schema, God Factory Screen.'
+    ]
+  },
+  {
+    id: 'suggested-jobs-implementation-pipeline',
+    title: 'Suggested Jobs Implementation Pipeline: 6 Stages (COMING SOON)',
+    summary: 'Six-stage pipeline from pre-implementation scan through backup, staged rollout, live testing, stability window, and completion.',
+    tags: ['coming-soon', 'suggested-jobs', 'implementation', 'pipeline', 'stages', 'crash-recovery'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Implementation pipeline stage progress view in Suggested Jobs when a job is in implementing status.',
+      'Trigger: User explicitly instructs God Factory to implement a job. Auto-implement never happens. Sandbox must be ready or God Factory must explicitly override (with justification).',
+      'Stage 1 — Pre-Implementation Scan: God Factory spawns Project State Crawler sub-agents to get current ground truth. Compares against sandbox devtag state. If drift detected in affected files → sandbox invalidated, must rebuild before implementation proceeds.',
+      'Stage 2 — Backup: Version Control Agent creates a rollback point tagged with job_id. RETAINED INDEFINITELY regardless of normal version history rotation.',
+      'Stage 3 — Staged Rollout: One atomic step at a time using the FULL pre-edit protocol (Memory Crawl + Project Description Crawl + Project State Crawl) for EACH step. Each step voted on. Each step passes tag validator → Diff Sub-Agent → Integration Verification Sub-Agent → Regression Sub-Agent before next step begins.',
+      'Stage 4 — Live Testing: After all steps committed, Test Sub-Agent runs full test suite against real IDE codebase including all sandbox tests plus any generated during staged rollout.',
+      'Stage 5 — Stability Check: IDE process monitored for configurable stability window (default 10 cycles) after implementation. Any crash, error log, or unexpected agent failure → AUTOMATIC ROLLBACK to pre-implementation rollback point.',
+      'Stage 6 — Completion: Stability window passes clean → job marked implemented. Version Control Agent tags commits. All affected plantags marked done. Blame Crawler begins monitoring newly implemented code from first model interaction.',
+      'Crash Recovery: Fully automatic. No human action needed to detect crash and restore last stable state. Human decides what to do after recovery.',
+      'Related: Sandbox System, Version Control Agent, Stability Window, God Factory, Pre-Edit Protocol.'
+    ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // UNIFIED SPEC SECTIONS — From unifi_spec.txt
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'devtag-base-vocabulary',
+    title: 'Devtag Base Vocabulary: Complete Structural Tag Reference (COMING SOON)',
+    summary: 'All 80+ base devtag types from the unified specification organized by category: code structure, status markers, and domain-specific tags.',
+    tags: ['coming-soon', 'devtags', 'vocabulary', 'unified-spec', 'reference', 'tag-registry'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Searchable devtag vocabulary browser in Tag Registry panel.',
+      'Module/Class/Function: devtag:module, devtag:class, devtag:function, devtag:method:[class]:[name], devtag:import, devtag:export, devtag:interface, devtag:type, devtag:enum, devtag:constant, devtag:namespace, devtag:package.',
+      'Web/API: devtag:route:[method]:[path], devtag:middleware, devtag:handler, devtag:controller, devtag:schema, devtag:field:[schema]:[name], devtag:query, devtag:mutation, devtag:subscription, devtag:rpc, devtag:proto, devtag:socket:[event].',
+      'Events/Workers: devtag:event, devtag:listener, devtag:emitter, devtag:job, devtag:queue, devtag:worker.',
+      'Data/State: devtag:cache:[key], devtag:state, devtag:store, devtag:repository, devtag:model, devtag:migration, devtag:seed, devtag:index:[file]:[column], devtag:transaction.',
+      'Auth/Security: devtag:auth:[mechanism], devtag:permission, devtag:role, devtag:policy.',
+      'Pipeline/Transform: devtag:pipeline, devtag:stage:[pipeline]:[name], devtag:transform, devtag:validator, devtag:serializer, devtag:deserializer, devtag:adapter.',
+      'UI/Frontend: devtag:component, devtag:prop:[component]:[name], devtag:hook, devtag:view, devtag:page, devtag:layout, devtag:style, devtag:theme.',
+      'Infra/Build: devtag:service, devtag:config:[key], devtag:env:[key], devtag:entrypoint:[file], devtag:dependency, devtag:build:[target], devtag:artifact, devtag:asset.',
+      'Testing: devtag:test, devtag:mock, devtag:fixture.',
+      'Features/Observability: devtag:feature, devtag:flag, devtag:experiment, devtag:metric, devtag:log:[channel], devtag:trace, devtag:span.',
+      'Status Markers (written by agents/crawlers, NOT by parsing layer): devtag:needs_rollback, devtag:needs_refactor, devtag:needs_test, devtag:needs_review, devtag:dead_code, devtag:orphaned, devtag:circular_dependency:[a]:[b].',
+      'Error/Exception: devtag:error:[code], devtag:exception:[name].',
+      'Remember: Agents call resolve_devtag(tag) to retrieve mappings on demand. The full chart is never loaded into any agent context.',
+      'Related: Tag Registry, Tag Validator, Tag Relationship Schema, Attribution Tags, Performance Tags, Versioning Tags.'
+    ]
+  },
+  {
+    id: 'voting-and-command-agent',
+    title: 'Voting System and Command Agent Decision Rules (COMING SOON)',
+    summary: 'How the Command Agent runs voting among sub-command agents to determine the winning decided step, including tie-breaking and veto authority.',
+    tags: ['coming-soon', 'command-agent', 'voting', 'decided-step', 'build-layer', 'veto'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Vote history viewer in forensic failed_votes table showing all votes and supporting tags from every decision cycle.',
+      'Trigger: Command Agent receives the refined action plan from Waiting Sub-Agent after REFINING → VOTING state transition.',
+      'Voting Process: Sub-command agents evaluate proposed decided steps and submit votes with supporting tag reasoning. Each vote references specific devtags, plantags, and buildtags from the registry.',
+      'Winner: Simple majority determines the winning decided step.',
+      'Tie Rule: In a tie vote, the Command Agent\'s own vote is counted at weight 1.5.',
+      'Veto: The God Factory Self-Improvement Agent holds ABSOLUTE VETO POWER over any vote at any time — no override possible.',
+      'Forensic Record: ALL votes (winning and losing) and their supporting tags are written to the failed_votes forensic table regardless of outcome.',
+      'After Vote: Winning decided step transmitted from SENT_TO_COMMAND state to Builder Agent.',
+      'Step Decomposition: If Command Agent receives the same step as failed twice → it decomposes the step into smaller sub-steps and restarts voting on the first sub-step (Level 3 escalation).',
+      'Concurrent Build Rule: Waiting Sub-Agent state machine returns to CRAWLING for the next step. Command Agent may have multiple decided steps in flight only if all buildtag sets are parallel-safe per Parallel Coordinator Agent.',
+      'Related: Waiting State Machine, Builder Agent, Failure Escalation Chart, God Factory Authority, Forensic Database.'
+    ]
+  },
+  {
+    id: 'waiting-state-machine',
+    title: 'Waiting Sub-Agent State Machine: All Five States (COMING SOON)',
+    summary: 'Complete state machine for the Waiting Sub-Agent — CRAWLING, TAG_GENERATION, REFINING, VOTING, SENT_TO_COMMAND — with transition rules, skip prohibition, and timeout behavior.',
+    tags: ['coming-soon', 'waiting-state', 'state-machine', 'crawling', 'refining', 'voting'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Real-time Waiting state indicator in Agent event feed showing current state and blocking conditions.',
+      'Rule: No state may be skipped. Machine advances only when all entry conditions are met.',
+      'CRAWLING: All three crawls dispatched concurrently — Memory Crawler, Project Description Crawler, Project State Crawler. Does NOT advance until ALL THREE outputs are received. Timeout: if any crawler exceeds time budget → escalate to God Factory.',
+      'TAG_GENERATION: Waiting Sub-Agent reconciles all three inputs: ground truth snapshot (authoritative — overrides memory crawl on conflicts), memory crawl (what agents remember building + failure history), project description crawl (plan). Produces completion state reflecting actual reality, not registry belief.',
+      'Reconciliation Rules: If snapshot and registry agree → devtag confirmed present. If snapshot shows Registry Surplus for memory-crawl-confirmed devtag → ground truth overrides, treat as absent. If snapshot shows Registry Deficit for a plantag:requires devtag → plantag treated as incomplete regardless of recorded status.',
+      'REFINING: Skeptic Agent inspects TAG_GENERATION output for structural errors, AI slop, spaghetti logic, under/over-engineering. May request single-file re-parses from Project State Crawler. Each re-parse must complete within same Skeptic Agent iteration. Maximum 5 refinement iterations.',
+      'After 5 Iterations: Current state sent to SENT_TO_COMMAND regardless of remaining issues. Unresolved issues logged to forensic and flagged to God Factory.',
+      'VOTING: Command Agent runs voting process as defined in Voting System section.',
+      'SENT_TO_COMMAND: Winning decided step transmitted to Builder Agent.',
+      'Manual Stop: If stopped manually during refinement, loop goes to previous or next checkpoint then terminates cleanly. Does NOT corrupt state.',
+      'Related: Pre-Edit Protocol, Memory Crawler, Project Description Crawler, Project State Crawler, Skeptic Agent, Command Agent.'
+    ]
+  },
+  {
+    id: 'output-capture-layer',
+    title: 'Output Capture Layer: Deterministic Attribution Interception (COMING SOON)',
+    summary: 'The invisible layer between every model inference call and every downstream consumer — zero latency impact, asynchronous blame record writing, synchronous tag validation forwarding.',
+    tags: ['coming-soon', 'output-capture', 'blame', 'attribution', 'deterministic', 'forensic'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Output capture layer stats viewable in BLAME panel showing capture rate, latency impact, and async write queue depth.',
+      'What It Is: NOT an agent. No inference. Deterministic interception layer. Runs synchronously with each model call.',
+      'Per Model Response Sequence: 1) Record all blame record fields available from model call metadata (model ID, token counts, duration, agent ID, interaction type, cycle ID). 2) Hash raw output → store in output_hash. 3) Forward raw output to tag validator as normal. 4) Receive tag validation result → append to blame record. 5) Write completed blame record to blame_records table. 6) Notify Blame Crawler of new record.',
+      'Latency Impact: ZERO. Writes asynchronously AFTER forwarding output to tag validator. No model call ever waits for blame record write.',
+      'Coverage Invariant: Every model output WITHOUT EXCEPTION produces a blame record. No output is unattributed.',
+      'Interaction with Blame Crawler: Output capture writes the record; Blame Crawler is then notified and runs quality analysis. The Blame Crawler never processes an output without a complete blame record.',
+      'Relationship to Tag Validator: Output capture runs BEFORE tag validator in terms of receiving the output, but tag validator runs first in terms of processing. Output capture intercepts → forwards to validator → receives validator result → completes blame record.',
+      'Related: Blame Record Schema, Blame Crawler, Tag Validator, Quality Analysis.'
+    ]
+  },
+  {
+    id: 'tag-validator-detail',
+    title: 'Tag Validator: Five-Check Deterministic Rule Engine (COMING SOON)',
+    summary: 'Mandatory validation layer between every agent output and every file write — five checks, deterministic, no inference, no exceptions.',
+    tags: ['coming-soon', 'tag-validator', 'validation', 'buildtags', 'registry', 'pre-write'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Tag validation failure log showing per-check rejection codes in Forensic → Tag Mismatches tab.',
+      'Check 1: Does the output contain at least one buildtag? Empty buildtag set → immediate rejection.',
+      'Check 2: Does each buildtag reference an existing devtag in the tag registry? Hallucinated devtag reference → rejection.',
+      'Check 3: Does each buildtag reference at least one unfulfilled plantag? Buildtag with no open plantag → rejection.',
+      'Check 4: Is the buildtag schema valid? Malformed buildtag format → rejection.',
+      'Check 5: Do parent-child relationships comply with the Tag Relationship Schema? devtag:method without parent devtag:class → rejection.',
+      'On Failure: Output is rejected. Rejection reason expressed as a tag_mismatch forensic record. Agent retries.',
+      'Immutable Behavior: The tag validator never interprets, infers, or makes exceptions. Same input always produces same result.',
+      'Position in Pipeline: Runs AFTER output capture intercepts (which hands it the output), BEFORE Diff Sub-Agent (which runs after tag validation passes).',
+      'Coverage: ALL agent outputs pass through the tag validator. No exception. Including Fleet Agents-Nano and God Factory Self-Improvement Agent.',
+      'Related: Tag Relationship Schema, Diff Sub-Agent, Output Capture Layer, Buildtag Vocabulary, Tag Registry Service.'
+    ]
+  },
+  {
+    id: 'unified-spec-integration-points',
+    title: 'Unified Spec: Cross-System Integration Points (COMING SOON)',
+    summary: 'How the Build Layer, Meta Layer, and Nano Sea share the forensic database, tag registry, and agent authority system — the three shared services that bind the entire system.',
+    tags: ['coming-soon', 'unified-spec', 'integration', 'shared-services', 'architecture', 'forensic'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Integration point diagram showing data flow between Build Layer, Meta Layer, and Nano Sea visible in Help overview.',
+      'Three Shared Services: (1) Forensic Database — single write destination for all agents, all layers, all sessions. Never purged, only archived. (2) Tag Registry Service — authoritative source of all devtag/plantag/buildtag mappings. Deterministic lookup. (3) Agent Authority System — spawn authority chart gating all sub-agent spawns system-wide.',
+      'Build Layer Entry: Agent Agent-Loop or Fleet Agent assigned a decided step by Command Agent.',
+      'Meta Layer Entry: Blame Crawler notified of new blame record by output capture layer OR Suggested Jobs Crawler runs scheduled crawl OR Gap Analysis Agent delivers gap report OR God Factory receives user input.',
+      'Project State Crawl Entry: Start of every WAITING state cycle OR on-demand from God Factory/Regression Agent/Dead Tag Sub-Agent/Gap Analysis Agent/Version Control Agent after revert.',
+      'Handshake Point — Build→Meta: After every Builder file write, Regression Sub-Agent runs, Version Control Agent records commit, Coverage Analysis Agent runs coverage_check. Then Blame Crawler is notified asynchronously.',
+      'Handshake Point — Meta→Build: God Factory veto can halt any build cycle at any point. Gap Analysis can exclude debt-ceiling files from build step assignment. Model Health Monitor can downgrade model tier assignments affecting which model executes decided steps.',
+      'Nano Integration: Fleet Agents-Nano operate through same tag validator and forensic database as standard Fleet Agents. Nano Liaison Agent provides translation layer. Nano cycle outputs become devtag:nano entries in the main registry.',
+      'Related: Build Layer Overview, Meta Layer Overview, Nano Sea, Forensic Database, Agent Spawn Authority.'
+    ]
   }
 ];
 
