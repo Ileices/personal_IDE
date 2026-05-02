@@ -1123,6 +1123,523 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Forensic Record: Every pre-edit cycle logs crawler latencies and gate clearance times.',
       'Related: WAITING State Detail, Memory Crawler, Project Description Crawler, Project State Crawler, Build Layer.'
     ]
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // ADDENDUM — SUB-AGENTS, ESCALATION CHARTS, TAG VOCABULARY EXTENSIONS, DIAGNOSTICS
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'diff-sub-agent',
+    title: 'Diff Sub-Agent: Pre-Write Validation (COMING SOON)',
+    summary: 'Predicts post-edit devtag state BEFORE the file system write executes, blocking writes whose results would not satisfy the required plantag.',
+    tags: ['coming-soon', 'build-layer', 'sub-agents', 'validation', 'pre-write', 'buildtags'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Diff Sub-Agent prediction log viewable in Agent event feed and forensic database.',
+      'Purpose: Close the gap between "tag is structurally valid" (tag validator) and "executing this tag will produce the expected post-edit state" (diff sub-agent).',
+      'Spawn Point: After tag validation passes and before the file system write executes.',
+      'Inputs: Current buildtag set, current devtag registry state for all affected files, current plantag requirements.',
+      'Process: Apply buildtag operations to current registry state in memory, compute predicted post-edit devtag state.',
+      'Pass Condition: Predicted state satisfies the current plantag requirement → write authorized.',
+      'Fail Condition: Predicted state mismatches → write blocked, mismatch logged to forensic diff_failures table, Builder Agent retries.',
+      'Pending Partition: On authorized write, predicted post-edit state written to pending registry partition. Promoted to active on write success; discarded on failure/revert.',
+      'Related: Builder Agent Detail, Tag Validator, Forensic Database, Build Layer, System Invariants.'
+    ]
+  },
+  {
+    id: 'conflict-sub-agent',
+    title: 'Conflict Sub-Agent: Fleet Lock Registry (COMING SOON)',
+    summary: 'Prevents two fleet agents from claiming the same devtag simultaneously, detects deadlocks, and queues held steps.',
+    tags: ['coming-soon', 'build-layer', 'sub-agents', 'fleet', 'concurrency', 'deadlock'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Conflict Sub-Agent lock registry viewer in Fleet Panel.',
+      'Purpose: Prevent parallel Fleet Agents from writing the same devtag simultaneously.',
+      'Lock Registry: Maintains a map of all active devtag claims keyed by agent ID.',
+      'Check Trigger: Before any fleet step assignment, buildtag set is checked against active claims.',
+      'Conflict Path: Conflicting step placed in a hold queue; released when conflicting agent completes or fails.',
+      'Timeout: Held step waiting >10 cycles escalates to Parallel Coordinator Agent for forced resolution.',
+      'Deadlock Detection: Agent A holds claim B needs AND Agent B holds claim A needs → both suspended, Command Agent notified.',
+      'Forensic Logging: All conflicts, resolutions, and timeouts written to conflict_log table.',
+      'Related: Parallel Coordinator Agent, Fleet Agents, Command Agent, Forensic Database.'
+    ]
+  },
+  {
+    id: 'regression-sub-agent',
+    title: 'Regression Sub-Agent: Per-Step Regression Check (COMING SOON)',
+    summary: 'After every committed build step, verifies that previously-done plantags still have their expected devtags intact.',
+    tags: ['coming-soon', 'build-layer', 'sub-agents', 'regression', 'plantags', 'validation'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Regression Sub-Agent result log in forensic database and Agent event feed.',
+      'Purpose: Detect regression immediately after each file write rather than waiting for test suite.',
+      'Process: Crawls all plantag:status:done entries; verifies corresponding devtags still exist in registry in expected state.',
+      'Regression Conditions: Devtag no longer exists, devtag type changed, relationship tags broken.',
+      'On Detection: Plantag reverted to plantag:status:blocked; regression entry written to regression_history table with causing buildtag.',
+      'No Repair: Regression Sub-Agent only detects and records. Repair is Blame Crawler responsibility.',
+      'Mandatory Timing: No subsequent step may begin in the same decision cycle until Regression Sub-Agent completes.',
+      'Related: Regression Agent (systemic), Blame Crawler, Forensic Database, System Invariants.'
+    ]
+  },
+  {
+    id: 'dead-tag-sub-agent',
+    title: 'Dead Tag Sub-Agent: File-System Tag Verification (COMING SOON)',
+    summary: 'Crawls tag registry against actual file system to find tags whose code no longer exists at the registered location.',
+    tags: ['coming-soon', 'sub-agents', 'tag-registry', 'dead-tags', 'forensic', 'scheduler'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Dead Tag Sub-Agent scheduled scan results visible in Tag Registry panel.',
+      'Purpose: Detect devtags in the registry that point to code that no longer exists on disk.',
+      'Triggers: Scheduled crawl (configurable interval) and on-demand when invoked by Blame Crawler or Regression Agent.',
+      'Process: For each devtag in registry, checks file and line location recorded; verifies code structure still exists there.',
+      'Detection: Tags whose code no longer exists at location flagged as devtag:dead_code.',
+      'Retention: Dead tags not immediately deleted — marked dead and written to dead_tags forensic table; Blame Crawler notified.',
+      'Auto-Retirement: If dead tag not resolved within 10 cycles, Tag Retirement Chart process triggered automatically.',
+      'Related: Tag Registry, Tag Retirement, Blame Crawler, Forensic Database.'
+    ]
+  },
+  {
+    id: 'context-window-manager',
+    title: 'Context Window Manager Sub-Agent (COMING SOON)',
+    summary: 'Chunks and prioritizes crawl outputs to fit within model tier token ceilings, tracks excluded tags, and enables on-demand tag retrieval.',
+    tags: ['coming-soon', 'sub-agents', 'chunking', 'context', 'model-tiers', 'token-budget'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Context Window Manager exclusion log showing which tags were dropped from each chunk and why.',
+      'Purpose: All crawl outputs that exceed the target model tier token ceiling must be chunked by this agent before delivery.',
+      'Priority Function: Tags directly referenced in current buildtag/plantag set rank highest; relationship tags to those rank second; all others ranked by recency in forensic database.',
+      'Chunk Delivery: Tags included in rank order until tier ceiling is reached.',
+      'Exclusion Log: Every excluded tag logged with reason; accessible via resolve_excluded_tags(cycle_id) for on-demand retrieval.',
+      'No Silent Exclusion: System Invariant — every excluded tag must be logged. No silent drops allowed.',
+      'Model Tier Ceilings: Tier 1 (nano) = 2000 tokens; Tier 2 (7B-13B) = 6000; Tier 3 (30B-70B) = 16000; Tier 4 (standard cloud) = 80000; Tier 5 (extended cloud) = 160000.',
+      'Related: Model Size Constraint Chart, Agent Spawn Authority, all crawler sub-agents.'
+    ]
+  },
+  {
+    id: 'integration-verification-sub-agent',
+    title: 'Integration Verification Sub-Agent (COMING SOON)',
+    summary: 'After Builder writes a file, crawls all relationship tags to verify connected devtags still exist and are accessible.',
+    tags: ['coming-soon', 'build-layer', 'sub-agents', 'integration', 'relationships', 'post-write'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Integration Verification Sub-Agent results visible in forensic integration_failures table.',
+      'Purpose: Verify that newly-written code\'s declared relationships (calls, inherits, implements, etc.) are still valid.',
+      'Trigger: After Builder writes a file and Diff Sub-Agent promotes the pending registry partition.',
+      'Process: Crawls all relationship tags connected to newly-written/modified devtags; verifies connected targets exist and are accessible.',
+      'Failure Conditions: Connected devtag missing, inaccessible from new file location, or changed to incompatible type.',
+      'Response: Integration failure written to integration_failures table; Blame Crawler notified.',
+      'No Auto-Revert: Step marked integration-incomplete but NOT reverted unless severity is critical/fatal per Severity Escalation Chart.',
+      'Related: Diff Sub-Agent, Blame Crawler, Severity Escalation, Forensic Database, Relationship Tags.'
+    ]
+  },
+  {
+    id: 'version-control-agent',
+    title: 'Version Control Agent (COMING SOON)',
+    summary: 'Persistent agent recording every committed build step as a versioned commit with full devtag before/after state and rollback index.',
+    tags: ['coming-soon', 'agents', 'version-control', 'rollback', 'audit', 'commits'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Version commit history browser integrated into Checkpoints panel.',
+      'Purpose: Give every build step a unique commit ID and full recovery path via rollback index.',
+      'Commit Record Schema: commit_id, buildtag_set, devtag_state_before, devtag_state_after, plantags_satisfied, agent_id, timestamp, reverted, revert_timestamp.',
+      'Devtag Annotation: Every modified devtag receives devtag:version:[commit_id] annotation at commit time.',
+      'Rollback: revert_to_commit(commit_id) → reconstruct pre-commit devtag state → issue buildtag:revert tags → instruct Builder to undo file changes → update registry.',
+      'Authority: God Factory Self-Improvement Agent can invoke revert_to_commit at any time with absolute authority.',
+      'Forensic Storage: All commits and reversions logged to version_commits table.',
+      'Relationship to Checkpoints: Version Control Agent is the specification-level concept; current Checkpoints UI is the implemented surface. Both serve recovery goals at different granularities.',
+      'Related: Builder Agent, Checkpoints, God Factory, Forensic Database, System Invariants.'
+    ]
+  },
+  {
+    id: 'parallel-coordinator-agent',
+    title: 'Parallel Coordinator Agent (COMING SOON)',
+    summary: 'Preventively partitions action plans into parallel-safe and parallel-unsafe sets before assigning steps to fleet agents.',
+    tags: ['coming-soon', 'agents', 'fleet', 'parallel', 'coordination', 'deadlock-prevention'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Parallel Coordinator assignment map showing which steps run concurrently and which are sequenced.',
+      'Purpose: Prevent deadlocks before they occur by analyzing the full action plan before fleet assignments.',
+      'Parallel-Safe Determination: Steps that share no devtag relationships in their buildtag sets can run simultaneously.',
+      'Sequential Determination: Steps sharing any devtag in buildtag sets are sequenced.',
+      'Assignment Safety: Checks Conflict Sub-Agent lock registry before every fleet step assignment.',
+      'Stall Detection: If a Fleet Agent makes no commits/failures for 5 cycles, status request is sent.',
+      'Stall Escalation: No response within 2 additional cycles → agent flagged dead, devtag claims released, Command Agent notified.',
+      'Forced Resolution: If held steps exceed 10-cycle timeout from Conflict Sub-Agent, Parallel Coordinator forces queue resolution.',
+      'Related: Conflict Sub-Agent, Fleet Agents, Command Agent, Build Layer.'
+    ]
+  },
+  {
+    id: 'regression-agent',
+    title: 'Regression Agent: Systemic Regression Tracking (COMING SOON)',
+    summary: 'Persistent agent detecting regression PATTERNS across all cycles — not individual regressions, but systemic trends and heat maps.',
+    tags: ['coming-soon', 'agents', 'regression', 'patterns', 'heat-map', 'systemic'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Regression heat map and systemic regression report accessible from Forensic panel.',
+      'Purpose: Where Regression Sub-Agent detects per-step regressions, Regression Agent detects patterns across cycles.',
+      'Threshold: 3 regressions in 5 cycles for any dimension (devtag, file, agent ID, build phase) triggers systemic regression flag.',
+      'Report to God Factory: Structured report with affected devtag chain, buildtag history, agent IDs involved, and suggested plantag:regression_guard recommendations.',
+      'Heat Map: Regression density per file expressed as tag-density score; files above threshold marked devtag:needs_review.',
+      'Deprioritization: High-regression-density files excluded from new build step assignments until density drops.',
+      'Forensic Logging: All systemic regressions written to systemic_regressions table.',
+      'Related: Regression Sub-Agent, God Factory, Blame Crawler, Tag Registry, Forensic Database.'
+    ]
+  },
+  {
+    id: 'nano-liaison-agent',
+    title: 'Nano Liaison Agent: Nano Sea ↔ Tag Registry Bridge (COMING SOON)',
+    summary: 'Bidirectional translator between nano sea internal state and devtag:nano vocabulary, monitoring nano anomalies in real-time.',
+    tags: ['coming-soon', 'agents', 'nano-sea-v2', 'bridge', 'translation', 'anomalies'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Nano Liaison translation log and anomaly feed in Nano Sea panel.',
+      'Purpose: Make nano sea code visible to the tag validator and forensic database by translating internal state to devtag:nano tags.',
+      'Inbound: When nano sea completes a cycle, Nano Liaison reads updated internal state, translates to devtag:nano tags, registers in tag registry.',
+      'Outbound: When Fleet Agents-Nano step is assigned a buildtag set, Nano Liaison translates devtag:nano references into nano sea internal state representations.',
+      'Anomaly Detection: Monitors nano cycle outputs for weight matrices with NaN/Inf values, generation cycles with identical outputs, RBY loops stalling in single phase.',
+      'Anomaly Response: Written to nano_anomalies forensic table; Fleet Agents-Nano and Midwife Bird-Feeding flagged.',
+      'Weight Protection: Nano Liaison can READ devtag:nano:weight:frozen and devtag:nano:weight:personal but cannot modify them directly. All nano weight modifications must pass standard buildtag validation.',
+      'System Invariant: Every devtag:nano tag written by Fleet Agents-Nano must have a valid Nano Liaison translation before the step is marked complete.',
+      'Related: Fleet Agents-Nano, Nano Sea v2 Roadmap, Tag Registry, Forensic Database.'
+    ]
+  },
+  {
+    id: 'model-size-constraint-chart',
+    title: 'Model Size Constraint Chart: Tier 1–5 Token Ceilings (COMING SOON)',
+    summary: 'Five model tiers with safe token ceilings at 80% of published context limits, governing agent role assignments.',
+    tags: ['coming-soon', 'agents', 'model-tiers', 'context-window', 'chunking', 'policy'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Tier assignment visualizer showing each agent\'s assigned tier and safe ceiling.',
+      'Tier 1 — Nano/Small Local: Safe ceiling 2000 tokens (Memory Crawler sub-agents spawned by Fleet Agents-Nano).',
+      'Tier 2 — Mid-Range Local (7B–13B): Safe ceiling 6000 tokens (Memory Crawler sub-agents spawned by Fleet Agents).',
+      'Tier 3 — Large Local (30B–70B): Safe ceiling 16000 tokens (Fleet Agents, Waiting Sub-Agent, Nano Liaison Agent).',
+      'Tier 4 — Standard Cloud (large hosted): Safe ceiling 80000 tokens (Agent Agent-Loop, Skeptic Agent, Command Agent, Blame Crawler).',
+      'Tier 5 — Extended Cloud: Safe ceiling 160000 tokens (God Factory Self-Improvement Agent).',
+      'Safe Ceiling = 80% of published context limit (reserves space for system prompt, tool defs, output buffer).',
+      'Override: God Factory can override any tier assignment per-operation with all overrides logged.',
+      'Related: Context Window Manager Sub-Agent, Agent Spawn Authority, Agent Architecture.'
+    ]
+  },
+  {
+    id: 'failure-escalation-chart',
+    title: 'Failure Escalation Chart: Level 1–5 Escalation Path (COMING SOON)',
+    summary: 'Five-level escalation from Builder retry to God Factory intervention, defining the exact path when build steps fail repeatedly.',
+    tags: ['coming-soon', 'agents', 'escalation', 'failures', 'policy', 'god-factory'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Failure escalation status indicator in Agent event feed showing current escalation level.',
+      'Level 1: Builder Agent fails 1–2 times → retries the same decided step.',
+      'Level 2: Builder Agent fails 3 times → step returned to Command Agent as failed; logged to forensic database; Skeptic Agent cycle restarts with failure as additional input.',
+      'Level 3: Command Agent receives same step failed twice → decomposes step into smaller sub-steps; restarts voting on first sub-step.',
+      'Level 4: Decomposed sub-steps fail 3+ times → entire action plan suspended; flagged to God Factory Self-Improvement Agent with full forensic context.',
+      'Level 5: God Factory unable to resolve within one of its own cycles → affected plantag marked plantag:status:blocked; user notified through memory tab with blocking devtag chain.',
+      'Forensic Severity Levels: info (logged only) → warning (Blame Crawler at next crawl) → error (Blame Crawler immediately, Skeptic flagged) → critical (cycle halted, Command Agent notified, Skeptic spawned) → fatal (cycle halted, God Factory invoked, user notified).',
+      'Related: Builder Agent, Command Agent, Skeptic Agent, God Factory, Forensic Database, Severity Escalation Chart.'
+    ]
+  },
+  {
+    id: 'severity-escalation-chart',
+    title: 'Severity Escalation: Automatic Condition Triggers (COMING SOON)',
+    summary: 'Conditions that automatically promote forensic entries from warning → error → critical → fatal regardless of agent decision.',
+    tags: ['coming-soon', 'forensic', 'escalation', 'severity', 'policy', 'safety'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Severity escalation event log in Forensic database showing every auto-escalation and its trigger.',
+      'Rule 1: Same-file warning in 3+ consecutive build cycles → auto-escalates to error.',
+      'Rule 2: Error previously logged as warning → escalates to critical on second occurrence.',
+      'Rule 3: Any tag mismatch involving devtag:perf_critical or devtag:security_requirement → automatically critical.',
+      'Rule 4: Circular dependency between two devtag:perf_critical components → automatically fatal.',
+      'Rule 5: Any forensic entry involving devtag:nano component that is also devtag:breaking_change → escalates to critical.',
+      'Rule 6: Builder Agent retry that produces a different tag mismatch on each attempt (non-deterministic output) → automatically critical.',
+      'Related: Failure Escalation Chart, Forensic Database, Tag Taxonomy, Performance Tags, Security Tags.'
+    ]
+  },
+  {
+    id: 'tag-retirement-chart',
+    title: 'Tag Retirement: Seven-Step Retirement Process (COMING SOON)',
+    summary: 'Mandatory seven-step process when a devtag is retired due to file deletion, rename, or restructure — prevents orphaned buildtags and plantags.',
+    tags: ['coming-soon', 'tag-registry', 'retirement', 'lifecycle', 'orphans', 'policy'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Tag retirement wizard accessible from Tag Registry panel for controlled devtag lifecycle management.',
+      'Step 1: Retiring agent calls retire_devtag(tag_id) on tag registry service.',
+      'Step 2: Registry queries all buildtags referencing this devtag → marks all matching buildtags as buildtag:orphaned.',
+      'Step 3: Registry queries all plantags referencing this devtag via plantag:requires or plantag:produces → marks matching plantags as plantag:status:blocked with blocking reason set to the retired tag ID.',
+      'Step 4: Registry queries all relationship tags (calls, depends_on, etc.) referencing this devtag → marks all as devtag:orphaned.',
+      'Step 5: All orphaned entries written to forensic database as tag_mismatches with severity error.',
+      'Step 6: Blame Crawler notified immediately.',
+      'Step 7: Dead tag retained in registry with status:retired for 30 cycles before permanent deletion (allows rollback via buildtag:revert).',
+      'Related: Dead Tag Sub-Agent, Tag Registry, Blame Crawler, Forensic Database, Version Control Agent.'
+    ]
+  },
+  {
+    id: 'relationship-tag-vocabulary',
+    title: 'Relationship Tag Vocabulary (COMING SOON)',
+    summary: 'Structural relationship devtags expressing how components call, inherit, implement, compose, subscribe, publish, read, write, proxy, and delegate.',
+    tags: ['coming-soon', 'tag-taxonomy', 'relationship-tags', 'devtags', 'vocabulary', 'structural'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Relationship tag browser in Tag Registry panel with visual dependency graph.',
+      'Purpose: Express component relationships structurally so Skeptic Agent, Conflict Sub-Agent, and Regression Sub-Agent can reason about dependencies without reading raw code.',
+      'devtag:calls:[caller]:[callee] — function/method invocation relationship.',
+      'devtag:inherits:[child]:[parent] — class inheritance.',
+      'devtag:implements:[class]:[interface] — interface implementation.',
+      'devtag:composes:[host]:[guest] — composition relationship.',
+      'devtag:depends_on:[a]:[b] — dependency declaration.',
+      'devtag:injected_into:[dependency]:[target] — dependency injection.',
+      'devtag:overrides:[child]:[parent_method] — method override.',
+      'devtag:extends:[child]:[parent] — extension relationship.',
+      'devtag:mixes_in:[target]:[mixin] — mixin application.',
+      'devtag:subscribes_to:[subscriber]:[event] — event subscription.',
+      'devtag:publishes:[publisher]:[event] — event publication.',
+      'devtag:reads_from:[consumer]:[store_or_state] — state read.',
+      'devtag:writes_to:[producer]:[store_or_state] — state write.',
+      'devtag:proxies:[proxy]:[target] — proxy wrapping.',
+      'devtag:wraps:[wrapper]:[wrapped] — wrapper pattern.',
+      'devtag:delegates_to:[delegator]:[delegate] — delegation pattern.',
+      'Tag Relationship Schema: Legal peer relationships include calls (both sides must be function/method), depends_on (both must exist in registry), subscribes_to/publishes (event must exist as devtag:event).',
+      'Related: Tag Registry, Tag Relationship Schema, Conflict Sub-Agent, Regression Sub-Agent.'
+    ]
+  },
+  {
+    id: 'nano-sea-tag-vocabulary',
+    title: 'Nano Sea Tag Vocabulary (COMING SOON)',
+    summary: 'Complete devtag:nano vocabulary making nano sea components visible to the tag validator, forensic database, and Nano Liaison Agent.',
+    tags: ['coming-soon', 'tag-taxonomy', 'nano-tags', 'devtags', 'vocabulary', 'nano-sea-v2'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Nano tag browser in Tag Registry panel showing all registered nano sea tags.',
+      'Purpose: Without nano tags, any code generated or modified by the nano sea is invisible to the tag validator and forensic database.',
+      'Module/Layer/Node: devtag:nano:module:[name], devtag:nano:layer:[name], devtag:nano:node:[name] — hierarchy for nano architecture.',
+      'Weight Tags: devtag:nano:weight:frozen:[matrix_name], devtag:nano:weight:personal:[matrix_name] — differentiate frozen vs trainable weights.',
+      'Lifecycle Tags: devtag:nano:cycle:[n], devtag:nano:generation:[n], devtag:nano:deposit:[name] — track cosmic cycle state.',
+      'Anomaly Tags: devtag:nano:absularity:[name], devtag:nano:absoleice:[name] — flag absularity and absoleice events in nano sea.',
+      'RBY Tags: devtag:nano:rby:r:[component], devtag:nano:rby:b:[component], devtag:nano:rby:y:[component] — mark RBY-simplex positions (Red=abstraction, Blue=domain, Yellow=style).',
+      'Advanced Tags: devtag:nano:icae:[fractal_name], devtag:nano:trifecta:[name], devtag:nano:infection:[name] — fractal and trifecta constructs.',
+      'Training Tags: devtag:nano:training_target:[name], devtag:nano:replay_buffer:[name], devtag:nano:fitness:[metric] — training state markers.',
+      'Parent-Child Rules: nano:node requires parent nano:layer; nano:layer requires parent nano:module; nano:weight:frozen and nano:weight:personal require parent nano:module; nano:rby:* require parent nano:trifecta.',
+      'Related: Nano Liaison Agent, Fleet Agents-Nano, Tag Registry, Nano Sea v2 Roadmap, RBY-Simplex Routing.'
+    ]
+  },
+  {
+    id: 'attribution-tag-vocabulary',
+    title: 'Attribution Tag Vocabulary (COMING SOON)',
+    summary: 'Structural authorship markers written at code-creation time so blame is structural, not inferred post-hoc.',
+    tags: ['coming-soon', 'tag-taxonomy', 'attribution-tags', 'devtags', 'blame', 'authorship'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Attribution tag stats in BLAME panel showing % agent-generated vs human-generated vs hybrid per codebase area.',
+      'Purpose: Blame Crawler identifies model quality by crawling blame records; attribution tags make authorship visible at the code level without inference.',
+      'devtag:agent_generated:[agent_id] — code created entirely by named agent.',
+      'devtag:human_generated — code written entirely by human developer.',
+      'devtag:hybrid_generated:[agent_id] — code created collaboratively; named agent made significant edits.',
+      'devtag:last_modified_by:[agent_id] — last modification attribution.',
+      'devtag:created_by:[agent_id] — original creation attribution.',
+      'devtag:reviewed_by:[agent_id] — reviewed and approved by named agent or human.',
+      'Write-Time Requirement: Attribution tags must be written at the same time as the code they describe.',
+      'Related: Blame Crawler, BLAME Panel, Quality Dimensions Framework, Forensic Database.'
+    ]
+  },
+  {
+    id: 'performance-versioning-tag-vocabulary',
+    title: 'Performance, Versioning, and File System Tags (COMING SOON)',
+    summary: 'Performance sensitivity, version state, and file system structure tags enabling scrutiny thresholds and breaking-change detection.',
+    tags: ['coming-soon', 'tag-taxonomy', 'performance-tags', 'versioning-tags', 'filesystem-tags', 'devtags'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Tag browser for performance, versioning, and file system tag families in Tag Registry.',
+      'Performance Sensitivity Tags: devtag:perf_critical, devtag:memory_bound, devtag:io_bound, devtag:latency_sensitive, devtag:cpu_bound, devtag:throughput_critical, devtag:realtime, devtag:batch_tolerant, devtag:hot_path, devtag:cold_path. These allow Skeptic Agent to apply different scrutiny thresholds per component.',
+      'Versioning Tags: devtag:version:[semver], devtag:deprecated:[name], devtag:breaking_change:[name], devtag:experimental:[name], devtag:stable:[name], devtag:internal:[name], devtag:public_api:[name], devtag:legacy:[name], devtag:migration_required:[name]. Without these, no agent can determine if an edit introduces a breaking change.',
+      'File System Structure Tags: devtag:directory:[path], devtag:file:[path], devtag:symlink:[path]:[target], devtag:generated_file:[path], devtag:config_file:[path], devtag:test_file:[path], devtag:data_file:[path], devtag:asset_file:[path]. Required by Context Window Manager and Dead Tag Sub-Agent.',
+      'Auto-Escalation: Any tag mismatch involving devtag:perf_critical or devtag:security_requirement is automatically severity=critical. Circular dependency between two perf_critical components is automatically fatal.',
+      'Related: Tag Registry, Skeptic Agent, Severity Escalation Chart, Nano Sea Tags, Attribution Tags.'
+    ]
+  },
+  {
+    id: 'extended-plantag-buildtag-vocabulary',
+    title: 'Extended Plantag and Buildtag Vocabulary (COMING SOON)',
+    summary: 'Additional plantag and buildtag types from the memory system addendum including test requirements, performance targets, regression guards, and new build operations.',
+    tags: ['coming-soon', 'tag-taxonomy', 'plantags', 'buildtags', 'vocabulary', 'addendum'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Plantag and buildtag vocabulary browser in Tag Registry panel showing all extended types.',
+      'Additional Plantags: plantag:test_required:[devtag] (test required before this devtag can be marked done), plantag:performance_target:[metric]:[value], plantag:regression_guard:[devtag], plantag:version_target:[semver], plantag:security_requirement:[name], plantag:nano_required:[component], plantag:compatibility:[platform], plantag:coverage_required:[percent], plantag:review_required:[agent_id].',
+      'Coordination Plantags: plantag:parallel_safe (step can run concurrently with others), plantag:parallel_unsafe (step must run alone), plantag:rollback_point (create version snapshot here), plantag:debt_ceiling:[score] (max debt allowed for this step).',
+      'Additional Buildtags: buildtag:test:[devtag], buildtag:document:[devtag], buildtag:deprecate:[devtag], buildtag:revert:[buildtag_id], buildtag:optimize:[devtag], buildtag:secure:[devtag], buildtag:annotate:[devtag]:[tag].',
+      'Lifecycle Buildtags: buildtag:migrate:[devtag_old]:[devtag_new], buildtag:retire:[devtag], buildtag:register:[devtag], buildtag:lock:[devtag], buildtag:unlock:[devtag].',
+      'Claim Buildtags: buildtag:checkpoint:[plantag], buildtag:claim:[devtag]:[agent_id], buildtag:release:[devtag]:[agent_id].',
+      'Related: Tag Registry, Tag Relationship Schema, Conflict Sub-Agent, Version Control Agent, Parallel Coordinator Agent.'
+    ]
+  },
+  {
+    id: 'tag-relationship-schema',
+    title: 'Tag Relationship Schema: Parent-Child and Peer Rules (COMING SOON)',
+    summary: 'Deterministic constraint table enforced by the tag validator defining which devtags can legally reference which other devtags.',
+    tags: ['coming-soon', 'tag-taxonomy', 'validation', 'schema', 'parent-child', 'peer-rules'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Tag relationship schema validator accessible from Tag Registry Rules tab.',
+      'Purpose: Tag validator checks devtag existence; Tag Relationship Schema checks whether the reference itself is structurally legal.',
+      'Legal Parent-Child: devtag:method requires parent devtag:class; devtag:field requires parent devtag:schema or devtag:model; devtag:prop requires parent devtag:component; devtag:stage requires parent devtag:pipeline.',
+      'Nano Parent-Child: devtag:nano:node requires parent devtag:nano:layer; devtag:nano:layer requires parent devtag:nano:module; nano:weight:frozen and nano:weight:personal require parent nano:module; nano:rby:* require parent nano:trifecta.',
+      'Relationship Parent-Child: devtag:symlink requires target devtag:file or devtag:directory; devtag:overrides requires parent devtag:inherits or devtag:extends; devtag:injected_into requires target devtag:function, devtag:method, or devtag:class.',
+      'Legal Peer Rules: devtag:calls requires both sides to exist as devtag:function or devtag:method; devtag:depends_on requires both sides in registry; devtag:circular_dependency valid only when both devtags exist AND depends_on chain between them is verified; devtag:subscribes_to and devtag:publishes require the event to exist as devtag:event.',
+      'Violation: Any devtag written in violation of parent-child or peer rules is rejected before registry insertion.',
+      'Related: Tag Registry, Relationship Tag Vocabulary, Tag Validator, Forensic Database.'
+    ]
+  },
+  {
+    id: 'forensic-database-all-tables',
+    title: 'Forensic Database: Complete Table Registry (COMING SOON)',
+    summary: 'All 45+ forensic tables across Core, Addendum, Blame, Gap Analysis, Project State Crawler, Suggested Jobs, and God Factory groups.',
+    tags: ['coming-soon', 'forensic', 'database', 'tables', 'audit', 'comprehensive'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Unified forensic browser showing all table groups with row counts, severity distributions, and cross-table correlation.',
+      'Core Tables (from base spec): failed_votes, tag_mismatches, spaghetti_index, under_engineered_regions, over_engineered_regions, missing_tests.',
+      'Addendum Tables: regression_history, conflict_log, dead_tags, diff_failures, integration_failures, version_commits, nano_anomalies, spawn_violations, systemic_regressions.',
+      'Blame Crawler Tables: blame_records, quality_records, tool_criticism, success_attribution, model_registry.',
+      'Gap Analysis Tables: coverage_matrix, pattern_records, debt_history, tag_vocabulary_gaps, agent_performance_records.',
+      'Project State Crawler Tables: ground_truth_snapshots, drift_events, language_registry, skipped_files, crawler_runs.',
+      'Suggested Jobs Tables: job_records, sandbox_runs, implementation_log, crash_recovery_log, job_steps, job_merge_log.',
+      'God Factory Tables: notification_queue, idle_suggestions, god_factory_actions, brainstorm_submissions, background_scan_log.',
+      'Invariant: No forensic entry may ever be deleted. Entries may be marked resolved/archived but never purged.',
+      'Related: Forensic Panel (current UI), Blame Panel, Gap Analysis, Project State Crawler, Suggested Jobs.'
+    ]
+  },
+  {
+    id: 'system-invariants',
+    title: 'System Invariants: Absolute Rules the System Must Never Break (COMING SOON)',
+    summary: 'Nine non-negotiable invariants from the unified spec addendum that govern agent behavior, file writes, fleet safety, and tag lifecycle.',
+    tags: ['coming-soon', 'policy', 'invariants', 'safety', 'enforcement', 'unified-spec'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: System invariant health monitor showing pass/fail status for each invariant in every build cycle.',
+      'Invariant 1 — Spawn Gate: No sub-agent may be spawned by an agent not listed in the Agent Spawn Authority Chart. Violations logged to spawn_violations and the spawn is blocked.',
+      'Invariant 2 — Diff Before Write: No file write may occur until Diff Sub-Agent has verified that the predicted post-edit devtag state satisfies the required plantag state.',
+      'Invariant 3 — Fleet Claim Release: No Fleet Agent may begin a step while it holds any devtag claim from a prior step that has not been released.',
+      'Invariant 4 — Tag Retirement Order: No devtag may be retired without completing all seven steps of the Tag Retirement Chart in order.',
+      'Invariant 5 — Conflict Gate: Conflict Sub-Agent must be consulted before any fleet step assignment. No step may be assigned if its buildtag set conflicts with any active devtag claim.',
+      'Invariant 6 — Commit Recording: Version Control Agent must receive and record every committed build step before the build cycle is marked complete.',
+      'Invariant 7 — Nano Translation: Nano Liaison Agent must verify that every devtag:nano tag written by Fleet Agents-Nano has a valid translation in nano sea internal state before the step is marked complete.',
+      'Invariant 8 — Regression Mandatory: Regression detection is mandatory after every committed build step. No subsequent step may begin in the same decision cycle until Regression Sub-Agent completes.',
+      'Invariant 9 — No Silent Exclusion: Context Window Manager must log every excluded tag for every chunking operation.',
+      'Related: Agent Spawn Authority, Diff Sub-Agent, Conflict Sub-Agent, Tag Retirement, Version Control Agent, Nano Liaison Agent, Regression Sub-Agent, Context Window Manager.'
+    ]
+  },
+  {
+    id: 'agent-loop-event-types',
+    title: 'Agent Loop Event Types and State Machine',
+    summary: 'All event types emitted by the agent loop: state changes, step lifecycle, schema errors, loop detection, self-reflection, halt conditions, and cooldowns.',
+    tags: ['agent-loop', 'diagnostics', 'events', 'state-machine', 'monitoring', 'observable'],
+    status: 'active',
+    details: [
+      'The agent loop emits structured events with timestamps and event type labels, visible in the Agent event feed.',
+      'State Change Events: [state_change] executing → agent step running; [state_change] evaluating → agent processing output; [state_change] complete → loop finished; [state_change] error → halt condition reached.',
+      'Step Lifecycle: [step_start] step description and target path; [step_complete] step accepted; [step_content] content generated; [dataset_update] training dataset updated; [timing_update] timing recorded.',
+      'Loop Detection: [loop_detected] fires when the same task is repeated 3+ times. Breakout attempt counter increments. Web search context injected to break the loop.',
+      'Loop Breakout: [info] 🔄 LOOP BREAKOUT (attempt #N) — automatically rewrites the stuck task with fresh web context. Maximum 3 breakout attempts before escalation.',
+      'Schema Miss: [info] Schema miss #N — model did not return structured JSON output block (no file changes). After 3 consecutive schema misses the loop falls back to a simplified prompt format.',
+      'Self-Reflection: [info] 🔍 Self-reflection at iteration N — triggered at iteration 10, 20, 30, etc. Agent reviews its own output quality and adjusts strategy.',
+      'Halt Condition: [error] Agent halted: N consecutive iterations with zero file changes. Default threshold: 15. Halted loop requires manual restart or task reformulation.',
+      'Cooldown: [cooldown] — mandatory pause between state transitions, preventing runaway API calls. Duration scales with model tier.',
+      'Nano Training Events: [info] Nano training observe failed — nano sea training endpoint unreachable during observe phase. Non-fatal; loop continues without nano feedback signal.',
+      'See: BLAME panel for quality attribution of each completed step; Forensic Database for logged halt events.'
+    ]
+  },
+  {
+    id: 'mega-prompt-system',
+    title: 'Mega Prompt System: Generation, Chunking, and Management',
+    summary: 'Curated and auto-generated large prompts for complex agent tasks — with context-aware chunking, model selection, and archive management.',
+    tags: ['agent-loop', 'mega-prompts', 'chunking', 'context-management', 'prompts'],
+    status: 'active',
+    details: [
+      'Mega Prompts are large-scale task prompts used to launch complex agent runs from the Mega Prompts panel inside Agent Settings.',
+      'Custom Mega Prompts: Enter any prompt and save it. Saved prompts are stored in localStorage and appear in the Mega Prompts list.',
+      'Preset Mega Prompts: Curated templates for games, SaaS platforms, bots, CLI tools, REST APIs, and more.',
+      'Archive / Remove: Saved custom mega prompts can be archived or removed from the list. ⚠ NOTE (known issue): Archive/Remove action is currently only partially implemented — see mega_prompt_problems.txt feedback. If remove does not work from the UI, clear the mega-prompts localStorage key to reset.',
+      'COMING SOON — Intelligent Generation: Current behavior concatenates prompt history. Planned behavior: agent reads all selected history entries, chunks them to stay within 35% of the current model token limit, and uses the full chunked context to synthesize a coherent mega prompt.',
+      'COMING SOON — Model Selection for Generation: When generating a mega prompt from history, the system will ask whether to use a cloud model (higher quality synthesis) or a local model (privacy/cost) and execute accordingly.',
+      'COMING SOON — Token-Aware Chunking: If a single prompt history entry exceeds 35% of the token limit, it will be chunked with the Context Window Manager Sub-Agent before synthesis.',
+      'See: Agent Settings Panel, Mega Prompts Panel anchor, Context Window Manager Sub-Agent, Model Size Constraint Chart.'
+    ]
+  },
+  {
+    id: 'skeptic-agent-forensic-loop',
+    title: 'Skeptic Agent: Forensic Sub-Crawler Loop (COMING SOON)',
+    summary: 'Skeptic Agent populates forensic database via sub-crawlers and decision agents, running up to 5 refinement iterations before passing state to Command Agent.',
+    tags: ['coming-soon', 'build-layer', 'skeptic-agent', 'forensic', 'sub-crawlers', 'refinement'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Skeptic Agent refinement cycle counter and forensic population log in Agent event feed.',
+      'Purpose: Challenge the Waiting Sub-Agent output for structural errors, incomplete work, AI slop, spaghetti logic, and over/under-engineering.',
+      'Sub-Crawlers: Skeptic Agent spawns multiple focused sub-agent crawlers that read data at granularity as fine as individual lines of code.',
+      'Decision Agents: Sub-crawlers populate the forensic database; Decision Agents crawl the forensic database and feed results back to Skeptic Agent.',
+      'Forensic Tables Populated: failed_votes, tag_mismatches, spaghetti_index, under_engineered_regions, over_engineered_regions, missing_tests (and more from addendum).',
+      'Refinement Cycle: Skeptic Agent uses Decision Agent results to feed corrections back to Waiting Sub-Agent → Waiting Sub-Agent refines → re-enters cycle.',
+      'Cycle Limit: Maximum 5 refinement iterations by default (configurable per-session).',
+      'Manual Stop Behavior: If stopped manually during refinement, loop goes to previous or next checkpoint then terminates (prevents state corruption).',
+      '24/7 Mode: Can be set to run continuously without iteration limit; still stops gracefully to checkpoint if interrupted.',
+      'After Max Iterations: Current refined state sent to Command Agent regardless of remaining issues. Unresolved issues logged to forensic database and flagged to God Factory.',
+      'Related: Waiting State Detail, Command Agent, Forensic Database, God Factory, Failure Escalation Chart.'
+    ]
+  },
+  {
+    id: 'help-agent',
+    title: 'Help Agent: In-System Documentation Assistant (COMING SOON)',
+    summary: 'Dedicated conversational agent that crawls the help menu to provide HOW TO, WHAT IS, and WHERE assistance to users.',
+    tags: ['coming-soon', 'agents', 'help-system', 'assistant', 'documentation', 'navigation'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Help Agent chat interface embedded in the Help panel for conversational feature discovery.',
+      'Purpose: Give users a conversational entry point to the help system — ask "how do I run a blame crawl?" and get a direct answer with navigation links.',
+      'Memory Scope: TOTAL — can access all memory sources and full system state to give context-aware answers.',
+      'Spawn Authority: Help Agent may spawn Memory Crawler and Context Window Manager Sub-Agent.',
+      'Cannot be accessed by: Agent Agent-Loop and Fleet Agents (excluded from Help Agent memory per Unified Spec).',
+      'Interaction Types: HOW TO questions (step-by-step), WHAT IS questions (feature explanation), WHERE questions (navigation links to panels and controls).',
+      'Context Crawling: On receiving a question, Help Agent crawls help registry, current panel state, and relevant memory to produce a grounded answer.',
+      'Current State: Current Help panel is registry-driven documentation with search. Help Agent chat layer is not yet implemented.',
+      'Related: Help System, Memory Scope Enforcement, Agent Spawn Authority, Help Panel.'
+    ]
+  },
+  {
+    id: 'agent-routers',
+    title: 'Agent Routers: Task Distribution Layer (COMING SOON)',
+    summary: 'Routes tasks between agents based on context, authority, and workload — sits between orchestrator and worker agents.',
+    tags: ['coming-soon', 'agents', 'routing', 'orchestration', 'dispatch', 'memory-total'],
+    status: 'coming_soon',
+    details: [
+      'COMING SOON: Agent Router monitoring dashboard showing active routing decisions and queue state.',
+      'Purpose: Prevent God Factory and user from needing to know which specific agent handles each task class.',
+      'Memory Scope: TOTAL — Agent Routers have unrestricted access to all memory sources.',
+      'Spawn Authority: Agent Routers may spawn any agent or sub-agent they are authorized to route to. They do not spawn processing agents directly.',
+      'Routing Signals: Task type, complexity estimate, current model tier availability, agent workload, security level, memory scope requirements.',
+      'Relationship to Fleet: Agent Routers decide WHICH fleet agents to activate and for WHICH tasks. Different from Parallel Coordinator which manages STEP ASSIGNMENT within an active fleet run.',
+      'Cannot be accessed by: Agent Agent-Loop and Fleet Agents (excluded from Agent Routers memory per Unified Spec).',
+      'Related: Agent Spawn Authority, Fleet Agents, Parallel Coordinator Agent, Model Size Constraint Chart, Memory Scope Enforcement.'
+    ]
+  },
+  {
+    id: 'midwife-bird-feeding',
+    title: 'Midwife Bird-Feeding: Dataset Production for Nano Training',
+    summary: 'Generates structured training datasets for the nano sea by feeding models structured prompts and capturing high-quality outputs.',
+    tags: ['midwife', 'nano-sea-v2', 'training', 'datasets', 'fleet-agents-nano', 'memory-total'],
+    status: 'active',
+    details: [
+      'Midwife Bird-Feeding is the data production system for nano sea training — it "feeds" models structured prompts and captures their outputs as training examples.',
+      'Memory Scope: TOTAL — Midwife has unrestricted access to all memory sources, so it can target training data at any area of the system.',
+      'Spawn Authority: Midwife may spawn Memory Crawler and Context Window Manager Sub-Agent.',
+      'Task Tab: Configure training tasks with model assignment, prompt structure, enable/disable per task.',
+      'Config Tab: Set feeding model, interval, max tokens per session, and concurrency level.',
+      'History Tab: Review past feeding sessions, inspect generated outputs, and flag low-quality examples.',
+      'Exclude Broken on Start: Skips models flagged as failed before starting a session — prevents wasted training cycles.',
+      'Integration: Midwife outputs feed directly into Fleet Agents-Nano training pipelines.',
+      'Coming Soon — Blame Integration: High-quality blame records will automatically seed Midwife task queues with examples of strong model behavior for reinforcement.',
+      'Coming Soon — Nano Targeting: Midwife will support targeted nano training — feed only nanos that score low on specific quality dimensions.',
+      'Related: Nano Sea, Fleet Agents-Nano, BLAME panel, Cosmic Cycles, Quality Dimensions.'
+    ]
   }
 ];
 
