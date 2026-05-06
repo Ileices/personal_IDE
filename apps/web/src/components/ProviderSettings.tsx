@@ -6,7 +6,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   Settings, ExternalLink, Check, X, RefreshCw,
-  Loader2, Shield, Wifi, WifiOff, Key, Monitor, Zap, Globe
+  Loader2, Shield, Wifi, WifiOff, Key, Monitor, Zap, Globe,
+  Download, GitMerge, AlertTriangle
 } from 'lucide-react';
 import { OllamaSetup } from './OllamaSetup';
 import { API_BASE } from '../config.js';
@@ -43,11 +44,17 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
   const [githubResult, setGithubResult] = useState<{ success: boolean; message: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'providers' | 'failed'>('providers');
 
+  // App auto-update
+  const [updateStatus, setUpdateStatus] = useState<{ branch?: string; behindCount?: number; recentCommits?: string } | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateResult, setUpdateResult] = useState<{ success: boolean; message: string; alreadyUpToDate?: boolean } | null>(null);
+
   useEffect(() => {
     fetchProviders();
     checkNanoStatus();
     fetchAllModels();
     fetchInstalledLocalModels();
+    void fetchUpdateStatus();
   }, []);
 
   const failedEntries = Object.values(failedModels).sort((a, b) => b.lastTestedAt - a.lastTestedAt);
@@ -159,8 +166,34 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function fetchUpdateStatus() {
+    try {
+      const res = await fetch(`${API_BASE}/api/app/update-status`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setUpdateStatus(data);
+    } catch { /* best-effort */ }
+  }
+
+  async function runAppUpdate() {
+    setUpdateBusy(true);
+    setUpdateResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/app/update`, { method: 'POST' });
+      const data = await res.json();
+      setUpdateResult(data);
+      if (data.success) {
+        // Refresh status after update
+        await fetchUpdateStatus();
+      }
+    } catch (err: any) {
+      setUpdateResult({ success: false, message: err.message });
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
+
   async function updateGithubPat() {
-    if (!githubPat.trim()) return;
     setUpdatingGithub(true);
     setGithubResult(null);
     try {
@@ -232,6 +265,69 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
             <>
               {activeTab === 'providers' && (
                 <>
+              {/* ── App Update from GitHub ── */}
+              <div className="border rounded-lg p-3 border-green-500/30 bg-green-500/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <GitMerge className="w-4 h-4 text-green-400" />
+                  <span className="font-medium text-sm">Update App from GitHub</span>
+                  {updateStatus?.behindCount != null && updateStatus.behindCount > 0 && (
+                    <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded flex items-center gap-0.5 ml-auto">
+                      <AlertTriangle className="w-2.5 h-2.5" /> {updateStatus.behindCount} commit{updateStatus.behindCount !== 1 ? 's' : ''} behind
+                    </span>
+                  )}
+                  {updateStatus?.behindCount === 0 && (
+                    <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded flex items-center gap-0.5 ml-auto">
+                      <Check className="w-2.5 h-2.5" /> Up to date
+                    </span>
+                  )}
+                </div>
+                {updateStatus && (
+                  <div className="mb-2 text-[10px] text-ide-text-dim space-y-0.5">
+                    <div>Branch: <span className="text-ide-text">{updateStatus.branch}</span></div>
+                    {updateStatus.recentCommits && (
+                      <div className="font-mono bg-ide-bg/60 rounded p-1.5 text-[9px] whitespace-pre max-h-16 overflow-y-auto">
+                        {updateStatus.recentCommits}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-ide-text-dim mb-2">
+                  Pulls the latest version from <span className="text-green-300">github.com/Ileices/personal_IDE</span> (origin/main). Requires git to be installed and the repo to have a clean working tree.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={runAppUpdate}
+                    disabled={updateBusy}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-green-500/20 text-green-300 rounded hover:bg-green-500/30 disabled:opacity-40 border border-green-500/30"
+                  >
+                    {updateBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                    {updateBusy ? 'Updating…' : 'Pull Latest Update'}
+                  </button>
+                  <button
+                    onClick={fetchUpdateStatus}
+                    disabled={updateBusy}
+                    className="px-3 py-1.5 text-xs text-ide-text-dim hover:text-ide-text border border-ide-border rounded hover:border-ide-accent/30 flex items-center gap-1"
+                    title="Check for updates"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                  </button>
+                </div>
+                {updateResult && (
+                  <div className={`mt-2 text-xs px-2 py-1.5 rounded whitespace-pre-wrap ${
+                    updateResult.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                  }`}>
+                    {updateResult.success
+                      ? <Check className="w-3 h-3 inline mr-1" />
+                      : <X className="w-3 h-3 inline mr-1" />
+                    }
+                    {updateResult.message}
+                    {updateResult.success && !updateResult.alreadyUpToDate && (
+                      <div className="mt-1 text-[10px] text-yellow-300">⚡ Restart the server to apply changes (pnpm dev).</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* ── GitHub Token Update ── */}
               <div className="border rounded-lg p-3 border-ide-accent/30 bg-ide-accent/5">
                 <div className="flex items-center gap-2 mb-2">

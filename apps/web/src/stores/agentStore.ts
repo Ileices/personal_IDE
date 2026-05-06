@@ -81,6 +81,9 @@ interface AgentStore {
       analyzeCodebase?: boolean;
       useCorpusManifesto?: boolean;
       autoProjectIntel?: boolean;
+      autoIngestCorpus?: boolean;
+      workflowMode?: 'build_new' | 'import_refactor' | 'code_review' | 'scale_research';
+      strictQualityGate?: boolean;
     }
   ) => Promise<void>;
   stopAgent: () => Promise<void>;
@@ -154,7 +157,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       enableSmartChunking,
       analyzeCodebase: options?.analyzeCodebase ?? true,
       useCorpusManifesto: options?.useCorpusManifesto,
+      autoIngestCorpus: options?.autoIngestCorpus,
       autoProjectIntel: options?.autoProjectIntel,
+      workflowMode: options?.workflowMode,
+      strictQualityGate: options?.strictQualityGate,
     });
 
     set({ isRunning: true, state: 'planning', currentIteration: 0, events: [] });

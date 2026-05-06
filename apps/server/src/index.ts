@@ -43,6 +43,7 @@ import { siliconFactoryRoutes } from './routes/siliconFactory.js';
 import { projectFactoryRoutes } from './routes/projectFactory.js';
 import { stabilityRoutes } from './routes/stability.js';
 import { contextWindowRoutes } from './routes/contextWindow.js';
+import { appUpdateRoutes } from './routes/appUpdate.js';
 import { startNanoLiaisonAgent } from './services/nanoLiaison/index.js';
 import { startSubsystemScheduler } from './services/subsystemScheduler.js';
 import { startSiliconFactorySupervisor } from './services/siliconFactory/index.js';
@@ -177,6 +178,9 @@ async function main() {
 
   // Context Window Manager — priority-based context assembly with budget enforcement
   await app.register(contextWindowRoutes, { prefix: '/api/context-window' });
+
+  // App Update — git pull from GitHub origin/main
+  await app.register(appUpdateRoutes);
 
   // Health — rich diagnostic endpoint (replaces inline handler)
   await app.register(healthRoutes);

@@ -190,6 +190,7 @@ export function AgentControls() {
   const [workflowMode, setWorkflowMode] = useState<WorkflowMode>('build_new');
   const [strictQualityGate, setStrictQualityGate] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [bottomTab, setBottomTab] = useState<'events' | 'milestones' | 'quality'>('events');
 
   const filteredHistory = useMemo(() => (
     promptHistory.filter(h => !histSearch || h.prompt.toLowerCase().includes(histSearch.toLowerCase()))
@@ -304,11 +305,11 @@ export function AgentControls() {
       const data = await res.json().catch(() => null);
       if (!data?.settings) return;
       setSelectedPresetId(data.settings.presetId || 'all-models-balanced');
-      setStrategyPrimaryModel(data.settings.primaryModel || selectedModel);
+      setStrategyPrimaryModel(prev => data.settings.primaryModel || prev);
       setStrategyFallbackModels(data.settings.fallbackModels || []);
       setFailedModelCount((data.failedModels || []).length);
     } catch {}
-  }, [selectedModel]);
+  }, []);
 
   const refreshStrategy = useCallback(async () => {
     try {
@@ -316,15 +317,14 @@ export function AgentControls() {
       const data = await res.json().catch(() => null);
       if (!data?.settings) return null;
       setSelectedPresetId(data.settings.presetId || 'all-models-balanced');
-      setStrategyPrimaryModel(data.settings.primaryModel || selectedModel);
+      setStrategyPrimaryModel(prev => data.settings.primaryModel || prev);
       setStrategyFallbackModels(data.settings.fallbackModels || []);
       setFailedModelCount((data.failedModels || []).length);
-      if (data.settings.primaryModel) setModel(data.settings.primaryModel);
       return data;
     } catch {
       return null;
     }
-  }, [selectedModel, setModel]);
+  }, []);
 
   useEffect(() => {
     void refreshStrategy();
@@ -459,6 +459,13 @@ export function AgentControls() {
     };
     void loadModels();
   }, []);
+
+  // Sync TopBar model picker → strategyPrimaryModel (only when not running)
+  useEffect(() => {
+    if (!isRunning && !isFleetRunning && selectedModel) {
+      setStrategyPrimaryModel(selectedModel);
+    }
+  }, [selectedModel, isRunning, isFleetRunning]);
 
   const capabilityCounts = useMemo(() => {
     const counts: Record<string, number> = {
@@ -670,6 +677,8 @@ export function AgentControls() {
         useCorpusManifesto,
         autoProjectIntel,
         autoIngestCorpus,
+        workflowMode,
+        strictQualityGate,
       });
       setTask('');
     } else {
@@ -677,15 +686,19 @@ export function AgentControls() {
         fallbackModels,
         analyzeCodebase,
         useCorpusManifesto,
+        autoIngestCorpus,
         autoProjectIntel,
+        workflowMode,
+        strictQualityGate,
       });
       setTask('');
     }
   };
 
   // Wizard → applies settings + optionally starts the loop
-  const handleWizardLaunch = useCallback(async (result: { workflowMode: WorkflowMode; strategyTemplate: string; taskPrompt: string; autoStart: boolean }) => {
+  const handleWizardLaunch = useCallback(async (result: { workflowMode: WorkflowMode; strategyTemplate: string; taskPrompt: string; autoStart: boolean; strictQualityGate: boolean }) => {
     setWorkflowMode(result.workflowMode);
+    setStrictQualityGate(result.strictQualityGate);
     setTask(result.taskPrompt);
     // Apply strategy template if one was selected
     if (result.strategyTemplate) {
@@ -694,17 +707,20 @@ export function AgentControls() {
     if (result.autoStart && activeProject) {
       // Brief delay so strategy applies first
       setTimeout(() => {
-        if (!task && result.taskPrompt) {
-          // Task state might not have updated yet — call startAgent directly
+        if (result.taskPrompt) {
+          // Start directly from wizard payload to avoid stale state races.
           startAgent(activeProject.id, result.taskPrompt, strategyPrimaryModel || 'openai/gpt-4.1', {
             analyzeCodebase,
             useCorpusManifesto,
+            autoIngestCorpus,
             autoProjectIntel,
+            workflowMode: result.workflowMode,
+            strictQualityGate: result.strictQualityGate,
           });
         }
       }, 200);
     }
-  }, [activeProject, applyStrategyTemplate, strategyPrimaryModel, analyzeCodebase, useCorpusManifesto, autoProjectIntel, startAgent, task]);
+  }, [activeProject, applyStrategyTemplate, strategyPrimaryModel, analyzeCodebase, useCorpusManifesto, autoIngestCorpus, autoProjectIntel, startAgent]);
 
   const handleCleanupFailedModels = async () => {
     setCleanupFailedModelsBusy(true);
@@ -745,7 +761,7 @@ export function AgentControls() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-ide-sidebar border-t border-ide-border overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 bg-ide-sidebar border-t border-ide-border overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-ide-border">
         <div className="flex items-center gap-2">
@@ -1123,6 +1139,31 @@ export function AgentControls() {
             className="w-full bg-ide-bg border border-ide-border rounded px-2.5 py-2 text-xs focus:outline-none focus:border-ide-accent resize-none mb-2"
             disabled={!activeProject}
           />
+          {/* Active model indicator + quick-switch */}
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="text-[10px] text-ide-text-dim shrink-0">Model:</span>
+            <select
+              value={strategyPrimaryModel}
+              onChange={e => {
+                setStrategyPrimaryModel(e.target.value);
+                setModel(e.target.value);
+                void persistStrategy({ primaryModel: e.target.value });
+              }}
+              disabled={isRunning || isFleetRunning}
+              className="flex-1 text-[10px] bg-ide-bg border border-ide-border rounded px-1.5 py-0.5 text-ide-accent focus:outline-none focus:border-ide-accent disabled:opacity-60 truncate"
+            >
+              {availableModels.length > 0 ? availableModels.map(m => (
+                <option key={m.id} value={m.id}>{m.name || m.id}</option>
+              )) : (
+                <option value={strategyPrimaryModel}>{strategyPrimaryModel}</option>
+              )}
+            </select>
+            {isRunning && currentModel && currentModel !== strategyPrimaryModel && (
+              <span className="text-[9px] text-yellow-400 truncate max-w-[80px]" title={`Active: ${currentModel}`}>
+                ↳ {currentModel.split('/').pop()}
+              </span>
+            )}
+          </div>
           <button
             onClick={handleStart}
             disabled={!task.trim() || !activeProject}
@@ -1339,49 +1380,112 @@ export function AgentControls() {
         </div>
       )}
 
-      {/* Event Log */}
-      <AgentEventFeed
-        events={events}
-        verbosity={verbosity}
-        setVerbosity={setVerbosity}
-        toggleEventExpanded={toggleEventExpanded}
-        isFleetRunning={isFleetRunning}
-        fleetMode={fleetMode}
-        fleetEvents={fleetEvents}
-        clearEvents={clearEvents}
-        clearFleetEvents={clearFleetEvents}
-        handleCopyFeed={handleCopyFeed}
-        copiedFeed={copiedFeed}
-      />
-
-      {/* Milestone + Quality panels — shown during/after a run */}
-      {activeProject && (isRunning || (!isRunning && events.length > 0)) && (
-        <>
-          <MilestonePanel
-            projectId={activeProject.id}
-            isRunning={isRunning || isFleetRunning}
-          />
-          <QualityTrend
-            projectId={activeProject.id}
-            isRunning={isRunning || isFleetRunning}
-            latestQualityEvent={latestQualityEvent}
-          />
-        </>
-      )}
-
-      {/* Pending Questions */}
-      {questions.length > 0 && (
-        <div className="border-t border-ide-border p-2">
-          <div className="text-[10px] text-yellow-400 font-medium mb-1 flex items-center gap-1">
-            <MessageSquare className="w-3 h-3" /> Questions ({questions.length})
-          </div>
-          <div className="max-h-24 overflow-y-auto space-y-1">
-            {questions.slice(-5).map((q, i) => (
-              <div key={i} className="text-[10px] text-ide-text-dim bg-ide-bg/50 rounded p-1.5">{q}</div>
-            ))}
-          </div>
+      {/* ── Tabbed bottom panel: Events / Milestones / Quality ── */}
+      <div className="flex flex-col flex-1 min-h-0 border-t border-ide-border">
+        {/* Tab bar */}
+        <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-0 shrink-0">
+          <button
+            onClick={() => setBottomTab('events')}
+            className={`flex items-center gap-1 px-2.5 py-1 text-[10px] rounded-t border-b-2 transition-colors ${
+              bottomTab === 'events'
+                ? 'border-ide-accent text-ide-accent bg-ide-accent/10'
+                : 'border-transparent text-ide-text-dim hover:text-ide-text'
+            }`}
+          >
+            <MessageSquare className="w-3 h-3" />
+            Events
+            {events.length > 0 && (
+              <span className="bg-ide-accent/20 text-ide-accent px-1 rounded text-[9px]">{events.length}</span>
+            )}
+          </button>
+          <button
+            onClick={() => setBottomTab('milestones')}
+            className={`flex items-center gap-1 px-2.5 py-1 text-[10px] rounded-t border-b-2 transition-colors ${
+              bottomTab === 'milestones'
+                ? 'border-ide-accent text-ide-accent bg-ide-accent/10'
+                : 'border-transparent text-ide-text-dim hover:text-ide-text'
+            }`}
+          >
+            <CheckCircle className="w-3 h-3" />
+            Milestones
+          </button>
+          <button
+            onClick={() => setBottomTab('quality')}
+            className={`flex items-center gap-1 px-2.5 py-1 text-[10px] rounded-t border-b-2 transition-colors ${
+              bottomTab === 'quality'
+                ? 'border-ide-accent text-ide-accent bg-ide-accent/10'
+                : 'border-transparent text-ide-text-dim hover:text-ide-text'
+            }`}
+          >
+            <Zap className="w-3 h-3" />
+            Quality
+          </button>
+          {questions.length > 0 && (
+            <span className="ml-auto text-[9px] text-yellow-400 flex items-center gap-1 pr-1">
+              <AlertCircle className="w-3 h-3" />{questions.length} Q
+            </span>
+          )}
         </div>
-      )}
+
+        {/* Tab content */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {bottomTab === 'events' && (
+            <div className="flex flex-col h-full min-h-0">
+              <AgentEventFeed
+                events={events}
+                verbosity={verbosity}
+                setVerbosity={setVerbosity}
+                toggleEventExpanded={toggleEventExpanded}
+                isFleetRunning={isFleetRunning}
+                fleetMode={fleetMode}
+                fleetEvents={fleetEvents}
+                clearEvents={clearEvents}
+                clearFleetEvents={clearFleetEvents}
+                handleCopyFeed={handleCopyFeed}
+                copiedFeed={copiedFeed}
+              />
+              {/* Pending Questions — shown inside events tab */}
+              {questions.length > 0 && (
+                <div className="border-t border-ide-border p-2 shrink-0">
+                  <div className="text-[10px] text-yellow-400 font-medium mb-1 flex items-center gap-1">
+                    <MessageSquare className="w-3 h-3" /> Questions ({questions.length})
+                  </div>
+                  <div className="max-h-24 overflow-y-auto space-y-1">
+                    {questions.slice(-5).map((q, i) => (
+                      <div key={i} className="text-[10px] text-ide-text-dim bg-ide-bg/50 rounded p-1.5">{q}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {bottomTab === 'milestones' && (
+            <div className="h-full overflow-y-auto">
+              {activeProject ? (
+                <MilestonePanel
+                  projectId={activeProject.id}
+                  isRunning={isRunning || isFleetRunning}
+                />
+              ) : (
+                <div className="p-3 text-[10px] text-ide-text-dim">No active project.</div>
+              )}
+            </div>
+          )}
+          {bottomTab === 'quality' && (
+            <div className="h-full overflow-y-auto">
+              {activeProject ? (
+                <QualityTrend
+                  projectId={activeProject.id}
+                  isRunning={isRunning || isFleetRunning}
+                  latestQualityEvent={latestQualityEvent}
+                />
+              ) : (
+                <div className="p-3 text-[10px] text-ide-text-dim">No active project.</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Project Factory Wizard modal */}
       {showWizard && (

@@ -252,7 +252,7 @@ When rate-limited:
 
 ### 9.1 Purpose
 
-The Midwife generates synthetic training data for the Nano Sea. It "feeds" the nanos with code examples.
+The Midwife generates synthetic training data for the Nano Sea. It "feeds" the nanos with code examples and any type of dataset an LLM can generate.
 
 ### 9.2 Controls
 

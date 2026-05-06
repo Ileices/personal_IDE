@@ -28,6 +28,7 @@ interface WizardResult {
   strategyTemplate: string;
   taskPrompt: string;
   autoStart: boolean;
+  strictQualityGate: boolean;
 }
 
 interface Props {
@@ -215,7 +216,7 @@ export function ProjectFactoryWizard({ onClose, onLaunch }: Props) {
     if (analysisResult?.analysisReport) {
       taskText = `${taskText}\n\n--- IMPORT ANALYSIS ---\n${analysisResult.analysisReport.slice(0, 8000)}\n--- END IMPORT ANALYSIS ---`;
     }
-    onLaunch({ workflowMode, strategyTemplate, taskPrompt: taskText, autoStart });
+    onLaunch({ workflowMode, strategyTemplate, taskPrompt: taskText, autoStart, strictQualityGate });
     onClose();
   };
 

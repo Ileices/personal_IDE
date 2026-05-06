@@ -1977,35 +1977,52 @@ const MIGRATIONS: Migration[] = [
     version: 100,
     name: 'forensic_composite_indexes',
     up(db: Database.Database) {
+      const tableHasColumns = (table: string, columns: string[]): boolean => {
+        try {
+          const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+          const existing = new Set(rows.map(r => r.name));
+          return columns.every(c => existing.has(c));
+        } catch {
+          return false;
+        }
+      };
+
+      const createIndexIfColumns = (indexName: string, table: string, columns: string[]): void => {
+        if (!tableHasColumns(table, columns)) return;
+        db.exec(`CREATE INDEX IF NOT EXISTS ${indexName} ON ${table}(${columns.join(', ')});`);
+      };
+
       // Add agent_class to agent_performance if not already present
       try {
         db.exec(`ALTER TABLE agent_performance ADD COLUMN agent_class TEXT NOT NULL DEFAULT 'unknown';`);
       } catch { /* column already exists — safe to ignore */ }
-      db.exec(`
-        -- blame_records: composite for "all records from model X in period Y"
-        CREATE INDEX IF NOT EXISTS idx_blame_model_created ON blame_records(model, created_at);
-        -- blame_records: composite for project + time range (agent run history)
-        CREATE INDEX IF NOT EXISTS idx_blame_project_created ON blame_records(project_id, created_at);
 
-        -- tag_mismatches: composite for per-agent mismatch history
-        CREATE INDEX IF NOT EXISTS idx_tag_mismatches_agent_created ON tag_mismatches(agent_id, created_at);
-        -- tag_mismatches: composite for cycle + severity (build health per cycle)
-        CREATE INDEX IF NOT EXISTS idx_tag_mismatches_cycle_severity ON tag_mismatches(cycle_id, severity);
+      // blame_records: model/project by created_at for fast forensic history slices
+      createIndexIfColumns('idx_blame_model_created', 'blame_records', ['model', 'created_at']);
+      createIndexIfColumns('idx_blame_project_created', 'blame_records', ['project_id', 'created_at']);
 
-        -- agent_performance: composite for class + time (agent class trend analysis)
-        CREATE INDEX IF NOT EXISTS idx_agent_perf_class_created ON agent_performance(agent_class, created_at);
+      // tag_mismatches: agent and cycle severity lookup
+      createIndexIfColumns('idx_tag_mismatches_agent_created', 'tag_mismatches', ['agent_id', 'created_at']);
+      createIndexIfColumns('idx_tag_mismatches_cycle_severity', 'tag_mismatches', ['cycle_id', 'severity']);
 
-        -- regression_history: composite for file + time (file stability tracking)
-        CREATE INDEX IF NOT EXISTS idx_regression_file_created ON regression_history(file_path, created_at);
-        -- regression_history: composite for cycle + build_phase
-        CREATE INDEX IF NOT EXISTS idx_regression_cycle_phase ON regression_history(cycle_id, build_phase);
+      // agent_performance: older schemas use timestamp, newer use created_at
+      if (tableHasColumns('agent_performance', ['agent_class', 'created_at'])) {
+        createIndexIfColumns('idx_agent_perf_class_created', 'agent_performance', ['agent_class', 'created_at']);
+      } else {
+        createIndexIfColumns('idx_agent_perf_class_created', 'agent_performance', ['agent_class', 'timestamp']);
+      }
 
-        -- model_registry: composite for provider + tier (provider comparison)
-        CREATE INDEX IF NOT EXISTS idx_model_registry_provider_tier ON model_registry(provider, model_tier);
+      // regression_history: older schemas use file, newer may use file_path
+      if (tableHasColumns('regression_history', ['file_path', 'created_at'])) {
+        createIndexIfColumns('idx_regression_file_created', 'regression_history', ['file_path', 'created_at']);
+      } else {
+        createIndexIfColumns('idx_regression_file_created', 'regression_history', ['file', 'created_at']);
+      }
+      createIndexIfColumns('idx_regression_cycle_phase', 'regression_history', ['cycle_id', 'build_phase']);
 
-        -- quality_records: composite for blame_id lookup (used in join queries)
-        CREATE INDEX IF NOT EXISTS idx_quality_blame_model ON quality_records(blame_id, tag_conformance);
-      `);
+      // model registry + quality join composites
+      createIndexIfColumns('idx_model_registry_provider_tier', 'model_registry', ['provider', 'model_tier']);
+      createIndexIfColumns('idx_quality_blame_model', 'quality_records', ['blame_id', 'tag_conformance']);
     },
   },
   {

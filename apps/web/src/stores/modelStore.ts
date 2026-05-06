@@ -164,11 +164,27 @@ function inferTier(provider: string): ModelDefinition['tier'] {
   return 'low';
 }
 
+function mergeModelDefinitions(dynamicDefs: ModelDefinition[]): ModelDefinition[] {
+  const merged = new Map<string, ModelDefinition>();
+
+  // Start with static catalog so users always have a full picker baseline.
+  for (const model of MODELS) {
+    merged.set(model.id, model);
+  }
+
+  // Dynamic models override static entries with live provider metadata.
+  for (const model of dynamicDefs) {
+    merged.set(model.id, model);
+  }
+
+  return Array.from(merged.values());
+}
+
 /** Cache live dynamic models so we don't lose them across store resets */
 let _dynamicCache: DynamicModel[] = [];
 
 export const useModelStore = create<ModelStore>((set, get) => ({
-  allModels: _dynamicCache.map(dynamicToDefinition),
+  allModels: mergeModelDefinitions(_dynamicCache.map(dynamicToDefinition)),
   providerErrors: [],
   isLoading: false,
   lastFetchAt: null,
@@ -200,17 +216,15 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       const liveModels = dedupedDynamic.map(dynamicToDefinition);
 
       set({
-        allModels: liveModels,
+        allModels: mergeModelDefinitions(liveModels),
         providerErrors: data.errors || [],
         isLoading: false,
         lastFetchAt: Date.now(),
       });
       void get().fetchInstalledLocalModels();
     } catch (err) {
-      // Fall back to the last known dynamic inventory, or static models if the API is unavailable.
-      const fallback = _dynamicCache.length > 0
-        ? _dynamicCache.map(dynamicToDefinition)
-        : [...MODELS];
+      // Fall back to static + any last-known dynamic inventory if the API is unavailable.
+      const fallback = mergeModelDefinitions(_dynamicCache.map(dynamicToDefinition));
       set({
         allModels: fallback,
         isLoading: false,

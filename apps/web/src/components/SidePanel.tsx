@@ -143,9 +143,7 @@ function AgentSidebarView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PanelHeader title="Agent" helpId="panel.agent" />
-      <div className="flex-1 overflow-y-auto">
-        <AgentControls />
-      </div>
+      <AgentControls />
       <div className="flex-shrink-0 border-t border-ide-border">
         <OpenClawPanel />
       </div>

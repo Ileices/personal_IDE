@@ -224,7 +224,7 @@ Read [](file:///z%3A/personal_IDE-master/personal_IDE-master/NANO_train/training
 
 ## 1. Core Objective
 
-**What you are building:** A fully autonomous, self-improving local-first IDE where an LLM agent doesn't just answer questions — it *reads, understands, writes, tests, and debugs entire codebases* across unlimited iterations, while simultaneously training a swarm of 296 purpose-built micro neural networks (the "Nano Sea") that will eventually replace the cloud LLMs entirely.
+**What you are building:** A fully autonomous, self-improving local-first IDE where an LLM agent doesn't just answer questions — it *reads, understands, writes, tests, and debugs entire codebases* across unlimited iterations, while simultaneously training a swarm of purpose-built micro neural networks (the "Nano Sea") that will eventually replace the cloud LLMs entirely.
 
 **Intended user:** A solo developer (or small team) who wants an AI pair-programmer that operates as a *persistent, stateful co-worker* — not a stateless chatbot. The user gives a high-level task ("build me a game," "refactor this module"), walks away, and comes back to working code with checkpoints for rollback safety.
 
@@ -233,7 +233,7 @@ Read [](file:///z%3A/personal_IDE-master/personal_IDE-master/NANO_train/training
 **Key features (by criticality):**
 1. **Autonomous agent loop** — multi-iteration code generation with structured output, error auto-fix, test auto-run, and checkpoint rollback
 2. **12-provider LLM abstraction** — seamless failover across GitHub Models, Ollama, Groq, Gemini, OpenRouter, LM Studio, Nano Sea, etc.
-3. **Nano Sea** — 296 micro neural networks with P2P mesh networking, RESPECT-scored compute sharing, and self-evolving lifecycle management
+3. **Nano Sea** — millions of  micro neural networks with P2P mesh networking, RESPECT-scored compute sharing, and self-evolving lifecycle management
 4. **Fleet mode** — parallel multi-agent execution with role specialization (lead, implementer, debugger, tester, reviewer)
 5. **Hierarchical codebase indexing** — AST-level code understanding with token-budget-aware rendering and forced read-before-write gating
 
@@ -255,6 +255,8 @@ Read [](file:///z%3A/personal_IDE-master/personal_IDE-master/NANO_train/training
 | **Nano Sea** | 296 nanos, orchestrator, mesh networking, RESPECT scoring, P2P | Functional (Python) |
 | **Infrastructure** | CI/CD (4 jobs), crypto (AES-256-GCM), checkpoints (git-based), CSRF protection | Functional |
 | **Database** | 17 tables across 2 migrations, WAL mode, parameterized queries | Functional |
+
+the number 296 is the types of nanos that can be trained so far, this means of the millions of nanos that will exist there will be 296 types that make up the lot until humans or the nano sea itself design more nano types. this is not fully implemented but must be!
 
 **Architecture pattern:** Event-driven monolith with module extraction trending toward plugin architecture. The server is a single Fastify process. The Nano Sea is a separate Python/FastAPI process managed as a subprocess. Communication is HTTP + WebSocket. There is no message queue.
 
@@ -329,7 +331,7 @@ Browser → Zustand store → fetch/SSE → Fastify route → EnhancedAgentLoop
 | **Cannot handle large codebases (>10K files)** | Medium | fsWalker.ts walks the entire filesystem synchronously on each index build. astParser.ts reads every file into memory. A monorepo with 50K files would cause multi-minute blocking pauses and OOM risk. |
 | **Cannot produce reliable code for unfamiliar stacks** | Medium | The exploration gate forces reading before writing, but the agent has no external documentation retrieval beyond basic web search. If the target framework isn't in the LLM's training data, the agent will still hallucinate APIs. |
 | **Cannot run in production (multi-tenant, internet-facing)** | High | No rate limiting per user (beyond basic IP throttle), no input sanitization on agent task descriptions, no sandboxing of `toolExecutor.ts` shell commands, no resource limits on agent runs. A malicious task description could execute arbitrary commands. |
-| **Fleet mode is bottlenecked by API quota** | Medium | All fleet agents share the same provider credentials. 4 agents on GitHub Models free tier will exhaust rate limits in seconds. Fleet is only practical with local providers (Ollama) or paid API tiers. |
+| **Fleet mode is bottlenecked by API quota** | Medium | All fleet agents share the same provider credentials. 4 agents on GitHub Models free tier will exhaust rate limits in seconds. Fleet is only practical with local providers (Ollama) or paid API tiers. | WHY CANT THE FLEET CYCLE THROUGH DIFFERENT APIS TO AVOID EXHAUSTING ONE API RATE LIMIT IN SECONDS? THIS IS THE DESIGN WE WERE TRYING TO GET IN THE FIRST PLACE NOT SPAM ONE AND THE LOOP DIE.
 | **No offline-first capability** | Low | Despite being "local-first," the IDE requires at least one LLM provider to be accessible. If Ollama isn't installed and all cloud providers are rate-limited, the system is inert. |
 
 ---
@@ -393,6 +395,8 @@ The 296-nano swarm is architecturally novel but computationally insufficient for
 - Each "nano" becomes a routing decision, not a separate model
 - Training uses the same Midwife pipeline but with proper evaluation (holdout accuracy, BLEU, pass@k)
 - This preserves the swarm metaphor while producing actually-useful completions
+
+THE AI THAT TRIED TO INTERPRET THE NANO SEA USING 296 NANOS INTERPRETED INCORRECTLY AND THEREFORE THE ENTIRE NANO SEA AND MIDWIFE BIRD FEEDING IS BEING OVERHAULED.
 
 **Justification:** The current architecture will never produce coherent code completions. The 296 nanos are interesting as a *research contribution* but cannot serve as an LLM replacement without fundamental architectural changes.
 
