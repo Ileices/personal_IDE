@@ -13,10 +13,10 @@
     "@personal-ide/shared": "workspace:*",
     "better-sqlite3": "^11.7.0",
     "dotenv": "^16.4.0",
-    "fastify": "^5.2.0",
+    "fastify": "^5.8.5",
     "@fastify/cors": "^10.0.0",
     "openai": "^4.80.0",
-    "uuid": "^11.0.0",
+    "uuid": "^14.0.0",
     "pino-pretty": "^13.0.0"
   },
   "devDependencies": {
