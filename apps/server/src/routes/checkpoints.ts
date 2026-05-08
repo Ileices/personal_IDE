@@ -21,7 +21,7 @@ export async function checkpointRoutes(app: FastifyInstance): Promise<void> {
       const { projectId } = request.params;
       const { projectRoot, description } = request.body;
       const checkpoint = service.createCheckpoint(
-        projectRoot, projectId, '', 0, description || 'Manual checkpoint', ''
+        projectRoot, projectId, '', 0, description || 'Manual checkpoint', '', 'user'
       );
       return checkpoint;
     }

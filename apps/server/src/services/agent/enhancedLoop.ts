@@ -1089,6 +1089,28 @@ export class EnhancedAgentLoop {
               currentTask = (currentTask || '') + '\n\n' + formattedForLLM;
             }
             this.emit({ type: 'info', message: 'Commands complete: ' + results.filter(r => r.success).length + '/' + results.length + ' succeeded' });
+
+            // ── Auto-Rollback Checkpoint: fire after successful write tool execution ──
+            // Non-blocking: failure only logs a warning, never throws into the loop.
+            try {
+              const writeIndicators = ['write_file', 'apply_edit', 'write ', 'echo ', ' > ', ' >> ', 'tee ', 'cat >'];
+              const hadWriteSuccess = results.some(r =>
+                r.success && writeIndicators.some(w => r.command.toLowerCase().includes(w))
+              );
+              if (hadWriteSuccess) {
+                const firstWrite = results.find(r => r.success && writeIndicators.some(w => r.command.toLowerCase().includes(w)));
+                const autoLabel = `auto: iter ${this.currentIteration} — ${firstWrite?.purpose?.slice(0, 60) || 'write tool'}`;
+                const cp = this.checkpoint.createCheckpoint(
+                  this.config.projectRoot, projectId, this.runId,
+                  this.currentIteration, autoLabel, 'auto',
+                );
+                if (cp) {
+                  this.emit({ type: 'checkpoint_created', iteration: this.currentIteration, trigger: 'auto_write', description: autoLabel });
+                }
+              }
+            } catch (cpErr: any) {
+              this.emit({ type: 'info', message: 'Auto-checkpoint warning: ' + cpErr.message });
+            }
           } catch (cmdErr: any) {
             this.emit({ type: 'info', message: 'Command execution error: ' + cmdErr.message });
           }

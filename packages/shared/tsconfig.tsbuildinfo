@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/constants/modelpresets.ts","./src/constants/models.ts","./src/constants/providers.ts","./src/constants/schema.ts","./src/types/agent.ts","./src/types/auth.ts","./src/types/chat.ts","./src/types/files.ts","./src/types/knowledge.ts","./src/types/memory.ts","./src/types/providers.ts"],"version":"5.9.3"}

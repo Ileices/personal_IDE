@@ -109,6 +109,7 @@ export interface Checkpoint {
   gitCommitHash?: string;
   createdAt: string;
   canRollback: boolean;
+  type?: 'auto' | 'user';
 }
 
 /** Error from code analysis */

@@ -12,11 +12,13 @@ import { API_BASE } from '../config.js';
 interface Checkpoint {
   id: string;
   projectId: string;
+  label?: string;
   description: string;
   hash: string;
   filesSnapshot: string[];
   iterationNumber: number;
   createdAt: string;
+  type?: 'auto' | 'user';
 }
 
 export function CheckpointViewer() {
@@ -134,34 +136,85 @@ export function CheckpointViewer() {
               No checkpoints yet
             </div>
           ) : (
-            <div className="space-y-1 max-h-40 overflow-y-auto">
-              {checkpoints.map((cp, i) => (
-                <div
-                  key={cp.id}
-                  className="flex items-start gap-1.5 px-2 py-1.5 bg-ide-bg/50 rounded text-[11px] group"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{cp.description}</div>
-                    <div className="text-[10px] text-ide-text-dim flex items-center gap-1.5 mt-0.5">
-                      <Clock className="w-2.5 h-2.5" />
-                      {new Date(cp.createdAt).toLocaleString()}
-                      {cp.iterationNumber > 0 && <span>· iter {cp.iterationNumber}</span>}
+            <div className="space-y-2">
+              {/* ── Agent Auto-Rollback ── */}
+              {(() => {
+                const autoCps = checkpoints.filter(cp => cp.type === 'auto');
+                if (autoCps.length === 0) return null;
+                return (
+                  <div>
+                    <div className="text-[9px] text-ide-text-dim uppercase tracking-wide px-1 mb-1">Agent Auto-Rollback</div>
+                    <div className="space-y-1 max-h-28 overflow-y-auto">
+                      {autoCps.map((cp, i) => (
+                        <div
+                          key={cp.id}
+                          className="flex items-start gap-1.5 px-2 py-1.5 bg-ide-bg/50 rounded text-[11px] group"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{cp.description || cp.label}</div>
+                            <div className="text-[10px] text-ide-text-dim flex items-center gap-1.5 mt-0.5">
+                              <Clock className="w-2.5 h-2.5" />
+                              {new Date(cp.createdAt).toLocaleString()}
+                              {cp.iterationNumber > 0 && <span>· iter {cp.iterationNumber}</span>}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => rollback(cp.id)}
+                            disabled={rollingBack === cp.id}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-ide-border rounded text-ide-text-dim hover:text-yellow-400 disabled:opacity-20"
+                            title="Rollback to this checkpoint"
+                          >
+                            {rollingBack === cp.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <button
-                    onClick={() => rollback(cp.id)}
-                    disabled={rollingBack === cp.id || i === 0}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-ide-border rounded text-ide-text-dim hover:text-yellow-400 disabled:opacity-20"
-                    title="Rollback to this checkpoint"
-                  >
-                    {rollingBack === cp.id ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <RotateCcw className="w-3 h-3" />
-                    )}
-                  </button>
-                </div>
-              ))}
+                );
+              })()}
+              {/* ── User Named Checkpoints ── */}
+              {(() => {
+                const userCps = checkpoints.filter(cp => cp.type !== 'auto');
+                if (userCps.length === 0) return null;
+                return (
+                  <div>
+                    <div className="text-[9px] text-ide-text-dim uppercase tracking-wide px-1 mb-1">User Named Checkpoints</div>
+                    <div className="space-y-1 max-h-28 overflow-y-auto">
+                      {userCps.map((cp, i) => (
+                        <div
+                          key={cp.id}
+                          className="flex items-start gap-1.5 px-2 py-1.5 bg-ide-bg/50 rounded text-[11px] group"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{cp.description || cp.label}</div>
+                            <div className="text-[10px] text-ide-text-dim flex items-center gap-1.5 mt-0.5">
+                              <Clock className="w-2.5 h-2.5" />
+                              {new Date(cp.createdAt).toLocaleString()}
+                              {cp.iterationNumber > 0 && <span>· iter {cp.iterationNumber}</span>}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => rollback(cp.id)}
+                            disabled={rollingBack === cp.id || i === 0}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-ide-border rounded text-ide-text-dim hover:text-yellow-400 disabled:opacity-20"
+                            title="Rollback to this checkpoint"
+                          >
+                            {rollingBack === cp.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

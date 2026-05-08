@@ -2198,6 +2198,17 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 107,
+    name: 'checkpoints-type-column',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, col: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+      if (!hasColumn('checkpoints', 'type')) {
+        db.exec(`ALTER TABLE checkpoints ADD COLUMN type TEXT NOT NULL DEFAULT 'user'`);
+      }
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────

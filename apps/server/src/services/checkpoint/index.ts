@@ -60,7 +60,8 @@ export class CheckpointService {
     agentRunId: string,
     iteration: number,
     label: string,
-    description: string = ''
+    description: string = '',
+    type: 'auto' | 'user' = 'user'
   ): Checkpoint | null {
     try {
       this.initGit(projectRoot);
@@ -75,8 +76,8 @@ export class CheckpointService {
         const id = uuid();
         const lastHash = this.getLastCommitHash(projectRoot);
         this.db.prepare(
-          'INSERT INTO checkpoints (id, project_id, agent_run_id, iteration, label, description, git_commit_hash) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        ).run(id, projectId, agentRunId, iteration, label, description, lastHash);
+          'INSERT INTO checkpoints (id, project_id, agent_run_id, iteration, label, description, git_commit_hash, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, projectId, agentRunId, iteration, label, description, lastHash, type);
 
         return {
           id,
@@ -89,6 +90,7 @@ export class CheckpointService {
           gitCommitHash: lastHash || undefined,
           createdAt: new Date().toISOString(),
           canRollback: true,
+          type,
         };
       } catch {
         // There are changes - commit them
@@ -112,8 +114,8 @@ export class CheckpointService {
 
       const id = uuid();
       this.db.prepare(
-        'INSERT INTO checkpoints (id, project_id, agent_run_id, iteration, label, description, files_snapshot, git_commit_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(id, projectId, agentRunId, iteration, label, description, JSON.stringify(changedFiles), commitHash);
+        'INSERT INTO checkpoints (id, project_id, agent_run_id, iteration, label, description, files_snapshot, git_commit_hash, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, projectId, agentRunId, iteration, label, description, JSON.stringify(changedFiles), commitHash, type);
 
       return {
         id,
@@ -126,6 +128,7 @@ export class CheckpointService {
         gitCommitHash: commitHash || undefined,
         createdAt: new Date().toISOString(),
         canRollback: true,
+        type,
       };
     } catch (err: any) {
       console.error('Checkpoint creation failed:', err.message);
@@ -166,6 +169,7 @@ export class CheckpointService {
       gitCommitHash: r.git_commit_hash || undefined,
       createdAt: r.created_at,
       canRollback: !!r.can_rollback,
+      type: (r.type === 'auto' ? 'auto' : 'user') as 'auto' | 'user',
     }));
   }
 
