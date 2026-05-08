@@ -2076,7 +2076,7 @@ const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_blame_project_mode
           ON blame_records(project_id, mode, created_at);
         CREATE INDEX IF NOT EXISTS idx_regression_file_time
-          ON regression_index(file_path, created_at);
+          ON regression_history(file, created_at);
         CREATE INDEX IF NOT EXISTS idx_drift_file_snapshot
           ON drift_events(file_path, snapshot_id);
         CREATE INDEX IF NOT EXISTS idx_tagmismatch_agent_buildtag
