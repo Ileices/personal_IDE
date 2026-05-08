@@ -1158,15 +1158,16 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     t === 'fatal'   ? 'text-red-600'   : 'text-blue-400';
 
   const acknowledgeNotification = async (id: string) => {
-    await fetch(`${API_BASE}/api/god-factory/queue/${id}/ack`, { method: 'POST' }).catch(() => {});
+    await fetch(`${API_BASE}/api/god-factory/notifications/${id}/dismiss`, { method: 'POST' }).catch(() => {});
     setNotifications(prev => prev.filter(x => x.id !== id));
   };
 
   const respondIdleSuggestion = async (suggestionId: string, response: 'accepted' | 'rejected' | 'deferred') => {
-    await fetch(`${API_BASE}/api/god-factory/idle-suggestions/${suggestionId}/respond`, {
+    const actionMap: Record<string, string> = { accepted: 'accept', rejected: 'reject', deferred: 'defer' };
+    await fetch(`${API_BASE}/api/god-factory/idle-suggestions/${suggestionId}/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ response }),
+      body: JSON.stringify({ action: actionMap[response] ?? response }),
     }).catch(() => {});
 
     setIdleSuggestions(prev => prev.filter(s => s.suggestion_id !== suggestionId));

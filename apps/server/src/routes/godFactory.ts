@@ -530,6 +530,14 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     return reply.send({ acknowledged: true, notification_id: id });
   });
 
+  // Alias: dismiss a notification (marks as acknowledged — no dismissed column in schema)
+  app.post('/notifications/:id/dismiss', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const result = db.prepare('UPDATE notification_queue SET user_acknowledged = 1, presented_to_user = 1 WHERE notification_id = ?').run(id);
+    if (result.changes === 0) return reply.status(404).send({ error: 'Notification not found' });
+    return reply.send({ dismissed: true, notification_id: id });
+  });
+
   app.get('/queue/:id', async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const detail = getNotificationDetail(db, id);
@@ -610,6 +618,49 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     `).run(response, suggestedJobId, id);
 
     return reply.send({ suggestion_id: id, user_response: response, suggested_job_id: suggestedJobId });
+  });
+
+  // Alias: action endpoint for idle suggestions ('accept'|'defer'|'reject' → mapped to stored values)
+  app.post('/idle-suggestions/:id/action', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as Record<string, unknown>;
+    const actionMap: Record<string, string> = { accept: 'accepted', defer: 'deferred', reject: 'rejected' };
+    const action = String(body.action || '');
+    const response = actionMap[action];
+
+    if (!response) {
+      return reply.status(400).send({ error: 'action must be accept|defer|reject' });
+    }
+
+    const suggestion = db.prepare('SELECT * FROM idle_suggestions WHERE suggestion_id = ?').get(id) as Record<string, unknown> | undefined;
+    if (!suggestion) return reply.status(404).send({ error: 'Suggestion not found' });
+
+    let suggestedJobId: string | null = null;
+    if (response === 'accepted') {
+      suggestedJobId = createJobFromSuggestion(db, {
+        suggestion_id: suggestion.suggestion_id as string,
+        category: suggestion.category as IdleCategory,
+        natural_language_summary: suggestion.natural_language_summary as string,
+        source_files: suggestion.source_files as string,
+        source_devtags: suggestion.source_devtags as string,
+      });
+
+      ensureNotification(db, {
+        category: 'idle_suggestion_accepted',
+        source_forensic_id: suggestion.suggestion_id as string,
+        severity: 'info',
+        summary_tags: ['job_created'],
+        natural_language_summary: `Created Suggested Job ${suggestedJobId} from idle suggestion.`,
+      });
+    }
+
+    db.prepare(`
+      UPDATE idle_suggestions
+      SET user_response = ?, suggested_job_id = COALESCE(?, suggested_job_id), presented_to_user = 1
+      WHERE suggestion_id = ?
+    `).run(response, suggestedJobId, id);
+
+    return reply.send({ suggestion_id: id, action, user_response: response, suggested_job_id: suggestedJobId });
   });
 
   app.get('/model-health', async (req: FastifyRequest, reply: FastifyReply) => {
