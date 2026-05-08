@@ -3077,6 +3077,30 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Checkpointing Rule: ground_truth_snapshots are created fresh every cycle. They are NOT persisted between cycles unless the Version Control Agent explicitly checkpoints one.',
       'Related: Project State Crawler Parsing, Drift Detection Detail, Ground Truth Snapshot, Drift Event Taxonomy, Forensic Database All Tables.'
     ]
+  },
+  {
+    id: 'security-hardening',
+    title: 'Security Hardening — ToolPolicyGate, Feature Flags & SSRF Defense',
+    summary: 'Multi-layer security architecture protecting the agent loop from prompt injection, SSRF, secret leakage, and unintended tool invocations. All high-risk capabilities are disabled by default and require explicit opt-in.',
+    tags: ['security', 'toolpolicygate', 'prompt-injection', 'ssrf', 'feature-flags', 'secrets', 'sensitive-files', 'owasp'],
+    status: 'active',
+    details: [
+      'ToolPolicyGate (toolPolicyGate.ts): Central policy object between the LLM planner and tool execution. Every agent tool call passes through evaluatePolicy() before execution. Gate can ALLOW, DENY, or REQUIRE_APPROVAL based on actor, tool name, target, and ContextTaint (user | local_file | model_output | web | peer).',
+      'DEFAULT_DISABLED_TOOLS: web_search, fetch_page, mesh_connect, spawn_agent, run_shell. These never run unless explicitly enabled via the Security & Feature Flags panel in Provider Settings.',
+      'APPROVAL_REQUIRED_WHEN_TAINTED: write_file, delete_file, create_file, run_tests, run_lint, nano_train require human approval when ContextTaint is "web" or "peer". This blocks prompt-injection via indirect web → write attack chains (OWASP LLM05).',
+      'ContextTaint Escalation: the agent loop tracks a contextTaint field per iteration. Taint resets to "model_output" at the start of each iteration. When web search results are injected (loop breakout), taint escalates to "web". All subsequent tool requests in that iteration are evaluated with the elevated taint.',
+      'Duplicate Nano Training Call Regression Fix: a legacy unredacted direct fetch() to /v1/training/observe was removed (it bypassed redactSecrets() and could leak secrets to the Nano Sea). Only the observationTrainingHook() path is active — it applies 8 SECRET_PATTERNS before sending.',
+      'Sensitive File Denylist (filesystem/index.ts): readFile() and listAllFiles() check isSensitiveFile() before serving content. Patterns include .env*, .npmrc, .netrc, .git-credentials, id_rsa/ed25519/ecdsa/dsa, *.pem, *.key, credentials.json, secrets.json, etc. Directories: .ssh, .gnupg, .aws, .azure, .kube.',
+      'safePath() Absolute-Path Hardening: absolute paths passed as filePath are now rejected before resolve() is called — prevents callers from escaping projectRoot via /etc/passwd-style inputs.',
+      'Web Search Hardening (webSearch.ts): INJECTION_PATTERNS regex array strips "ignore previous instructions", "you are now", "[SYSTEM]:", <|im_start|> etc. from all titles, snippets, and fetched page content. formatSearchForLLM() wraps output in [UNTRUSTED WEB CONTENT] tags so the model treats it with appropriate scepticism.',
+      'fetchWebPage() 50KB Hard Cap: regardless of caller maxChars, web responses are capped at 50KB to prevent context flooding attacks. Content-type guard rejects non-HTML/text responses.',
+      'DB Migration 104 (policy_audit): policy_audit table records every gate evaluation: actor, tool, target, source_context, allowed, requires_approval, reason, audit_id (unique). Indexed on created_at and (allowed, created_at) for efficient blocked-request dashboards.',
+      'Feature Flags GUI (Provider Settings → Security & Feature Flags card): toggle web_search, mesh_connect, spawn_agent, nano_training at runtime. Changes call PATCH /api/features which updates the ToolPolicyGate enabledTools Set immediately without server restart.',
+      'Environment Variable Defaults: ENABLE_WEB_SEARCH (default false), ENABLE_MESH (default false), ENABLE_AGENT_SPAWN (default false), NANO_TRAINING (default true). Startup log prints active flags.',
+      'Research Basis: OWASP LLM Top 10 LLM05 (Indirect Prompt Injection), PortSwigger LLM attack taxonomy. Key defense: "do not rely on prompting to block attacks — use hard code gates" and "treat all APIs given to LLMs as publicly accessible".',
+      'Community Discussion: github.com/Ileices/personal_IDE Discussion #6 — "Security Hardening Deep Dive". Topic 10 covers ToolPolicyGate integration experiments and implementation data.',
+      'Related: ToolPolicyGate Source, webSearch.ts, filesystem/index.ts, observationTrainer.ts, config.ts features, ProviderSettings Security Card, DB Migration 104.'
+    ]
   }
 ];
 

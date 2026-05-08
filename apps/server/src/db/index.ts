@@ -2086,6 +2086,30 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 104,
+    name: 'policy-audit-log',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS policy_audit (
+          id               INTEGER PRIMARY KEY AUTOINCREMENT,
+          created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+          actor            TEXT    NOT NULL,
+          tool             TEXT    NOT NULL,
+          target           TEXT    NOT NULL,
+          source_context   TEXT    NOT NULL,
+          allowed          INTEGER NOT NULL,
+          requires_approval INTEGER NOT NULL DEFAULT 0,
+          reason           TEXT,
+          audit_id         TEXT    UNIQUE
+        );
+        CREATE INDEX IF NOT EXISTS idx_policy_audit_time
+          ON policy_audit(created_at);
+        CREATE INDEX IF NOT EXISTS idx_policy_audit_blocked
+          ON policy_audit(allowed, created_at);
+      `);
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────

@@ -34,6 +34,7 @@ import { webSearch, formatSearchForLLM } from './webSearch.js';
 import { CodeIndexer } from './codeIndexer.js';
 import { detectPlatform, formatPlatformForLLM, type PlatformInfo } from './platformDetector.js';
 import { observationTrainingHook } from '../nano/observationTrainer.js';
+import { evaluatePolicy, isToolEnabled, type ContextTaint, type ToolName } from './toolPolicyGate.js';
 // Extracted modules for <1000 LOC compliance
 import { initializeRun, resolveModelContextWindow } from './loop/runSetup.js';
 import { enforceTokenBudget, tryProactiveChunking, recoverFromTokenLimitError } from './loop/tokenRecovery.js';
@@ -198,6 +199,8 @@ export class EnhancedAgentLoop {
   // trigger one short summarization call before next iteration's history append
   private pendingProviderSwitchSummary = false;
   private preSwitchContextWindow = 0;
+  // ToolPolicyGate: taint level of the current iteration's context (escalates when web content injected)
+  private contextTaint: ContextTaint = 'model_output';
 
   constructor(
     private db: Database.Database,
@@ -483,6 +486,8 @@ export class EnhancedAgentLoop {
         }
 
         this.currentIteration++;
+        // Reset context taint at the start of each iteration — fresh model output is safe
+        this.contextTaint = 'model_output';
 
         // ── Knowledge Graph Liveness: drain dirty-file set from previous iteration ──
         // Bounded by number of unique files touched — not by write count (agent may
@@ -690,14 +695,20 @@ export class EnhancedAgentLoop {
 
           // Try web search to find new approaches when stuck
           try {
-            const errorQuery = this.lastErrorContext
-              ? this.lastErrorContext.slice(0, 100)
-              : initialTask.slice(0, 80);
-            const searchResult = await webSearch(errorQuery + ' solution fix', 3);
-            if (searchResult.results.length > 0) {
-              const searchContext = formatSearchForLLM(searchResult);
-              currentTask += '\n\n' + searchContext;
-              this.emit({ type: 'info', message: 'Web search: Found ' + searchResult.results.length + ' results for context' });
+            if (isToolEnabled('web_search')) {
+              const errorQuery = this.lastErrorContext
+                ? this.lastErrorContext.slice(0, 100)
+                : initialTask.slice(0, 80);
+              const searchResult = await webSearch(errorQuery + ' solution fix', 3);
+              if (searchResult.results.length > 0) {
+                const searchContext = formatSearchForLLM(searchResult);
+                currentTask += '\n\n' + searchContext;
+                // Escalate taint — web content is now in context
+                this.contextTaint = 'web';
+                this.emit({ type: 'info', message: 'Web search: Found ' + searchResult.results.length + ' results for context (taint escalated to web)' });
+              }
+            } else {
+              this.emit({ type: 'info', message: 'Web search skipped — disabled by ToolPolicyGate' });
             }
           } catch { /* web search is non-critical */ }
         }
@@ -1009,33 +1020,6 @@ export class EnhancedAgentLoop {
           this.emit({ type: 'dataset_update', dataset: this.datasetBuilder?.formatForEvent() });
         } catch { /* non-critical */ }
 
-        // ── Bird-feed observation to Nano Sea (fire-and-forget, Priority 1) ──
-        // Runs AFTER the LLM response and BEFORE tool execution so the training
-        // pair is (what we asked, what the model said) — not (what we asked, what tools did).
-        if (!failedResp && content.length > 0) {
-          try {
-            const nanoBaseUrl = appConfig.services.nanoSeaUrl;
-            fetch(nanoBaseUrl + '/v1/training/observe', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                query: currentTask.slice(0, 4000),
-                response: content.slice(0, 8000),
-                source: 'agent_loop',
-                quality: structured?.confidence ? structured.confidence / 100 : 0.75,
-                metadata: {
-                  provider: this.config.provider,
-                  model: this.config.model,
-                  iteration: this.currentIteration,
-                  runId: this.runId,
-                  filesChanged: fileChangesCount,
-                  timestamp: Date.now(),
-                },
-              }),
-            }).catch(() => {}); // nano server may be stopped — never throw
-          } catch { /* non-critical */ }
-        }
-
         // ── Execute Agent Commands via ToolExecutor ──
         const normalizedStructuredCommands = Array.isArray(structured?.commands)
           ? (structured!.commands as any[])
@@ -1065,8 +1049,40 @@ export class EnhancedAgentLoop {
         if (commandsToRun.length > 0) {
           try {
             this.emit({ type: 'info', message: 'Executing ' + commandsToRun.length + ' agent command(s)...' });
+
+            // ── ToolPolicyGate: filter commands before execution ──────────────
+            // Map free-text commands to closest ToolName for policy evaluation.
+            const gatedCommands = commandsToRun.filter((cmd) => {
+              const cmdStr = cmd.command.toLowerCase().trim();
+              // Infer tool name from command string
+              const toolName: ToolName =
+                cmdStr.startsWith('read ') || cmdStr.startsWith('cat ') ? 'read_file' :
+                cmdStr.startsWith('write ') || cmdStr.startsWith('echo ') ? 'write_file' :
+                cmdStr.startsWith('rm ') || cmdStr.startsWith('del ') ? 'delete_file' :
+                cmdStr.startsWith('mkdir') || cmdStr.startsWith('touch') || cmdStr.startsWith('create ') ? 'create_file' :
+                cmdStr.includes('npm test') || cmdStr.includes('vitest') || cmdStr.includes('jest') ? 'run_tests' :
+                cmdStr.includes('eslint') || cmdStr.includes('tsc ') ? 'run_lint' :
+                'run_shell';
+              const decision = evaluatePolicy({
+                actor: 'agent',
+                tool: toolName,
+                target: cmd.purpose || cmd.command.slice(0, 80),
+                reason: cmd.purpose || 'agent loop command',
+                sourceContext: this.contextTaint,
+              });
+              if (!decision.allow) {
+                this.emit({ type: 'tool_policy_blocked', tool: toolName, command: cmd.command.slice(0, 120), reason: decision.reason, auditId: decision.auditId });
+                return false;
+              }
+              if (decision.requiresApproval) {
+                this.emit({ type: 'tool_policy_approval_required', tool: toolName, command: cmd.command.slice(0, 120), reason: decision.reason, auditId: decision.auditId });
+                return false; // block until explicit approval mechanism exists
+              }
+              return true;
+            });
+
             const { results, formattedForLLM } = await this.toolExecutor.executeCommands(
-              commandsToRun,
+              gatedCommands,
               (e: any) => this.emit(e),
             );
             if (formattedForLLM) {

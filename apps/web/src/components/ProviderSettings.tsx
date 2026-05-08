@@ -49,12 +49,17 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateResult, setUpdateResult] = useState<{ success: boolean; message: string; alreadyUpToDate?: boolean } | null>(null);
 
+  // Feature flags
+  const [featureFlags, setFeatureFlags] = useState<{ webSearchEnabled: boolean; meshEnabled: boolean; agentSpawnEnabled: boolean; nanoTrainingEnabled: boolean } | null>(null);
+  const [featureSaving, setFeatureSaving] = useState(false);
+
   useEffect(() => {
     fetchProviders();
     checkNanoStatus();
     fetchAllModels();
     fetchInstalledLocalModels();
     void fetchUpdateStatus();
+    void fetchFeatureFlags();
   }, []);
 
   const failedEntries = Object.values(failedModels).sort((a, b) => b.lastTestedAt - a.lastTestedAt);
@@ -217,6 +222,27 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function fetchFeatureFlags() {
+    try {
+      const res = await fetch(`${API_BASE}/api/features`);
+      if (res.ok) setFeatureFlags(await res.json());
+    } catch { /* non-critical */ }
+  }
+
+  async function patchFeatureFlag(key: string, value: boolean) {
+    setFeatureSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/features`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: value }),
+      });
+      if (res.ok) setFeatureFlags(await res.json());
+    } catch { /* non-critical */ } finally {
+      setFeatureSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-[700px] max-h-[80vh] bg-ide-sidebar border border-ide-border rounded-xl shadow-2xl flex flex-col">
@@ -328,9 +354,48 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
                 )}
               </div>
 
-              {/* ── GitHub Token Update ── */}
-              <div className="border rounded-lg p-3 border-ide-accent/30 bg-ide-accent/5">
+              {/* ── Security & Feature Flags ── */}
+              <div className="border rounded-lg p-3 border-orange-500/30 bg-orange-500/5">
                 <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-4 h-4 text-orange-400" />
+                  <span className="font-medium text-sm">Security &amp; Feature Flags</span>
+                  <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded ml-auto">ToolPolicyGate</span>
+                </div>
+                <p className="text-xs text-ide-text-dim mb-3">
+                  High-risk capabilities are disabled by default. Enable only what your current workflow requires. Changes take effect immediately without restart.
+                </p>
+                {featureFlags ? (
+                  <div className="space-y-2">
+                    {([
+                      { key: 'webSearchEnabled', label: 'Web Search', description: 'Allow agent to query DuckDuckGo during loop breakout' },
+                      { key: 'meshEnabled', label: 'Mesh Networking', description: 'Allow agent to connect to mesh peers' },
+                      { key: 'agentSpawnEnabled', label: 'Agent Spawning', description: 'Allow agent to spawn sub-agents' },
+                      { key: 'nanoTrainingEnabled', label: 'Nano Training', description: 'Send observation pairs to Nano Sea for training' },
+                    ] as const).map(({ key, label, description }) => (
+                      <div key={key} className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium">{label}</div>
+                          <div className="text-[10px] text-ide-text-dim">{description}</div>
+                        </div>
+                        <button
+                          onClick={() => patchFeatureFlag(key, !featureFlags[key])}
+                          disabled={featureSaving}
+                          className={`flex-shrink-0 w-10 h-5 rounded-full transition-colors relative ${featureFlags[key] ? 'bg-orange-500' : 'bg-ide-border'}`}
+                        >
+                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${featureFlags[key] ? 'left-5' : 'left-0.5'}`} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs text-ide-text-dim">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Loading flags…
+                  </div>
+                )}
+              </div>
+
+              {/* ── GitHub Token Update ── */}
+              <div className="border rounded-lg p-3 border-ide-accent/30 bg-ide-accent/5">                <div className="flex items-center gap-2 mb-2">
                   <span className="font-medium text-sm">GitHub Token (PAT)</span>
                   <span className="text-[10px] bg-ide-accent/20 text-ide-accent px-1.5 py-0.5 rounded">
                     Required for Copilot Models

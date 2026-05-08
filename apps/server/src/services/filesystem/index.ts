@@ -14,6 +14,10 @@ const MAX_READ_SIZE = 10 * 1024 * 1024;
  * Prevents directory traversal attacks.
  */
 export function safePath(projectRoot: string, filePath: string): string {
+  // Reject absolute paths passed in as filePath — they would silently escape the root
+  if (filePath && (filePath.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(filePath))) {
+    throw new Error(`Absolute path rejected: ${filePath}`);
+  }
   const resolved = resolve(projectRoot, filePath);
   const normalizedRoot = resolve(projectRoot);
 
@@ -91,6 +95,11 @@ export function listFileTree(rootPath: string, maxDepth: number = 5): FileNode {
 /** Read a file's content */
 export function readFile(projectRoot: string, filePath: string): FileContent {
   const fullPath = safePath(projectRoot, filePath);
+
+  // Block reads of sensitive files to prevent secret leakage into LLM context
+  if (isSensitiveFile(fullPath)) {
+    throw new Error(`Read denied: ${filePath} matches sensitive file denylist`);
+  }
 
   if (!existsSync(fullPath)) {
     throw new Error(`File not found: ${filePath}`);
@@ -336,7 +345,10 @@ export function listAllFiles(
         if (entry.isDirectory()) {
           walk(fullPath);
         } else {
-          files.push(normalizePath(relative(projectRoot, fullPath)));
+          // Exclude sensitive files from directory listings sent to LLM
+          if (!isSensitiveFile(fullPath)) {
+            files.push(normalizePath(relative(projectRoot, fullPath)));
+          }
         }
       }
     } catch {

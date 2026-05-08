@@ -27,7 +27,7 @@ export type ToolName =
   | 'mesh_connect'
   | 'spawn_agent';
 
-export type ActorId = 'agent' | 'user' | 'nano' | 'system' | 'midwife';
+export type ActorId = 'agent' | 'user' | 'nano' | 'system' | 'midwife' | 'peer';
 
 /**
  * The "taint level" of the context that generated this tool request.

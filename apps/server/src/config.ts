@@ -54,6 +54,13 @@ export interface AppConfig {
     ollamaUrl: string;
     nanoSeaUrl: string;
   };
+  /** Feature flags — high-risk capabilities disabled by default */
+  features: {
+    webSearchEnabled: boolean;
+    meshEnabled: boolean;
+    agentSpawnEnabled: boolean;
+    nanoTrainingEnabled: boolean;
+  };
   /** Dynamic context detection settings */
   contextDefaults: {
     /** Default context window for unknown/dynamic models (Ollama, Nano, etc.) */
@@ -164,6 +171,12 @@ export function loadConfig(): AppConfig {
       ollamaUrl: env('OLLAMA_URL', 'http://localhost:11434'),
       nanoSeaUrl: env('NANO_SEA_URL', 'http://localhost:5100'),
     },
+    features: {
+      webSearchEnabled: envBool('ENABLE_WEB_SEARCH', false),
+      meshEnabled: envBool('ENABLE_MESH', false),
+      agentSpawnEnabled: envBool('ENABLE_AGENT_SPAWN', false),
+      nanoTrainingEnabled: envBool('NANO_TRAINING', true),
+    },
     contextDefaults: {
       unknownModelContext: envInt('UNKNOWN_MODEL_CONTEXT', 128000),
       contextFloor: envInt('CONTEXT_FLOOR', 2048),
@@ -174,3 +187,7 @@ export function loadConfig(): AppConfig {
 }
 
 export const appConfig = loadConfig();
+
+// Log active feature flags at startup for visibility
+const _flags = appConfig.features;
+console.log(`[config] Feature flags: webSearch=${_flags.webSearchEnabled} mesh=${_flags.meshEnabled} agentSpawn=${_flags.agentSpawnEnabled} nanoTraining=${_flags.nanoTrainingEnabled}`);
