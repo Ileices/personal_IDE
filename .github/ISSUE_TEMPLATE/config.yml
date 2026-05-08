@@ -1,0 +1,9 @@
+---
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Community Discussions
+    url: https://github.com/Ileices/personal_IDE/discussions
+    about: Questions, show-and-tell, and general conversation happen in GitHub Discussions — not Issues. Start here if you're not sure whether to file an Issue.
+  - name: 📖 Help & Documentation
+    url: https://github.com/Ileices/personal_IDE/discussions
+    about: The in-app Help panel is the primary documentation source. This link goes to the community discussion board where help questions are answered.
