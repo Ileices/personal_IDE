@@ -460,6 +460,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [totalJobs, setTotalJobs] = useState(0);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [brainstorm, setBrainstorm] = useState('');
+  const [brainstormConfirm, setBrainstormConfirm] = useState<string | null>(null);
   const [sections, setSections] = useState({ notifications: true, idleSuggestions: true, jobs: true, externalProjects: false, implementingPipeline: false, health: true, modelHealth: true, background: false, subsystems: false, siliconFactory: false, brainstorm: false });
   const [blameStats, setBlameStats] = useState<any[]>([]);
   const [subsystems, setSubsystems] = useState<Record<SubsystemId, SubsystemConfig>>({
@@ -2229,11 +2230,17 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                 onClick={async () => {
                   if (!brainstorm.trim()) return;
                   const text = brainstorm.trim();
-                  await fetch(`${API_BASE}/api/god-factory/brainstorm`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ input: text }),
-                  }).catch(() => {});
+                  try {
+                    const res = await fetch(`${API_BASE}/api/god-factory/brainstorm`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ input: text }),
+                    });
+                    if (res.ok) {
+                      setBrainstormConfirm('Brainstorm saved — Suggested Job created');
+                      setTimeout(() => setBrainstormConfirm(null), 3000);
+                    }
+                  } catch { /* ignore */ }
                   onSendToBrainstorm(text);
                   setBrainstorm('');
                   loadSuggestedJobs();
@@ -2244,6 +2251,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
               >
                 <Send className="w-2.5 h-2.5" /> Send to Chat
               </button>
+              {brainstormConfirm && (
+                <div className="text-[9px] text-green-400 mt-1 text-center">{brainstormConfirm}</div>
+              )}
             </div>
           )}
         </div>
