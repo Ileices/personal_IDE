@@ -361,6 +361,21 @@ export async function fleetRoutes(app: FastifyInstance) {
     return { success: true };
   });
 
+  // --- POST /api/fleet/answer — Deliver an answer to a pending agent question ---
+  app.post('/answer', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!activeFleet) {
+      return reply.status(404).send({ error: 'No active fleet' });
+    }
+
+    const body = req.body as { questionId: string; answer: string; agentId?: string };
+    if (!body.answer?.trim()) {
+      return reply.status(400).send({ error: 'answer is required' });
+    }
+
+    activeFleet.broadcastMessage(body.answer.trim(), body.agentId, 'high');
+    return { success: true };
+  });
+
   // --- POST /api/fleet/agent/:agentId/pause ---
   app.post('/agent/:agentId/pause', async (req: FastifyRequest) => {
     if (!activeFleet) return { success: false, message: 'No active fleet' };

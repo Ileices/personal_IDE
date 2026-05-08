@@ -10,6 +10,7 @@ export function FleetPanel() {
   const {
     agents, isFleetRunning,
     pauseAgent, resumeAgent, stopAgent,
+    sendFleetMessage, answerQuestion,
   } = useFleetStore();
 
   if (agents.length === 0) {
@@ -29,8 +30,8 @@ export function FleetPanel() {
       pauseAgent={pauseAgent}
       resumeAgent={resumeAgent}
       stopAgent={stopAgent}
-      sendFleetMessage={() => {}}
-      answerQuestion={() => {}}
+      sendFleetMessage={sendFleetMessage}
+      answerQuestion={answerQuestion}
     />
   );
 }

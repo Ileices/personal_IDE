@@ -85,6 +85,7 @@ interface FleetStore {
   pauseFleet: () => Promise<void>;
   resumeFleet: () => Promise<void>;
   sendFleetMessage: (message: string, agentId?: string) => Promise<void>;
+  answerQuestion: (questionId: string, answer: string, agentId?: string) => Promise<void>;
   pauseAgent: (agentId: string) => Promise<void>;
   resumeAgent: (agentId: string) => Promise<void>;
   stopAgent: (agentId: string) => Promise<void>;
@@ -194,6 +195,10 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
 
   sendFleetMessage: async (message, agentId) => {
     await apiPost('/fleet/message', { message, agentId, priority: 'high' });
+  },
+
+  answerQuestion: async (questionId, answer, agentId) => {
+    await apiPost('/fleet/answer', { questionId, answer, agentId });
   },
 
   pauseAgent: async (agentId) => {
