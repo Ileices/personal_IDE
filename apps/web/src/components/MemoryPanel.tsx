@@ -24,6 +24,7 @@ export function MemoryPanel() {
   const [accessMode, setAccessMode] = useState<MemoryAccessMode>('total');
   const [preset, setPreset] = useState<MemoryPreset>('recent_decisions');
   const [customSources, setCustomSources] = useState<string[]>(['user_note', 'agent_log']);
+  const [interactionType, setInteractionType] = useState('');
 
   // New note form
   const [newTitle, setNewTitle] = useState('');
@@ -55,12 +56,18 @@ export function MemoryPanel() {
     return () => clearInterval(interval);
   }, [projectId, expanded]);
 
+  // Re-fetch when interaction type filter changes
+  useEffect(() => {
+    if (projectId) fetchNotesForProject(projectId);
+  }, [interactionType]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function fetchNotesForProject(pid: string) {
     if (!pid) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/memory/notes/${pid}?limit=200`);
+      const typeParam = interactionType ? `&interactionType=${encodeURIComponent(interactionType)}` : '';
+      const res = await fetch(`${API_BASE}/api/memory/notes/${pid}?limit=200${typeParam}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
       setNotes((data.notes || []).map(mapNote));
@@ -170,6 +177,7 @@ export function MemoryPanel() {
       relatedFiles: typeof raw.relatedFiles === 'string' ? JSON.parse(raw.relatedFiles || raw.related_files || '[]') : (raw.relatedFiles || raw.related_files || []),
       importance: raw.importance,
       conversationId: raw.conversationId || raw.conversation_id,
+      interactionType: raw.interactionType || raw.interaction_type || '',
       createdAt: raw.createdAt || raw.created_at,
       updatedAt: raw.updatedAt || raw.updated_at,
     };
@@ -289,6 +297,31 @@ export function MemoryPanel() {
             onPresetChange={setPreset}
             onToggleCustomSource={toggleCustomSource}
           />
+
+          {/* Interaction Type Filter Tabs */}
+          <div className="flex flex-wrap gap-0.5 px-2 py-1 border-b border-ide-border/30">
+            {[
+              { label: 'All', value: '' },
+              { label: 'Ask Chat', value: 'ask_chat' },
+              { label: 'Edit Chat', value: 'edit_chat' },
+              { label: 'Plan Chat', value: 'plan_chat' },
+              { label: 'Ask Agent', value: 'ask_agent' },
+              { label: 'Edit Agent', value: 'edit_agent' },
+              { label: 'Plan Agent', value: 'plan_agent' },
+            ].map(tab => (
+              <button
+                key={tab.value}
+                onClick={() => setInteractionType(tab.value)}
+                className={`text-[9px] px-1.5 py-0.5 rounded transition-colors ${
+                  interactionType === tab.value
+                    ? 'bg-ide-accent text-white'
+                    : 'bg-ide-bg text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/80'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
           {/* Create Form */}
           {showCreate && (

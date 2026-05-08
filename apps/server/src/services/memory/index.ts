@@ -106,7 +106,13 @@ export class MemoryService {
   }
 
   /** Get all notes for a project */
-  getProjectNotes(projectId: string, limit: number = 100): MemoryNote[] {
+  getProjectNotes(projectId: string, limit: number = 100, interactionType?: string): MemoryNote[] {
+    if (interactionType) {
+      const rows = this.db.prepare(
+        'SELECT * FROM memory_notes WHERE project_id = ? AND interaction_type = ? ORDER BY importance DESC, updated_at DESC LIMIT ?'
+      ).all(projectId, interactionType, limit) as any[];
+      return rows.map(r => this.mapNote(r));
+    }
     const rows = this.db.prepare(
       'SELECT * FROM memory_notes WHERE project_id = ? ORDER BY importance DESC, updated_at DESC LIMIT ?'
     ).all(projectId, limit) as any[];
@@ -165,6 +171,7 @@ export class MemoryService {
       relatedFiles: JSON.parse(row.related_files || '[]'),
       importance: row.importance,
       conversationId: row.conversation_id,
+      interactionType: row.interaction_type || '',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

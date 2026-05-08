@@ -9,6 +9,7 @@ export interface MemoryNote {
   relatedFiles: string[];
   importance: number;
   conversationId?: string;
+  interactionType?: string;
   createdAt: string;
   updatedAt: string;
 }

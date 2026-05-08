@@ -56,8 +56,8 @@ export async function memoryRoutes(app: FastifyInstance) {
 
   app.get('/notes/:projectId', safeRoute(async (req: FastifyRequest) => {
     const { projectId } = req.params as { projectId: string };
-    const { limit } = req.query as { limit?: string };
-    const notes = memory.getProjectNotes(projectId, limit ? parseInt(limit) : 100);
+    const { limit, interactionType } = req.query as { limit?: string; interactionType?: string };
+    const notes = memory.getProjectNotes(projectId, limit ? parseInt(limit) : 100, interactionType || undefined);
     return { notes };
   }));
 

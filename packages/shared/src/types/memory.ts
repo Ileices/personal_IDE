@@ -39,6 +39,8 @@ export interface MemoryNote {
   importance: number;
   /** Conversation ID that generated this note */
   conversationId?: string;
+  /** Interaction type that created this note (e.g. ask_chat, edit_agent) */
+  interactionType?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -2187,6 +2187,17 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 106,
+    name: 'memory-notes-interaction-type',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, col: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+      if (!hasColumn('memory_notes', 'interaction_type')) {
+        db.exec(`ALTER TABLE memory_notes ADD COLUMN interaction_type TEXT NOT NULL DEFAULT ''`);
+      }
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────
