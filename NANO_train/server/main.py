@@ -535,6 +535,16 @@ class NanoServer:
 
     async def _run_inference(self, query: str) -> str:
         """Run the nano inference pipeline on a query."""
+        try:
+            from inference.decode_pipeline import argmax_decode, ids_to_text, run_inference
+            from tokenizer import SharedTokenizer
+            shared_tokenizer = SharedTokenizer.get()
+        except Exception:
+            argmax_decode = None
+            ids_to_text = None
+            run_inference = None
+            shared_tokenizer = None
+
         # If pipeline executor available, try it
         if self._pipeline_executor and "inference" in self._pipeline_executor._pipelines:
             try:
@@ -542,6 +552,13 @@ class NanoServer:
                 # Get the last stage result
                 format_result = results.get("format") or results.get("generate")
                 if format_result is not None:
+                    # Prefer structural decode for tensors/logits over stringification.
+                    if argmax_decode is not None and ids_to_text is not None and shared_tokenizer is not None:
+                        token_ids = argmax_decode(format_result)
+                        decoded = ids_to_text(token_ids, shared_tokenizer)
+                        if decoded and len(decoded.strip()) > 1:
+                            return decoded
+
                     text = str(format_result)
                     # Only return if it's meaningful (not just tensor repr)
                     if not text.startswith("tensor(") and len(text.strip()) > 5:
@@ -562,6 +579,11 @@ class NanoServer:
             try:
                 # Try code completion nano directly
                 for name, nano in self._sea.items():
+                    if run_inference is not None and shared_tokenizer is not None and callable(nano):
+                        decoded = run_inference(nano, query, shared_tokenizer, max_new_tokens=80)
+                        if decoded and len(decoded.strip()) > 5:
+                            return f"[Nano: {name}] {decoded}"
+
                     if "CodeCompletion" in name or "TokenGenerator" in name:
                         if hasattr(nano, 'generate_text'):
                             result = nano.generate_text(query)

@@ -1,287 +1,270 @@
 """
-Tensor-to-Text Decode Pipeline — The missing link between nano output and readable text.
+Tensor-to-text decode pipeline.
 
-Pipeline: raw tensor → argmax → token IDs → BPE detokenize → UTF-8 text
-
-This module provides multiple decoding strategies:
-  1. Greedy decode (argmax)
-  2. Top-k sampling
-  3. Temperature-scaled sampling
-  4. Beam search (for multi-step generation)
-  
-Works with both the legacy CharTokenizer and the new BPE SharedTokenizer.
+Pipeline:
+  raw logits/tensor -> argmax -> token IDs -> detokenize -> text
 """
 from __future__ import annotations
-import logging
-import math
-from typing import List, Optional, Tuple, Dict, Any, TYPE_CHECKING
 
-if TYPE_CHECKING:
+from dataclasses import dataclass
+from typing import Any, Iterable, List, Optional, Sequence
+
+
+SPECIAL_TOKEN_FALLBACK = {0, 2, 3}  # pad, bos, eos
+
+
+def _to_numpy_array(values: Any):
+    import numpy as np
+
+    if values is None:
+        return np.array([])
+
+    if hasattr(values, "detach"):
+        values = values.detach().cpu().numpy()
+
+    return np.asarray(values)
+
+
+def argmax_decode(logits: Any) -> List[int]:
+    """Convert logits/tensor output to token IDs via argmax.
+
+    Supports torch tensors, numpy arrays, and nested lists.
+    - 1D: treated as token IDs/logits vector and converted to ints.
+    - 2D: treated as (batch, vocab), argmax over vocab.
+    - 3D+: treated as (..., vocab), argmax over last dim.
+    """
+    import numpy as np
+
+    arr = _to_numpy_array(logits)
+    if arr.size == 0:
+        return []
+
+    if arr.ndim == 0:
+        return [int(arr.item())]
+
+    if arr.ndim == 1:
+        if np.issubdtype(arr.dtype, np.integer):
+            return [int(x) for x in arr.tolist()]
+        # 1D float logits across vocab -> one token ID
+        if arr.shape[0] > 1:
+            return [int(np.argmax(arr))]
+        return [int(round(float(arr[0])))]
+
+    if arr.ndim == 2:
+        # (batch, vocab)
+        token_ids = np.argmax(arr, axis=1)
+        return [int(x) for x in token_ids.reshape(-1).tolist()]
+
+    # (batch, seq, vocab) or higher: argmax over vocab dim
+    token_ids = np.argmax(arr, axis=-1)
+    return [int(x) for x in token_ids.reshape(-1).tolist()]
+
+
+def _detect_special_ids(tokenizer: Any) -> set[int]:
+    special_ids = set(SPECIAL_TOKEN_FALLBACK)
+    for attr in ("pad_id", "bos_id", "eos_id", "pad_token_id", "bos_token_id", "eos_token_id"):
+        value = getattr(tokenizer, attr, None)
+        if isinstance(value, int):
+            special_ids.add(value)
+    return special_ids
+
+
+def ids_to_text(token_ids: List[int], tokenizer: Any) -> str:
+    """Convert token IDs to UTF-8 text using tokenizer.decode.
+
+    Special IDs (pad/bos/eos) are removed before decode.
+    """
+    if tokenizer is None:
+        return ""
+
+    if not token_ids:
+        return ""
+
+    special_ids = _detect_special_ids(tokenizer)
+    cleaned = [int(t) for t in token_ids if int(t) not in special_ids]
+    if not cleaned:
+        return ""
+
+    try:
+        text = tokenizer.decode(cleaned, skip_special=True)
+    except TypeError:
+        text = tokenizer.decode(cleaned)
+    except Exception:
+        return ""
+
+    if not isinstance(text, str):
+        text = str(text)
+    return text.encode("utf-8", errors="replace").decode("utf-8", errors="replace").strip()
+
+
+def _encode_text(tokenizer: Any, text: str, max_new_tokens: int):
     import torch
 
-logger = logging.getLogger(__name__)
+    if hasattr(tokenizer, "encode_to_tensor"):
+        return tokenizer.encode_to_tensor(text, max_len=max_new_tokens)
+
+    if hasattr(tokenizer, "encode"):
+        ids = tokenizer.encode(text)
+        if not ids:
+            ids = [0]
+        return torch.tensor([ids[:max_new_tokens]], dtype=torch.long)
+
+    raise ValueError("Tokenizer does not expose encode() or encode_to_tensor()")
+
+
+def run_inference(model: Any, input_text: str, tokenizer: Any, max_new_tokens: int = 128) -> str:
+    """Full end-to-end inference: text in -> model -> text out."""
+    if model is None or tokenizer is None:
+        return ""
+
+    try:
+        import torch
+    except Exception:
+        torch = None
+
+    encoded = _encode_text(tokenizer, input_text or "", max_new_tokens=max_new_tokens)
+
+    # Keep CPU-only compatibility: only move tensor when model exposes a device.
+    model_input = encoded
+    if torch is not None and hasattr(model, "parameters"):
+        try:
+            device = next(model.parameters()).device
+            model_input = encoded.to(device)
+        except Exception:
+            model_input = encoded
+
+    try:
+        if torch is not None:
+            with torch.no_grad():
+                output = model(model_input)
+        else:
+            output = model(model_input)
+    except Exception:
+        return ""
+
+    if output is None:
+        return ""
+
+    if isinstance(output, (tuple, list)) and output:
+        output = output[0]
+
+    token_ids = argmax_decode(output)
+    if not token_ids:
+        return ""
+
+    return ids_to_text(token_ids, tokenizer)
+
+
+@dataclass
+class DecodeConfig:
+    strategy: str = "greedy"
+    temperature: float = 1.0
+    max_length: int = 128
+
+
+@dataclass
+class DecodeResult:
+    text: str
+    token_ids: List[int]
+    token_count: int
 
 
 class DecodePipeline:
-    """
-    Converts raw nano output tensors into human-readable text.
-    
-    The nanos produce float tensors where each value represents either:
-      A) Normalized token IDs (BPE mode): value ∈ [0,1] → id = round(value * vocab_size)
-      B) Char ordinals (legacy mode): value ∈ [0,1] → char = chr(value * 256)
-    
-    This pipeline handles both modes and provides multiple decoding strategies.
-    """
+    """Compatibility wrapper around argmax_decode + ids_to_text."""
 
-    def __init__(self, mode: str = "bpe"):
-        """
-        Initialize decode pipeline.
-        
-        Args:
-            mode: "bpe" for BPE tokenizer, "char" for legacy CharTokenizer
-        """
+    def __init__(self, mode: str = "bpe", config: Optional[DecodeConfig] = None):
         self.mode = mode
-        self._tokenizer = None
+        self.config = config or DecodeConfig()
 
-    def _get_tokenizer(self):
-        """Lazy-load the BPE tokenizer."""
-        if self._tokenizer is None and self.mode == "bpe":
-            import sys, os
-            sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    def _resolve_tokenizer(self, tokenizer: Any = None):
+        if tokenizer is not None:
+            return tokenizer
+        if self.mode != "bpe":
+            return _FallbackByteTokenizer()
+        try:
             from tokenizer import SharedTokenizer
-            self._tokenizer = SharedTokenizer.get()
-        return self._tokenizer
 
-    # ─── Core Decode Methods ─────────────────────────────────
+            return SharedTokenizer.get()
+        except Exception:
+            return _FallbackByteTokenizer()
 
-    def greedy_decode(self, tensor: "torch.Tensor") -> str:
-        """
-        Greedy decoding: take the argmax at each position.
-        
-        For BPE mode: denormalize values to token IDs, then decode
-        For char mode: denormalize to char ordinals
-        
-        Args:
-            tensor: Output tensor from nano, shape (1, seq_len) or (seq_len,)
-        Returns:
-            Decoded text string
-        """
-        values = self._to_list(tensor)
+    def decode(self, logits: Any, tokenizer: Any = None) -> DecodeResult:
+        tok = self._resolve_tokenizer(tokenizer)
+        token_ids = argmax_decode(logits)
+        if self.config.max_length > 0:
+            token_ids = token_ids[: self.config.max_length]
+        text = ids_to_text(token_ids, tok)
+        return DecodeResult(text=text, token_ids=token_ids, token_count=len(token_ids))
 
-        if self.mode == "bpe":
-            return self._decode_bpe(values)
-        else:
-            return self._decode_char(values)
+    def greedy_decode(self, logits: Any, tokenizer: Any = None) -> str:
+        return self.decode(logits, tokenizer=tokenizer).text
 
-    def topk_decode(self, logits_tensor: "torch.Tensor", k: int = 5,
-                    temperature: float = 1.0) -> str:
-        """
-        Top-k sampling: restrict to top k tokens, then sample.
-        
-        Expects logits (unnormalized scores) of shape (1, seq_len, vocab_size)
-        or a simple output tensor for fallback to greedy.
-        """
-        import torch
 
-        if logits_tensor.dim() <= 2:
-            return self.greedy_decode(logits_tensor)
+class _FallbackByteTokenizer:
+    """Minimal tokenizer fallback when shared tokenizer is unavailable."""
 
-        logits = logits_tensor.squeeze(0)  # (seq_len, vocab_size)
+    pad_id = 0
+    bos_id = 2
+    eos_id = 3
 
-        ids = []
-        for pos in range(logits.size(0)):
-            logit = logits[pos] / max(temperature, 1e-8)
-            topk_vals, topk_idx = torch.topk(logit, min(k, logit.size(0)))
-            probs = torch.softmax(topk_vals, dim=-1)
-            sampled = torch.multinomial(probs, 1).item()
-            token_id = topk_idx[sampled].item()
-            ids.append(token_id)
+    def encode(self, text: str) -> List[int]:
+        return [int(b) for b in text.encode("utf-8", errors="replace")]
 
-        if self.mode == "bpe":
-            tok = self._get_tokenizer()
-            return tok.decode(ids) if tok else self._ids_to_char(ids)
-        else:
-            return self._ids_to_char(ids)
-
-    def temperature_decode(self, tensor: "torch.Tensor",
-                           temperature: float = 0.7) -> str:
-        """
-        Temperature-scaled decoding for output tensors.
-        
-        Adds controlled randomness: temperature > 1 = more random,
-        temperature < 1 = more deterministic (approaches greedy).
-        """
-        import torch
-
-        values = self._to_list(tensor)
-
-        if temperature <= 0.01:
-            return self.greedy_decode(tensor)
-
-        if self.mode == "bpe":
-            tok = self._get_tokenizer()
-            if tok is None:
-                return self._decode_char(values)
-            
-            vocab_size = tok.vocab_size
-            noisy_ids = []
-            for v in values:
-                base_id = v * vocab_size
-                noise = (torch.randn(1).item()) * temperature * (vocab_size * 0.01)
-                token_id = int(round(base_id + noise))
-                token_id = max(0, min(token_id, vocab_size - 1))
-                if token_id == 0:
-                    continue
-                noisy_ids.append(token_id)
-            return tok.decode(noisy_ids)
-        else:
-            return self._decode_char(values)
-
-    def beam_decode(self, nano: Any, initial_input: "torch.Tensor",
-                    max_steps: int = 64, beam_width: int = 3) -> str:
-        """
-        Beam search decoding for auto-regressive generation.
-        Runs the nano iteratively, feeding output back as input.
-        """
-        import torch
-
-        beams: List[Tuple[float, List[int], torch.Tensor]] = [
-            (0.0, [], initial_input)
-        ]
-
-        for step in range(max_steps):
-            candidates = []
-            for log_prob, ids, last_input in beams:
-                with torch.no_grad():
-                    output = nano(last_input)
-
-                values = output.squeeze().detach().cpu()
-
-                if self.mode == "bpe":
-                    tok = self._get_tokenizer()
-                    vocab_size = tok.vocab_size if tok else 256
-                else:
-                    vocab_size = 256
-
-                for i in range(min(beam_width, values.size(0))):
-                    v = values[i].item()
-                    token_id = int(round(v * vocab_size))
-                    token_id = max(0, min(token_id, vocab_size - 1))
-                    if token_id <= 1:
-                        continue
-                    new_log_prob = log_prob + math.log(max(abs(v), 1e-10))
-                    new_ids = ids + [token_id]
-                    candidates.append((new_log_prob, new_ids, output))
-
-            if not candidates:
-                break
-
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            beams = candidates[:beam_width]
-
-            if self.mode == "bpe" and beams[0][1] and beams[0][1][-1] == 3:
-                break
-
-        best_ids = beams[0][1] if beams else []
-        if self.mode == "bpe":
-            tok = self._get_tokenizer()
-            return tok.decode(best_ids) if tok else self._ids_to_char(best_ids)
-        else:
-            return self._ids_to_char(best_ids)
-
-    # ─── Batch Decode ────────────────────────────────────────
-
-    def batch_decode(self, tensors: List["torch.Tensor"]) -> List[str]:
-        """Decode a batch of tensors."""
-        return [self.greedy_decode(t) for t in tensors]
-
-    # ─── Internal Helpers ────────────────────────────────────
-
-    @staticmethod
-    def _to_list(tensor: "torch.Tensor") -> List[float]:
-        """Convert tensor to flat list of floats."""
-        values = tensor.squeeze().detach().cpu().tolist()
-        if isinstance(values, (int, float)):
-            values = [values]
-        return values
-
-    def _decode_bpe(self, values: List[float]) -> str:
-        """Decode normalized float values via BPE tokenizer."""
-        tok = self._get_tokenizer()
-        if tok is None:
-            return self._decode_char(values)
-
-        vocab_size = tok.vocab_size
-        ids = []
-        for v in values:
-            token_id = int(round(v * vocab_size))
-            token_id = max(0, min(token_id, vocab_size - 1))
-            if token_id == 0:
+    def decode(self, token_ids: Sequence[int], skip_special: bool = True) -> str:
+        data = bytearray()
+        for tid in token_ids:
+            value = int(tid)
+            if skip_special and value in SPECIAL_TOKEN_FALLBACK:
                 continue
-            ids.append(token_id)
-
-        return tok.decode(ids)
-
-    @staticmethod
-    def _decode_char(values: List[float]) -> str:
-        """Legacy char-level decode: value * 256 → chr."""
-        chars = []
-        for v in values:
-            c = int(v * 256)
-            if 32 <= c < 127:
-                chars.append(chr(c))
-            elif c > 0:
-                chars.append("?")
-        return "".join(chars).rstrip("\x00").rstrip("?").strip()
-
-    @staticmethod
-    def _ids_to_char(ids: List[int]) -> str:
-        """Convert raw token IDs to characters (fallback)."""
-        chars = []
-        for i in ids:
-            if 32 <= i < 127:
-                chars.append(chr(i))
-            elif i > 0:
-                chars.append("?")
-        return "".join(chars).strip()
+            if 0 <= value <= 255:
+                data.append(value)
+        return bytes(data).decode("utf-8", errors="replace")
 
 
-# ─── Convenience Functions ───────────────────────────────────
-
-def decode_tensor(tensor: "torch.Tensor", mode: str = "bpe") -> str:
-    """One-shot decode: tensor → text."""
+def decode_tensor(tensor: Any, mode: str = "bpe") -> str:
+    """One-shot decode helper."""
     return DecodePipeline(mode=mode).greedy_decode(tensor)
 
 
-def decode_nano_output(nano: Any, input_text: str,
-                       max_len: int = 128, mode: str = "bpe") -> str:
-    """
-    Full end-to-end: text → nano → text.
-    
-    1. Encode input text to tensor via BPE tokenizer
-    2. Run nano forward pass
-    3. Decode output tensor back to text
-    """
-    import sys, os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-    import torch
-
-    pipeline = DecodePipeline(mode=mode)
-
+def decode_nano_output(nano: Any, input_text: str, max_len: int = 128, mode: str = "bpe") -> str:
+    """Backward-compatible helper for text -> model -> text."""
+    tokenizer: Any
     if mode == "bpe":
-        from tokenizer import SharedTokenizer
-        tok = SharedTokenizer.get()
-        input_tensor = tok.encode_to_tensor(input_text, max_len=max_len)
+        try:
+            from tokenizer import SharedTokenizer
+
+            tokenizer = SharedTokenizer.get()
+        except Exception:
+            tokenizer = _FallbackByteTokenizer()
     else:
-        chars = [ord(c) / 256.0 for c in input_text[:max_len]]
-        while len(chars) < max_len:
-            chars.append(0.0)
-        input_tensor = torch.tensor([chars], dtype=torch.float32)
+        tokenizer = _FallbackByteTokenizer()
 
-    device = next(nano.parameters()).device
-    input_tensor = input_tensor.to(device)
+    return run_inference(nano, input_text, tokenizer, max_new_tokens=max_len)
 
-    with torch.no_grad():
-        output_tensor = nano(input_tensor)
 
-    return pipeline.greedy_decode(output_tensor)
+if __name__ == "__main__":
+    # Smoke test: tokenizer round-trip and decode from synthetic logits.
+    try:
+        from tokenizer import SharedTokenizer
+
+        tok = SharedTokenizer.get()
+    except Exception:
+        tok = _FallbackByteTokenizer()
+
+    sample = "hello nano sea"
+    encoded = tok.encode(sample)
+    round_trip = ids_to_text(encoded, tok)
+    print("roundtrip:", round_trip[:60])
+
+    # Build deterministic synthetic logits for argmax decode.
+    try:
+        import numpy as np
+
+        vocab = max(getattr(tok, "vocab_size", 256), 8)
+        logits = np.full((1, min(len(encoded), 6), vocab), -10.0, dtype=float)
+        for i, tid in enumerate(encoded[:6]):
+            logits[0, i, int(tid) % vocab] = 10.0
+        ids = argmax_decode(logits)
+        print("decoded:", ids_to_text(ids, tok)[:60])
+    except Exception as exc:
+        print("smoke test warning:", exc)

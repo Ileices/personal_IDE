@@ -1,9 +1,23 @@
-﻿"""
-Inference module - Tensor-to-text decode pipeline and generation utilities.
+﻿"""Inference module exports."""
 
-Usage:
-    from inference import decode_tensor, decode_nano_output, DecodePipeline
-"""
-from .decode_pipeline import DecodePipeline, decode_tensor, decode_nano_output
+from .decode_pipeline import (
+    DecodeConfig,
+    DecodePipeline,
+    DecodeResult,
+    argmax_decode,
+    decode_nano_output,
+    decode_tensor,
+    ids_to_text,
+    run_inference,
+)
 
-__all__ = ["DecodePipeline", "decode_tensor", "decode_nano_output"]
+__all__ = [
+    "DecodeConfig",
+    "DecodePipeline",
+    "DecodeResult",
+    "argmax_decode",
+    "decode_nano_output",
+    "decode_tensor",
+    "ids_to_text",
+    "run_inference",
+]
