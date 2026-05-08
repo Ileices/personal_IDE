@@ -744,7 +744,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Normal version history rotation prunes old rollback points according to a configured retention policy. Implementation-tagged rollback points (those tied to a job_id) are exempt from this rotation and are kept permanently in the forensic database alongside the implementation_log entries that reference them.',
       'Checkpoints are scoped to the active project ID and require the server to be running. User-created named checkpoints remain available for manual rollback from the Checkpoints panel at any time.',
       '⚠ NOTE: The rollback confirmation currently uses the browser native confirm() dialog — this may be blocked by popup blockers or browser security settings in some environments.',
-      '⚠ NOTE: Automatic per-step rollback points and the full Version Control Agent pipeline are part of the intended architecture. The current Checkpoints panel exposes user-created named snapshots. Automatic agent-step rollback and crash recovery integration are planned features that bridge the current panel to the full Version Control Agent behavior described above.'
+      '✅ RESOLVED (commit bf5685a): Automatic per-step rollback points are now wired in the agent loop. After each successful write tool execution, a non-blocking auto-checkpoint is created (type="auto"). CheckpointViewer shows two labeled sections: "Agent Auto-Rollback" (auto type) and "User Named Checkpoints" (user type). The type column was added via migration 107.'
     ]
   },
   {
