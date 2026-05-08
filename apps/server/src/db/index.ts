@@ -2110,6 +2110,83 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 105,
+    name: 'github-community-tables',
+    up(db: Database.Database) {
+      db.exec(`
+        -- Locally tracked reports (Discussions + Issues) posted from this instance
+        CREATE TABLE IF NOT EXISTS github_reports (
+          id              TEXT PRIMARY KEY,
+          discussion_id   TEXT,
+          discussion_number INTEGER,
+          issue_number    INTEGER,
+          title           TEXT NOT NULL,
+          body            TEXT NOT NULL,
+          category        TEXT NOT NULL DEFAULT 'General',
+          labels          TEXT NOT NULL DEFAULT '[]',
+          report_type     TEXT NOT NULL DEFAULT 'general',
+          discussion_url  TEXT,
+          issue_url       TEXT,
+          status          TEXT NOT NULL DEFAULT 'open',
+          comment_count   INTEGER NOT NULL DEFAULT 0,
+          last_comment_at TEXT,
+          created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Draft reports (auto-saved, not yet posted)
+        CREATE TABLE IF NOT EXISTS github_drafts (
+          id          TEXT PRIMARY KEY,
+          title       TEXT NOT NULL DEFAULT '',
+          body        TEXT NOT NULL DEFAULT '',
+          category    TEXT NOT NULL DEFAULT 'General',
+          labels      TEXT NOT NULL DEFAULT '[]',
+          report_type TEXT NOT NULL DEFAULT 'bug',
+          updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Unread notifications from tracked reports
+        CREATE TABLE IF NOT EXISTS github_notifications (
+          id          TEXT PRIMARY KEY,
+          report_id   TEXT,
+          type        TEXT NOT NULL DEFAULT 'reply',
+          actor_login TEXT NOT NULL DEFAULT '',
+          actor_avatar TEXT NOT NULL DEFAULT '',
+          preview     TEXT NOT NULL DEFAULT '',
+          thread_url  TEXT NOT NULL DEFAULT '',
+          read_at     TEXT,
+          created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Tracks comment counts for polling (notification detection)
+        CREATE TABLE IF NOT EXISTS github_tracked (
+          discussion_node_id TEXT PRIMARY KEY,
+          report_id          TEXT,
+          known_comment_count INTEGER NOT NULL DEFAULT 0,
+          known_is_answered  INTEGER NOT NULL DEFAULT 0,
+          last_polled_at     TEXT
+        );
+
+        -- Dev-mode: agent-drafted responses awaiting approval
+        CREATE TABLE IF NOT EXISTS github_dev_drafts (
+          id              TEXT PRIMARY KEY,
+          discussion_id   TEXT NOT NULL,
+          discussion_number INTEGER,
+          discussion_title TEXT NOT NULL DEFAULT '',
+          analysis        TEXT NOT NULL DEFAULT '',
+          draft_response  TEXT NOT NULL DEFAULT '',
+          status          TEXT NOT NULL DEFAULT 'pending',
+          posted_url      TEXT,
+          created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_github_reports_created
+          ON github_reports(created_at);
+        CREATE INDEX IF NOT EXISTS idx_github_notifications_read
+          ON github_notifications(read_at, created_at);
+      `);
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────

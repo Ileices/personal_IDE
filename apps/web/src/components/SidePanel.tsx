@@ -26,6 +26,7 @@ import { ForensicPanel } from './ForensicPanel';
 import { GapAnalysisPanel } from './GapAnalysisPanel';
 import { ProjectStateCrawlerPanel } from './ProjectStateCrawlerPanel';
 import { SuggestedJobsPanel } from './SuggestedJobsPanel';
+import { CommunityHubPanel } from './CommunityHubPanel';
 import { ProviderSetupWizard } from './wizards/ProviderSetupWizard';
 import { ModelStrategyWizard } from './wizards/ModelStrategyWizard';
 import { HelpTip } from './HelpTip';
@@ -88,6 +89,7 @@ export function SidePanel({ view, width, onClose, onNewProject }: SidePanelProps
       {view === 'gap' && <GapAnalysisPanel />}
       {view === 'project-state-crawler' && <ProjectStateCrawlerPanel />}
       {view === 'suggested-jobs' && <SuggestedJobsPanel />}
+      {view === 'community' && <CommunityHubPanel />}
       {view === 'help' && <HelpView />}
     </div>
   );

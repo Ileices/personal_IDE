@@ -45,6 +45,7 @@ import { stabilityRoutes } from './routes/stability.js';
 import { contextWindowRoutes } from './routes/contextWindow.js';
 import { appUpdateRoutes } from './routes/appUpdate.js';
 import { featuresRoutes } from './routes/features.js';
+import { githubRoutes } from './routes/github.js';
 import { startNanoLiaisonAgent } from './services/nanoLiaison/index.js';
 import { startSubsystemScheduler } from './services/subsystemScheduler.js';
 import { startSiliconFactorySupervisor } from './services/siliconFactory/index.js';
@@ -185,6 +186,9 @@ async function main() {
 
   // Feature Flags — runtime toggle for security-gated capabilities
   await app.register(featuresRoutes);
+
+  // GitHub Community — discussions, reporting, notifications, dev-mode tools
+  await app.register(githubRoutes, { prefix: '/api/github' });
 
   // Health — rich diagnostic endpoint (replaces inline handler)
   await app.register(healthRoutes);

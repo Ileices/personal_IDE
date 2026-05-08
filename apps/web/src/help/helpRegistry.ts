@@ -3107,7 +3107,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     title: 'GitHub Integration & Community',
     summary: 'How to connect the app to GitHub, report bugs and share wins directly from inside the app, browse the community feed, and cross-post to developer platforms. This section describes features that are in active development and will become available progressively.',
     tags: ['github', 'community', 'reporting', 'discussions', 'social', 'cross-post', 'notifications', 'feed', 'integration'],
-    status: 'coming_soon',
+    status: 'active',
     details: [
       '━━━ SETTING UP GITHUB ON YOUR MACHINE ━━━',
       'This app connects to GitHub to let you report problems, share wins, and browse the community — all without opening a browser. To make this work, your computer needs two tools: Git and GitHub CLI (gh). If you\'ve used GitHub before, you probably already have these. If not, the app includes a one-click setup wizard that walks you through installing everything step by step.',
