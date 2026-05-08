@@ -2,6 +2,11 @@ this directory will be used for training AI models.
 we will not train LARGE models.
 we will train nano models.
 
+Testing
+-------
+Run the Prompt 9 end-to-end inference test with:
+python -m pytest NANO_train/tests/test_inference_e2e.py -v
+
 
 ## Core Nano Categories
 
