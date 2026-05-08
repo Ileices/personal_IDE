@@ -9,8 +9,7 @@ import {
   ChevronRight, ChevronDown, Folder, FolderOpen,
   RefreshCw, Search
 } from 'lucide-react';
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+import { API_BASE } from '../config.js';
 
 const EXT_ICONS: Record<string, string> = {
   '.ts': '🔷', '.tsx': '⚛️', '.js': '🟨', '.jsx': '⚛️',

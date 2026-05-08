@@ -13,8 +13,9 @@ import {
   TrendingUp,
   Wrench,
 } from 'lucide-react';
+import { API_BASE } from '../config.js';
 
-const API = 'http://localhost:3001/api/gap';
+const API = `${API_BASE}/api/gap`;
 
 type GapTab =
   | 'summary'

@@ -5,8 +5,9 @@
 // ============================================
 import React, { useState, useEffect, useCallback } from 'react';
 import { Tag, GitBranch, Layers, CheckSquare, AlertTriangle, RefreshCw, Search, Lock, Unlock } from 'lucide-react';
+import { API_BASE } from '../config.js';
 
-const API = 'http://localhost:3001/api/tags';
+const API = `${API_BASE}/api/tags`;
 
 type TabId = 'devtags' | 'plantags' | 'buildtags' | 'rules' | 'stats';
 

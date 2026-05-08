@@ -11,8 +11,9 @@ import {
   Cpu, Shield, TrendingUp, RefreshCw, ChevronDown, ChevronRight,
   BarChart2
 } from 'lucide-react';
+import { API_BASE } from '../config.js';
 
-const API = 'http://localhost:3001/api/forensic';
+const API = `${API_BASE}/api/forensic`;
 
 type ForensicTab =
   | 'summary'

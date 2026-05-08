@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useTerminalStore, TerminalSession } from '../stores/terminalStore';
 import { Terminal, Plus, X, Trash2, Bot, User } from 'lucide-react';
+import { API_BASE } from '../config.js';
 
 /** Color helpers for output streams */
 const streamColor = (stream: string) => {
@@ -46,8 +47,7 @@ export function TerminalPanel() {
     const session = sessions.find(s => s.id === activeSessionId);
     if (!session?.alive) return;
 
-    const API = (import.meta.env.VITE_API_URL as string || '').replace(/\/+$/, '');
-    const eventSource = new EventSource(`${API}/api/terminal/stream/${activeSessionId}`);
+    const eventSource = new EventSource(`${API_BASE}/api/terminal/stream/${activeSessionId}`);
     eventSource.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
