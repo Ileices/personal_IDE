@@ -6,6 +6,7 @@
 // ============================================
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
+import { randomBytes } from 'crypto';
 
 interface CSRFOptions {
   /** Allowed origins — typically the frontend URL(s) */
@@ -18,6 +19,35 @@ interface CSRFOptions {
 
 const DEFAULT_UNSAFE = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
 const LOCAL_DEV_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+const CSRF_COOKIE_NAME = 'csrf_token';
+
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!cookieHeader) return out;
+  for (const part of cookieHeader.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    out[key] = decodeURIComponent(value);
+  }
+  return out;
+}
+
+function ensureCsrfCookie(request: FastifyRequest, reply: FastifyReply): string {
+  const cookies = parseCookies(request.headers.cookie);
+  const existing = cookies[CSRF_COOKIE_NAME];
+  if (existing) return existing;
+
+  const token = randomBytes(24).toString('base64url');
+  // JS-readable cookie (HttpOnly=false) for double-submit CSRF header.
+  // SameSite=Lax prevents most cross-site sends while preserving normal SPA navigation.
+  reply.header(
+    'Set-Cookie',
+    `${CSRF_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; SameSite=Lax`
+  );
+  return token;
+}
 
 /**
  * CSRF guard plugin.
@@ -43,6 +73,9 @@ async function csrfPlugin(app: FastifyInstance, opts: CSRFOptions): Promise<void
   // and requests with a valid Referer from allowed origins.
 
   app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
+    // Always ensure token cookie exists so frontend can mirror it via X-CSRF-Token.
+    ensureCsrfCookie(request, reply);
+
     // Safe methods don't need CSRF protection
     if (!unsafeMethods.has(request.method)) return;
 
@@ -51,11 +84,28 @@ async function csrfPlugin(app: FastifyInstance, opts: CSRFOptions): Promise<void
 
     const origin = request.headers.origin;
     const referer = request.headers.referer;
+    const cookies = parseCookies(request.headers.cookie);
+    const csrfCookie = cookies[CSRF_COOKIE_NAME] || '';
+    const csrfHeader = (request.headers['x-csrf-token'] as string | undefined) || '';
+
+    const verifyDoubleSubmit = (): FastifyReply | void => {
+      if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+        return reply.status(403).send({
+          error: 'CSRF validation failed',
+          message: 'CSRF token missing or mismatch',
+        });
+      }
+    };
 
     // If Origin header is present, it must match
     if (origin) {
       const cleanOrigin = origin.replace(/\/+$/, '');
-      if (isAllowedOrigin(cleanOrigin)) return;
+      if (isAllowedOrigin(cleanOrigin)) {
+        // Same-origin validation is sufficient here; token is additive hardening.
+        // If a token header is supplied, it must match the CSRF cookie.
+        if (csrfHeader) return verifyDoubleSubmit();
+        return;
+      }
       // Reject
       return reply.status(403).send({
         error: 'CSRF validation failed',
@@ -67,7 +117,12 @@ async function csrfPlugin(app: FastifyInstance, opts: CSRFOptions): Promise<void
     if (referer) {
       try {
         const refOrigin = new URL(referer).origin;
-        if (isAllowedOrigin(refOrigin)) return;
+        if (isAllowedOrigin(refOrigin)) {
+          // Same-origin validation is sufficient here; token is additive hardening.
+          // If a token header is supplied, it must match the CSRF cookie.
+          if (csrfHeader) return verifyDoubleSubmit();
+          return;
+        }
       } catch { /* invalid referer URL */ }
       return reply.status(403).send({
         error: 'CSRF validation failed',
@@ -75,10 +130,13 @@ async function csrfPlugin(app: FastifyInstance, opts: CSRFOptions): Promise<void
       });
     }
 
-    // No Origin AND no Referer — allow for API clients (curl, Postman, server-to-server)
-    // This is safe because browsers ALWAYS send Origin on cross-origin POST.
-    // A missing Origin+Referer means it's NOT a browser cross-origin attack.
-    return;
+    // No Origin and no Referer on unsafe methods is rejected.
+    // Smoke test (expected 403):
+    //   curl -i -X POST http://127.0.0.1:3001/api/agent/start -H "Content-Type: application/json" -d '{}'
+    return reply.status(403).send({
+      error: 'CSRF validation failed',
+      message: 'Origin/Referer required for unsafe request',
+    });
   });
 }
 
