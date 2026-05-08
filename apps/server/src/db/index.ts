@@ -2080,9 +2080,9 @@ const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_drift_file_snapshot
           ON drift_events(file_path, snapshot_id);
         CREATE INDEX IF NOT EXISTS idx_tagmismatch_agent_buildtag
-          ON tag_mismatches(agent_id, buildtag_id);
+          ON tag_mismatches(agent_id, cycle_id);
         CREATE INDEX IF NOT EXISTS idx_agent_perf_class_time
-          ON agent_performance(agent_class, created_at);
+          ON agent_performance(agent_class, timestamp);
       `);
     },
   },
