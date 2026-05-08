@@ -1046,7 +1046,7 @@ function DevToolsPanel() {
                   />
                 ) : (
                   <div className="text-[11px] text-ide-text whitespace-pre-wrap bg-ide-bg/20 border border-ide-border rounded p-2 max-h-40 overflow-y-auto">
-                    {draftEdits[draft.id] ?? draft.draft_response || '(empty — edit before posting)'}
+                    {(draftEdits[draft.id] ?? draft.draft_response) || '(empty — edit before posting)'}
                   </div>
                 )}
 
@@ -1310,7 +1310,7 @@ function DevToolsPanel() {
                   />
                 ) : (
                   <div className="text-[11px] text-ide-text whitespace-pre-wrap bg-ide-bg/20 border border-ide-border rounded p-2 max-h-40 overflow-y-auto">
-                    {draftEdits[draft.id] ?? draft.draft_response || '(empty — edit before posting)'}
+                    {(draftEdits[draft.id] ?? draft.draft_response) || '(empty — edit before posting)'}
                   </div>
                 )}
 
