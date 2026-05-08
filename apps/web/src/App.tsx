@@ -22,6 +22,7 @@ import { TheGodFactory } from './components/TheGodFactory';
 import { HelpProvider } from './help/helpContext';
 import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { API_BASE } from './config.js';
+import { UpdateBanner, type UpdateInfo } from './components/UpdateBanner.js';
 
 function getStored<T>(key: string, fallback: T): T {
   try { return JSON.parse(sessionStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
@@ -51,7 +52,43 @@ export default function App() {
   const [showNewProject, setShowNewProject] = useState(false);
   const { showWizard: showFirstRun, setShowWizard: setShowFirstRun, completeFirstRun } = useFirstRunWizard();
 
+  // ── Update check state ──────────────────────────
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+
   useEffect(() => { checkAuth().then(() => loadProjects()); }, []);
+
+  // ── Startup update check + 6-hour interval ──────
+  useEffect(() => {
+    if (!user) return;
+
+    const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+
+    async function checkForUpdates() {
+      try {
+        const res = await fetch(`${API_BASE}/api/app/check-updates`);
+        if (!res.ok) return;
+        const data = await res.json() as { behindCount: number; branch: string; remoteHead?: string };
+        if (data.behindCount > 0) {
+          setUpdateInfo({ behindCount: data.behindCount, branch: data.branch, remoteHead: data.remoteHead });
+          setUpdateDismissed(false); // always show again if new check finds updates
+        } else {
+          setUpdateInfo(null);
+        }
+      } catch {
+        // Network or git unavailable — silently skip
+      }
+    }
+
+    // Delay first check by 5 s to not compete with startup I/O
+    const startup = setTimeout(checkForUpdates, 5000);
+    const interval = setInterval(checkForUpdates, SIX_HOURS_MS);
+
+    return () => {
+      clearTimeout(startup);
+      clearInterval(interval);
+    };
+  }, [user]);
 
   // First-run check: show setup wizard if no models/providers configured
   useEffect(() => {
@@ -137,6 +174,16 @@ export default function App() {
         />
       )}
       <TopBar onNewProject={() => setShowNewProject(true)} />
+
+      {/* Update available banner — top-centre, floating above content */}
+      {updateInfo && !updateDismissed && (
+        <UpdateBanner
+          info={updateInfo}
+          onDismiss={() => setUpdateDismissed(true)}
+          onUpdated={() => { setUpdateDismissed(true); setUpdateInfo(null); }}
+        />
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar active={activeView} onChange={handleViewChange} fleetBadge={fleetBadge} />
         {/* When studio is active, hide normal side panel & editor, show full-width Studio */}
