@@ -358,7 +358,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Project panel controls active project context used by chat and agent routes.',
       'File browser shows the directory tree and opens files in the Code tab editor.',
       'Right-click any file to copy path, copy name, or reveal in system Explorer.',
-      '⚠ NOTE: FileBrowser defines its own API_BASE constant instead of importing from config — if VITE_API_BASE env is not set or differs, file reveal actions may call the wrong server address.'
+      '✅ RESOLVED (commit 9f18190): FileBrowser now imports API_BASE from ../config.js — no longer defines its own constant. File reveal actions use the same base URL as the rest of the app.'
     ]
   },
   {
@@ -396,7 +396,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Multiple sessions (tabs) are supported; each session maps to a server-side PTY process.',
       'User shell and LLM agent shell are separate sessions — the agent shell is controlled by the loop, not the user.',
       'Output streams: green = stdout, red = stderr, accent = stdin echo.',
-      '⚠ NOTE: TerminalPanel uses the VITE_API_URL environment variable, which is different from the VITE_API_BASE used by the rest of the app. If only one env is set, terminal streaming may fail or point to the wrong server port.'
+      '✅ RESOLVED (commit 9f18190): TerminalPanel now imports API_BASE from ../config.js. The local VITE_API_URL inline reference is removed — terminal streaming uses the same resolved base URL as all other components.'
     ]
   },
   {
