@@ -17,6 +17,30 @@ interface WebSearchResult {
   error?: string;
 }
 
+// ─── SSRF / Private-network block list ─────────────────────────────────────
+// Prevent web search from being weaponized to probe local infrastructure.
+// Any search result URL pointing to these targets is dropped.
+const BLOCKED_HOST_PATTERNS: RegExp[] = [
+  /^localhost$/i,
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^0\.0\.0\.0$/,
+  /^169\.254\./,    // AWS metadata / link-local
+  /^::1$/,          // IPv6 loopback
+  /^fc00:/i,        // IPv6 private
+];
+
+function isBlockedUrl(rawUrl: string): boolean {
+  try {
+    const { hostname } = new URL(rawUrl);
+    return BLOCKED_HOST_PATTERNS.some(p => p.test(hostname));
+  } catch {
+    return false; // malformed URLs are kept — DuckDuckGo may return them
+  }
+}
+
 /** Search the web using DuckDuckGo Lite (no API key required) */
 export async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult> {
   try {
@@ -65,7 +89,7 @@ function parseDDGResults(html: string, max: number): SearchResult[] {
       url = decodeURIComponent(uddgMatch[1]);
     }
 
-    if (title && url && !url.includes('duckduckgo.com')) {
+    if (title && url && !url.includes('duckduckgo.com') && !isBlockedUrl(url)) {
       links.push({ url, title });
     }
   }
@@ -89,6 +113,10 @@ function parseDDGResults(html: string, max: number): SearchResult[] {
 
 /** Fetch a web page and extract main text content */
 export async function fetchWebPage(url: string, maxChars = 8000): Promise<{ url: string; content: string; error?: string }> {
+  // SSRF protection: block internal network targets
+  if (isBlockedUrl(url)) {
+    return { url, content: '', error: 'SSRF blocked: URL targets private network' };
+  }
   try {
     const resp = await fetch(url, {
       headers: {

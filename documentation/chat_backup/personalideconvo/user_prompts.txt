@@ -141,6 +141,7 @@ make sure the model continues the loop covering all data starting back up partly
 the next part that was truncated so they get a full picture... IE
 
 
+this should scale to any model token limi:
 when a model token limit is 8000
 8000 tokens is the model limit
 overview or codebase is 1000000 tokens or more

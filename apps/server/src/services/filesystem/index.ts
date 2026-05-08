@@ -112,6 +112,41 @@ export function readFile(projectRoot: string, filePath: string): FileContent {
   };
 }
 
+// ── Sensitive file denylist ──────────────────────────────────────────────────
+// Any agent write/delete targeting these patterns is rejected.
+// Read access is also blocked to prevent accidental leakage into LLM context.
+const SENSITIVE_FILENAME_PATTERNS: RegExp[] = [
+  /^\.env$/i,
+  /^\.env\.(local|production|staging|dev)$/i,
+  /^\.npmrc$/i,
+  /^\.netrc$/i,
+  /^\.git-credentials$/i,
+  /^id_rsa$/i,
+  /^id_ed25519$/i,
+  /^id_ecdsa$/i,
+  /^id_dsa$/i,
+  /\.pem$/i,
+  /\.key$/i,
+  /\.pfx$/i,
+  /\.p12$/i,
+  /credentials\.json$/i,
+  /provider_configs\.json$/i,
+  /secrets\.json$/i,
+  /auth\.json$/i,
+];
+
+const SENSITIVE_DIR_SEGMENTS: string[] = ['.ssh', '.gnupg', '.aws', '.azure', '.kube'];
+
+function isSensitiveFile(resolvedPath: string): boolean {
+  const parts = resolvedPath.replace(/\\/g, '/').split('/');
+  const filename = parts[parts.length - 1];
+  // Check filename patterns
+  if (SENSITIVE_FILENAME_PATTERNS.some(p => p.test(filename))) return true;
+  // Check if inside a sensitive directory
+  if (SENSITIVE_DIR_SEGMENTS.some(seg => parts.includes(seg))) return true;
+  return false;
+}
+
 /** Write a file with optional backup */
 // ── Constitutional protection list ──────────────────────────────────────────
 // Files that must never be modified by any automated agent.
@@ -141,6 +176,11 @@ export function writeFile(projectRoot: string, filePath: string, content: string
     );
   }
   const fullPath = safePath(projectRoot, filePath);
+  if (isSensitiveFile(fullPath)) {
+    throw new Error(
+      `Security: write denied for '${filePath}' — matches sensitive file denylist (credentials, keys, .env, etc.)`
+    );
+  }
   const dir = dirname(fullPath);
 
   // Create directory if needed

@@ -2062,6 +2062,30 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 103,
+    name: 'forensic-table-performance-indexes',
+    up(db: Database.Database) {
+      // Performance indexes for the forensic accountability system.
+      // blame_records, regression_index, drift_events, tag_mismatches, and
+      // agent_performance are query-hot tables — these indexes bring their
+      // common access patterns from full-table scans to index lookups.
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_blame_model_time
+          ON blame_records(model_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_blame_project_mode
+          ON blame_records(project_id, mode, created_at);
+        CREATE INDEX IF NOT EXISTS idx_regression_file_time
+          ON regression_index(file_path, created_at);
+        CREATE INDEX IF NOT EXISTS idx_drift_file_snapshot
+          ON drift_events(file_path, snapshot_id);
+        CREATE INDEX IF NOT EXISTS idx_tagmismatch_agent_buildtag
+          ON tag_mismatches(agent_id, buildtag_id);
+        CREATE INDEX IF NOT EXISTS idx_agent_perf_class_time
+          ON agent_performance(agent_class, created_at);
+      `);
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────

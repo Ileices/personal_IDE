@@ -33,6 +33,7 @@ import { writeBlameRecord } from '../../routes/blame.js';
 import { webSearch, formatSearchForLLM } from './webSearch.js';
 import { CodeIndexer } from './codeIndexer.js';
 import { detectPlatform, formatPlatformForLLM, type PlatformInfo } from './platformDetector.js';
+import { observationTrainingHook } from '../nano/observationTrainer.js';
 // Extracted modules for <1000 LOC compliance
 import { initializeRun, resolveModelContextWindow } from './loop/runSetup.js';
 import { enforceTokenBudget, tryProactiveChunking, recoverFromTokenLimitError } from './loop/tokenRecovery.js';
@@ -768,6 +769,24 @@ export class EnhancedAgentLoop {
               }
             }
             llmCallSucceeded = true;
+
+            // ── Observation Training Hook ──────────────────────────────
+            // Fire-and-forget: send this (prompt, response) pair to the
+            // Nano Sea so nanos can learn from every LLM call.
+            // Must happen AFTER response received, BEFORE tool execution.
+            // Never blocks the agent loop.
+            observationTrainingHook({
+              prompt: messages[messages.length - 1]?.content as string ?? '',
+              response: response?.content ?? '',
+              source: 'agent_loop',
+              timestamp: Date.now(),
+              metadata: {
+                provider: this.config.provider,
+                model: this.config.model,
+                projectId: this.config.projectRoot,
+                iterationIndex: this.currentIteration,
+              },
+            });
           } catch (err: any) {
             // Cancel timing on error
             this.timingService.cancelCall();

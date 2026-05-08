@@ -232,9 +232,9 @@ Read [](file:///z%3A/personal_IDE-master/personal_IDE-master/NANO_train/training
 
 **Key features (by criticality):**
 1. **Autonomous agent loop** — multi-iteration code generation with structured output, error auto-fix, test auto-run, and checkpoint rollback
-2. **12-provider LLM abstraction** — seamless failover across GitHub Models, Ollama, Groq, Gemini, OpenRouter, LM Studio, Nano Sea, etc.
+2. **multi-provider LLM abstraction** — seamless failover across GitHub Models, Ollama, Groq, Gemini, OpenRouter, LM Studio, Nano Sea, etc.
 3. **Nano Sea** — millions of  micro neural networks with P2P mesh networking, RESPECT-scored compute sharing, and self-evolving lifecycle management
-4. **Fleet mode** — parallel multi-agent execution with role specialization (lead, implementer, debugger, tester, reviewer)
+4. **Fleet mode** — parallel multi-agent execution with role specialization (lead, implementer, debugger, tester, reviewer, blame crawler, etc.)
 5. **Hierarchical codebase indexing** — AST-level code understanding with token-budget-aware rendering and forced read-before-write gating
 
 ---

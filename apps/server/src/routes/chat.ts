@@ -17,6 +17,7 @@ import { readFile } from '../services/filesystem/index.js';
 import { appConfig } from '../config.js';
 import { resolveModelStrategy } from '../services/modelStrategy.js';
 import { writeBlameRecord } from './blame.js';
+import { observationTrainingHook } from '../services/nano/observationTrainer.js';
 
 /** Get an LLM client for a model ID, returns null if not configured */
 function getClientForModel(db: any, modelId: string): import('openai').default | null {
@@ -239,6 +240,14 @@ export async function chatRoutes(app: FastifyInstance) {
           }
 
           const fullContent = completion.content || '';
+          // ── Observation Training Hook (nano path) ──────────────────────
+          observationTrainingHook({
+            prompt: messages[messages.length - 1]?.content as string ?? '',
+            response: fullContent,
+            source: 'chat',
+            timestamp: Date.now(),
+            metadata: { model: modelId, projectId: body.projectId },
+          });
           reply.raw.write(`data: ${JSON.stringify({
             type: 'message_start',
             conversationId,
@@ -369,22 +378,17 @@ export async function chatRoutes(app: FastifyInstance) {
             }
 
             // ── Bird-feed observation to Nano trainer (fire-and-forget) ──
-            try {
-              const nanoRow = db.prepare(
-                "SELECT base_url FROM provider_configs WHERE provider_id = 'nano' AND enabled = 1"
-              ).get() as any;
-              const nanoBaseUrl = (nanoRow?.base_url || appConfig.services.nanoSeaUrl).replace(/\/v1\/?$/, '');
-              fetch(nanoBaseUrl + '/v1/training/observe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  query: body.message.slice(0, 4000),
-                  response: fullContent.slice(0, 8000),
-                  source: 'chat',
-                  quality: structured?.confidence ? structured.confidence / 100 : 0.7,
-                }),
-              }).catch(() => {}); // nano may not be running
-            } catch { /* non-critical */ }
+            // Uses observationTrainingHook for secret redaction + unified path
+            observationTrainingHook({
+              prompt: messages[messages.length - 1]?.content as string ?? body.message,
+              response: fullContent,
+              source: 'chat',
+              timestamp: Date.now(),
+              metadata: {
+                model: modelId,
+                projectId: body.projectId,
+              },
+            });
           },
         });
 
