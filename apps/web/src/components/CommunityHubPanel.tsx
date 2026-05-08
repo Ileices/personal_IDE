@@ -16,7 +16,7 @@ import {
   getNotifications, markNotificationRead, markAllNotificationsRead,
   pollNotifications, getDevOpenDiscussions, getDevOpenIssues,
   analyzeDiscussion, getDevDrafts, updateDevDraft, postDevDraft,
-  closeIssue, getToolchainStatus,
+  closeIssue, markCommentAsAnswer, closeDiscussion, getToolchainStatus,
   type GHDiscussion, type LocalReport, type LocalDraft,
   type GHNotification, type DevDraft, type GHIssue,
 } from '../api/github.js';
@@ -826,6 +826,287 @@ function NotificationsPanel({ onRead }: { onRead: () => void }) {
 
 // ── Dev Tools Panel (owner-only) ───────────────
 function DevToolsPanel() {
+  const [devTab, setDevTab] = useState<'discussions' | 'issues' | 'drafts'>('discussions');
+  const [discussions, setDiscussions] = useState<GHDiscussion[]>([]);
+  const [issues, setIssues] = useState<GHIssue[]>([]);
+  const [devDrafts, setDevDrafts] = useState<DevDraft[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState<string | null>(null);
+  const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
+  // Track per-draft: postedJobId and pending close/answer actions
+  const [postResults, setPostResults] = useState<Record<string, { url: string; jobId?: string }>>({});
+  const [closingDiscussion, setClosingDiscussion] = useState<string | null>(null);
+
+  const loadData = async (tab: 'discussions' | 'issues' | 'drafts') => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (tab === 'discussions') {
+        const r = await getDevOpenDiscussions();
+        setDiscussions(r.discussions);
+      } else if (tab === 'issues') {
+        const r = await getDevOpenIssues();
+        setIssues(r.issues);
+      } else {
+        const r = await getDevDrafts();
+        setDevDrafts(r.drafts);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to load.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(devTab); }, [devTab]);
+
+  const handleAnalyze = async (d: GHDiscussion) => {
+    setAnalyzing(d.id);
+    try {
+      await analyzeDiscussion({
+        discussionId: d.id,
+        discussionNumber: d.number,
+        discussionTitle: d.title,
+        discussionBody: d.body,
+      });
+      setDevTab('drafts');
+      await loadData('drafts');
+    } catch (e: any) {
+      setError(e.message || 'Analysis failed.');
+    } finally {
+      setAnalyzing(null);
+    }
+  };
+
+  const handlePost = async (draft: DevDraft) => {
+    try {
+      const editedText = draftEdits[draft.id];
+      if (editedText !== undefined && editedText !== draft.draft_response) {
+        await updateDevDraft(draft.id, editedText);
+      }
+      const result = await postDevDraft(draft.id);
+      setPostResults(prev => ({ ...prev, [draft.id]: { url: result.url, jobId: result.jobId } }));
+      await loadData('drafts');
+    } catch (e: any) {
+      setError(e.message || 'Failed to post.');
+    }
+  };
+
+  const handleCloseIssue = async (number: number) => {
+    try {
+      await closeIssue(number, '_Resolved by the development team. See linked discussion for details._');
+      await loadData('issues');
+    } catch (e: any) {
+      setError(e.message || 'Failed to close issue.');
+    }
+  };
+
+  const handleCloseDiscussion = async (draft: DevDraft) => {
+    if (!draft.discussion_id) return;
+    setClosingDiscussion(draft.id);
+    try {
+      await closeDiscussion(draft.discussion_id);
+      await loadData('drafts');
+    } catch (e: any) {
+      setError(e.message || 'Failed to close discussion.');
+    } finally {
+      setClosingDiscussion(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Warning banner */}
+      <div className="px-3 py-2 bg-yellow-900/20 border-b border-yellow-500/20 text-[10px] text-yellow-300">
+        ⚙ Dev Tools — Owner-Only. Changes post directly to GitHub.
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex border-b border-ide-border">
+        {(['discussions', 'issues', 'drafts'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setDevTab(t)}
+            className={`px-3 py-1.5 text-[11px] border-b-2 capitalize transition-colors ${
+              devTab === t ? 'border-yellow-400 text-yellow-300' : 'border-transparent text-ide-text-dim'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <div className="mx-3 mt-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-[11px] text-red-300">
+          {error}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto">
+        {loading && (
+          <div className="flex justify-center py-8"><Loader size={16} className="animate-spin text-ide-text-dim" /></div>
+        )}
+
+        {/* Open Discussions */}
+        {!loading && devTab === 'discussions' && (
+          <div className="divide-y divide-ide-border">
+            {discussions.length === 0 ? (
+              <div className="p-4 text-center text-ide-text-dim text-[12px]">No open discussions.</div>
+            ) : discussions.map(d => (
+              <div key={d.id} className="px-3 py-2.5">
+                <div className="text-[12px] font-medium text-ide-text mb-0.5">#{d.number} {d.title}</div>
+                <div className="text-[10px] text-ide-text-dim mb-1.5">
+                  @{d.author?.login} · 👍{d.reactions?.totalCount} · 💬{d.comments?.totalCount}
+                </div>
+                <button
+                  onClick={() => handleAnalyze(d)}
+                  disabled={analyzing === d.id}
+                  className="flex items-center gap-1 text-[11px] px-2.5 py-1 bg-yellow-500/20 text-yellow-300 rounded hover:bg-yellow-500/30 disabled:opacity-50 transition-colors"
+                >
+                  {analyzing === d.id ? <Loader size={11} className="animate-spin" /> : <TerminalSquare size={11} />}
+                  {analyzing === d.id ? 'Analyzing…' : 'Analyze & Draft Fix'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Open Issues */}
+        {!loading && devTab === 'issues' && (
+          <div className="divide-y divide-ide-border">
+            {issues.length === 0 ? (
+              <div className="p-4 text-center text-ide-text-dim text-[12px]">No open issues.</div>
+            ) : issues.map(issue => (
+              <div key={issue.number} className="px-3 py-2.5">
+                <div className="text-[12px] font-medium text-ide-text mb-0.5">#{issue.number} {issue.title}</div>
+                <div className="text-[10px] text-ide-text-dim mb-1.5">
+                  @{issue.user?.login} · 💬{issue.comments}
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={issue.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-ide-accent hover:underline"
+                  >
+                    View ↗
+                  </a>
+                  <button
+                    onClick={() => handleCloseIssue(issue.number)}
+                    className="text-[10px] px-2 py-0.5 bg-red-500/20 text-red-300 rounded hover:bg-red-500/30 transition-colors"
+                  >
+                    Close Issue
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Dev Drafts */}
+        {!loading && devTab === 'drafts' && (
+          <div className="divide-y divide-ide-border">
+            {devDrafts.length === 0 ? (
+              <div className="p-4 text-center text-ide-text-dim text-[12px]">
+                No drafts yet. Analyze a discussion to generate one.
+              </div>
+            ) : devDrafts.map(draft => (
+              <div key={draft.id} className="px-3 py-3">
+                <div className="flex items-start gap-2 mb-2">
+                  <div className="flex-1">
+                    <div className="text-[12px] font-medium text-ide-text">
+                      #{draft.discussion_number} {draft.discussion_title}
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0 rounded ${draft.status === 'posted' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                      {draft.status}
+                    </span>
+                  </div>
+                </div>
+
+                {draft.analysis && (
+                  <details className="mb-2">
+                    <summary className="text-[10px] text-ide-text-dim cursor-pointer hover:text-ide-text">
+                      Agent Analysis
+                    </summary>
+                    <div className="mt-1 text-[11px] text-ide-text whitespace-pre-wrap bg-ide-bg/30 border border-ide-border rounded p-2">
+                      {draft.analysis}
+                    </div>
+                  </details>
+                )}
+
+                <div className="text-[10px] text-ide-text-dim mb-1">Draft Response:</div>
+                {editingDraft === draft.id ? (
+                  <textarea
+                    value={draftEdits[draft.id] ?? draft.draft_response}
+                    onChange={e => setDraftEdits(prev => ({ ...prev, [draft.id]: e.target.value }))}
+                    rows={6}
+                    className="w-full text-[11px] bg-ide-bg border border-ide-border rounded p-2 text-ide-text resize-none font-mono focus:outline-none focus:border-ide-accent"
+                  />
+                ) : (
+                  <div className="text-[11px] text-ide-text whitespace-pre-wrap bg-ide-bg/20 border border-ide-border rounded p-2 max-h-40 overflow-y-auto">
+                    {draftEdits[draft.id] ?? draft.draft_response || '(empty — edit before posting)'}
+                  </div>
+                )}
+
+                {draft.status !== 'posted' && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      onClick={() => setEditingDraft(editingDraft === draft.id ? null : draft.id)}
+                      className="flex items-center gap-1 text-[11px] px-2 py-1 border border-ide-border rounded text-ide-text-dim hover:text-ide-text transition-colors"
+                    >
+                      <Edit size={11} /> {editingDraft === draft.id ? 'Done Editing' : 'Edit'}
+                    </button>
+                    <button
+                      onClick={() => handlePost(draft)}
+                      className="flex items-center gap-1 text-[11px] px-2.5 py-1 bg-green-500/20 text-green-300 rounded hover:bg-green-500/30 transition-colors"
+                    >
+                      <Send size={11} /> Approve & Post
+                    </button>
+                  </div>
+                )}
+
+                {/* Post-approval actions: close the discussion loop */}
+                {draft.status === 'posted' && (
+                  <div className="mt-2 space-y-1.5">
+                    {postResults[draft.id]?.jobId && (
+                      <div className="text-[10px] text-green-300 bg-green-900/20 border border-green-500/20 rounded px-2 py-1">
+                        ✓ Suggested Job created — fix queued in God Factory pipeline
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => handleCloseDiscussion(draft)}
+                        disabled={closingDiscussion === draft.id}
+                        className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-red-500/10 text-red-300 border border-red-500/30 rounded hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+                        title="Mark discussion as Closed on GitHub"
+                      >
+                        {closingDiscussion === draft.id ? <Loader size={10} className="animate-spin" /> : <X size={10} />}
+                        Close Discussion
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {draft.posted_url && (
+                  <a
+                    href={draft.posted_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block mt-1 text-[10px] text-ide-accent hover:underline"
+                  >
+                    View Posted Response ↗
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
   const [devTab, setDevTab] = useState<'discussions' | 'issues' | 'drafts'>('discussions');
   const [discussions, setDiscussions] = useState<GHDiscussion[]>([]);
   const [issues, setIssues] = useState<GHIssue[]>([]);

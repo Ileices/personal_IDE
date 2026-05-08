@@ -505,7 +505,7 @@ Format your response as JSON with these fields:
     reply.send({ ok: true });
   });
 
-  /** POST /api/github/dev/drafts/:id/post — Approve and post a dev draft */
+  /** POST /api/github/dev/drafts/:id/post — Approve and post a dev draft, then inject a Suggested Job */
   app.post('/dev/drafts/:id/post', async (req: FastifyRequest, reply) => {
     if (!requireOwner(reply)) return;
     if (!requireToken(reply)) return;
@@ -526,7 +526,49 @@ Format your response as JSON with these fields:
         UPDATE github_dev_drafts SET status = 'posted', posted_url = ? WHERE id = ?
       `).run(comment.url || '', id);
 
-      reply.send({ ok: true, url: comment.url });
+      // ── Inject a Suggested Job so the fix flows into the God Factory pipeline ──
+      // Parse the analysis JSON for root_cause + solution if available
+      let rootCause = '';
+      let solution = '';
+      try {
+        const parsed = JSON.parse(draft.analysis?.match(/\{[\s\S]+\}/)?.[0] || '{}');
+        rootCause = parsed.root_cause || '';
+        solution = parsed.solution || '';
+      } catch { /* analysis is raw text */ }
+
+      const jobId = randomUUID();
+      const jobTitle = `Community Fix: #${draft.discussion_number} ${draft.discussion_title || ''}`.slice(0, 200);
+      const jobDescription = [
+        rootCause ? `Root Cause: ${rootCause}` : '',
+        solution  ? `Solution: ${solution}` : '',
+        `Discussion: ${draft.discussion_number}`,
+        `Posted Fix: ${comment.url || ''}`,
+        draft.draft_response ? `\n---\n${draft.draft_response.slice(0, 1000)}` : '',
+      ].filter(Boolean).join('\n').trim();
+
+      db.prepare(`
+        INSERT OR IGNORE INTO suggested_jobs
+          (id, category, source, title, description, priority, status, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        jobId,
+        'user_requested',
+        'github_community',
+        jobTitle,
+        jobDescription || 'Fix posted from Dev Tools.',
+        'high',
+        'pending',
+        JSON.stringify({
+          discussion_id:     draft.discussion_id,
+          discussion_number: draft.discussion_number,
+          dev_draft_id:      id,
+          posted_comment_url: comment.url || '',
+          root_cause: rootCause,
+          solution,
+        }),
+      );
+
+      reply.send({ ok: true, url: comment.url, jobId });
     } catch (err: any) {
       reply.code(500).send({ error: err.message || 'Failed to post draft.' });
     }
@@ -547,6 +589,38 @@ Format your response as JSON with these fields:
       reply.send({ ok: true });
     } catch (err: any) {
       reply.code(500).send({ error: err.message || 'Failed to close issue.' });
+    }
+  });
+
+  /** POST /api/github/dev/mark-answer — Mark a discussion comment as the accepted answer */
+  app.post('/dev/mark-answer', async (req: FastifyRequest, reply) => {
+    if (!requireOwner(reply)) return;
+    if (!requireToken(reply)) return;
+
+    const { commentId } = req.body as any;
+    if (!commentId) return reply.code(400).send({ error: 'commentId is required.' });
+
+    try {
+      await gh().markCommentAsAnswer(commentId);
+      reply.send({ ok: true });
+    } catch (err: any) {
+      reply.code(500).send({ error: err.message || 'Failed to mark answer.' });
+    }
+  });
+
+  /** POST /api/github/dev/close-discussion — Close a discussion (state: CLOSED) */
+  app.post('/dev/close-discussion', async (req: FastifyRequest, reply) => {
+    if (!requireOwner(reply)) return;
+    if (!requireToken(reply)) return;
+
+    const { discussionId } = req.body as any;
+    if (!discussionId) return reply.code(400).send({ error: 'discussionId is required.' });
+
+    try {
+      await gh().closeDiscussion(discussionId);
+      reply.send({ ok: true });
+    } catch (err: any) {
+      reply.code(500).send({ error: err.message || 'Failed to close discussion.' });
     }
   });
 }

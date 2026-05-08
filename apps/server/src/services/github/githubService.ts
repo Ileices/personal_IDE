@@ -392,6 +392,35 @@ export class GitHubService {
       isAnswered: n.isAnswered ?? false,
     }));
   }
+
+  /**
+   * Mark a Discussion comment as the accepted answer.
+   * GitHub GraphQL: markDiscussionCommentAsAnswer mutation.
+   * Requires the node ID of the *comment* (not the discussion).
+   */
+  async markCommentAsAnswer(commentId: string): Promise<void> {
+    await this.graphql(`
+      mutation MarkAnswer($commentId: ID!) {
+        markDiscussionCommentAsAnswer(input: { id: $commentId }) {
+          clientMutationId
+        }
+      }
+    `, { commentId });
+  }
+
+  /**
+   * Close a Discussion via GraphQL (state: CLOSED).
+   * Used after a dev draft fix is posted and verified.
+   */
+  async closeDiscussion(discussionId: string): Promise<void> {
+    await this.graphql(`
+      mutation CloseDiscussion($discussionId: ID!) {
+        closeDiscussion(input: { discussionId: $discussionId }) {
+          discussion { id state }
+        }
+      }
+    `, { discussionId });
+  }
 }
 
 // ── Singleton factory ──────────────────────────

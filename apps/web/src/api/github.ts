@@ -246,9 +246,17 @@ export function updateDevDraft(id: string, draftResponse: string) {
 }
 
 export function postDevDraft(id: string) {
-  return apiPost<{ ok: boolean; url: string }>(`${BASE}/dev/drafts/${id}/post`, {});
+  return apiPost<{ ok: boolean; url: string; jobId?: string }>(`${BASE}/dev/drafts/${id}/post`, {});
 }
 
 export function closeIssue(number: number, comment?: string) {
   return apiPost<{ ok: boolean }>(`${BASE}/dev/close-issue/${number}`, { comment });
+}
+
+export function markCommentAsAnswer(commentId: string) {
+  return apiPost<{ ok: boolean }>(`${BASE}/dev/mark-answer`, { commentId });
+}
+
+export function closeDiscussion(discussionId: string) {
+  return apiPost<{ ok: boolean }>(`${BASE}/dev/close-discussion`, { discussionId });
 }
