@@ -972,20 +972,20 @@ export const HELP_SECTIONS: HelpSection[] = [
   },
   {
     id: 'spec-pipeline-core',
-    title: 'Unified Spec Pipeline Core (COMING SOON)',
+    title: 'Unified Spec Pipeline Core',
     summary: 'Build Layer and Meta Layer handshake, mandatory WAITING inputs, and gate rules from the unified specification.',
-    tags: ['coming-soon', 'unified-spec', 'build-layer', 'meta-layer', 'waiting-state', 'pipeline'],
-    status: 'coming_soon',
+    tags: ['unified-spec', 'build-layer', 'meta-layer', 'waiting-state', 'pipeline'],
+    status: 'active',
     details: [
-      'COMING SOON: Unified Build Layer + Meta Layer timeline view in Help with cross-links to active panels and forensic tables.',
-      'Current concept: no file write is legal until Memory Crawler, Project Description Crawler, and Project State Crawler all deliver outputs into WAITING state.',
-      'Current concept: Waiting Sub-Agent state flow remains CRAWLING → TAG_GENERATION → REFINING → VOTING → SENT_TO_COMMAND, with no skipped states.',
-      'Current concept: Command Agent decides next step after refinement and voting; Builder executes one decided step at a time.',
-      'Current concept: Meta Layer runs concurrently (Blame, Gap Analysis, Suggested Jobs, God Factory monitors) and shares forensic + tag registry services with Build Layer.',
-      'Current concept: Agent Spawn Authority chart gates every sub-agent spawn and logs unauthorized attempts as forensic events.',
-      'Silicon Factory mapping: the WAITING state is orchestrated by the Executive agent (Layer 1). The three crawlers deliver their outputs into the Task Ledger WAITING signal queue. The Skeptic Sub-Agent maps to the Critic (Layer 4) running its four-check sequence (syntax → manifest → spec → security). The Command Sub-Agent maps to the Executive routing the voted step to the Coder (Layer 3). The Builder maps to the Coder using Tool Class 4 (surgical edit) for all writes. Post-commit validation maps to the Integration Tester (Tool Class 7) plus the Forensic Agent checking for regressions.',
-      'Silicon Factory gate enforcement: the Context Stitcher (Layer 5) assembles the context window for each pipeline step, ensuring the Global Anchor and current task instruction are always present regardless of compression. The Token Economist enforces the 2000/2000 budget across the pipeline. No step proceeds if budget would be exceeded without compression.',
-      'Silicon Factory Meta Layer: the Forensic Agent, Security Auditor, and Integration Tester (all Layer 4) run concurrently with the Build Layer and write to the forensic database. The God Factory background monitors (background scan state) read those forensic records continuously and queue notifications for the next interactive session.'
+      'Current implementation uses the enhanced agent loop (EnhancedAgentLoop v5) as the execution backbone: iterative planning, tool-call execution via ToolExecutor, and policy gating through ToolPolicyGate before high-risk actions.',
+      'The build loop emits run telemetry each iteration (state, iteration count, token usage, tool/quality events) and writes run completion summaries into agent_runs so Project Factory and monitoring panels can consume a consistent run timeline.',
+      'Checkpointing is wired in the active loop: initial checkpoint creation at run start when checkpointing is enabled, plus smart checkpoint events for provider-switch and user-interject transitions.',
+      'Project Factory endpoints provide the current pipeline control surface: templates, scaffold, import analysis, milestones, quality snapshots, and import-analysis history. Scaffold and import flows persist data into DB tables used by later loop stages.',
+      'Import analysis already maps real projects to recommended workflow_mode and strategy_template values, stores analysis artifacts, and writes corpus/manifests the loop can consume for follow-on implementation tasks.',
+      'Meta-layer style signals are active in parallel via existing services/routes (blame records, gap reports, suggested jobs, and God Factory monitors) and are surfaced through dedicated APIs rather than a single monolithic pipeline endpoint.',
+      '⚠ NOTE (three-crawler WAITING gate): The strict pre-edit WAITING-state enforcement chain from the unified spec is still not fully enforced in this loop implementation. Related crawler and snapshot systems exist, but a universal hard gate before every write is not yet consistently wired in enhancedLoop.ts.',
+      '⚠ NOTE (spec parity): The architecture-defined CRAWLING → TAG_GENERATION → REFINING → VOTING → SENT_TO_COMMAND state machine is represented across components, but not all transitions are exposed as first-class, user-visible states in one consolidated API/view yet.',
+      '⚠ NOTE (help scope): This section documents what is active today in the route/loop stack. It is not a claim that every unified-spec invariant is already hard-block enforced at runtime.'
     ]
   },
   {
@@ -1019,17 +1019,22 @@ export const HELP_SECTIONS: HelpSection[] = [
   },
   {
     id: 'spec-god-factory-ops',
-    title: 'THE GOD FACTORY Operations Model (COMING SOON)',
+    title: 'THE GOD FACTORY Operations Model',
     summary: 'Interactive state plus background scan state with notification queue, idle suggestions, and authority boundaries.',
-    tags: ['coming-soon', 'god-factory', 'notifications', 'idle-suggestions', 'authority', 'brainstorm'],
-    status: 'coming_soon',
+    tags: ['god-factory', 'notifications', 'idle-suggestions', 'authority', 'brainstorm'],
+    status: 'active',
     details: [
-      'COMING SOON: full God Factory operations map documenting all background monitors and forensic-linked notification flows.',
-      'Interactive state concept: user requests can trigger on-the-fly sub-agents (file inspector, devtag resolver, forensic reader, blame reader, live checks).',
-      'Background scan concept: continuous monitor + idle scanner + debt monitor + model performance monitor + gap report monitor + pattern watch.',
-      'Idle suggestion categories include trivial_enhancement, feature_bridge, performance_opportunity, debt_warning, regression_trend, and model_behavior_alert.',
-      'Authority concept: God Factory can veto, adjust model tier assignment, extend sandbox limits, modify schema/model registry, and invoke version-control rollbacks with logged justification tags.',
-      'Safety concept: God Factory still cannot bypass validator + diff + regression checks before file writes.'
+      'Interactive session lifecycle is active: routes create interactive sessions, append user/agent/job/notification events, and persist session traces for later review.',
+      'Notification queue operations are active: /queue lists prioritized notifications, marks presented items, supports ack/dismiss paths, and exposes notification detail lookup.',
+      'Idle suggestion operations are active: /idle-suggestions returns unresolved suggestions, /idle-suggestions/:id/respond and /idle-suggestions/:id/action support accept/defer/reject flows, and accepted suggestions generate concrete Suggested Jobs.',
+      'God Factory startup briefing behavior is active in the UI: TheGodFactory fetches queue + idle suggestions on session start and proactively injects a startup brief instead of waiting for a manual query.',
+      'Brainstorm-to-job flow is active: /brainstorm persists brainstorm_records, creates a suggested job record immediately, emits a notification, and can trigger a suggested-jobs crawler tick.',
+      'Background operations visibility is active: /background-status exposes scheduler/subsystem state plus monitor status fields (registry monitor, idle scanner, debt monitor, model monitor, gap monitor, pattern watch).',
+      'Runtime authority controls are active: /controls/background can pause/resume scheduler, sandbox, and individual subsystems, and each control action is logged into god_factory_actions with notification emission.',
+      'UI subsystem controls are active in the right panel and persisted through subsystem settings, including manual run and idle toggle behavior for each configured subsystem.',
+      'Idle suggestion categories currently in use include trivial_enhancement, feature_bridge, performance_opportunity, debt_warning, regression_trend, and model_behavior_alert.',
+      '⚠ NOTE (scanner position key mismatch): Background status currently reads key god_factory:idle_scan_position, while the subsystem idle scanner writes god_factory_idle_scan_position; this can cause displayed scan_position to lag or appear empty until keys are unified.',
+      '⚠ NOTE (scope): The operations model is functional and multi-surface, but some advanced authority/spec behaviors remain implementation-dependent and are still being expanded incrementally.'
     ]
   },
   {
