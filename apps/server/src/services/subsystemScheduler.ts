@@ -134,6 +134,10 @@ async function tick(db: Database.Database): Promise<void> {
     if (shouldRunNow(db, 'gap_analysis', settings.gap_analysis)) {
       executeSubsystem(db, { subsystem: 'gap_analysis', depth: settings.gap_analysis.maxDepth });
     }
+
+    if (shouldRunNow(db, 'god_factory_idle_scan', settings.god_factory_idle_scan)) {
+      executeSubsystem(db, { subsystem: 'god_factory_idle_scan', depth: settings.god_factory_idle_scan.maxDepth });
+    }
   } catch (err) {
     console.error('Subsystem scheduler tick failed:', err);
   } finally {

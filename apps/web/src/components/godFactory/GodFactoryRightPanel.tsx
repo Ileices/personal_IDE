@@ -162,7 +162,7 @@ interface Props {
   onSendToBrainstorm: (text: string) => void;
 }
 
-type SubsystemId = 'ide_codebase_crawler' | 'project_state_crawler' | 'suggested_jobs_crawler' | 'gap_analysis';
+type SubsystemId = 'ide_codebase_crawler' | 'project_state_crawler' | 'suggested_jobs_crawler' | 'gap_analysis' | 'god_factory_idle_scan';
 interface SubsystemConfig {
   enabled: boolean;
   idleEnabled: boolean;
@@ -294,6 +294,11 @@ const SUBSYSTEM_META: Record<SubsystemId, { label: string; description: string; 
     label: 'Gap Analysis',
     description: 'Surfaces failure clusters and subsystem gaps from recent runs.',
     scope: 'global',
+  },
+  god_factory_idle_scan: {
+    label: 'God Factory Idle Scan',
+    description: 'Scans one IDE app file per idle window and queues improvement suggestions.',
+    scope: 'ide_app',
   },
 };
 
@@ -468,12 +473,14 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     project_state_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 90, maxDepth: 5, manualOnly: false },
     suggested_jobs_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 120, maxDepth: 4, manualOnly: false },
     gap_analysis: { enabled: true, idleEnabled: true, idleIntervalSec: 180, maxDepth: 4, manualOnly: false },
+    god_factory_idle_scan: { enabled: true, idleEnabled: true, idleIntervalSec: 600, maxDepth: 1, manualOnly: false },
   });
   const [subsystemStatus, setSubsystemStatus] = useState<Record<SubsystemId, SubsystemRuntime>>({
     ide_codebase_crawler: {},
     project_state_crawler: {},
     suggested_jobs_crawler: {},
     gap_analysis: {},
+    god_factory_idle_scan: {},
   });
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
   const [runningSubsystem, setRunningSubsystem] = useState<SubsystemId | null>(null);
@@ -1820,7 +1827,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   </div>
                 </div>
               )}
-              {(['ide_codebase_crawler', 'project_state_crawler', 'suggested_jobs_crawler', 'gap_analysis'] as SubsystemId[]).map(id => {
+              {(['ide_codebase_crawler', 'project_state_crawler', 'suggested_jobs_crawler', 'gap_analysis', 'god_factory_idle_scan'] as SubsystemId[]).map(id => {
                 const cfg = subsystems[id];
                 const meta = SUBSYSTEM_META[id];
                 const runtime = subsystemStatus[id] || {};

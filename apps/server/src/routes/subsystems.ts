@@ -8,8 +8,9 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { resolve } from 'path';
 import { getSubsystemRuntimeStatus } from '../services/subsystemScheduler.js';
+import { runGodFactoryIdleScanner } from '../services/godFactory/idleScanner.js';
 
-export type SubsystemId = 'ide_codebase_crawler' | 'project_state_crawler' | 'suggested_jobs_crawler' | 'gap_analysis';
+export type SubsystemId = 'ide_codebase_crawler' | 'project_state_crawler' | 'suggested_jobs_crawler' | 'gap_analysis' | 'god_factory_idle_scan';
 
 export interface SubsystemConfig {
   enabled: boolean;
@@ -24,6 +25,7 @@ export interface SubsystemsSettings {
   project_state_crawler: SubsystemConfig;
   suggested_jobs_crawler: SubsystemConfig;
   gap_analysis: SubsystemConfig;
+  god_factory_idle_scan: SubsystemConfig;
 }
 
 export interface SubsystemRunRequest {
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: SubsystemsSettings = {
   project_state_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 90, maxDepth: 5, manualOnly: false },
   suggested_jobs_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 120, maxDepth: 4, manualOnly: false },
   gap_analysis: { enabled: true, idleEnabled: true, idleIntervalSec: 180, maxDepth: 4, manualOnly: false },
+  god_factory_idle_scan: { enabled: true, idleEnabled: true, idleIntervalSec: 600, maxDepth: 1, manualOnly: false },
 };
 
 function safeScanRoot(rootPath: string): string {
@@ -119,6 +122,7 @@ export function loadSettings(db: any): SubsystemsSettings {
       project_state_crawler: { ...DEFAULT_SETTINGS.project_state_crawler, ...(parsed.project_state_crawler || {}) },
       suggested_jobs_crawler: { ...DEFAULT_SETTINGS.suggested_jobs_crawler, ...(parsed.suggested_jobs_crawler || {}) },
       gap_analysis: { ...DEFAULT_SETTINGS.gap_analysis, ...(parsed.gap_analysis || {}) },
+      god_factory_idle_scan: { ...DEFAULT_SETTINGS.god_factory_idle_scan, ...(parsed.god_factory_idle_scan || {}) },
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -182,6 +186,7 @@ export async function subsystemsRoutes(app: FastifyInstance) {
         project_state_crawler: { ...current.project_state_crawler, ...(updates.project_state_crawler || {}) },
         suggested_jobs_crawler: { ...current.suggested_jobs_crawler, ...(updates.suggested_jobs_crawler || {}) },
         gap_analysis: { ...current.gap_analysis, ...(updates.gap_analysis || {}) },
+        god_factory_idle_scan: { ...current.god_factory_idle_scan, ...(updates.god_factory_idle_scan || {}) },
       };
       setKv(db, SETTINGS_KEY, JSON.stringify(merged));
       return reply.send({ success: true, settings: merged });
@@ -302,6 +307,18 @@ export function executeSubsystem(db: any, request: SubsystemRunRequest): { subsy
       recentFailureClusters: recentFails,
       gapReports,
       summary: `Generated ${gapReports.length} gap signal(s) from recent failures`,
+    };
+  }
+
+  if (request.subsystem === 'god_factory_idle_scan') {
+    void runGodFactoryIdleScanner(db).catch((err) => {
+      console.error('god_factory_idle_scan execution failed:', err);
+    });
+
+    result = {
+      summary: 'Queued God Factory idle scanner pass (max 1 file this tick)',
+      maxFilesPerTick: 1,
+      root: 'apps/',
     };
   }
 
