@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { promises as fs } from 'fs';
+import { Dirent, promises as fs } from 'fs';
 import { dirname, extname, relative, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -44,9 +44,9 @@ async function collectFiles(rootDir: string): Promise<string[]> {
   const files: string[] = [];
 
   async function walk(currentDir: string): Promise<void> {
-    let entries: Awaited<ReturnType<typeof fs.readdir>>;
+    let entries: Dirent<string>[];
     try {
-      entries = await fs.readdir(currentDir, { withFileTypes: true });
+      entries = await fs.readdir(currentDir, { withFileTypes: true, encoding: 'utf8' });
     } catch {
       return;
     }
