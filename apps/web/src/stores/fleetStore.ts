@@ -32,6 +32,7 @@ export interface FleetAgentInfo {
   filesChanged: number;
   tokensUsed: number;
   assignedFiles: string[];
+  pendingQuestions?: string[];
 }
 
 export interface FleetEvent {
@@ -56,6 +57,7 @@ interface FleetStore {
   selectedAgentCount: number;
   capacity: FleetCapacitySnapshot | null;
   eventSource: EventSource | null;
+  fleetConnectionState: 'unknown' | 'recovered' | 'live';
 
   // Fleet settings
   fleetContinuousMode: boolean;
@@ -102,6 +104,37 @@ interface FleetStore {
   connectFleetEvents: () => void;
   disconnectFleetEvents: () => void;
   clearFleetEvents: () => void;
+  restoreFleetState: () => Promise<void>;
+}
+
+function applyFleetStatusSnapshot(set: (fn: any) => void, status: any, connectionState: 'unknown' | 'recovered' | 'live') {
+  const running = status?.state === 'running' || status?.state === 'decomposing' || status?.state === 'paused';
+  set({
+    isFleetRunning: running,
+    fleetState: status?.state || 'idle',
+    fleetId: status?.fleetId || null,
+    agents: Array.isArray(status?.agents)
+      ? status.agents.map((agent: any) => ({
+          id: agent.id,
+          role: agent.role,
+          task: agent.task || '',
+          model: agent.model,
+          provider: agent.provider,
+          placement: agent.placement,
+          assignmentSource: agent.assignmentSource,
+          status: agent.status,
+          iterations: agent.iterations || 0,
+          filesChanged: agent.filesChanged || 0,
+          tokensUsed: agent.tokensUsed || 0,
+          assignedFiles: agent.assignedFiles || [],
+          pendingQuestions: agent.pendingQuestions || [],
+        }))
+      : [],
+    totalIterations: status?.totalIterations || 0,
+    totalFilesChanged: status?.totalFilesChanged || 0,
+    totalTokensUsed: status?.totalTokensUsed || 0,
+    fleetConnectionState: connectionState,
+  });
 }
 
 export const useFleetStore = create<FleetStore>((set, get) => ({
@@ -117,6 +150,7 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
   selectedAgentCount: 3,
   capacity: null,
   eventSource: null,
+  fleetConnectionState: 'unknown',
   fleetContinuousMode: true,
   fleetCooldownMs: 5000,
   fleetBypassRateLimits: true,
@@ -172,6 +206,7 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
       totalIterations: 0,
       totalFilesChanged: 0,
       totalTokensUsed: 0,
+      fleetConnectionState: 'live',
     });
 
     get().connectFleetEvents();
@@ -179,7 +214,7 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
 
   stopFleet: async () => {
     await apiPost('/fleet/stop', {});
-    set({ isFleetRunning: false, fleetState: 'idle' });
+    set({ isFleetRunning: false, fleetState: 'idle', fleetConnectionState: 'unknown' });
     get().disconnectFleetEvents();
   },
 
@@ -191,6 +226,29 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
   resumeFleet: async () => {
     await apiPost('/fleet/resume', {});
     set({ fleetState: 'running' });
+  },
+
+  restoreFleetState: async () => {
+    try {
+      const snapshot = await apiGet('/fleet/state') as any;
+      if (snapshot?.active) {
+        applyFleetStatusSnapshot(set, snapshot, 'recovered');
+        return;
+      }
+
+      set({
+        isFleetRunning: false,
+        fleetState: snapshot?.state || 'idle',
+        fleetId: null,
+        agents: [],
+        totalIterations: 0,
+        totalFilesChanged: 0,
+        totalTokensUsed: 0,
+        fleetConnectionState: 'unknown',
+      });
+    } catch {
+      // Recovery is best-effort; SSE will still reconnect normally.
+    }
   },
 
   sendFleetMessage: async (message, agentId) => {
@@ -273,6 +331,10 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
 
         set(s => ({ events: [...s.events, fleetEvent] }));
 
+        if (event.type !== 'fleet_state_sync' && event.type !== 'heartbeat') {
+          set({ fleetConnectionState: 'live' });
+        }
+
         // Update state based on event types
         switch (event.type) {
           case 'fleet_start':
@@ -298,6 +360,7 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
                 filesChanged: 0,
                 tokensUsed: 0,
                 assignedFiles: [],
+                pendingQuestions: [],
               }],
             }));
             break;
@@ -344,6 +407,7 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
             set({
               isFleetRunning: false,
               fleetState: 'complete',
+              fleetConnectionState: 'live',
               totalIterations: event.totalIterations || 0,
               totalFilesChanged: event.totalFilesChanged || 0,
               totalTokensUsed: event.totalTokensUsed || 0,
@@ -351,11 +415,15 @@ export const useFleetStore = create<FleetStore>((set, get) => ({
             break;
 
           case 'fleet_stopped':
-            set({ isFleetRunning: false, fleetState: 'idle' });
+            set({ isFleetRunning: false, fleetState: 'idle', fleetConnectionState: 'unknown' });
             break;
 
           case 'fleet_error':
-            set({ isFleetRunning: false, fleetState: 'error' });
+            set({ isFleetRunning: false, fleetState: 'error', fleetConnectionState: 'unknown' });
+            break;
+
+          case 'fleet_state_sync':
+            applyFleetStatusSnapshot(set, event, 'recovered');
             break;
         }
       },

@@ -301,6 +301,19 @@ export async function fleetRoutes(app: FastifyInstance) {
     return { active: false, state: 'idle' };
   });
 
+  // --- GET /api/fleet/state — Recover the current fleet snapshot after refresh ---
+  app.get('/state', async () => {
+    if (!activeFleet) {
+      return { active: false, recovered: false, state: 'idle', agents: [] };
+    }
+
+    return {
+      active: true,
+      recovered: true,
+      ...activeFleet.getStatus(),
+    };
+  });
+
   // --- GET /api/fleet/max-agents — Detect max agents for this machine ---
   app.get('/max-agents', async () => {
     const capacity = AgentFleet.detectCapacity();
@@ -414,6 +427,8 @@ export async function fleetRoutes(app: FastifyInstance) {
       reply.raw.end();
       return;
     }
+
+    reply.raw.write(`data: ${JSON.stringify({ type: 'fleet_state_sync', ...activeFleet.getStatus() })}\n\n`);
 
     const unsubscribe = activeFleet.onEvent((event: any) => {
       try {

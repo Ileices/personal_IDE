@@ -106,6 +106,7 @@ export interface FleetStatus {
     filesChanged: number;
     tokensUsed: number;
     assignedFiles: string[];
+    pendingQuestions: string[];
   }[];
   totalIterations: number;
   totalFilesChanged: number;
@@ -406,6 +407,7 @@ export class AgentFleet {
         filesChanged: a.filesChanged,
         tokensUsed: a.tokensUsed,
         assignedFiles: a.assignedFiles.slice(0, 20),
+        pendingQuestions: a.loop.getStatus().pendingQuestions || [],
       })),
       totalIterations: this.getTotalIterations(),
       totalFilesChanged: this.getTotalFilesChanged(),
