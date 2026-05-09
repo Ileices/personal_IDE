@@ -14,7 +14,7 @@ import type { MemoryAccessMode, MemoryNote, MemoryPreset } from './memory/types.
 
 export function MemoryPanel() {
   const { activeProject } = useProjectStore();
-  const { conversationId } = useChatStore();
+  const { conversationId, mode } = useChatStore();
   const [notes, setNotes] = useState<MemoryNote[]>([]);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(true);
@@ -25,6 +25,30 @@ export function MemoryPanel() {
   const [preset, setPreset] = useState<MemoryPreset>('recent_decisions');
   const [customSources, setCustomSources] = useState<string[]>(['user_note', 'agent_log']);
   const [interactionType, setInteractionType] = useState('');
+  const [scopeNotice, setScopeNotice] = useState<string | null>(null);
+
+  function getSessionValue(key: string): string {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return '';
+      return JSON.parse(raw) as string;
+    } catch {
+      return '';
+    }
+  }
+
+  function resolveCallerType(): 'project_factory' | 'god_factory' | 'fleet' | 'chat' {
+    const view = getSessionValue('ide_view');
+    const tab = getSessionValue('ide_tab');
+
+    if (view === 'studio') return 'god_factory';
+    if (view === 'fleet') return 'fleet';
+    if (view === 'agent' || tab === 'agent' || mode === 'agent') return 'project_factory';
+    return 'chat';
+  }
+
+  const callerType = resolveCallerType();
+  const isProjectFactoryContext = callerType === 'project_factory';
 
   // New note form
   const [newTitle, setNewTitle] = useState('');
@@ -45,21 +69,30 @@ export function MemoryPanel() {
     if (projectId) {
       setNotes([]);
       setError(null);
+      setScopeNotice(null);
       fetchNotesForProject(projectId);
     }
   }, [projectId]);
+
+  useEffect(() => {
+    if (!isProjectFactoryContext) return;
+    if (accessMode === 'total') {
+      setAccessMode('self');
+      setScopeNotice('Project Factory memory scope is restricted to SELF/CUSTOM/PRESET. Switch to God Factory view for TOTAL access.');
+    }
+  }, [isProjectFactoryContext, accessMode]);
 
   // Auto-refresh notes every 15 seconds while the panel is visible
   useEffect(() => {
     if (!projectId || !expanded) return;
     const interval = setInterval(() => fetchNotesForProject(projectId), 15000);
     return () => clearInterval(interval);
-  }, [projectId, expanded]);
+  }, [projectId, expanded, callerType, accessMode]);
 
   // Re-fetch when interaction type filter changes
   useEffect(() => {
     if (projectId) fetchNotesForProject(projectId);
-  }, [interactionType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [interactionType, callerType, accessMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchNotesForProject(pid: string) {
     if (!pid) return;
@@ -67,9 +100,19 @@ export function MemoryPanel() {
     setError(null);
     try {
       const typeParam = interactionType ? `&interactionType=${encodeURIComponent(interactionType)}` : '';
-      const res = await fetch(`${API_BASE}/api/memory/notes/${pid}?limit=200${typeParam}`);
+      const callerParam = `&callerType=${encodeURIComponent(callerType)}`;
+      const accessParam = `&accessMode=${encodeURIComponent(accessMode)}`;
+      const res = await fetch(`${API_BASE}/api/memory/notes/${pid}?limit=200${typeParam}${callerParam}${accessParam}`);
+      if (res.status === 403) {
+        const payload = await res.json().catch(() => ({}));
+        setScopeNotice('Project Factory memory scope is restricted to SELF/CUSTOM/PRESET. Switch to God Factory view for TOTAL access.');
+        setError(payload?.error || 'Scope TOTAL not available for Project Factory');
+        setNotes([]);
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
+      setScopeNotice(null);
       setNotes((data.notes || []).map(mapNote));
     } catch (err: any) {
       console.error('Failed to fetch notes:', err);
@@ -92,13 +135,23 @@ export function MemoryPanel() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/memory/notes/search`, {
+      const callerParam = `callerType=${encodeURIComponent(callerType)}`;
+      const accessParam = `accessMode=${encodeURIComponent(accessMode)}`;
+      const res = await fetch(`${API_BASE}/api/memory/notes/search?${callerParam}&${accessParam}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, query: searchQuery, limit: 100 }),
       });
+      if (res.status === 403) {
+        const payload = await res.json().catch(() => ({}));
+        setScopeNotice('Project Factory memory scope is restricted to SELF/CUSTOM/PRESET. Switch to God Factory view for TOTAL access.');
+        setError(payload?.error || 'Scope TOTAL not available for Project Factory');
+        setNotes([]);
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
+      setScopeNotice(null);
       setNotes((data.notes || []).map(mapNote));
     } catch (err: any) {
       console.error('Search failed:', err);
@@ -293,10 +346,17 @@ export function MemoryPanel() {
             mode={accessMode}
             preset={preset}
             customSources={customSources}
+            allowTotal={!isProjectFactoryContext}
             onModeChange={setAccessMode}
             onPresetChange={setPreset}
             onToggleCustomSource={toggleCustomSource}
           />
+
+          {scopeNotice && (
+            <div className="mx-2 mb-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200">
+              {scopeNotice}
+            </div>
+          )}
 
           {/* Interaction Type Filter Tabs */}
           <div className="flex flex-wrap gap-0.5 px-2 py-1 border-b border-ide-border/30">

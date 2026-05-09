@@ -7,6 +7,7 @@ interface Props {
   mode: MemoryAccessMode;
   preset: MemoryPreset;
   customSources: string[];
+  allowTotal?: boolean;
   onModeChange: (mode: MemoryAccessMode) => void;
   onPresetChange: (preset: MemoryPreset) => void;
   onToggleCustomSource: (source: string) => void;
@@ -16,14 +17,19 @@ export function MemoryAccessBar({
   mode,
   preset,
   customSources,
+  allowTotal = true,
   onModeChange,
   onPresetChange,
   onToggleCustomSource,
 }: Props) {
+  const modeOptions: MemoryAccessMode[] = allowTotal
+    ? ['total', 'self', 'custom', 'preset']
+    : ['self', 'custom', 'preset'];
+
   return (
     <div className="px-2 pb-1.5 space-y-1.5">
       <div className="grid grid-cols-4 gap-1">
-        {(['total', 'self', 'custom', 'preset'] as MemoryAccessMode[]).map(m => (
+        {modeOptions.map(m => (
           <button
             key={m}
             onClick={() => onModeChange(m)}

@@ -6,6 +6,29 @@ import { MemoryService } from '../services/memory/index.js';
 import type { ProjectRequest, MemorySearchQuery } from '@personal-ide/shared';
 import { safeRoute } from '../plugins/safeRoute.js';
 
+type MemoryCallerType = 'project_factory' | 'god_factory' | 'fleet' | 'chat' | 'unknown';
+
+function normalizeCallerType(raw?: string): MemoryCallerType {
+  const value = String(raw || '').trim().toLowerCase();
+  if (value === 'project_factory') return 'project_factory';
+  if (value === 'god_factory') return 'god_factory';
+  if (value === 'fleet') return 'fleet';
+  if (value === 'chat') return 'chat';
+  return 'unknown';
+}
+
+function normalizeAccessMode(raw?: string): string {
+  return String(raw || '').trim().toLowerCase();
+}
+
+function enforceMemoryScope(callerType: MemoryCallerType, accessMode: string, reply: FastifyReply): boolean {
+  if (callerType === 'project_factory' && accessMode === 'total') {
+    reply.status(403).send({ error: 'Scope TOTAL not available for Project Factory' });
+    return false;
+  }
+  return true;
+}
+
 export async function memoryRoutes(app: FastifyInstance) {
   const db = (app as any).db;
   const memory = new MemoryService(db);
@@ -54,15 +77,29 @@ export async function memoryRoutes(app: FastifyInstance) {
     return { note };
   }));
 
-  app.get('/notes/:projectId', safeRoute(async (req: FastifyRequest) => {
+  app.get('/notes/:projectId', safeRoute(async (req: FastifyRequest, reply: FastifyReply) => {
     const { projectId } = req.params as { projectId: string };
-    const { limit, interactionType } = req.query as { limit?: string; interactionType?: string };
+    const { limit, interactionType, callerType, accessMode } = req.query as {
+      limit?: string;
+      interactionType?: string;
+      callerType?: string;
+      accessMode?: string;
+    };
+
+    const normalizedCaller = normalizeCallerType(callerType);
+    if (!enforceMemoryScope(normalizedCaller, normalizeAccessMode(accessMode), reply)) return;
+
     const notes = memory.getProjectNotes(projectId, limit ? parseInt(limit) : 100, interactionType || undefined);
     return { notes };
   }));
 
-  app.post('/notes/search', safeRoute(async (req: FastifyRequest) => {
+  app.post('/notes/search', safeRoute(async (req: FastifyRequest, reply: FastifyReply) => {
     const query = req.body as MemorySearchQuery;
+    const { callerType, accessMode } = req.query as { callerType?: string; accessMode?: string };
+
+    const normalizedCaller = normalizeCallerType(callerType);
+    if (!enforceMemoryScope(normalizedCaller, normalizeAccessMode(accessMode), reply)) return;
+
     const notes = memory.searchNotes(query);
     return { notes };
   }));
