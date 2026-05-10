@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { HelpCircle, Search, BookOpen, ExternalLink, Crosshair } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { useHelp } from '../help/helpContext';
 import { HELP_ANCHORS, HELP_ANCHORS_BY_SECTION, HELP_SECTIONS } from '../help/helpRegistry';
 
@@ -128,11 +129,37 @@ export function HelpPanel() {
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="rounded-lg border border-ide-border bg-ide-panel p-3">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-ide-text-dim mb-2">How It Works</div>
-            <div className="space-y-1.5">
+            <div className="space-y-2 prose prose-sm text-xs text-ide-text-dim">
               {section.details.map((line, index) => (
-                <p key={`${section.id}-detail-${index}`} className="text-xs text-ide-text-dim leading-relaxed">
-                  {line}
-                </p>
+                <div
+                  key={`${section.id}-detail-${index}`}
+                  className="prose prose-sm max-w-none [&_a]:text-ide-accent [&_a]:underline [&_a]:hover:text-ide-accent/80 [&_strong]:text-ide-text [&_em]:italic [&_code]:text-ide-text-dim [&_code]:bg-ide-bg/50 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_p]:m-0 [&_ul]:m-0 [&_ol]:m-0 [&_li]:m-0"
+                >
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children }) => <p className="text-xs leading-relaxed text-ide-text-dim">{children}</p>,
+                      a: ({ href, children }) => (
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-ide-accent underline hover:text-ide-accent/80 cursor-pointer">
+                          {children}
+                        </a>
+                      ),
+                      strong: ({ children }) => <strong className="text-ide-text font-semibold">{children}</strong>,
+                      em: ({ children }) => <em className="italic text-ide-text-dim">{children}</em>,
+                      code: ({ children }) => <code className="text-ide-text-dim bg-ide-bg/50 px-1 py-0.5 rounded font-mono text-[11px]">{children}</code>,
+                      ul: ({ children }) => <ul className="list-disc list-inside text-xs ml-2">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal list-inside text-xs ml-2">{children}</ol>,
+                      li: ({ children }) => <li className="text-xs text-ide-text-dim">{children}</li>,
+                      h1: ({ children }) => <h1 className="text-sm font-bold text-ide-text mt-3 mb-1">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-sm font-bold text-ide-text mt-2 mb-1">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-xs font-bold text-ide-text mt-2 mb-1">{children}</h3>,
+                      blockquote: ({ children }) => (
+                        <blockquote className="border-l-2 border-ide-accent pl-2 italic text-ide-text-dim text-xs">{children}</blockquote>
+                      ),
+                    }}
+                  >
+                    {line}
+                  </ReactMarkdown>
+                </div>
               ))}
             </div>
           </div>
