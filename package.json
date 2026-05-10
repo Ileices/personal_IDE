@@ -31,7 +31,10 @@
       "tinyglobby>picomatch": "4.0.4",
       "fdir>picomatch": "4.0.4",
       "micromatch>picomatch": "2.3.2",
-      "anymatch>picomatch": "2.3.2"
+      "anymatch>picomatch": "2.3.2",
+      "fast-uri": ">=3.1.2",
+      "dompurify": ">=3.4.0",
+      "prismjs": ">=1.30.0"
     }
   }
 }
