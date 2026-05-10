@@ -1,5 +1,13 @@
 # Personal IDE — Agentic Development Environment
 
+[![Security Audit](https://github.com/Ileices/personal_IDE/actions/workflows/security-audit.yml/badge.svg)](https://github.com/Ileices/personal_IDE/actions/workflows/security-audit.yml)
+[![pnpm](https://img.shields.io/badge/pnpm-10%2B-orange)](https://pnpm.io/)
+[![Node.js](https://img.shields.io/badge/node-20%2B-green)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub Discussions](https://img.shields.io/github/discussions/Ileices/personal_IDE)](https://github.com/Ileices/personal_IDE/discussions)
+[![Security Advisories](https://img.shields.io/badge/Security-0%20open%20vulnerabilities-brightgreen)](https://github.com/Ileices/personal_IDE/security/dependabot)
+
 > An autonomous agentic IDE where agents never read raw code. Every structural
 > element is a **devtag**. Every plan element is a **plantag**. Every edit
 > operation is a **buildtag**. The system improves itself.
