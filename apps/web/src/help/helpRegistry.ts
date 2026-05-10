@@ -57,24 +57,6 @@ export const HELP_SECTIONS: HelpSection[] = [
     ]
   },
   {
-    id: 'help-truth-ledger',
-    title: 'Help Section Truth Ledger and Evidence Links',
-    summary: 'Pinned snapshot timestamps, implementation evidence, and discussion threads backing current help claims.',
-    tags: ['help', 'truth-ledger', 'evidence', 'discussions', 'snapshots'],
-    status: 'active',
-    details: [
-      'Last Updated Snapshot (UTC): 2026-05-10.',
-      'Evidence Commit 1: 03f61fe (Help section scope expansion and UI helper updates).',
-      'Evidence Commit 2: 814de42 (Help detail parity pass and route/feature alignment checks).',
-      'Evidence Commit 3: a6cc82c (provider/model control-plane fixes and GitHub PAT model visibility hardening).',
-      'Discussion Thread #17 (main implementation stream): https://github.com/EchoCog/windsurf-instructions-set/discussions/17',
-      'Roadmap Thread #18 (parallel expansion + milestone chain): https://github.com/EchoCog/windsurf-instructions-set/discussions/18',
-      'Help expansion planning thread #8: https://github.com/EchoCog/windsurf-instructions-set/discussions/8',
-      'How to verify quickly: open Provider Settings, refresh GitHub PAT, then confirm cloud models appear in model pickers without requiring provider toggle flips.',
-      'Scope note: This ledger captures current shipped behavior and known partials. Items labeled COMING SOON remain roadmap-level by design until promoted to active implementation status.'
-    ]
-  },
-  {
     id: 'silicon-factory-tools',
     title: 'Silicon Factory — The Agent Tool Infrastructure',
     summary: 'The universal tool layer powering every agent in the system: 7 tool classes, Handshake Protocol, Task Ledger, Background Daemon, and the full 5-tier agent swarm.',
@@ -3263,8 +3245,8 @@ export const HELP_SECTIONS: HelpSection[] = [
     status: 'active',
     details: [
       '╭─ ✦ Help Governance Snapshot',
-      '│ Last Updated: 2026-05-09',
-      '│ Canonical Discussion: https://github.com/Ileices/personal_IDE/discussions/17',
+      '│ Last Updated: 2026-05-10',
+      '│ Canonical Discussion: https://github.com/EchoCog/windsurf-instructions-set/discussions/17',
       '│ Rule: Help is the final promise surface; we strengthen and align it instead of weakening it.',
       '╰─ Every major Help claim should map to evidence: discussion comment + code path + commit.',
       'Coverage Pass 1 (Community Hub + GitHub Integration parity): https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16867042',
@@ -3272,7 +3254,9 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Coverage Pass 3 (Security + trust boundary linkage): https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16867044',
       'Coverage Pass 4 (Cross-panel GitHub references): https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16867045',
       'Coverage Pass 5 (Remaining gaps and hardening backlog): https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16867046',
-      'Related implementation thread (GitHub/Community engine): https://github.com/Ileices/personal_IDE/discussions/8',
+      'Current implementation pass evidence commit: 6a68577 (model catalog unification + God Factory tool policy gate + help parity updates).',
+      'Parallel roadmap thread: https://github.com/EchoCog/windsurf-instructions-set/discussions/18',
+      'Related implementation thread (GitHub/Community engine): https://github.com/EchoCog/windsurf-instructions-set/discussions/8',
       'Related architecture boundary/provenance thread: https://github.com/Ileices/personal_IDE/discussions/14',
       'Related security advisories thread: https://github.com/Ileices/personal_IDE/discussions/10',
       'Update discipline: any GitHub/Community feature change should include synchronized updates in this ledger discussion and in-app Help links.'
