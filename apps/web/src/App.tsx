@@ -8,6 +8,7 @@ import { useProjectStore } from './stores/projectStore';
 import { useChatStore } from './stores/chatStore';
 import { useAgentStore } from './stores/agentStore';
 import { useFleetStore } from './stores/fleetStore';
+import { useModelStore } from './stores/modelStore';
 import { LoginPage } from './components/LoginPage';
 import { TopBar } from './components/TopBar';
 import { ActivityBar, type ActivityView } from './components/ActivityBar';
@@ -34,6 +35,7 @@ function setStored(key: string, val: unknown) {
 export default function App() {
   const { user, isLoading: checking, checkAuth } = useAuthStore();
   const { loadProjects } = useProjectStore();
+  const { dynamicModelCount, fetchModels } = useModelStore();
 
   const [activeView, setActiveView]     = useState<ActivityView>(() => getStored('ide_view', 'explorer'));
   const [activeTab,  setActiveTab]      = useState<EditorTab>(() => getStored('ide_tab', 'code'));
@@ -90,19 +92,18 @@ export default function App() {
     };
   }, [user]);
 
-  // First-run check: show setup wizard if no models/providers configured
+  // First-run check: use centralized model store inventory.
   useEffect(() => {
     if (!user) return;
-    fetch(`${API_BASE}/api/providers/all-models`)
-      .then(r => r.json())
-      .then(d => {
-        const models = d.models || d;
-        if (!Array.isArray(models) || models.length === 0) {
-          setShowSetupWizard(true);
-        }
-      })
-      .catch(() => { /* server might not be ready — don't block */ });
-  }, [user]);
+    void fetchModels(true);
+  }, [user, fetchModels]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (dynamicModelCount === 0) {
+      setShowSetupWizard(true);
+    }
+  }, [user, dynamicModelCount]);
   useEffect(() => { setStored('ide_view', activeView); }, [activeView]);
   useEffect(() => { setStored('ide_tab', activeTab); }, [activeTab]);
   useEffect(() => { setStored('ide_side_w', sideWidth); }, [sideWidth]);

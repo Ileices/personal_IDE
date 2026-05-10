@@ -3246,7 +3246,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     details: [
       '╭─ ✦ Help Governance Snapshot',
       '│ Last Updated: 2026-05-10',
-      '│ Canonical Discussion: https://github.com/EchoCog/windsurf-instructions-set/discussions/17',
+      '│ Canonical Discussion: https://github.com/Ileices/personal_IDE/discussions/17',
       '│ Rule: Help is the final promise surface; we strengthen and align it instead of weakening it.',
       '╰─ Every major Help claim should map to evidence: discussion comment + code path + commit.',
       'Coverage Pass 1 (Community Hub + GitHub Integration parity): https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16867042',

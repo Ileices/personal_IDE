@@ -86,6 +86,8 @@ interface ProviderError {
 interface ModelStore {
   /** All models from all sources — static + dynamic */
   allModels: ModelDefinition[];
+  /** Count of live models discovered from provider inventory API */
+  dynamicModelCount: number;
   /** Provider errors from last fetch (for diagnostics) */
   providerErrors: ProviderError[];
   /** Whether a fetch is in progress */
@@ -186,6 +188,7 @@ let _dynamicCache: DynamicModel[] = [];
 
 export const useModelStore = create<ModelStore>((set, get) => ({
   allModels: mergeModelDefinitions(_dynamicCache.map(dynamicToDefinition)),
+  dynamicModelCount: _dynamicCache.length,
   providerErrors: [],
   isLoading: false,
   lastFetchAt: null,
@@ -218,6 +221,7 @@ export const useModelStore = create<ModelStore>((set, get) => ({
 
       set({
         allModels: mergeModelDefinitions(liveModels),
+        dynamicModelCount: dedupedDynamic.length,
         providerErrors: data.errors || [],
         isLoading: false,
         lastFetchAt: Date.now(),
@@ -228,6 +232,7 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       const fallback = mergeModelDefinitions(_dynamicCache.map(dynamicToDefinition));
       set({
         allModels: fallback,
+        dynamicModelCount: _dynamicCache.length,
         isLoading: false,
         providerErrors: [{ provider: 'all', error: String(err) }],
       });
