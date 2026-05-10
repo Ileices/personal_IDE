@@ -113,6 +113,17 @@ export class GitHubService {
     this.db = db;
   }
 
+  private decryptToken(tokenValue: string | null | undefined): string | null {
+    if (!tokenValue) return null;
+    try {
+      const decrypted = smartDecrypt(tokenValue, appConfig.security.encryptKey);
+      if (decrypted && decrypted.length > 0) return decrypted;
+    } catch {
+      if (tokenValue.length > 10) return tokenValue;
+    }
+    return null;
+  }
+
   /** Get the active GitHub PAT from DB → env fallback */
   getToken(): string | null {
     try {
@@ -121,14 +132,21 @@ export class GitHubService {
         .prepare(`SELECT token_encrypted FROM auth_tokens WHERE is_active = 1 AND github_user_id != -1 ORDER BY updated_at DESC LIMIT 1`)
         .get() as { token_encrypted: string } | undefined;
 
-      if (row?.token_encrypted) {
-        try {
-          const decrypted = smartDecrypt(row.token_encrypted, appConfig.security.encryptKey);
-          if (decrypted && decrypted.length > 0) return decrypted;
-        } catch {
-          // If decrypt fails, token might be stored plain
-          if (row.token_encrypted.length > 10) return row.token_encrypted;
-        }
+      const activeToken = this.decryptToken(row?.token_encrypted);
+      if (activeToken) {
+        return activeToken;
+      }
+
+      // Fallback: if the current active profile is guest/local-only but a saved GitHub
+      // account exists, reuse the most recently updated GitHub token so Community Hub
+      // features remain single-sign-on across the app.
+      const fallbackRow = this.db
+        .prepare(`SELECT token_encrypted FROM auth_tokens WHERE github_user_id != -1 ORDER BY is_active DESC, updated_at DESC LIMIT 1`)
+        .get() as { token_encrypted: string } | undefined;
+
+      const fallbackToken = this.decryptToken(fallbackRow?.token_encrypted);
+      if (fallbackToken) {
+        return fallbackToken;
       }
     } catch {
       // DB read failed — fall through to env
@@ -140,10 +158,19 @@ export class GitHubService {
   /** Check if the current user is the repo owner */
   isOwner(): boolean {
     try {
-      const row = this.db
+      const activeRow = this.db
         .prepare(`SELECT github_login FROM auth_tokens WHERE is_active = 1 LIMIT 1`)
         .get() as { github_login: string } | undefined;
-      return row?.github_login === OWNER_LOGIN;
+
+      if (activeRow?.github_login === OWNER_LOGIN) {
+        return true;
+      }
+
+      const fallbackRow = this.db
+        .prepare(`SELECT github_login FROM auth_tokens WHERE github_user_id != -1 ORDER BY is_active DESC, updated_at DESC LIMIT 1`)
+        .get() as { github_login: string } | undefined;
+
+      return fallbackRow?.github_login === OWNER_LOGIN;
     } catch {
       return false;
     }

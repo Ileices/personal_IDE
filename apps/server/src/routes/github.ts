@@ -59,6 +59,16 @@ export async function githubRoutes(app: FastifyInstance) {
       WHERE is_active = 1
       LIMIT 1
     `).get() as { github_login: string; github_name: string | null; github_user_id: number } | undefined;
+    const fallbackAccount = db.prepare(`
+      SELECT github_login, github_name, github_user_id
+      FROM auth_tokens
+      WHERE github_user_id != -1
+      ORDER BY is_active DESC, updated_at DESC
+      LIMIT 1
+    `).get() as { github_login: string; github_name: string | null; github_user_id: number } | undefined;
+    const effectiveAccount = activeAccount && activeAccount.github_user_id !== -1
+      ? activeAccount
+      : fallbackAccount;
     const savedGitHubAccounts = (db.prepare(`
       SELECT COUNT(*) as count
       FROM auth_tokens
@@ -77,10 +87,10 @@ export async function githubRoutes(app: FastifyInstance) {
       canPost:    hasToken,
       cliReady:   !!gitVersion && !!ghVersion,
       setupMode:  hasToken ? 'token-ready' : 'token-required',
-      activeAccount: activeAccount && activeAccount.github_user_id !== -1
+      activeAccount: effectiveAccount && effectiveAccount.github_user_id !== -1
         ? {
-            login: activeAccount.github_login,
-            name: activeAccount.github_name,
+            login: effectiveAccount.github_login,
+            name: effectiveAccount.github_name,
           }
         : null,
       savedGitHubAccounts,
