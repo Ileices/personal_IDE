@@ -5,6 +5,7 @@
 // ============================================
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   MessageSquare, Bug, Sparkles, RefreshCw, ChevronDown,
   ThumbsUp, Heart, Rocket, Eye, Laugh, SmilePlus, HelpCircle,
@@ -51,12 +52,84 @@ function relativeTime(iso: string): string {
   return `${d}d ago`;
 }
 
-function MarkdownContent({ content }: { content: string }) {
+function parseDiscussionNumberFromHref(href?: string): number | null {
+  if (!href) return null;
+
+  const trim = href.trim();
+  if (!trim) return null;
+
+  const discussionPathRegex = /^\/Ileices\/personal_IDE\/discussions\/(\d+)(?:[/?#].*)?$/i;
+
+  if (trim.startsWith('/')) {
+    const relativeMatch = trim.match(discussionPathRegex);
+    if (!relativeMatch) return null;
+    const parsed = Number(relativeMatch[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  try {
+    const parsedUrl = new URL(trim);
+    const host = parsedUrl.hostname.toLowerCase();
+    if (host !== 'github.com' && host !== 'www.github.com') return null;
+
+    const absoluteMatch = parsedUrl.pathname.match(discussionPathRegex);
+    if (!absoluteMatch) return null;
+
+    const parsed = Number(absoluteMatch[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function MarkdownContent({ content, onOpenDiscussion }: { content: string; onOpenDiscussion?: (discussionNumber: number) => void }) {
   return (
-    <div className="prose prose-invert prose-sm max-w-none text-ide-text">
+    <div className="max-w-none text-ide-text">
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-ide-accent hover:underline" />,
+          h1: ({ children }) => <h1 className="mb-3 mt-4 text-[20px] font-bold leading-tight text-ide-text">{children}</h1>,
+          h2: ({ children }) => <h2 className="mb-2 mt-4 text-[18px] font-semibold leading-tight text-ide-text">{children}</h2>,
+          h3: ({ children }) => <h3 className="mb-2 mt-3 text-[16px] font-semibold leading-snug text-ide-text">{children}</h3>,
+          h4: ({ children }) => <h4 className="mb-1 mt-3 text-[14px] font-semibold text-ide-text">{children}</h4>,
+          h5: ({ children }) => <h5 className="mb-1 mt-2 text-[13px] font-semibold text-ide-text">{children}</h5>,
+          h6: ({ children }) => <h6 className="mb-1 mt-2 text-[12px] font-semibold uppercase tracking-wide text-ide-text-dim">{children}</h6>,
+          p: ({ children }) => <p className="my-2 text-[12px] leading-relaxed text-ide-text">{children}</p>,
+          strong: ({ children }) => <strong className="font-bold text-[12.5px] text-ide-text">{children}</strong>,
+          em: ({ children }) => <em className="italic text-ide-text">{children}</em>,
+          blockquote: ({ children }) => <blockquote className="my-2 border-l-2 border-ide-accent/40 pl-3 text-[12px] text-ide-text-dim">{children}</blockquote>,
+          ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-[12px] text-ide-text">{children}</ul>,
+          ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5 text-[12px] text-ide-text">{children}</ol>,
+          li: ({ children }) => <li className="text-[12px] leading-relaxed">{children}</li>,
+          hr: () => <hr className="my-3 border-ide-border" />,
+          table: ({ children }) => <div className="my-3 overflow-x-auto"><table className="min-w-full border-collapse text-[11px]">{children}</table></div>,
+          thead: ({ children }) => <thead className="bg-ide-bg/50">{children}</thead>,
+          tbody: ({ children }) => <tbody>{children}</tbody>,
+          tr: ({ children }) => <tr className="border-b border-ide-border/70">{children}</tr>,
+          th: ({ children }) => <th className="border border-ide-border px-2 py-1 text-left font-semibold text-ide-text">{children}</th>,
+          td: ({ children }) => <td className="border border-ide-border px-2 py-1 text-ide-text">{children}</td>,
+          a: ({ href, children, ...props }) => {
+            const discussionNumber = parseDiscussionNumberFromHref(href);
+            const isInternalDiscussionLink = !!onOpenDiscussion && !!discussionNumber;
+
+            return (
+              <a
+                {...props}
+                href={href}
+                onClick={event => {
+                  if (!isInternalDiscussionLink) return;
+                  event.preventDefault();
+                  onOpenDiscussion?.(discussionNumber!);
+                }}
+                target={isInternalDiscussionLink ? undefined : '_blank'}
+                rel={isInternalDiscussionLink ? undefined : 'noopener noreferrer'}
+                className="text-ide-accent underline underline-offset-2 hover:opacity-90"
+                title={isInternalDiscussionLink ? `Open discussion #${discussionNumber} in Community Hub` : undefined}
+              >
+                {children}
+              </a>
+            );
+          },
           code: ({ className, children, ...props }) => {
             const hasLanguage = /language-(\w+)/.test(className || '');
             if (!hasLanguage) {
@@ -64,6 +137,7 @@ function MarkdownContent({ content }: { content: string }) {
             }
             return <code className="block overflow-x-auto rounded bg-ide-bg p-2 text-[11px]" {...props}>{children}</code>;
           },
+          pre: ({ children }) => <pre className="my-2 overflow-x-auto rounded bg-ide-bg p-2">{children}</pre>,
         }}
       >
         {content}
@@ -228,6 +302,7 @@ function DiscussionFeed({ onOpenThread, setThreadNumber }: { onOpenThread: () =>
       <DiscussionThread
         number={openThreadNumber}
         onBack={() => setOpenThreadNumber(null)}
+        onNavigateThread={(discussionNumber) => setOpenThreadNumber(discussionNumber)}
       />
     );
   }
@@ -340,7 +415,7 @@ function DiscussionFeed({ onOpenThread, setThreadNumber }: { onOpenThread: () =>
 }
 
 // ── Discussion Thread ──────────────────────────
-function DiscussionThread({ number, onBack }: { number: number; onBack: () => void }) {
+function DiscussionThread({ number, onBack, onNavigateThread }: { number: number; onBack: () => void; onNavigateThread: (discussionNumber: number) => void }) {
   const [discussion, setDiscussion] = useState<GHDiscussion | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -434,7 +509,7 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
           <h3 className="text-[13px] font-semibold text-ide-text mb-2">{discussion.title}</h3>
 
           <div className="bg-ide-bg/30 rounded p-2.5 border border-ide-border">
-            <MarkdownContent content={discussion.body || ''} />
+            <MarkdownContent content={discussion.body || ''} onOpenDiscussion={onNavigateThread} />
           </div>
 
           {/* Reactions */}
@@ -476,7 +551,7 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
                   <span className="text-[10px] text-ide-text-dim">{relativeTime(comment.createdAt)}</span>
                 </div>
                 <div className="text-[12px]">
-                  <MarkdownContent content={comment.body || ''} />
+                  <MarkdownContent content={comment.body || ''} onOpenDiscussion={onNavigateThread} />
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {Object.entries(REACTION_MAP).map(([key, emoji]) => {
@@ -513,7 +588,7 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
                           <span className="text-[10px] text-ide-text-dim">{relativeTime(reply.createdAt)}</span>
                         </div>
                         <div className="text-[12px]">
-                          <MarkdownContent content={reply.body || ''} />
+                          <MarkdownContent content={reply.body || ''} onOpenDiscussion={onNavigateThread} />
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {Object.entries(REACTION_MAP).map(([key, emoji]) => {
