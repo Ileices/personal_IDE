@@ -122,7 +122,7 @@ export function AgentControls() {
   const latestQualityEvent = useAgentStore(s => s.latestQualityEvent);
   const { activeProject } = useProjectStore();
   const { selectedModel, setModel } = useChatStore();
-  const { allModels } = useModelStore();
+  const { allModels, fetchModels } = useModelStore();
   const [task, setTask] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -141,8 +141,19 @@ export function AgentControls() {
   const [failedModelCount, setFailedModelCount] = useState(0);
   const [cleanupFailedModelsBusy, setCleanupFailedModelsBusy] = useState(false);
   const [analyzeCodebase, setAnalyzeCodebase] = useState(true);
-  const [availableModels, setAvailableModels] = useState<UnifiedModelLike[]>([]);
   const [templateBusy, setTemplateBusy] = useState<string | null>(null);
+    const availableModels = useMemo<UnifiedModelLike[]>(() => {
+      return allModels.map((m) => ({
+        id: m.id,
+        name: m.name,
+        provider: m.id.split('/')[0] || m.publisher,
+        description: m.description,
+        contextWindow: m.maxInputTokens,
+        supportsVision: !!m.supportsVision,
+        isFree: m.tier.includes('free') || m.tier.includes('ollama') || m.id.startsWith('nano/'),
+      }));
+    }, [allModels]);
+
   const [useCorpusManifesto, setUseCorpusManifesto] = useState(true);
   const [autoIngestCorpus, setAutoIngestCorpus] = useState(true);
   const [autoProjectIntel, setAutoProjectIntel] = useState(true);
@@ -446,19 +457,8 @@ export function AgentControls() {
   }, [activeProject?.id, useCorpusManifesto, autoIngestCorpus, autoProjectIntel, corpusPath]);
 
   useEffect(() => {
-    const loadModels = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/providers/all-models`);
-        const data = await res.json().catch(() => null);
-        if (data?.models?.length) {
-          setAvailableModels(data.models);
-        }
-      } catch {
-        setAvailableModels([]);
-      }
-    };
-    void loadModels();
-  }, []);
+    void fetchModels();
+  }, [fetchModels]);
 
   // Sync TopBar model picker → strategyPrimaryModel (only when not running)
   useEffect(() => {

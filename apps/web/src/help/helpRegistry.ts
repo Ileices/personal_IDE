@@ -57,6 +57,24 @@ export const HELP_SECTIONS: HelpSection[] = [
     ]
   },
   {
+    id: 'help-truth-ledger',
+    title: 'Help Section Truth Ledger and Evidence Links',
+    summary: 'Pinned snapshot timestamps, implementation evidence, and discussion threads backing current help claims.',
+    tags: ['help', 'truth-ledger', 'evidence', 'discussions', 'snapshots'],
+    status: 'active',
+    details: [
+      'Last Updated Snapshot (UTC): 2026-05-10.',
+      'Evidence Commit 1: 03f61fe (Help section scope expansion and UI helper updates).',
+      'Evidence Commit 2: 814de42 (Help detail parity pass and route/feature alignment checks).',
+      'Evidence Commit 3: a6cc82c (provider/model control-plane fixes and GitHub PAT model visibility hardening).',
+      'Discussion Thread #17 (main implementation stream): https://github.com/EchoCog/windsurf-instructions-set/discussions/17',
+      'Roadmap Thread #18 (parallel expansion + milestone chain): https://github.com/EchoCog/windsurf-instructions-set/discussions/18',
+      'Help expansion planning thread #8: https://github.com/EchoCog/windsurf-instructions-set/discussions/8',
+      'How to verify quickly: open Provider Settings, refresh GitHub PAT, then confirm cloud models appear in model pickers without requiring provider toggle flips.',
+      'Scope note: This ledger captures current shipped behavior and known partials. Items labeled COMING SOON remain roadmap-level by design until promoted to active implementation status.'
+    ]
+  },
+  {
     id: 'silicon-factory-tools',
     title: 'Silicon Factory — The Agent Tool Infrastructure',
     summary: 'The universal tool layer powering every agent in the system: 7 tool classes, Handshake Protocol, Task Ledger, Background Daemon, and the full 5-tier agent swarm.',

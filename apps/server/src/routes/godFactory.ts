@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { runSuggestedJobsCrawlerTick } from '../services/suggestedJobsCrawler/index.js';
+import { assessToolPolicy, getToolPolicySnapshot } from '../services/godFactory/toolGatekeeper.js';
 import { getSubsystemRuntimeStatus, startSubsystemScheduler, stopSubsystemScheduler } from '../services/subsystemScheduler.js';
 import { getKv, loadSettings, setKv, type SubsystemId } from './subsystems.js';
 
@@ -843,6 +844,85 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         justification_tags: parseJson<string[]>(row.justification_tags, []),
       })),
     });
+  });
+
+  app.get('/tools/policy', async (_req: FastifyRequest, reply: FastifyReply) => {
+    return reply.send({ policy: getToolPolicySnapshot() });
+  });
+
+  app.post('/tools/assess', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as Record<string, unknown>;
+    const toolName = String(body.toolName || '').trim();
+
+    if (!toolName) {
+      return reply.status(400).send({ error: 'toolName is required' });
+    }
+
+    const assessment = assessToolPolicy({
+      toolName,
+      actionType: body.actionType ? String(body.actionType) : undefined,
+      command: body.command ? String(body.command) : undefined,
+      targetPath: body.targetPath ? String(body.targetPath) : undefined,
+      writeOperation: body.writeOperation === true,
+      networkOperation: body.networkOperation === true,
+    });
+
+    const actionId = logGodFactoryAction(db, {
+      action_type: 'tool_policy_assessment',
+      target_id: toolName,
+      target_type: 'tool_action',
+      authority_invoked: 'tool_policy_gate',
+      justification_tags: ['tool_policy', assessment.decision, assessment.normalized.actionType],
+      result: `${assessment.decision}:${assessment.riskScore}`,
+    });
+
+    return reply.send({ action_id: actionId, assessment });
+  });
+
+  app.post('/tools/assess-batch', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as Record<string, unknown>;
+    const actions = Array.isArray(body.actions) ? body.actions : [];
+
+    if (actions.length === 0) {
+      return reply.status(400).send({ error: 'actions[] is required' });
+    }
+
+    const assessments = actions.map((raw, index) => {
+      const item = (raw ?? {}) as Record<string, unknown>;
+      const toolName = String(item.toolName || '').trim();
+      if (!toolName) {
+        return {
+          index,
+          error: 'toolName is required',
+        };
+      }
+
+      const assessment = assessToolPolicy({
+        toolName,
+        actionType: item.actionType ? String(item.actionType) : undefined,
+        command: item.command ? String(item.command) : undefined,
+        targetPath: item.targetPath ? String(item.targetPath) : undefined,
+        writeOperation: item.writeOperation === true,
+        networkOperation: item.networkOperation === true,
+      });
+
+      const actionId = logGodFactoryAction(db, {
+        action_type: 'tool_policy_assessment',
+        target_id: toolName,
+        target_type: 'tool_action',
+        authority_invoked: 'tool_policy_gate',
+        justification_tags: ['tool_policy', assessment.decision, assessment.normalized.actionType],
+        result: `${assessment.decision}:${assessment.riskScore}`,
+      });
+
+      return {
+        index,
+        action_id: actionId,
+        assessment,
+      };
+    });
+
+    return reply.send({ assessments });
   });
 
   app.post('/sessions/start', async (req: FastifyRequest, reply: FastifyReply) => {

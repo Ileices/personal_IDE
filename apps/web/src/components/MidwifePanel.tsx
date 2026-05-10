@@ -5,21 +5,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useMidwifeStore, type MidwifeTaskType } from '../stores/midwifeStore';
 import { useModelStore } from '../stores/modelStore';
-import { MODELS } from '@personal-ide/shared';
 import {
   X, Play, Square,
   Bird, Cpu, AlertCircle, Settings2, History as HistoryIcon,
 } from 'lucide-react';
-import { API_BASE } from '../config.js';
 import { TasksTab } from './midwife/TasksTab';
 import { ConfigTab } from './midwife/ConfigTab';
 import { HistoryTab } from './midwife/HistoryTab';
-
-interface DynamicModel {
-  id: string;
-  name: string;
-  provider: string;
-}
 
 interface Props {
   onClose: () => void;
@@ -31,29 +23,11 @@ export function MidwifePanel({ onClose }: Props) {
     fetchConfig, updateConfig, fetchTasks, updateTask,
     fetchStatus, fetchHistory, startFeeding, stopFeeding,
   } = useMidwifeStore();
-  const { failedModels, clearSessionSkips } = useModelStore();
+  const { allModels, failedModels, clearSessionSkips, fetchModels } = useModelStore();
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'config' | 'history'>('tasks');
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
-  const [dynamicModels, setDynamicModels] = useState<DynamicModel[]>([]);
   const [excludeBrokenOnStart, setExcludeBrokenOnStart] = useState(true);
-
-  // Fetch dynamic models from all enabled providers
-  const fetchDynamicModels = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/providers/all-models`);
-      const data = await res.json();
-      if (data.models?.length > 0) {
-        setDynamicModels(data.models.map((m: any) => ({
-          id: m.id,
-          name: m.name,
-          provider: m.provider || m.publisher || 'unknown',
-        })));
-      }
-    } catch {
-      // Fall back to static models
-    }
-  }, []);
 
   // Initial fetch
   useEffect(() => {
@@ -61,7 +35,7 @@ export function MidwifePanel({ onClose }: Props) {
     fetchTasks();
     fetchStatus();
     fetchHistory();
-    fetchDynamicModels();
+    void fetchModels();
   }, []);
 
   // Poll status while running
@@ -74,10 +48,11 @@ export function MidwifePanel({ onClose }: Props) {
     return () => clearInterval(interval);
   }, [status?.isRunning]);
 
-  // Use dynamic models if available, else fall back to static
-  const allModels: { id: string; name: string; publisher: string }[] = dynamicModels.length > 0
-    ? dynamicModels.map(m => ({ id: m.id, name: m.name, publisher: m.provider }))
-    : MODELS.map(m => ({ id: m.id, name: m.name, publisher: m.publisher }));
+  const modelCatalog: { id: string; name: string; publisher: string }[] = allModels.map((m) => ({
+    id: m.id,
+    name: m.name,
+    publisher: m.publisher,
+  }));
 
   const handleToggleTask = useCallback((taskType: MidwifeTaskType, enabled: boolean) => {
     updateTask(taskType, { enabled });
@@ -203,7 +178,7 @@ export function MidwifePanel({ onClose }: Props) {
           {activeTab === 'tasks' && (
             <TasksTab
               tasks={tasks}
-              allModels={allModels}
+              allModels={modelCatalog}
               expandedTask={expandedTask}
               setExpandedTask={setExpandedTask}
               onToggle={handleToggleTask}
@@ -213,7 +188,7 @@ export function MidwifePanel({ onClose }: Props) {
           )}
 
           {activeTab === 'config' && (
-            <ConfigTab config={config} updateConfig={updateConfig} onProvidersChanged={fetchDynamicModels} />
+            <ConfigTab config={config} updateConfig={updateConfig} onProvidersChanged={() => void fetchModels()} />
           )}
 
           {activeTab === 'history' && (
