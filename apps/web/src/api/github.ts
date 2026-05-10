@@ -12,6 +12,12 @@ export interface GHToolchainStatus {
   gh:     { installed: boolean; version: string | null };
   auth:   { connected: boolean; status: string };
   ready:  boolean;
+  canBrowse: boolean;
+  canPost: boolean;
+  cliReady: boolean;
+  setupMode: string;
+  activeAccount: { login: string; name: string | null } | null;
+  savedGitHubAccounts: number;
   isOwner: boolean;
 }
 
@@ -133,7 +139,7 @@ export function getToolchainStatus() {
 
 // Feed
 export function listDiscussions(params?: {
-  sort?: 'NEWEST' | 'OLDEST' | 'UPDATED';
+  sort?: 'NEWEST' | 'OLDEST' | 'UPDATED' | 'TOP' | 'TRENDING';
   categoryId?: string;
   after?: string;
   first?: number;

@@ -53,6 +53,17 @@ export async function githubRoutes(app: FastifyInstance) {
     const ghVersion  = check('gh --version');
     const hasToken   = !!gh().getToken();
     const isOwner    = gh().isOwner();
+    const activeAccount = db.prepare(`
+      SELECT github_login, github_name, github_user_id
+      FROM auth_tokens
+      WHERE is_active = 1
+      LIMIT 1
+    `).get() as { github_login: string; github_name: string | null; github_user_id: number } | undefined;
+    const savedGitHubAccounts = (db.prepare(`
+      SELECT COUNT(*) as count
+      FROM auth_tokens
+      WHERE github_user_id != -1
+    `).get() as { count: number } | undefined)?.count ?? 0;
 
     let authStatus = 'none';
     if (hasToken) authStatus = 'pat';
@@ -61,7 +72,18 @@ export async function githubRoutes(app: FastifyInstance) {
       git:        { installed: !!gitVersion, version: gitVersion },
       gh:         { installed: !!ghVersion,  version: ghVersion  },
       auth:       { connected: hasToken, status: authStatus },
-      ready:      !!gitVersion && !!ghVersion && hasToken,
+      ready:      hasToken,
+      canBrowse:  hasToken,
+      canPost:    hasToken,
+      cliReady:   !!gitVersion && !!ghVersion,
+      setupMode:  hasToken ? 'token-ready' : 'token-required',
+      activeAccount: activeAccount && activeAccount.github_user_id !== -1
+        ? {
+            login: activeAccount.github_login,
+            name: activeAccount.github_name,
+          }
+        : null,
+      savedGitHubAccounts,
       isOwner,
     });
   });
@@ -75,7 +97,7 @@ export async function githubRoutes(app: FastifyInstance) {
     if (!requireToken(reply)) return;
 
     const query = req.query as any;
-    const sort       = (query.sort as string) || 'NEWEST';   // NEWEST | OLDEST | UPDATED
+    const sort       = (query.sort as string) || 'NEWEST';   // NEWEST | OLDEST | UPDATED | TOP | TRENDING
     const categoryId = (query.categoryId as string) || undefined;
     const cursor     = (query.after as string) || undefined;
     const first      = Math.min(parseInt(query.first || '20', 10), 50);

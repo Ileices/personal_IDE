@@ -90,6 +90,21 @@ export interface GHIssue {
   user: { login: string; avatar_url: string };
 }
 
+function discussionRankingScore(discussion: GitHubDiscussion, mode: 'TOP' | 'TRENDING'): number {
+  const reactionScore = discussion.reactions?.totalCount ?? 0;
+  const commentScore = discussion.comments?.totalCount ?? 0;
+  const upvoteScore = discussion.upvoteCount ?? 0;
+  const ageMs = Date.now() - new Date(discussion.updatedAt || discussion.createdAt).getTime();
+  const ageDays = Math.max(ageMs / 86_400_000, 0);
+
+  if (mode === 'TOP') {
+    return reactionScore * 3 + commentScore * 2 + upvoteScore;
+  }
+
+  const freshnessBoost = Math.max(14 - ageDays, 0);
+  return commentScore * 4 + reactionScore * 3 + upvoteScore * 2 + freshnessBoost;
+}
+
 // ── GitHubService class ────────────────────────
 export class GitHubService {
   private db: Database.Database;
@@ -190,12 +205,14 @@ export class GitHubService {
     first?: number;
     after?: string;
     categoryId?: string;
-    orderBy?: 'NEWEST' | 'OLDEST' | 'UPDATED';
+    orderBy?: 'NEWEST' | 'OLDEST' | 'UPDATED' | 'TOP' | 'TRENDING';
   } = {}): Promise<{ nodes: GitHubDiscussion[]; pageInfo: PageInfo; totalCount: number }> {
     const { first = 20, after, categoryId, orderBy = 'NEWEST' } = opts;
 
-    const orderField = orderBy === 'UPDATED' ? 'UPDATED_AT' : 'CREATED_AT';
+    const rankingMode = orderBy === 'TOP' || orderBy === 'TRENDING' ? orderBy : null;
+    const orderField = orderBy === 'UPDATED' || rankingMode ? 'UPDATED_AT' : 'CREATED_AT';
     const orderDir   = orderBy === 'OLDEST'  ? 'ASC' : 'DESC';
+    const requestedFirst = rankingMode ? Math.max(first, 50) : first;
 
     const data = await this.graphql(`
       query ListDiscussions($owner: String!, $name: String!, $first: Int!, $after: String, $categoryId: ID, $orderField: DiscussionOrderField!, $orderDir: OrderDirection!) {
@@ -221,7 +238,20 @@ export class GitHubService {
           }
         }
       }
-    `, { owner: REPO_OWNER, name: REPO_NAME, first, after: after ?? null, categoryId: categoryId ?? null, orderField, orderDir });
+    `, { owner: REPO_OWNER, name: REPO_NAME, first: requestedFirst, after: after ?? null, categoryId: categoryId ?? null, orderField, orderDir });
+
+    if (rankingMode) {
+      const rankedNodes = [...data.repository.discussions.nodes]
+        .sort((left: GitHubDiscussion, right: GitHubDiscussion) =>
+          discussionRankingScore(right, rankingMode) - discussionRankingScore(left, rankingMode)
+        )
+        .slice(0, first);
+
+      return {
+        ...data.repository.discussions,
+        nodes: rankedNodes,
+      };
+    }
 
     return data.repository.discussions;
   }

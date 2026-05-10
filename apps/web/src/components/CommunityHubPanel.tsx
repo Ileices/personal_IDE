@@ -8,7 +8,7 @@ import {
   MessageSquare, Bug, Sparkles, RefreshCw, ChevronDown,
   ThumbsUp, Heart, Rocket, Eye, Laugh, SmilePlus, HelpCircle,
   Star, Send, AlertTriangle, CheckCircle, Bell, BellOff, Users,
-  TerminalSquare, ChevronRight, PlusCircle, Loader, X, Edit,
+  TerminalSquare, ChevronRight, PlusCircle, Loader, X, Edit, ExternalLink, LogIn,
 } from 'lucide-react';
 import {
   listDiscussions, getDiscussion, addComment, addReaction,
@@ -19,8 +19,10 @@ import {
   closeIssue, markCommentAsAnswer, closeDiscussion, getToolchainStatus,
   type GHDiscussion, type LocalReport, type LocalDraft,
   type GHNotification, type DevDraft, type GHIssue,
+  type GHToolchainStatus,
 } from '../api/github.js';
 import { CATEGORY_IDS } from './github/constants.js';
+import { useAuthStore } from '../stores/authStore';
 
 // ── Category colour mapping ────────────────────
 const CATEGORY_COLOURS: Record<string, string> = {
@@ -59,17 +61,23 @@ export function CommunityHubPanel({ isOwner: isOwnerProp }: CommunityHubPanelPro
   const [tab, setTab] = useState<Tab>('feed');
   const [isOwner, setIsOwner] = useState(isOwnerProp ?? false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [ready, setReady] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<GHToolchainStatus | null>(null);
+  const { user, accounts, isLoading: authBusy, login, switchAccount, loadAccounts, checkAuth, error: authError, clearError } = useAuthStore();
+
+  const refreshStatus = useCallback(() => {
+    getToolchainStatus()
+      .then(s => {
+        setStatus(s);
+        setIsOwner(s.isOwner);
+      })
+      .catch(() => setStatus(null));
+  }, []);
 
   // Check toolchain status + owner status
   useEffect(() => {
-    getToolchainStatus()
-      .then(s => {
-        setReady(s.ready);
-        setIsOwner(s.isOwner);
-      })
-      .catch(() => setReady(false));
-  }, []);
+    refreshStatus();
+    void loadAccounts();
+  }, [loadAccounts, refreshStatus]);
 
   // Poll notifications every 5 minutes
   useEffect(() => {
@@ -89,17 +97,41 @@ export function CommunityHubPanel({ isOwner: isOwnerProp }: CommunityHubPanelPro
         <span className="text-[11px] font-semibold uppercase tracking-wider text-ide-text-dim flex-1">
           Community Hub
         </span>
-        {ready === false && (
+        {status?.ready === false && (
           <span className="text-[10px] text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded">
             Setup Required
           </span>
         )}
-        {ready === true && (
+        {status?.ready === true && (
           <span className="text-[10px] text-green-400 bg-green-400/10 px-2 py-0.5 rounded">
             GitHub: Ready ✓
           </span>
         )}
       </div>
+
+      {(status?.ready === false || !status) && (
+        <GitHubSetupBanner
+          status={status}
+          userLogin={user?.login ?? null}
+          accounts={accounts}
+          authBusy={authBusy}
+          authError={authError}
+          onLogin={login}
+          onSwitchAccount={switchAccount}
+          onRefresh={async () => {
+            clearError();
+            await checkAuth();
+            await loadAccounts();
+            refreshStatus();
+          }}
+        />
+      )}
+
+      {status?.ready === true && !status.cliReady && (
+        <div className="mx-3 mt-3 rounded border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-[11px] text-yellow-200">
+          GitHub token access is working. GitHub CLI is optional here and only needed for CLI-based setup flows.
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex border-b border-ide-border flex-shrink-0">
@@ -141,7 +173,7 @@ function DiscussionFeed({ onOpenThread, setThreadNumber }: { onOpenThread: () =>
   const [discussions, setDiscussions] = useState<GHDiscussion[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<'NEWEST' | 'UPDATED'>('NEWEST');
+  const [sort, setSort] = useState<'NEWEST' | 'UPDATED' | 'TOP' | 'TRENDING'>('NEWEST');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
@@ -189,6 +221,8 @@ function DiscussionFeed({ onOpenThread, setThreadNumber }: { onOpenThread: () =>
         >
           <option value="NEWEST">Newest</option>
           <option value="UPDATED">Recently Updated</option>
+          <option value="TOP">Top Voted</option>
+          <option value="TRENDING">Trending</option>
         </select>
         <select
           value={categoryFilter}
@@ -291,6 +325,12 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
   const [replyBody, setReplyBody] = useState('');
   const [replying, setReplying] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<{ id: string; login: string } | null>(null);
+
+  const refreshDiscussion = useCallback(async () => {
+    const fresh = await getDiscussion(number);
+    setDiscussion(fresh.discussion);
+  }, [number]);
 
   useEffect(() => {
     setLoading(true);
@@ -305,15 +345,23 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
     setReplying(true);
     setReplyError(null);
     try {
-      await addComment(discussion.id, replyBody);
+      await addComment(discussion.id, replyBody, replyTarget?.id);
       setReplyBody('');
-      // Refresh
-      const fresh = await getDiscussion(number);
-      setDiscussion(fresh.discussion);
+      setReplyTarget(null);
+      await refreshDiscussion();
     } catch (e: any) {
       setReplyError(e.message || 'Failed to post reply.');
     } finally {
       setReplying(false);
+    }
+  };
+
+  const handleReaction = async (subjectId: string, content: string) => {
+    try {
+      await addReaction(subjectId, content);
+      await refreshDiscussion();
+    } catch (e: any) {
+      setReplyError(e.message || 'Failed to update reaction.');
     }
   };
 
@@ -408,18 +456,63 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
                 <div className="text-[12px] text-ide-text whitespace-pre-wrap leading-relaxed">
                   {comment.body}
                 </div>
-                {/* Comment reactions */}
-                <div className="flex gap-1 mt-1.5 flex-wrap">
-                  {Object.entries(REACTION_MAP).slice(0, 4).map(([key, emoji]) => {
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {Object.entries(REACTION_MAP).map(([key, emoji]) => {
                     const count = comment.reactions?.nodes?.filter(r => r.content === key).length || 0;
-                    if (count === 0) return null;
                     return (
-                      <span key={key} className="text-[10px] px-1.5 py-0 rounded bg-ide-bg/50 border border-ide-border text-ide-text-dim">
+                      <button
+                        key={key}
+                        onClick={() => handleReaction(comment.id, key)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                          count > 0
+                            ? 'border-ide-accent/40 bg-ide-accent/10 text-ide-text'
+                            : 'border-ide-border text-ide-text-dim hover:border-ide-accent/40'
+                        }`}
+                      >
                         {emoji} {count}
-                      </span>
+                      </button>
                     );
                   })}
+                  <button
+                    onClick={() => setReplyTarget({ id: comment.id, login: comment.author.login })}
+                    className="ml-auto text-[10px] text-ide-accent hover:underline"
+                  >
+                    Reply
+                  </button>
                 </div>
+
+                {comment.replies?.nodes && comment.replies.nodes.length > 0 && (
+                  <div className="mt-2 space-y-2 border-l border-ide-border pl-3">
+                    {comment.replies.nodes.map(reply => (
+                      <div key={reply.id} className="rounded border border-ide-border/70 bg-ide-bg/30 p-2">
+                        <div className="mb-1 flex items-center gap-1.5">
+                          <img src={reply.author?.avatarUrl} alt="" className="h-4 w-4 rounded-full" />
+                          <span className="text-[11px] text-ide-text font-medium">@{reply.author?.login}</span>
+                          <span className="text-[10px] text-ide-text-dim">{relativeTime(reply.createdAt)}</span>
+                        </div>
+                        <div className="text-[12px] text-ide-text whitespace-pre-wrap leading-relaxed">{reply.body}</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {Object.entries(REACTION_MAP).map(([key, emoji]) => {
+                            const count = reply.reactions?.nodes?.filter(r => r.content === key).length || 0;
+                            return (
+                              <button
+                                key={key}
+                                onClick={() => handleReaction(reply.id, key)}
+                                className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                                  count > 0
+                                    ? 'border-ide-accent/40 bg-ide-accent/10 text-ide-text'
+                                    : 'border-ide-border text-ide-text-dim hover:border-ide-accent/40'
+                                }`}
+                              >
+                                {emoji} {count}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -427,7 +520,19 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
 
         {/* Reply box */}
         <div className="border-t border-ide-border pt-3">
-          <div className="text-[11px] text-ide-text-dim mb-1.5">Post a Reply</div>
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <div className="text-[11px] text-ide-text-dim">
+              {replyTarget ? `Replying to @${replyTarget.login}` : 'Post a Reply'}
+            </div>
+            {replyTarget && (
+              <button
+                onClick={() => setReplyTarget(null)}
+                className="text-[10px] text-ide-text-dim hover:text-ide-text"
+              >
+                Cancel reply target
+              </button>
+            )}
+          </div>
           <textarea
             value={replyBody}
             onChange={e => setReplyBody(e.target.value)}
@@ -446,6 +551,115 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
             {replying ? <Loader size={12} className="animate-spin" /> : <Send size={12} />}
             {replying ? 'Posting…' : 'Post Reply'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GitHubSetupBanner({
+  status,
+  userLogin,
+  accounts,
+  authBusy,
+  authError,
+  onLogin,
+  onSwitchAccount,
+  onRefresh,
+}: {
+  status: GHToolchainStatus | null;
+  userLogin: string | null;
+  accounts: Array<{ id: number; login: string; isActive: boolean; hasCopilot: boolean }>;
+  authBusy: boolean;
+  authError: string | null;
+  onLogin: (pat: string) => Promise<boolean>;
+  onSwitchAccount: (githubUserId: number) => Promise<boolean>;
+  onRefresh: () => Promise<void> | void;
+}) {
+  const [pat, setPat] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const handleLogin = async () => {
+    if (!pat.trim()) return;
+    setSubmitting(true);
+    setMessage(null);
+    const ok = await onLogin(pat.trim());
+    setSubmitting(false);
+    if (ok) {
+      setPat('');
+      setMessage('GitHub account connected. Refreshing Community Hub state...');
+      await onRefresh();
+    }
+  };
+
+  return (
+    <div className="mx-3 mt-3 rounded border border-yellow-500/30 bg-yellow-500/10 p-3 text-[11px]">
+      <div className="flex items-start gap-2">
+        <AlertTriangle size={15} className="mt-0.5 text-yellow-300" />
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-yellow-100">Community Hub setup is incomplete</div>
+          <div className="mt-1 text-yellow-50/90">
+            Feed, replies, and posting run on the app&apos;s GitHub token. GitHub CLI is optional for setup flows, but a stored GitHub account or PAT is required for the hub itself.
+          </div>
+          <div className="mt-2 grid gap-1 text-yellow-50/90 sm:grid-cols-2">
+            <div>Git installed: {status?.git.installed ? 'yes' : 'no'}</div>
+            <div>GitHub CLI installed: {status?.gh.installed ? 'yes' : 'no (optional)'}</div>
+            <div>Active GitHub account: {status?.activeAccount?.login || userLogin || 'none'}</div>
+            <div>Saved GitHub accounts: {status?.savedGitHubAccounts ?? accounts.filter(a => a.id !== -1).length}</div>
+          </div>
+
+          {accounts.filter(a => a.id !== -1).length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {accounts.filter(a => a.id !== -1).map(account => (
+                <button
+                  key={account.id}
+                  onClick={() => void onSwitchAccount(account.id).then(() => onRefresh())}
+                  disabled={authBusy || account.isActive}
+                  className={`rounded border px-2 py-1 text-[10px] ${account.isActive ? 'border-green-500/40 bg-green-500/10 text-green-200' : 'border-yellow-400/30 bg-transparent text-yellow-50 hover:bg-yellow-400/10'}`}
+                >
+                  {account.isActive ? 'Active' : 'Use'} @{account.login}{account.hasCopilot ? ' • Copilot' : ''}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              type="password"
+              value={pat}
+              onChange={event => setPat(event.target.value)}
+              placeholder="Paste GitHub PAT to enable Community Hub"
+              className="min-w-0 flex-1 rounded border border-ide-border bg-ide-bg px-2 py-1.5 text-[11px] text-ide-text placeholder:text-ide-text-dim"
+            />
+            <button
+              onClick={() => void handleLogin()}
+              disabled={!pat.trim() || submitting || authBusy}
+              className="inline-flex items-center justify-center gap-1 rounded bg-ide-accent px-3 py-1.5 text-[11px] text-white disabled:opacity-50"
+            >
+              <LogIn size={12} />
+              {submitting ? 'Connecting…' : 'Connect GitHub'}
+            </button>
+            <button
+              onClick={() => void onRefresh()}
+              className="rounded border border-ide-border px-3 py-1.5 text-[11px] text-ide-text hover:border-ide-accent/40"
+            >
+              Refresh Status
+            </button>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-3 text-[10px]">
+            <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-ide-accent hover:underline">
+              Open GitHub token page <ExternalLink size={11} />
+            </a>
+            <a href="https://github.com/Ileices/personal_IDE/discussions/8" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-ide-accent hover:underline">
+              Community Hub roadmap discussion <ExternalLink size={11} />
+            </a>
+          </div>
+
+          {(message || authError) && (
+            <div className="mt-2 text-[10px] text-yellow-50/90">{authError || message}</div>
+          )}
         </div>
       </div>
     </div>
