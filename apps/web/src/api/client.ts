@@ -9,7 +9,19 @@ const CSRF_COOKIE = 'csrf_token';
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 function buildUrl(path: string): string {
-  return `${API_BASE}${path}`;
+  const normalizedBase = API_BASE.replace(/\/+$/, '');
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  // Avoid accidental /api/api/... when callers already include /api-prefixed paths.
+  if (normalizedBase.endsWith('/api') && normalizedPath.startsWith('/api/')) {
+    return `${normalizedBase}${normalizedPath.slice(4)}`;
+  }
+
+  if (normalizedBase.endsWith('/api') && normalizedPath === '/api') {
+    return normalizedBase;
+  }
+
+  return `${normalizedBase}${normalizedPath}`;
 }
 
 function getCookie(name: string): string | null {
@@ -23,7 +35,7 @@ async function ensureCsrfToken(): Promise<string | null> {
   if (existing) return existing;
 
   // Bootstrap token cookie via a safe endpoint.
-  await fetch(buildUrl('/api/health'), {
+  await fetch(buildUrl('/health'), {
     method: 'GET',
     credentials: 'include',
   }).catch(() => {});
