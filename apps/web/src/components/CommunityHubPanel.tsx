@@ -4,6 +4,7 @@
 // Dev Tools tab only shown to repo owner
 // ============================================
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
   MessageSquare, Bug, Sparkles, RefreshCw, ChevronDown,
   ThumbsUp, Heart, Rocket, Eye, Laugh, SmilePlus, HelpCircle,
@@ -48,6 +49,27 @@ function relativeTime(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   return `${d}d ago`;
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <div className="prose prose-invert prose-sm max-w-none text-ide-text">
+      <ReactMarkdown
+        components={{
+          a: ({ ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-ide-accent hover:underline" />,
+          code: ({ className, children, ...props }) => {
+            const hasLanguage = /language-(\w+)/.test(className || '');
+            if (!hasLanguage) {
+              return <code className="rounded bg-ide-bg px-1 py-0.5 text-[11px] text-ide-accent" {...props}>{children}</code>;
+            }
+            return <code className="block overflow-x-auto rounded bg-ide-bg p-2 text-[11px]" {...props}>{children}</code>;
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 // ── Main Panel ────────────────────────────────
@@ -411,8 +433,8 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
 
           <h3 className="text-[13px] font-semibold text-ide-text mb-2">{discussion.title}</h3>
 
-          <div className="text-[12px] text-ide-text whitespace-pre-wrap leading-relaxed bg-ide-bg/30 rounded p-2.5 border border-ide-border">
-            {discussion.body}
+          <div className="bg-ide-bg/30 rounded p-2.5 border border-ide-border">
+            <MarkdownContent content={discussion.body || ''} />
           </div>
 
           {/* Reactions */}
@@ -453,8 +475,8 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
                   <span className="text-[11px] text-ide-text font-medium">@{comment.author?.login}</span>
                   <span className="text-[10px] text-ide-text-dim">{relativeTime(comment.createdAt)}</span>
                 </div>
-                <div className="text-[12px] text-ide-text whitespace-pre-wrap leading-relaxed">
-                  {comment.body}
+                <div className="text-[12px]">
+                  <MarkdownContent content={comment.body || ''} />
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {Object.entries(REACTION_MAP).map(([key, emoji]) => {
@@ -490,7 +512,9 @@ function DiscussionThread({ number, onBack }: { number: number; onBack: () => vo
                           <span className="text-[11px] text-ide-text font-medium">@{reply.author?.login}</span>
                           <span className="text-[10px] text-ide-text-dim">{relativeTime(reply.createdAt)}</span>
                         </div>
-                        <div className="text-[12px] text-ide-text whitespace-pre-wrap leading-relaxed">{reply.body}</div>
+                        <div className="text-[12px]">
+                          <MarkdownContent content={reply.body || ''} />
+                        </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {Object.entries(REACTION_MAP).map(([key, emoji]) => {
                             const count = reply.reactions?.nodes?.filter(r => r.content === key).length || 0;
@@ -869,8 +893,8 @@ function ReportCompose() {
       )}
 
       {tab === 'preview' && (
-        <div className="flex-1 min-h-0 overflow-y-auto text-[12px] text-ide-text whitespace-pre-wrap leading-relaxed bg-ide-bg/30 border border-ide-border rounded p-2.5">
-          {body || <span className="text-ide-text-dim italic">Nothing to preview yet.</span>}
+        <div className="flex-1 min-h-0 overflow-y-auto bg-ide-bg/30 border border-ide-border rounded p-2.5">
+          {body ? <MarkdownContent content={body} /> : <span className="text-[12px] text-ide-text-dim italic">Nothing to preview yet.</span>}
         </div>
       )}
 
