@@ -29,7 +29,7 @@ interface ProviderInfo {
 export function ProviderSettings({ onClose }: { onClose: () => void }) {
   const {
     allModels, failedModels, bulkTestInProgress, bulkTestProgress,
-    fetchModels: fetchAllModels, testAllModels, testModel, clearFailed, fetchInstalledLocalModels,
+    fetchModels: fetchAllModels, testAllModels, testModel, clearFailed, clearFailedByProvider, fetchInstalledLocalModels,
   } = useModelStore();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,6 +209,7 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
       });
       const data = await res.json();
       if (data.success) {
+        clearFailedByProvider('github');
         setGithubResult({ success: true, message: `Token updated for @${data.user.login}${data.user.hasCopilot ? ' (Copilot ✓)' : ''}` });
         setGithubPat('');
         void fetchAllModels(true);

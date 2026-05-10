@@ -153,9 +153,10 @@ export async function providersRoutes(app: FastifyInstance): Promise<void> {
       return config ? config.enabled === 1 : defaultEnabled;
     };
 
-    // Only try GitHub if there's actually a valid token — don't waste API calls
+    // Always try GitHub when an active PAT exists.
+    // A disabled provider toggle should not hide a valid paid Copilot catalog.
     const authRow = db.prepare('SELECT token_encrypted FROM auth_tokens WHERE is_active = 1').get() as any;
-    if (authRow?.token_encrypted && isProviderEnabled('github', true)) {
+    if (authRow?.token_encrypted) {
       try {
         const ghClient = getClientFromDb(db, 'github');
         if (ghClient) {
@@ -165,7 +166,7 @@ export async function providersRoutes(app: FastifyInstance): Promise<void> {
       } catch (err: any) {
         errors.push({ provider: 'github', error: err.message });
       }
-    } else if (isProviderEnabled('github', true)) {
+    } else {
       errors.push({ provider: 'github', error: 'No GitHub token configured. Go to Provider Settings → GitHub to add your PAT.' });
     }
 

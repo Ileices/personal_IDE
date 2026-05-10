@@ -117,6 +117,7 @@ interface ModelStore {
   markWorking: (modelId: string) => void;
   markFailed: (modelId: string, record: Omit<FailedModelRecord, 'modelId' | 'lastTestedAt' | 'skippedForSession'>) => void;
   clearFailed: (modelId: string) => void;
+  clearFailedByProvider: (provider: string) => void;
   clearSessionSkips: () => void;
   setPreferTestedModelsFirst: (value: boolean) => void;
   setHideFailedModels: (value: boolean) => void;
@@ -193,7 +194,7 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   workingModels: loadWorkingModels(),
   failedModels: loadFailedModels(),
   preferTestedModelsFirst: true,
-  hideFailedModels: true,
+  hideFailedModels: false,
   bulkTestInProgress: false,
   bulkTestProgress: { completed: 0, total: 0 },
 
@@ -308,6 +309,19 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   clearFailed: (modelId: string) => {
     const nextFailed = { ...get().failedModels };
     delete nextFailed[modelId];
+    saveFailedModels(nextFailed);
+    set({ failedModels: nextFailed });
+  },
+
+  clearFailedByProvider: (provider: string) => {
+    const normalized = provider.toLowerCase();
+    const nextFailed = { ...get().failedModels };
+    Object.keys(nextFailed).forEach(modelId => {
+      const modelProvider = (nextFailed[modelId]?.provider || modelId.split('/')[0] || '').toLowerCase();
+      if (modelProvider === normalized) {
+        delete nextFailed[modelId];
+      }
+    });
     saveFailedModels(nextFailed);
     set({ failedModels: nextFailed });
   },
