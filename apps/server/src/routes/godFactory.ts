@@ -343,12 +343,18 @@ function ensureIdleSuggestion(
     cycle_id?: string;
   },
 ): void {
+  // Suppress if an identical suggestion is pending OR was already responded to within 24 hours.
+  // This prevents refreshGodFactorySignals from re-creating the same suggestion seconds after
+  // the user accepts/rejects it (the underlying source record still exists).
   const existing = db.prepare(`
     SELECT suggestion_id
     FROM idle_suggestions
     WHERE category = ?
       AND natural_language_summary = ?
-      AND user_response IS NULL
+      AND (
+        user_response IS NULL
+        OR datetime(timestamp) > datetime('now', '-24 hours')
+      )
     LIMIT 1
   `).get(payload.category, payload.natural_language_summary) as { suggestion_id: string } | undefined;
 
@@ -372,7 +378,158 @@ function ensureIdleSuggestion(
   );
 }
 
+/**
+ * Intel Panel → God Factory pipeline wire.
+ *
+ * Reads gap_reports WHERE flagged_to_god_factory = 1 AND not yet acknowledged,
+ * creates a job_records entry for each, marks the gap as acknowledged, and
+ * writes a god_factory_actions audit entry.
+ *
+ * This closes the highest-priority wiring gap identified in Discussion #24:
+ * the Gap Analysis crawler correctly writes flagged reports, but nothing was
+ * converting them into actionable job_records until this function.
+ *
+ * Returns the count of new jobs created.
+ */
+function flushFlaggedGapReportsToJobs(db: Db): number {
+  const flagged = db.prepare(`
+    SELECT report_id, gap_category, severity, affected_files, affected_tags,
+           recommended_action_tags, session_id
+    FROM gap_reports
+    WHERE flagged_to_god_factory = 1
+      AND (acknowledged_at IS NULL OR acknowledged_at = '')
+    ORDER BY
+      CASE severity
+        WHEN 'fatal'    THEN 0
+        WHEN 'critical' THEN 1
+        WHEN 'error'    THEN 2
+        WHEN 'warning'  THEN 3
+        ELSE 4
+      END ASC,
+      datetime(timestamp) DESC
+    LIMIT 50
+  `).all() as Array<{
+    report_id: string;
+    gap_category: string;
+    severity: string;
+    affected_files: string;
+    affected_tags: string;
+    recommended_action_tags: string;
+    session_id: string;
+  }>;
+
+  if (flagged.length === 0) return 0;
+
+  const defaultProjectId = (() => {
+    const rows = db.prepare(`
+      SELECT id FROM projects ORDER BY last_accessed_at DESC, created_at DESC LIMIT 1
+    `).all() as Array<{ id: string }>;
+    return rows.length > 0 ? rows[0].id : null;
+  })();
+
+  const sandboxSpec = JSON.stringify({
+    sandbox_id: null,
+    status: 'not_started',
+    cycle_limit: 50,
+    cycles_used: 0,
+    test_results: [],
+    human_review_required: false,
+    human_review_completed: false,
+  });
+
+  const categoryMap: Record<string, string> = {
+    coverage: 'nano_coverage_gap',
+    structural: 'debt_reduction',
+    process: 'regression_hardening',
+    tag_system: 'tag_schema_extension',
+    agent_performance: 'god_factory_scan',
+  };
+
+  const priorityMap: Record<string, string> = {
+    fatal: 'critical',
+    critical: 'critical',
+    error: 'high',
+    warning: 'medium',
+    info: 'low',
+  };
+
+  let created = 0;
+
+  for (const gap of flagged) {
+    // Idempotency check: skip if a job already references this gap report
+    const existing = db.prepare(
+      `SELECT job_id FROM job_records WHERE source_report_id = ? LIMIT 1`
+    ).get(gap.report_id) as { job_id: string } | undefined;
+    if (existing) {
+      // Mark acknowledged even if job already existed
+      db.prepare(`UPDATE gap_reports SET acknowledged_at = datetime('now') WHERE report_id = ?`).run(gap.report_id);
+      continue;
+    }
+
+    const jobId = randomUUID();
+    const jobCategory = categoryMap[gap.gap_category] || 'god_factory_scan';
+    const priority = priorityMap[gap.severity] || 'medium';
+    const actionTags = parseJson<string[]>(gap.recommended_action_tags, []);
+    const title = `Fix: ${gap.gap_category.replace(/_/g, ' ')} gap (${gap.severity})${actionTags.length > 0 ? ' — ' + actionTags.slice(0, 3).join(', ') : ''}`;
+    const description = `Gap report ${gap.report_id} from session ${gap.session_id}. Severity: ${gap.severity}. Category: ${gap.gap_category}. Recommended actions: ${actionTags.join(', ') || 'see gap report'}.`;
+
+    db.prepare(`
+      INSERT INTO job_records
+        (id, job_id, project_id, job_category, source, source_record_ids, source_report_id,
+         priority, title, description,
+         affected_files, affected_devtags, affected_plantags, required_buildtags,
+         blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
+         implementation_status, created_cycle, last_updated_cycle,
+         timestamp, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+    `).run(
+      randomUUID(),
+      jobId,
+      defaultProjectId,
+      jobCategory,
+      'god_factory_agent',
+      JSON.stringify([gap.report_id]),
+      gap.report_id,
+      priority,
+      title,
+      description,
+      gap.affected_files || '[]',
+      gap.affected_tags || '[]',
+      '[]',
+      '[]',
+      '[]',
+      '[]',
+      JSON.stringify({ phase: 1, milestone: 'gap_report_flush', parent_job_id: null, child_job_ids: [] }),
+      JSON.stringify(actionTags.map((tag, i) => ({ step: i + 1, action: tag }))),
+      sandboxSpec,
+      JOB_STATUS.SUGGESTED,
+      0,
+      0,
+    );
+
+    db.prepare(`UPDATE gap_reports SET acknowledged_at = datetime('now') WHERE report_id = ?`).run(gap.report_id);
+
+    logGodFactoryAction(db, {
+      action_type: 'gap_to_job',
+      target_id: jobId,
+      target_type: 'job',
+      authority_invoked: 'gap_analysis_flush',
+      justification_tags: ['gap_fix', gap.gap_category, gap.severity],
+      result: `Created job_record ${jobId} from gap_report ${gap.report_id}`,
+    });
+
+    created++;
+  }
+
+  return created;
+}
+
 function refreshGodFactorySignals(db: Db): void {
+  // Wire gap reports to jobs — converts flagged gap_reports into job_records entries.
+  // This closes the highest-priority wiring gap: gap analysis DOES write flagged records,
+  // but nothing was reading them to create actionable jobs until this function.
+  flushFlaggedGapReportsToJobs(db);
+
   const criticalGaps = db.prepare(`
     SELECT report_id, gap_category, severity, affected_files, affected_tags, timestamp
     FROM gap_reports
@@ -1187,6 +1344,20 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     }
 
     return reply.status(201).send({ brainstorm_id: brainstormId, generated_job_id: jobId });
+  });
+
+  // ── Gap Reports → Jobs Flush ────────────────────────────────────────────────
+  // Manually triggers the gap-to-job pipeline: reads all unacknowledged
+  // flagged gap_reports and converts them into job_records entries.
+  // Also called automatically from refreshGodFactorySignals on every signal cycle.
+  app.post('/gap-reports/flush-to-jobs', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const created = flushFlaggedGapReportsToJobs(db);
+    return reply.status(200).send({
+      jobs_created: created,
+      message: created > 0
+        ? `Flushed ${created} gap report(s) into job_records.`
+        : 'No unacknowledged flagged gap reports found.',
+    });
   });
 
   app.post('/actions', async (req: FastifyRequest, reply: FastifyReply) => {

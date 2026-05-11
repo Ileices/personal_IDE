@@ -7,6 +7,8 @@ import type { ProviderType } from '@personal-ide/shared';
 import { getModel } from '@personal-ide/shared';
 import { fetchProviderModels, getClientFromDb } from '../../llm/providers.js';
 import { detectProjectStack } from '../../errors/detector.js';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { CodebaseAnalyzer } from '../../analysis/codebase.js';
 import { RelationshipIndexService } from '../../analysis/relationshipIndex.js';
 import { LogBloatManager } from '../../analysis/logManager.js';
@@ -166,6 +168,33 @@ export async function initializeRun(
     });
   } catch (err: any) {
     emit({ type: 'info', message: 'Platform detection: ' + err.message });
+  }
+
+  // ── Personal IDE Identity Injection ──
+  // When the agent loop is running INSIDE the Personal IDE source tree, inject
+  // an identity context block so the model knows it is modifying its own runtime.
+  // Markers: the two files that are unique to the Personal IDE monorepo.
+  const PERSONAL_IDE_MARKERS = [
+    join('apps', 'server', 'src', 'routes', 'godFactory.ts'),
+    join('apps', 'web', 'src', 'help', 'helpRegistry.ts'),
+  ];
+  const isPersonalIDE = PERSONAL_IDE_MARKERS.every(m => existsSync(join(config.projectRoot, m)));
+  if (isPersonalIDE) {
+    const selfAwarenessBlock = [
+      '\n[PLATFORM IDENTITY: Personal IDE]',
+      'You are operating INSIDE Personal IDE — the IDE that is running you.',
+      'You are its developer. You have full context about the codebase architecture.',
+      'When modifying files under apps/server/ or apps/web/ you are changing your own runtime.',
+      'Before marking any task complete, verify the build is still clean:',
+      '  pnpm --filter @personal-ide/server build',
+      '  pnpm --filter @personal-ide/web build',
+      'Key source contracts:',
+      '  - apps/server/src/db/index.ts: SQLite migrations (append-only, never mutate existing versions)',
+      '  - apps/web/src/help/helpRegistry.ts: master promise ledger (update FIRST before implementing)',
+      '  - apps/server/src/routes/godFactory.ts: God Factory control plane',
+    ].join('\n');
+    result.platformContext = result.platformContext + selfAwarenessBlock;
+    emit({ type: 'info', message: 'Personal IDE identity injected into platform context.' });
   }
 
   // ── Project Stack Detection ──

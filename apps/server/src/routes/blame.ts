@@ -560,8 +560,17 @@ function maybeWriteSuccessAttribution(db: any, args: {
 export function writeBlameRecord(db: any, input: BlameWriteInput): void {
   try {
     const id = randomUUID();
-    const modelId = input.model;
+    // Attribution fallback: if no model field, default to 'github/copilot'
+    // (codebase with no explicit blame attribution came from GitHub Copilot suggestions)
+    const modelId = (input.model && input.model.trim()) ? input.model.trim() : 'github/copilot';
     const provider = parseProvider(modelId);
+    // User signature detection: # $usersignature[TAG] in output text marks manually-authored lines
+    const sigMatch = typeof input.outputText === 'string'
+      ? input.outputText.match(/#\s*\$usersignature\[([^\]]+)\]/)
+      : null;
+    const userAuthored = sigMatch ? 1 : 0;
+    const userSignatureTag = sigMatch ? sigMatch[1].trim() : null;
+    const attributedSource = userAuthored ? userSignatureTag : modelId;
     const modelName = parseModelName(modelId);
     const modelVersion = input.modelVersion || 'unknown';
     const interactionType = input.interactionType || input.mode || 'ask';
@@ -605,6 +614,7 @@ export function writeBlameRecord(db: any, input: BlameWriteInput): void {
         context_window_tokens, output_tokens_allowed,
         context_utilization_percent, output_utilization_percent,
         output_hash, drift_detected, forensic_entry_ids,
+        user_authored, user_signature_tag, attributed_source,
         created_at, timestamp
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?,
@@ -621,6 +631,7 @@ export function writeBlameRecord(db: any, input: BlameWriteInput): void {
         ?, ?, ?,
         ?, ?,
         ?, ?,
+        ?, ?, ?,
         ?, ?, ?,
         datetime('now'), ?
       )
@@ -667,6 +678,9 @@ export function writeBlameRecord(db: any, input: BlameWriteInput): void {
       outputHash,
       input.driftDetected ? 1 : 0,
       safeJsonArrayString(input.forensicEntryIds || []),
+      userAuthored,
+      userSignatureTag,
+      attributedSource,
       timestamp,
     );
 

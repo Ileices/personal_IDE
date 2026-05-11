@@ -2392,6 +2392,52 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 114,
+    name: 'blame-attribution-and-gap-to-job-columns',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, col: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+
+      // blame_records: forensic attribution columns
+      // user_authored: 1 when output contains # $usersignature[TAG]
+      // user_signature_tag: extracted TAG from $usersignature marker
+      // attributed_source: who actually authored this code ('github/copilot' fallback, or user tag)
+      if (!hasColumn('blame_records', 'user_authored')) {
+        db.exec(`ALTER TABLE blame_records ADD COLUMN user_authored INTEGER NOT NULL DEFAULT 0`);
+      }
+      if (!hasColumn('blame_records', 'user_signature_tag')) {
+        db.exec(`ALTER TABLE blame_records ADD COLUMN user_signature_tag TEXT`);
+      }
+      if (!hasColumn('blame_records', 'attributed_source')) {
+        db.exec(`ALTER TABLE blame_records ADD COLUMN attributed_source TEXT`);
+      }
+
+      // gap_reports: mark when a job has been created for this gap
+      if (!hasColumn('gap_reports', 'acknowledged_at')) {
+        db.exec(`ALTER TABLE gap_reports ADD COLUMN acknowledged_at TEXT`);
+      }
+
+      // job_records: link back to the originating gap report
+      if (!hasColumn('job_records', 'source_report_id')) {
+        db.exec(`ALTER TABLE job_records ADD COLUMN source_report_id TEXT`);
+      }
+      if (!hasColumn('job_records', 'description')) {
+        db.exec(`ALTER TABLE job_records ADD COLUMN description TEXT NOT NULL DEFAULT ''`);
+      }
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_blame_user_authored
+          ON blame_records(user_authored, created_at);
+        CREATE INDEX IF NOT EXISTS idx_blame_attributed_source
+          ON blame_records(attributed_source, created_at);
+        CREATE INDEX IF NOT EXISTS idx_gap_reports_acknowledged
+          ON gap_reports(acknowledged_at, flagged_to_god_factory);
+        CREATE INDEX IF NOT EXISTS idx_job_records_source_report
+          ON job_records(source_report_id);
+      `);
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────
