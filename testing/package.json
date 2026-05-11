@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@vitest/ui": "^4.0.18",
+    "@vitest/ui": "^4.1.5",
     "picomatch": "^4.0.4",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
