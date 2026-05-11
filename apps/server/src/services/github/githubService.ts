@@ -214,11 +214,19 @@ export class GitHubService {
     return appConfig.github.pat || null;
   }
 
-  /** Check if the current user is the repo owner */
+  /** Check if the current user is the repo owner (active account only — no fallback).
+   *  Using a saved owner row as fallback would keep privileges alive after a guest
+   *  or different user becomes active, silently bypassing the intended session boundary.
+   */
   isOwner(): boolean {
-    const account = this.getActiveGitHubAccount();
-    if (!account) return false;
-    return account.github_login === OWNER_LOGIN;
+    try {
+      const activeRow = this.db
+        .prepare(`SELECT github_login, github_user_id FROM auth_tokens WHERE is_active = 1 LIMIT 1`)
+        .get() as { github_login: string; github_user_id: number } | undefined;
+      return activeRow?.github_user_id !== -1 && activeRow?.github_login === OWNER_LOGIN;
+    } catch {
+      return false;
+    }
   }
 
   /** Active GitHub account context for route-level scoping */

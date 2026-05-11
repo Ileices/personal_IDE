@@ -600,6 +600,21 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
   const [runningSubsystem, setRunningSubsystem] = useState<SubsystemId | null>(null);
 
+  // ── Auto-intelligence toggle state ──
+  const [autoIntelEnabled, setAutoIntelEnabled] = useState(false);
+  const [autoIntelIntervalMin, setAutoIntelIntervalMin] = useState(15);
+  const [autoIntelCountdown, setAutoIntelCountdown] = useState(0);
+  const [autoIntelBusy, setAutoIntelBusy] = useState(false);
+  const [autoIntelLastRun, setAutoIntelLastRun] = useState<string | null>(null);
+  const [autoIntelError, setAutoIntelError] = useState<string | null>(null);
+  const [autoIntelFailCount, setAutoIntelFailCount] = useState(0);
+
+  // ── Rate usage state ──
+  const [rateUsage, setRateUsage] = useState<Array<{ model: string; count: number; limitEst: number }>>([]);
+
+  // ── Notification action busy state ──
+  const [notifActionBusy, setNotifActionBusy] = useState<string | null>(null);
+
   const loadQueue = useCallback(() => {
     fetch(`${API_BASE}/api/god-factory/queue?limit=20`)
       .then(r => r.ok ? r.json() : null)
@@ -687,6 +702,27 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       .finally(() => setJobsLoading(false));
   }, [projectId]);
 
+  // ── Rate usage loader (derived from blame stats) ──
+  const loadRateUsage = useCallback(() => {
+    fetch(`${API_BASE}/api/blame/records?limit=200&window=3600`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { records?: Array<{ attributed_source?: string; model_id?: string }> } | null) => {
+        if (!d?.records?.length) return;
+        const counts: Record<string, number> = {};
+        for (const rec of d.records) {
+          const key = rec.attributed_source || rec.model_id || 'unknown';
+          counts[key] = (counts[key] || 0) + 1;
+        }
+        const usage = Object.entries(counts).map(([model, count]) => ({
+          model,
+          count,
+          limitEst: model.includes('copilot') ? 50 : model.includes('gpt-4') ? 40 : 60,
+        }));
+        setRateUsage(usage.sort((a, b) => b.count - a.count).slice(0, 5));
+      })
+      .catch(() => {});
+  }, []);
+
   const loadExternalJobs = useCallback(() => {
     const qp = new URLSearchParams({ limit: '10', category: 'external_project' });
     if (projectId) qp.set('project_id', projectId);
@@ -767,6 +803,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       loadBackgroundStatus();
       loadRecentActions();
       loadSiliconDashboard();
+      loadRateUsage();
 
       jobsTimer = window.setInterval(() => {
         loadSuggestedJobs();
@@ -781,6 +818,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         loadBackgroundStatus();
         loadRecentActions();
         loadSiliconDashboard();
+        loadRateUsage();
       }, 20_000);
 
       void loadSubsystemSettings();
@@ -805,7 +843,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (jobsTimer) window.clearInterval(jobsTimer);
       if (gfTimer) window.clearInterval(gfTimer);
     };
-  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard]);
+  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage]);
 
   const toggleSection = (key: keyof typeof sections) =>
     setSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1291,6 +1329,80 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     setNotifications(prev => prev.filter(x => x.id !== id));
   };
 
+  // ── Auto-intelligence pipeline trigger ──
+  const runAutoIntelPipeline = useCallback(async () => {
+    if (autoIntelBusy) return;
+    setAutoIntelBusy(true);
+    setAutoIntelError(null);
+    try {
+      // Step 1: flush flagged gap reports to jobs
+      const flushRes = await fetch(`${API_BASE}/api/god-factory/gap-reports/flush-to-jobs`, { method: 'POST' }).catch(() => null);
+      if (!flushRes || !flushRes.ok) throw new Error('flush-to-jobs failed');
+      // Step 2: refresh God Factory signals
+      await fetch(`${API_BASE}/api/god-factory/signals`, { method: 'GET' }).catch(() => null);
+      // Step 3: reload queue and jobs
+      loadQueue();
+      loadSuggestedJobs();
+      loadCodebaseHealth();
+      setAutoIntelLastRun(new Date().toISOString());
+      setAutoIntelFailCount(0);
+      setAutoIntelCountdown(autoIntelIntervalMin * 60);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'pipeline error';
+      setAutoIntelError(msg);
+      setAutoIntelFailCount(prev => prev + 1);
+      if (autoIntelFailCount + 1 >= 3) {
+        setAutoIntelEnabled(false);
+        setAutoIntelError(`Auto-intelligence disabled after 3 consecutive failures. Last error: ${msg}`);
+      }
+    } finally {
+      setAutoIntelBusy(false);
+    }
+  }, [autoIntelBusy, autoIntelIntervalMin, autoIntelFailCount, loadQueue, loadSuggestedJobs, loadCodebaseHealth]);
+
+  // ── Auto-intelligence interval effect ──
+  useEffect(() => {
+    if (!autoIntelEnabled) { setAutoIntelCountdown(0); return; }
+    setAutoIntelCountdown(autoIntelIntervalMin * 60);
+    const countdownId = window.setInterval(() => {
+      setAutoIntelCountdown(prev => {
+        if (prev <= 1) return autoIntelIntervalMin * 60;
+        return prev - 1;
+      });
+    }, 1000);
+    const pipelineId = window.setInterval(() => {
+      void runAutoIntelPipeline();
+    }, autoIntelIntervalMin * 60 * 1000);
+    return () => { window.clearInterval(countdownId); window.clearInterval(pipelineId); };
+  }, [autoIntelEnabled, autoIntelIntervalMin, runAutoIntelPipeline]);
+
+  // ── Notification action handlers ──
+  const notifFlushToJob = async (notifId: string) => {
+    setNotifActionBusy('flush');
+    try {
+      await fetch(`${API_BASE}/api/god-factory/gap-reports/flush-to-jobs`, { method: 'POST' });
+      await acknowledgeNotification(notifId);
+      loadSuggestedJobs();
+      loadQueue();
+    } catch { /* no-op */ }
+    finally { setNotifActionBusy(null); setSelectedNotification(null); }
+  };
+
+  const notifViewModelHealth = () => {
+    setSelectedNotification(null);
+    setSections(prev => ({ ...prev, modelHealth: true }));
+  };
+
+  const notifAddToQueue = async (notifId: string) => {
+    setNotifActionBusy('queue');
+    try {
+      await fetch(`${API_BASE}/api/god-factory/gap-reports/flush-to-jobs`, { method: 'POST' });
+      await acknowledgeNotification(notifId);
+      loadSuggestedJobs();
+    } catch { /* no-op */ }
+    finally { setNotifActionBusy(null); setSelectedNotification(null); }
+  };
+
   const respondIdleSuggestion = async (suggestionId: string, response: 'accepted' | 'rejected' | 'deferred') => {
     const actionMap: Record<string, string> = { accepted: 'accept', rejected: 'reject', deferred: 'defer' };
     await fetch(`${API_BASE}/api/god-factory/idle-suggestions/${suggestionId}/action`, {
@@ -1411,6 +1523,58 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                     </pre>
                   </div>
                 )}
+                {/* ── Notification action controls ── */}
+                <div>
+                  <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Actions</div>
+                  <div className="flex flex-wrap gap-1">
+                    {(() => {
+                      const cat = selectedNotification.notification.category as string;
+                      const id = selectedNotification.notification.notification_id;
+                      const isGapCategory = cat === 'gap_report' || cat === 'code_health' || cat === 'drift' || cat === 'regression_trend';
+                      const isModelAlert = cat === 'model_behavior_alert' || cat === 'model_performance';
+                      const isDebt = cat === 'debt_warning';
+                      const isCritical = selectedNotification.notification.severity === 'critical' || selectedNotification.notification.severity === 'fatal';
+                      return (
+                        <>
+                          {(isGapCategory || isCritical) && (
+                            <button
+                              onClick={() => void notifFlushToJob(id)}
+                              disabled={notifActionBusy === 'flush'}
+                              className="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300 border border-yellow-500/30 hover:bg-yellow-500/25 disabled:opacity-40 flex items-center gap-1"
+                            >
+                              {notifActionBusy === 'flush' ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Zap className="w-2 h-2" />}
+                              Create Job
+                            </button>
+                          )}
+                          {isModelAlert && (
+                            <button
+                              onClick={notifViewModelHealth}
+                              className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 flex items-center gap-1"
+                            >
+                              <Shield className="w-2 h-2" /> View Model Health
+                            </button>
+                          )}
+                          {isDebt && (
+                            <button
+                              onClick={() => void notifAddToQueue(id)}
+                              disabled={notifActionBusy === 'queue'}
+                              className="text-[9px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30 hover:bg-orange-500/25 disabled:opacity-40 flex items-center gap-1"
+                            >
+                              {notifActionBusy === 'queue' ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Briefcase className="w-2 h-2" />}
+                              Add to Queue
+                            </button>
+                          )}
+                          <button
+                            onClick={() => void acknowledgeNotification(id).then(() => setSelectedNotification(null))}
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-ide-border/30 text-ide-text-dim border border-ide-border/40 hover:bg-ide-border/50 flex items-center gap-1"
+                          >
+                            <X className="w-2 h-2" /> Dismiss
+                          </button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
               </>
             )}
             {selectedModel && (
@@ -1470,6 +1634,63 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       )}
 
       <div className="flex-1 overflow-y-auto">
+        {/* ── Auto-Intelligence Toggle ── */}
+        <div className="border-b border-ide-border/50 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3 h-3 text-purple-400" />
+              <span className="text-[10px] font-semibold text-ide-text-dim">Auto-Intelligence</span>
+            </div>
+            <button
+              onClick={() => { setAutoIntelEnabled(v => !v); setAutoIntelError(null); setAutoIntelFailCount(0); }}
+              className={`relative w-8 h-4 rounded-full transition-colors ${autoIntelEnabled ? 'bg-purple-500' : 'bg-ide-border'}`}
+              title={autoIntelEnabled ? 'Disable auto-intelligence pipeline' : 'Enable auto-intelligence pipeline'}
+            >
+              <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${autoIntelEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          {autoIntelEnabled && (
+            <div className="mt-1.5 space-y-1 text-[9px]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-ide-text-dim">Interval</span>
+                <select
+                  value={autoIntelIntervalMin}
+                  onChange={e => setAutoIntelIntervalMin(Number(e.target.value))}
+                  className="bg-ide-bg border border-ide-border/40 rounded px-1 text-ide-text text-[9px]"
+                >
+                  <option value={5}>5 min</option>
+                  <option value={15}>15 min</option>
+                  <option value={30}>30 min</option>
+                  <option value={60}>60 min</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-ide-text-dim">Next run in</span>
+                <span className="text-purple-300 font-mono">
+                  {autoIntelCountdown > 0 ? `${Math.floor(autoIntelCountdown / 60)}m ${autoIntelCountdown % 60}s` : '—'}
+                </span>
+              </div>
+              {autoIntelLastRun && (
+                <div className="text-ide-text-dim">Last: {new Date(autoIntelLastRun).toLocaleTimeString()}</div>
+              )}
+              <button
+                onClick={() => void runAutoIntelPipeline()}
+                disabled={autoIntelBusy}
+                className="w-full py-1 text-[9px] rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 disabled:opacity-40 flex items-center justify-center gap-1"
+              >
+                {autoIntelBusy ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Zap className="w-2.5 h-2.5" />}
+                Run Now
+              </button>
+            </div>
+          )}
+          {autoIntelError && (
+            <div className="mt-1 text-[9px] text-red-400 leading-snug flex items-start gap-1">
+              <AlertTriangle className="w-2.5 h-2.5 mt-0.5 flex-shrink-0" />
+              <span>{autoIntelError}</span>
+            </div>
+          )}
+        </div>
+
         {/* ── Notifications ── */}
         <div className="border-b border-ide-border/50">
           <button onClick={() => toggleSection('notifications')}
@@ -1834,6 +2055,27 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   </div>
                 </button>
               ))}
+              {rateUsage.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Rate Usage (last 1h)</div>
+                  {rateUsage.map(u => {
+                    const pct = Math.min(100, Math.round((u.count / u.limitEst) * 100));
+                    const barColor = pct >= 90 ? 'bg-red-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-green-500';
+                    const textColor = pct >= 90 ? 'text-red-400' : pct >= 60 ? 'text-yellow-400' : 'text-green-400';
+                    return (
+                      <div key={u.model} className="mb-1.5">
+                        <div className="flex items-center justify-between text-[9px] mb-0.5">
+                          <span className="text-ide-text-dim truncate max-w-[110px]" title={u.model}>{u.model}</span>
+                          <span className={textColor}>{u.count}/{u.limitEst}</span>
+                        </div>
+                        <div className="h-1 rounded bg-ide-border/40 overflow-hidden">
+                          <div className={`h-full rounded ${barColor}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

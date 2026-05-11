@@ -372,10 +372,13 @@ export async function codebaseRoutes(app: FastifyInstance) {
   // { path, content, approved? }
   //   approved=false → preview (diff) + requiresApproval: true
   //   approved=true  → write file (creates dirs, creates .bak if exists)
+  //   force=true     → skip truncation guard (must be explicit)
+  // Truncation guard: if existing file shrinks by >40% in line count, the
+  // request is blocked unless force=true is sent with approved=true.
   // ─────────────────────────────────────────────────────────────────────────
   app.post('/write', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { path: filePath, content, approved = false } = req.body as {
-      path: string; content: string; approved?: boolean;
+    const { path: filePath, content, approved = false, force = false } = req.body as {
+      path: string; content: string; approved?: boolean; force?: boolean;
     };
     if (!filePath || content === undefined) return reply.status(400).send({ error: 'path and content required' });
 
@@ -383,16 +386,51 @@ export async function codebaseRoutes(app: FastifyInstance) {
       const resolved = fsService.safePath(IDE_ROOT, filePath);
       const isNew = !existsSync(resolved);
       const originalContent = isNew ? '' : readFileSync(resolved, 'utf-8');
+
+      // Truncation guard: block writes that shrink an existing file by >40% in lines
+      let truncationWarning: string | null = null;
+      if (!isNew) {
+        const originalLines = originalContent.split('\n').length;
+        const newLines = content.split('\n').length;
+        const shrinkRatio = newLines / originalLines;
+        if (originalLines > 20 && shrinkRatio < 0.60) {
+          truncationWarning = `TRUNCATION RISK: file would shrink from ${originalLines} to ${newLines} lines (${Math.round(shrinkRatio * 100)}% of original). This likely means the new content is incomplete.`;
+          if (approved && !force) {
+            return reply.status(400).send({
+              error: truncationWarning + ' Pass force=true to override this guard.',
+              truncation_risk: true,
+              original_lines: originalLines,
+              new_lines: newLines,
+            });
+          }
+        }
+      }
+
       const diff = unifiedDiff(originalContent, content, normalizeSep(filePath));
 
       if (!approved) {
-        return { requiresApproval: true, path: filePath, diff, isNew, linesWritten: content.split('\n').length };
+        const originalLines = isNew ? 0 : originalContent.split('\n').length;
+        const newLines = content.split('\n').length;
+        return {
+          requiresApproval: true,
+          path: filePath,
+          diff,
+          isNew,
+          linesWritten: newLines,
+          originalLines,
+          truncationWarning,
+        };
       }
 
       mkdirSync(dirname(resolved), { recursive: true });
       if (!isNew) writeFileSync(resolved + '.bak', originalContent, 'utf-8');
       writeFileSync(resolved, content, 'utf-8');
-      return { success: true, path: filePath, isNew, linesWritten: content.split('\n').length };
+      return {
+        success: true,
+        path: filePath,
+        isNew,
+        linesWritten: content.split('\n').length,
+      };
     } catch (err: any) {
       return reply.status(400).send({ error: err.message });
     }

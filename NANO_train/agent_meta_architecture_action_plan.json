@@ -3,8 +3,8 @@
     "title": "Agent meta-architecture — full stack action plan",
     "description": "A 5-phase production build plan for a context-window-aware agent that uses its token budget as a control plane for external automation scripts. The agent never writes final code directly — it writes scripts that write the code, runs them, and stores only compressed summaries. This lets a 512-token model build arbitrarily large codebases across many turns.",
     "total_phases": 5,
-    "total_tasks": 22,
-    "total_files_to_create": 18,
+    "total_tasks": 23,
+    "total_files_to_create": 19,
     "build_order": "strict — each phase must be complete before starting the next",
     "core_principle": "The agent is a control plane, not a code writer. It generates Python automation scripts that generate the actual codebase. Each script run can produce tens of thousands of lines. The agent only ever sees compressed summaries of what was built."
   },
@@ -16,6 +16,20 @@
       "tasks": [
         {
           "task_id": "1.1",
+          "name": "Create centralized configuration file",
+          "sub": "Define base paths for memory fabric and projects, with environment variable overrides",
+          "difficulty": "easy",
+          "files_to_create": ["config.py"],
+          "what": "A Python file to hold all configurable paths and settings, making the system adaptable to different environments.",
+          "how": "Create a config.py with default paths that can be overridden by environment variables.",
+          "code": {
+            "filename": "config.py",
+            "language": "python",
+            "content": "import os\n\nMEMORY_FABRIC_BASE_PATH = os.getenv('MEMORY_FABRIC_BASE_PATH', 'memory_fabric')\nPROJECTS_BASE_PATH = os.getenv('PROJECTS_BASE_PATH', 'projects')\n\n# Example usage:\n# from config import MEMORY_FABRIC_BASE_PATH, PROJECTS_BASE_PATH"
+          }
+        },
+        {
+          "task_id": "1.2",
           "name": "Create the folder structure on disk",
           "sub": "One-time setup — run a Python script to scaffold directories",
           "difficulty": "easy",
@@ -43,11 +57,11 @@
           "code": {
             "filename": "scaffold_memory_fabric.py",
             "language": "python",
-            "content": "import os, pathlib\n\nBASE = pathlib.Path('memory_fabric')\ndirs = [\n    'indices',\n    'domains/example_project/user_prompts',\n    'domains/example_project/agent_outputs',\n    'domains/example_project/memory_markers',\n    'automation/code_generators',\n    'automation/schema_templates',\n    'cache'\n]\nfor d in dirs:\n    (BASE / d).mkdir(parents=True, exist_ok=True)\npathlib.Path('projects').mkdir(exist_ok=True)\nprint('Memory fabric scaffold complete.')"
+            "content": "import os, pathlib\nfrom config import MEMORY_FABRIC_BASE_PATH, PROJECTS_BASE_PATH\n\nBASE = pathlib.Path(MEMORY_FABRIC_BASE_PATH)\ndirs = [\n    'indices',\n    'domains/example_project/user_prompts',\n    'domains/example_project/agent_outputs',\n    'domains/example_project/memory_markers',\n    'automation/code_generators',\n    'automation/schema_templates',\n    'cache'\n]\nfor d in dirs:\n    (BASE / d).mkdir(parents=True, exist_ok=True)\npathlib.Path(PROJECTS_BASE_PATH).mkdir(exist_ok=True)\nprint('Memory fabric scaffold complete.')"
           }
         },
         {
-          "task_id": "1.2",
+          "task_id": "1.3",
           "name": "Build the token-aware index manager",
           "sub": "Python class that loads only memories that fit in the token budget",
           "difficulty": "hard",

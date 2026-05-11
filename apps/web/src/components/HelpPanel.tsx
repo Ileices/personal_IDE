@@ -214,6 +214,24 @@ export function HelpPanel() {
                </div>
              )}
            </div>
+
+           {section.discussionLinks && section.discussionLinks.length > 0 && (
+             <div className="space-y-2">
+               <div className="text-[11px] font-semibold uppercase tracking-wider text-ide-text-dim">Related GitHub Discussions</div>
+               {section.discussionLinks.map((link, i) => (
+                 <a
+                   key={`${section.id}-dlink-${i}`}
+                   href={link.url}
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   className="flex items-center gap-2 text-[11px] text-ide-accent hover:text-ide-accent/80 underline p-2 rounded border border-ide-border bg-ide-panel hover:bg-ide-bg/40 transition-colors"
+                 >
+                   <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                   {link.label}
+                 </a>
+               ))}
+             </div>
+           )}
          </div>
        </div>
      </div>

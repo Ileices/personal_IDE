@@ -55,6 +55,9 @@ interface ApprovalDetails {
   isNew?: boolean;
   oldString?: string;
   newString?: string;
+  originalLines?: number;
+  newLines?: number;
+  truncationWarning?: string | null;
 }
 
 interface PromptHistoryItem {
@@ -100,6 +103,13 @@ To call a tool, output a fenced code block with language \`tool_call\` containin
 \`\`\`tool_call
 {"tool": "read_file", "params": {"path": "apps/web/src/App.tsx", "startLine": 1, "endLine": 50}}
 \`\`\`
+
+⚠️ CRITICAL AUTONOMY RULES (MUST follow every single response):
+1. If your response mentions reading, searching, checking, or calling anything — INCLUDE THE tool_call BLOCK IN THIS SAME RESPONSE. Never say "I will search" and then stop. ACT immediately.
+2. Use ONE tool call per response. After you receive the tool result, use another tool or give your final answer.
+3. Do NOT ask the user for permission before using tools — just use them. You have full authorization.
+4. Do NOT describe a multi-step plan and then wait. Execute the FIRST step NOW, then proceed step-by-step.
+5. If you are in autonomous mode, after completing each task continue to the NEXT task without pausing. Only stop when you have exhausted all identified work or hit the iteration limit.
 
 ### Available Tools
 
@@ -156,15 +166,19 @@ To call a tool, output a fenced code block with language \`tool_call\` containin
 | silicon_reindex_embeddings | Rebuild TF-IDF symbol embeddings for stronger semantic find | \`project_id?\` |
 
 ### Tool Rules
-- Use ONE tool call per response turn
+- Use ONE tool call per response turn — include it in the SAME response where you decide to use it
+- NEVER describe what you will do and then stop — execute immediately
+- **ALWAYS use \`patch_file\` for modifying existing files — NEVER use \`write_file\` on files that already exist**
+- **ONLY use \`write_file\` when creating a brand-new file that does not yet exist**
+- The reason: \`write_file\` replaces the entire file content. If your generated content is incomplete due to token limits or context loss, you will silently delete working code. \`patch_file\` surgically replaces only the matched region, leaving everything else untouched.
+- Always READ a file before patching it (ensures oldString matches exactly)
+- For patch_file: include 3+ lines of unchanged context around the target text
+- patch_file oldString must match EXACTLY ONCE — add more context if needed
 - When the user asks for a feature, enhancement, or implementation, call \`find_suggested_jobs\` first
 - If a matching job exists, call \`get_job_detail\` or \`read_sandbox_status\` before recommending implementation
 - If no matching job exists for a requested enhancement, call \`create_brainstorm_job\` to create a real Suggested Job instead of inventing one
 - When the user asks about codebase state, regressions, model performance, coverage, debt, or recurring failures, use the live God Factory tools instead of guessing
 - Brainstorm responses must cite live tool results such as devtags, files, debt scores, patterns, or blame/model data
-- Always READ a file before patching it (ensures oldString matches exactly)
-- For patch_file: include 3+ lines of unchanged context around the target text
-- patch_file oldString must match EXACTLY ONCE — add more context if needed
 - Dangerous commands (rm -rf, format, shutdown, etc.) are automatically blocked
 - Maximum ${MAX_TOOL_ITERATIONS} tool calls per session
 - After finishing, provide a clear summary of all changes made
@@ -176,6 +190,11 @@ function extractToolCall(text: string): ToolCall | null {
   try {
     const parsed = JSON.parse(match[1]);
     if (typeof parsed.tool !== 'string') return null;
+    // Normalize: handle both {tool, params: {...}} and flat {tool, key1: val1, ...}
+    if (!parsed.params || typeof parsed.params !== 'object') {
+      const { tool, ...rest } = parsed;
+      return { tool, params: rest } as ToolCall;
+    }
     return parsed as ToolCall;
   } catch { return null; }
 }
@@ -356,6 +375,7 @@ export function TheGodFactory() {
   const [toolIterationCount, setToolIterationCount] = useState(0);
   const [pendingApproval, setPendingApproval]     = useState<ApprovalDetails | null>(null);
   const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
+  const [autonomousMode, setAutonomousMode]       = useState(false);
 
   // Codebase snapshot — pre-loaded on mount so system prompt always has real context
   const [codebaseTree, setCodebaseTree]   = useState<string>('');
@@ -367,10 +387,12 @@ export function TheGodFactory() {
   const inputRef  = useRef<HTMLTextAreaElement>(null);
   const godFactorySessionIdRef = useRef<string | null>(null);
   const sessionIntroShownRef = useRef<string | null>(null);
+  const autonomousModeRef = useRef(false);
 
   // Keep local model in sync with global if global changes and we haven't overridden
   useEffect(() => { if (selectedModel && !localModel) setLocalModel(selectedModel); }, [selectedModel]);
-  useEffect(() => { void fetchModels(); }, [fetchModels]);
+  // Force-refresh models on mount so GitHub PAT models are always current
+  useEffect(() => { void fetchModels(true); }, [fetchModels]);
   useEffect(() => {
     if (allModels.length === 0 || !localModel) return;
     if (allModels.some(model => model.id === localModel)) return;
@@ -381,6 +403,7 @@ export function TheGodFactory() {
   useEffect(() => { saveConv(messages); }, [messages]);
   useEffect(() => { saveHistory(history); }, [history]);
   useEffect(() => { godFactorySessionIdRef.current = godFactorySessionId; }, [godFactorySessionId]);
+  useEffect(() => { autonomousModeRef.current = autonomousMode; }, [autonomousMode]);
 
   // ── Load codebase tree on mount ───────────────────────────────────────────
   useEffect(() => {
@@ -791,13 +814,22 @@ export function TheGodFactory() {
           });
           const preview = await prevRes.json();
           if (preview.error) return `Error: ${preview.error}`;
-          const approved = await requestApproval({ type: 'write', path: String(params.path), diff: preview.diff, isNew: preview.isNew });
+          const approved = await requestApproval({
+            type: 'write',
+            path: String(params.path),
+            diff: preview.diff,
+            isNew: preview.isNew,
+            originalLines: preview.originalLines,
+            newLines: preview.linesWritten,
+            truncationWarning: preview.truncationWarning ?? null,
+          });
           if (!approved) return `User rejected write to ${params.path}.`;
           const applyRes = await fetch(`${API_BASE}/api/codebase/write`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: params.path, content: params.content, approved: true }),
+            body: JSON.stringify({ path: params.path, content: params.content, approved: true, force: true }),
           });
           const result = await applyRes.json();
+          if (!applyRes.ok) return `Error: ${result.error}`;
           return result.success ? `${result.isNew ? 'Created' : 'Updated'} ${params.path} (${result.linesWritten} lines).` : `Error: ${result.error}`;
         }
         case 'run_command': {
@@ -1299,7 +1331,24 @@ export function TheGodFactory() {
 
       while (iteration < MAX_TOOL_ITERATIONS && !abort.signal.aborted) {
         const toolCall = extractToolCall(currentContent);
-        if (!toolCall) break;
+
+        if (!toolCall) {
+          // No tool call found. In autonomous mode, keep driving the agent unless it signals done.
+          if (autonomousModeRef.current && toolsEnabled && iteration > 0) {
+            const donePhrases = /autonomous loop complete|no more tasks|all tasks complete|nothing more to do|task complete|i'm done|i am done/i;
+            if (donePhrases.test(currentContent)) break;
+            // Inject continuation nudge so the agent keeps working
+            toolHistory.push({ role: 'assistant', content: currentContent });
+            const contPrompt = `Continue autonomously. Identify the next highest-priority task from the Intel Panel, codebase health signals, or prior analysis. Execute it immediately with a tool call. When all work is done, reply with "AUTONOMOUS LOOP COMPLETE".`;
+            const { content: nextContent } = await streamTurn(contPrompt, buildSystemCtx(toolHistory), abort);
+            currentContent = nextContent;
+            finalAssistantContent = nextContent;
+            iteration++;
+            setToolIterationCount(iteration);
+            continue;
+          }
+          break;
+        }
 
         iteration++;
         setToolIterationCount(iteration);
@@ -1582,6 +1631,9 @@ export function TheGodFactory() {
             <div className="flex items-center gap-2 mb-2 text-[10px] text-purple-400/70">
               <Wrench className="w-3 h-3" />
               <span>Agent mode: reads, searches, edits files and runs commands — writes/execs require your approval</span>
+              {autonomousMode && (
+                <span className="text-purple-300 font-semibold animate-pulse">∞ Autonomous ON</span>
+              )}
               {codebaseReady
                 ? <span className="ml-auto text-green-400/70">✓ Codebase loaded</span>
                 : <span className="ml-auto text-yellow-400/70 animate-pulse">⏳ Loading codebase…</span>}
@@ -1591,15 +1643,32 @@ export function TheGodFactory() {
             <textarea
               ref={inputRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => {
+                setInput(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+              }}
               onKeyDown={handleKey}
               placeholder={toolsEnabled
                 ? "Tell THE GOD FACTORY what to build, fix, or enhance… it will use tools autonomously (Enter sends)"
                 : "Tell THE GOD FACTORY what to build, fix, or enhance… (Enter sends, Shift+Enter = newline)"}
-              className="flex-1 bg-ide-bg border border-ide-border rounded-lg px-3 py-2.5 text-sm text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-purple-500/50 transition-colors min-h-[60px] max-h-[200px]"
+              className="flex-1 bg-ide-bg border border-ide-border rounded-lg px-3 py-2.5 text-sm text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-purple-500/50 transition-colors overflow-y-auto"
+              style={{ minHeight: '60px', maxHeight: '200px', height: '60px' }}
               rows={2}
             />
             <div className="flex flex-col gap-1.5">
+              {/* Autonomous mode toggle */}
+              <button
+                onClick={() => setAutonomousMode(prev => !prev)}
+                title={autonomousMode ? 'Autonomous mode ON — agent will keep running until done. Click to disable.' : 'Autonomous mode OFF — agent stops after each response. Click to enable.'}
+                className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors text-xs font-bold border ${
+                  autonomousMode
+                    ? 'bg-purple-600/80 border-purple-400 text-white'
+                    : 'bg-ide-bg border-ide-border text-ide-text-dim hover:border-purple-500/50'
+                }`}
+              >
+                ∞
+              </button>
               {isStreaming ? (
                 <button onClick={stopStreaming}
                   className="w-9 h-9 flex items-center justify-center bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30">
@@ -1676,6 +1745,30 @@ function ApprovalModal({ details, onApprove, onReject }: {
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Truncation warning — shown prominently when file shrinks significantly */}
+              {details.truncationWarning && (
+                <div className="flex items-start gap-2 p-3 bg-red-500/15 border border-red-500/40 rounded-lg text-[11px] text-red-300">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-400" />
+                  <div>
+                    <p className="font-semibold text-red-400 mb-1">⚠ Truncation Risk Detected</p>
+                    <p>{details.truncationWarning}</p>
+                    <p className="mt-1 text-red-400/70">Approving will overwrite with the potentially incomplete content. The original will be backed up to <code>.bak</code>.</p>
+                  </div>
+                </div>
+              )}
+              {/* Line count summary */}
+              {!details.isNew && details.originalLines !== undefined && details.newLines !== undefined && (
+                <div className={`flex items-center gap-3 text-[11px] px-3 py-2 rounded border ${
+                  details.newLines < details.originalLines * 0.8
+                    ? 'bg-red-500/10 border-red-500/30 text-red-300'
+                    : 'bg-ide-bg/50 border-ide-border text-ide-text-dim'
+                }`}>
+                  <span>Lines: <span className="font-mono">{details.originalLines}</span> → <span className="font-mono">{details.newLines}</span></span>
+                  {details.newLines < details.originalLines * 0.8 && (
+                    <span className="text-red-400 font-semibold">({Math.round(details.newLines / details.originalLines * 100)}% of original)</span>
+                  )}
+                </div>
+              )}
               {details.diff && (
                 <>
                   <div className="flex items-center justify-between">

@@ -154,6 +154,7 @@ function inferTier(provider: string): ModelDefinition['tier'] {
   if (p.includes('ollama')) return 'ollama_local';
   if (p.includes('anthropic') || p.includes('claude')) return 'anthropic_sonnet';
   if (p.includes('openai') || p.includes('gpt')) return 'openai_direct';
+  if (p === 'github') return 'openai_direct'; // GitHub Copilot API uses OpenAI-compatible models
   if (p.includes('deepseek')) return 'deepseek_direct';
   if (p.includes('qwen') || p.includes('alibaba') || p.includes('dashscope')) return 'qwen_free';
   if (p.includes('mistral')) return 'mistral_free';
