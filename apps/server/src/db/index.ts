@@ -2202,11 +2202,194 @@ const MIGRATIONS: Migration[] = [
     version: 107,
     name: 'checkpoints-type-column',
     up(db: Database.Database) {
+      const hasTable = (table: string) =>
+        !!db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table);
       const hasColumn = (table: string, col: string) =>
         (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+
+      if (!hasTable('checkpoints')) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS checkpoints (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            agent_run_id TEXT,
+            iteration INTEGER NOT NULL DEFAULT 0,
+            label TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            files_snapshot TEXT DEFAULT '[]',
+            git_commit_hash TEXT,
+            can_rollback INTEGER NOT NULL DEFAULT 1,
+            type TEXT NOT NULL DEFAULT 'user',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+          CREATE INDEX IF NOT EXISTS idx_checkpoints_project ON checkpoints(project_id);
+        `);
+        return;
+      }
+
       if (!hasColumn('checkpoints', 'type')) {
         db.exec(`ALTER TABLE checkpoints ADD COLUMN type TEXT NOT NULL DEFAULT 'user'`);
       }
+    },
+  },
+  {
+    version: 108,
+    name: 'github-account-scope-columns',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, col: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+
+      if (!hasColumn('github_reports', 'github_user_id')) {
+        db.exec(`ALTER TABLE github_reports ADD COLUMN github_user_id INTEGER NOT NULL DEFAULT -1`);
+      }
+      if (!hasColumn('github_notifications', 'github_user_id')) {
+        db.exec(`ALTER TABLE github_notifications ADD COLUMN github_user_id INTEGER NOT NULL DEFAULT -1`);
+      }
+      if (!hasColumn('github_tracked', 'github_user_id')) {
+        db.exec(`ALTER TABLE github_tracked ADD COLUMN github_user_id INTEGER NOT NULL DEFAULT -1`);
+      }
+      if (!hasColumn('github_dev_drafts', 'github_user_id')) {
+        db.exec(`ALTER TABLE github_dev_drafts ADD COLUMN github_user_id INTEGER NOT NULL DEFAULT -1`);
+      }
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_github_reports_user_created
+          ON github_reports(github_user_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_github_notifications_user_read
+          ON github_notifications(github_user_id, read_at, created_at);
+        CREATE INDEX IF NOT EXISTS idx_github_tracked_user
+          ON github_tracked(github_user_id, discussion_node_id);
+        CREATE INDEX IF NOT EXISTS idx_github_dev_drafts_user
+          ON github_dev_drafts(github_user_id, created_at);
+      `);
+    },
+  },
+  {
+    version: 109,
+    name: 'interactive-session-chunks',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS interactive_session_chunks (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          field_name TEXT NOT NULL,
+          chunk_index INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(session_id, field_name, chunk_index)
+        );
+        CREATE INDEX IF NOT EXISTS idx_interactive_session_chunks_session
+          ON interactive_session_chunks(session_id, field_name, chunk_index);
+      `);
+    },
+  },
+  {
+    version: 110,
+    name: 'god-factory-loop-error-telemetry',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, col: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+
+      if (!hasColumn('god_factory_loop_state', 'last_error_code')) {
+        db.exec(`ALTER TABLE god_factory_loop_state ADD COLUMN last_error_code TEXT`);
+      }
+      if (!hasColumn('god_factory_loop_state', 'last_error_summary')) {
+        db.exec(`ALTER TABLE god_factory_loop_state ADD COLUMN last_error_summary TEXT`);
+      }
+      if (!hasColumn('god_factory_loop_state', 'last_error_at')) {
+        db.exec(`ALTER TABLE god_factory_loop_state ADD COLUMN last_error_at TEXT`);
+      }
+      if (!hasColumn('god_factory_loop_state', 'stop_reason')) {
+        db.exec(`ALTER TABLE god_factory_loop_state ADD COLUMN stop_reason TEXT`);
+      }
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_gf_loop_state_stop_reason
+          ON god_factory_loop_state(stop_reason, last_error_at);
+      `);
+    },
+  },
+  {
+    version: 111,
+    name: 'god-factory-durable-runs',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS god_factory_runs (
+          run_id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          model_id TEXT NOT NULL,
+          max_iterations INTEGER NOT NULL DEFAULT 0,
+          iteration_count INTEGER NOT NULL DEFAULT 0,
+          jobs_completed INTEGER NOT NULL DEFAULT 0,
+          jobs_failed INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','completed','stopped','crashed','error')),
+          stop_reason TEXT,
+          started_at TEXT NOT NULL DEFAULT (datetime('now')),
+          last_active_at TEXT,
+          ended_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_gf_runs_status_started
+          ON god_factory_runs(status, started_at);
+        CREATE INDEX IF NOT EXISTS idx_gf_runs_project
+          ON god_factory_runs(project_id, started_at);
+      `);
+    },
+  },
+  {
+    version: 112,
+    name: 'job-record-project-scope',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, col: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+
+      if (!hasColumn('job_records', 'project_id')) {
+        db.exec(`ALTER TABLE job_records ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL`);
+      }
+
+      const projects = db.prepare(`
+        SELECT id
+        FROM projects
+        ORDER BY last_accessed_at DESC, created_at DESC
+        LIMIT 2
+      `).all() as Array<{ id: string }>;
+
+      if (projects.length === 1) {
+        db.prepare(`
+          UPDATE job_records
+          SET project_id = ?
+          WHERE project_id IS NULL OR project_id = ''
+        `).run(projects[0].id);
+      }
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_job_records_project
+          ON job_records(project_id);
+        CREATE INDEX IF NOT EXISTS idx_job_records_project_status_created
+          ON job_records(project_id, implementation_status, created_at);
+      `);
+    },
+  },
+  {
+    version: 113,
+    name: 'god-factory-run-governance-config',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, col: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+
+      if (!hasColumn('god_factory_runs', 'auto_approve_changes')) {
+        db.exec(`ALTER TABLE god_factory_runs ADD COLUMN auto_approve_changes INTEGER NOT NULL DEFAULT 0`);
+      }
+      if (!hasColumn('god_factory_runs', 'auto_answer_questions')) {
+        db.exec(`ALTER TABLE god_factory_runs ADD COLUMN auto_answer_questions INTEGER NOT NULL DEFAULT 0`);
+      }
+      if (!hasColumn('god_factory_runs', 'checkpoint_every')) {
+        db.exec(`ALTER TABLE god_factory_runs ADD COLUMN checkpoint_every INTEGER NOT NULL DEFAULT 5`);
+      }
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_gf_runs_governance
+          ON god_factory_runs(auto_approve_changes, auto_answer_questions, checkpoint_every);
+      `);
     },
   },
 ];

@@ -90,6 +90,21 @@ export interface GHIssue {
   user: { login: string; avatar_url: string };
 }
 
+export interface ActiveGitHubAccount {
+  github_user_id: number;
+  github_login: string;
+}
+
+// C4-G: Discussion category type returned by getDiscussionCategories()
+export interface DiscussionCategory {
+  id: string;
+  name: string;
+  emoji: string;
+  emojiHTML: string;
+  description: string;
+  isAnswerable: boolean;
+}
+
 function discussionRankingScore(discussion: GitHubDiscussion, mode: 'TOP' | 'TRENDING'): number {
   const reactionScore = discussion.reactions?.totalCount ?? 0;
   const commentScore = discussion.comments?.totalCount ?? 0;
@@ -108,9 +123,53 @@ function discussionRankingScore(discussion: GitHubDiscussion, mode: 'TOP' | 'TRE
 // ── GitHubService class ────────────────────────
 export class GitHubService {
   private db: Database.Database;
+  private readonly maxNetworkAttempts = 3;
+  private readonly requestTimeoutMs = 15000;
+  /** In-memory TTL cache for global ranking results (TOP/TRENDING). */
+  private readonly _rankingCache = new Map<string, {
+    nodes: GitHubDiscussion[];
+    fetchedAt: number;
+    totalCount: number;
+  }>();
 
   constructor(db: Database.Database) {
     this.db = db;
+  }
+
+  private async wait(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private getErrorMessage(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    return String(err);
+  }
+
+  private async fetchWithRetry(url: string, init: RequestInit, context: string): Promise<Response> {
+    let lastError: string | null = null;
+
+    for (let attempt = 1; attempt <= this.maxNetworkAttempts; attempt++) {
+      try {
+        const signal = AbortSignal.timeout(this.requestTimeoutMs);
+        const res = await fetch(url, { ...init, signal });
+
+        // Retry upstream 5xxs; return all other responses to normal handlers.
+        if (res.status >= 500 && attempt < this.maxNetworkAttempts) {
+          await this.wait(attempt * 250);
+          continue;
+        }
+
+        return res;
+      } catch (err) {
+        lastError = this.getErrorMessage(err);
+        if (attempt < this.maxNetworkAttempts) {
+          await this.wait(attempt * 250);
+          continue;
+        }
+      }
+    }
+
+    throw new Error(`${context} failed after ${this.maxNetworkAttempts} attempts: ${lastError ?? 'unknown network error'}`);
   }
 
   private decryptToken(tokenValue: string | null | undefined): string | null {
@@ -157,23 +216,38 @@ export class GitHubService {
 
   /** Check if the current user is the repo owner */
   isOwner(): boolean {
+    const account = this.getActiveGitHubAccount();
+    if (!account) return false;
+    return account.github_login === OWNER_LOGIN;
+  }
+
+  /** Active GitHub account context for route-level scoping */
+  getActiveGitHubAccount(): ActiveGitHubAccount | null {
     try {
       const activeRow = this.db
-        .prepare(`SELECT github_login FROM auth_tokens WHERE is_active = 1 LIMIT 1`)
-        .get() as { github_login: string } | undefined;
+        .prepare(`SELECT github_user_id, github_login FROM auth_tokens WHERE is_active = 1 LIMIT 1`)
+        .get() as { github_user_id: number; github_login: string } | undefined;
 
-      if (activeRow?.github_login === OWNER_LOGIN) {
-        return true;
+      if (activeRow?.github_user_id !== -1 && activeRow?.github_login) {
+        return activeRow;
       }
 
       const fallbackRow = this.db
-        .prepare(`SELECT github_login FROM auth_tokens WHERE github_user_id != -1 ORDER BY is_active DESC, updated_at DESC LIMIT 1`)
-        .get() as { github_login: string } | undefined;
+        .prepare(`SELECT github_user_id, github_login FROM auth_tokens WHERE github_user_id != -1 ORDER BY is_active DESC, updated_at DESC LIMIT 1`)
+        .get() as { github_user_id: number; github_login: string } | undefined;
 
-      return fallbackRow?.github_login === OWNER_LOGIN;
+      if (fallbackRow?.github_user_id !== -1 && fallbackRow?.github_login) {
+        return fallbackRow;
+      }
+
+      return null;
     } catch {
-      return false;
+      return null;
     }
+  }
+
+  getActiveGitHubUserId(): number {
+    return this.getActiveGitHubAccount()?.github_user_id ?? -1;
   }
 
   /** Execute a GitHub GraphQL query */
@@ -181,7 +255,7 @@ export class GitHubService {
     const token = this.getToken();
     if (!token) throw new Error('No GitHub token configured. Go to Settings → Providers to add your PAT.');
 
-    const res = await fetch(GRAPHQL_URL, {
+    const res = await this.fetchWithRetry(GRAPHQL_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -190,12 +264,20 @@ export class GitHubService {
         'X-GitHub-Api-Version': '2022-11-28',
       },
       body: JSON.stringify({ query, variables }),
-    });
+    }, 'GitHub GraphQL request');
 
-    if (!res.ok) throw new Error(`GitHub GraphQL HTTP ${res.status}`);
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      const truncated = bodyText.slice(0, 300);
+      throw new Error(`GitHub GraphQL HTTP ${res.status}${truncated ? `: ${truncated}` : ''}`);
+    }
+
     const data = await res.json() as any;
     if (data.errors?.length) {
-      throw new Error(data.errors.map((e: any) => e.message).join('; '));
+      const detail = data.errors
+        .map((e: any) => `${e.message}${e.type ? ` [${e.type}]` : ''}`)
+        .join('; ');
+      throw new Error(`GitHub GraphQL responded with errors: ${detail}`);
     }
     return data.data as T;
   }
@@ -205,7 +287,7 @@ export class GitHubService {
     const token = this.getToken();
     if (!token) throw new Error('No GitHub token configured.');
 
-    const res = await fetch(`${REST_BASE}${path}`, {
+    const res = await this.fetchWithRetry(`${REST_BASE}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -215,7 +297,7 @@ export class GitHubService {
         'X-GitHub-Api-Version': '2022-11-28',
       },
       body: body ? JSON.stringify(body) : undefined,
-    });
+    }, `GitHub REST ${method} ${path}`);
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({})) as any;
@@ -237,10 +319,84 @@ export class GitHubService {
     const { first = 20, after, categoryId, orderBy = 'NEWEST' } = opts;
 
     const rankingMode = orderBy === 'TOP' || orderBy === 'TRENDING' ? orderBy : null;
-    const orderField = orderBy === 'UPDATED' || rankingMode ? 'UPDATED_AT' : 'CREATED_AT';
-    const orderDir   = orderBy === 'OLDEST'  ? 'ASC' : 'DESC';
-    const requestedFirst = rankingMode ? Math.max(first, 50) : first;
+    const orderField = rankingMode ? 'UPDATED_AT' : (orderBy === 'UPDATED' ? 'UPDATED_AT' : 'CREATED_AT');
+    const orderDir   = orderBy === 'OLDEST' ? 'ASC' : 'DESC';
 
+    // For TOP/TRENDING, accumulate all pages and rank globally (C5 finding S fix).
+    // Cap at 10 pages × 100 items = 1000 discussions to respect rate limits.
+    // Results are TTL-cached at 10 minutes per (mode, categoryId) key.
+    if (rankingMode) {
+      const cacheKey = `ranking:${rankingMode}:${categoryId ?? ''}`;
+      const cached = this._rankingCache.get(cacheKey);
+      if (cached && Date.now() - cached.fetchedAt < 10 * 60 * 1000) {
+        const sliced = cached.nodes.slice(0, first);
+        return {
+          nodes: sliced,
+          pageInfo: { hasNextPage: cached.nodes.length > first, hasPreviousPage: false },
+          totalCount: cached.totalCount,
+        };
+      }
+
+      const accumulated: GitHubDiscussion[] = [];
+      let cursor: string | null = null;
+      let totalCount = 0;
+      const maxPages = 10;
+      const pageSize = 100;
+
+      for (let page = 0; page < maxPages; page++) {
+        const data: { repository: { discussions: { totalCount: number; pageInfo: { hasNextPage: boolean; endCursor?: string }; nodes: GitHubDiscussion[] } } } = await this.graphql(`
+          query ListDiscussionsPaged($owner: String!, $name: String!, $first: Int!, $after: String, $categoryId: ID, $orderField: DiscussionOrderField!, $orderDir: OrderDirection!) {
+            repository(owner: $owner, name: $name) {
+              discussions(
+                first: $first
+                after: $after
+                categoryId: $categoryId
+                orderBy: { field: $orderField, direction: $orderDir }
+              ) {
+                totalCount
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  id number title body createdAt updatedAt url isAnswered upvoteCount
+                  stateReason
+                  author { login avatarUrl url }
+                  category { id name emoji: emojiHTML }
+                  labels(first: 5) { nodes { name color } }
+                  comments { totalCount }
+                  reactions(first: 6) { totalCount nodes { content user { login } } }
+                  answer { id body author { login avatarUrl url } }
+                }
+              }
+            }
+          }
+        `, { owner: REPO_OWNER, name: REPO_NAME, first: pageSize, after: cursor, categoryId: categoryId ?? null, orderField, orderDir });
+
+        const page_data = data.repository.discussions;
+        totalCount = page_data.totalCount;
+        accumulated.push(...page_data.nodes);
+
+        if (!page_data.pageInfo.hasNextPage) break;
+        cursor = page_data.pageInfo.endCursor ?? null;
+        if (!cursor) break;
+
+        // Brief pause between pages to be gentle on rate limits
+        await this.wait(150);
+      }
+
+      const ranked = [...accumulated].sort(
+        (left, right) => discussionRankingScore(right, rankingMode) - discussionRankingScore(left, rankingMode)
+      );
+
+      this._rankingCache.set(cacheKey, { nodes: ranked, fetchedAt: Date.now(), totalCount });
+
+      const sliced = ranked.slice(0, first);
+      return {
+        nodes: sliced,
+        pageInfo: { hasNextPage: ranked.length > first, hasPreviousPage: false },
+        totalCount,
+      };
+    }
+
+    // Non-ranking modes: single page fetch (original behaviour)
     const data = await this.graphql(`
       query ListDiscussions($owner: String!, $name: String!, $first: Int!, $after: String, $categoryId: ID, $orderField: DiscussionOrderField!, $orderDir: OrderDirection!) {
         repository(owner: $owner, name: $name) {
@@ -265,20 +421,7 @@ export class GitHubService {
           }
         }
       }
-    `, { owner: REPO_OWNER, name: REPO_NAME, first: requestedFirst, after: after ?? null, categoryId: categoryId ?? null, orderField, orderDir });
-
-    if (rankingMode) {
-      const rankedNodes = [...data.repository.discussions.nodes]
-        .sort((left: GitHubDiscussion, right: GitHubDiscussion) =>
-          discussionRankingScore(right, rankingMode) - discussionRankingScore(left, rankingMode)
-        )
-        .slice(0, first);
-
-      return {
-        ...data.repository.discussions,
-        nodes: rankedNodes,
-      };
-    }
+    `, { owner: REPO_OWNER, name: REPO_NAME, first, after: after ?? null, categoryId: categoryId ?? null, orderField, orderDir });
 
     return data.repository.discussions;
   }
@@ -427,7 +570,7 @@ export class GitHubService {
   }
 
   /** Get recent comments on tracked discussion IDs to detect new replies */
-  async pollTrackedDiscussions(nodeIds: string[]): Promise<Array<{ id: string; commentCount: number; isAnswered: boolean }>> {
+  async pollTrackedDiscussions(nodeIds: string[]): Promise<Array<{ id: string; commentCount: number; isAnswered: boolean; stateReason: string | null; updatedAt: string | null; url: string | null }>> {
     if (nodeIds.length === 0) return [];
 
     // GraphQL nodes query for multiple node IDs
@@ -437,6 +580,9 @@ export class GitHubService {
           ... on Discussion {
             id
             isAnswered
+            stateReason
+            updatedAt
+            url
             comments { totalCount }
           }
         }
@@ -447,6 +593,9 @@ export class GitHubService {
       id: n.id,
       commentCount: n.comments?.totalCount ?? 0,
       isAnswered: n.isAnswered ?? false,
+      stateReason: n.stateReason ?? null,
+      updatedAt: n.updatedAt ?? null,
+      url: n.url ?? null,
     }));
   }
 
@@ -477,6 +626,37 @@ export class GitHubService {
         }
       }
     `, { discussionId });
+  }
+
+  // C4-G: Dynamic discussion categories — replaces hardcoded CATEGORY_IDS map.
+  // Cached for 30 minutes to avoid hammering the API on every call.
+  private _categoriesCache: { nodes: DiscussionCategory[]; fetchedAt: number } | null = null;
+  private readonly _categoriesTTL = 30 * 60 * 1000; // 30 min
+
+  async getDiscussionCategories(): Promise<DiscussionCategory[]> {
+    const now = Date.now();
+    if (this._categoriesCache && (now - this._categoriesCache.fetchedAt) < this._categoriesTTL) {
+      return this._categoriesCache.nodes;
+    }
+    const data = await this.graphql<{ repository: { discussionCategories: { nodes: DiscussionCategory[] } } }>(`
+      query GetDiscussionCategories($owner: String!, $name: String!) {
+        repository(owner: $owner, name: $name) {
+          discussionCategories(first: 25) {
+            nodes {
+              id
+              name
+              emoji
+              emojiHTML
+              description
+              isAnswerable
+            }
+          }
+        }
+      }
+    `, { owner: REPO_OWNER, name: REPO_NAME });
+    const nodes = data?.repository?.discussionCategories?.nodes ?? [];
+    this._categoriesCache = { nodes, fetchedAt: now };
+    return nodes;
   }
 }
 

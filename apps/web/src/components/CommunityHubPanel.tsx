@@ -19,6 +19,7 @@ import {
   pollNotifications, getDevOpenDiscussions, getDevOpenIssues,
   analyzeDiscussion, getDevDrafts, updateDevDraft, postDevDraft,
   closeIssue, markCommentAsAnswer, closeDiscussion, getToolchainStatus,
+  markDiscussionAnswer, closeDiscussionByAuthor,
   type GHDiscussion, type LocalReport, type LocalDraft,
   type GHNotification, type DevDraft, type GHIssue,
   type GHToolchainStatus,
@@ -158,6 +159,10 @@ export function CommunityHubPanel({ isOwner: isOwnerProp }: CommunityHubPanelPro
   const [isOwner, setIsOwner] = useState(isOwnerProp ?? false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [status, setStatus] = useState<GHToolchainStatus | null>(null);
+  // notifThreadNumber: when a notification row is clicked, we navigate to this discussion
+  // inline in the notifications tab rather than switching to the feed tab. Set to null
+  // when the user clicks Back from the inline thread view.
+  const [notifThreadNumber, setNotifThreadNumber] = useState<number | null>(null);
   const { user, accounts, isLoading: authBusy, login, switchAccount, loadAccounts, checkAuth, error: authError, clearError } = useAuthStore();
 
   const refreshStatus = useCallback(() => {
@@ -257,7 +262,27 @@ export function CommunityHubPanel({ isOwner: isOwnerProp }: CommunityHubPanelPro
         {tab === 'feed'          && <DiscussionFeed onOpenThread={() => setTab('thread')} setThreadNumber={() => {}} />}
         {tab === 'report'        && <ReportCompose />}
         {tab === 'my-reports'    && <MyReports />}
-        {tab === 'notifications' && <NotificationsPanel onRead={() => setUnreadCount(0)} />}
+        {tab === 'notifications' && notifThreadNumber !== null && (
+          <DiscussionThread
+            number={notifThreadNumber}
+            onBack={() => setNotifThreadNumber(null)}
+            onNavigateThread={(n) => setNotifThreadNumber(n)}
+          />
+        )}
+        {tab === 'notifications' && notifThreadNumber === null && (
+          <NotificationsPanel
+            onRead={() => setUnreadCount(0)}
+            onNavigateToThread={(n) => {
+              // Switch to the feed tab (which has its own thread router) is not possible
+              // from here because DiscussionFeed owns openThreadNumber locally.
+              // Instead we render a direct DiscussionThread below by setting a root-level
+              // thread state. We can't mutate DiscussionFeed's local state from here,
+              // so we store the number in a sibling state variable (notifThreadNumber)
+              // and show the thread inline in the notifications tab.
+              setNotifThreadNumber(n);
+            }}
+          />
+        )}
         {tab === 'dev' && isOwner && <DevToolsPanel />}
       </div>
     </div>
@@ -414,6 +439,24 @@ function DiscussionFeed({ onOpenThread, setThreadNumber }: { onOpenThread: () =>
   );
 }
 
+// ── Discussion Thread helpers ──────────────────
+/**
+ * Returns true if the authenticated user has already reacted with `content`.
+ * Requires reactions.nodes to include { content, user { login } } — the
+ * server GraphQL query already returns this shape.
+ *
+ * CAUTION: do not duplicate this check at individual call sites. All toggle
+ * decisions must flow through handleReaction to stay consistent.
+ */
+function userHasReacted(
+  nodes: Array<{ content: string; user?: { login: string } }> | undefined,
+  content: string,
+  authLogin: string | undefined
+): boolean {
+  if (!authLogin || !nodes?.length) return false;
+  return nodes.some(r => r.content === content && r.user?.login === authLogin);
+}
+
 // ── Discussion Thread ──────────────────────────
 function DiscussionThread({ number, onBack, onNavigateThread }: { number: number; onBack: () => void; onNavigateThread: (discussionNumber: number) => void }) {
   const [discussion, setDiscussion] = useState<GHDiscussion | null>(null);
@@ -423,6 +466,18 @@ function DiscussionThread({ number, onBack, onNavigateThread }: { number: number
   const [replying, setReplying] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<{ id: string; login: string } | null>(null);
+
+  // Discussion resolution state.
+  // CAUTION: closingDiscussion / markingAnswer track in-flight requests to prevent
+  // double-submission. Always reset them in the finally block.
+  const [closingDiscussion, setClosingDiscussion] = useState(false);
+  const [markingAnswer, setMarkingAnswer] = useState<string | null>(null); // commentId being marked
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
+
+  // Auth user login — used to detect and toggle the user's own reactions,
+  // and to show/hide author-only resolution controls.
+  // useAuthStore is already imported at the top of this file.
+  const { user: authUser } = useAuthStore();
 
   const refreshDiscussion = useCallback(async () => {
     const fresh = await getDiscussion(number);
@@ -453,14 +508,83 @@ function DiscussionThread({ number, onBack, onNavigateThread }: { number: number
     }
   };
 
-  const handleReaction = async (subjectId: string, content: string) => {
+  /**
+   * Close this discussion.
+   *
+   * CAUTION: This is a destructive action visible to all GitHub users.
+   * The confirmation dialog below ensures explicit user intent before the
+   * API call is made. Do not remove the confirm() guard.
+   *
+   * GitHub enforces that only the discussion author or a collaborator with
+   * triage/write access can close a discussion; the API will return an error
+   * if the authenticated user lacks permission.
+   */
+  const handleClose = async () => {
+    if (!discussion) return;
+    if (!window.confirm(`Close discussion #${discussion.number} "${discussion.title}"?\nThis action is visible on GitHub.`)) return;
+    setClosingDiscussion(true);
+    setResolutionError(null);
     try {
-      await addReaction(subjectId, content);
+      await closeDiscussionByAuthor(discussion.id);
+      await refreshDiscussion();
+    } catch (e: any) {
+      setResolutionError(e.message || 'Failed to close discussion.');
+    } finally {
+      setClosingDiscussion(false);
+    }
+  };
+
+  /**
+   * Mark a comment as the accepted answer on this discussion.
+   *
+   * CAUTION: Only applicable to Q&A-category discussions. Calling this on
+   * other category types (e.g., Ideas, Announcements) will return a GitHub
+   * API error which is surfaced in resolutionError rather than swallowed.
+   *
+   * GitHub enforces that only the discussion author can mark an answer.
+   */
+  const handleMarkAnswer = async (commentId: string) => {
+    if (!discussion) return;
+    setMarkingAnswer(commentId);
+    setResolutionError(null);
+    try {
+      await markDiscussionAnswer(discussion.id, commentId);
+      await refreshDiscussion();
+    } catch (e: any) {
+      setResolutionError(e.message || 'Failed to mark answer.');
+    } finally {
+      setMarkingAnswer(null);
+    }
+  };
+
+  /**
+   * Toggle a reaction on any subject (discussion body, comment, or reply).
+   * Passing `reactionNodes` lets the toggle check detect whether the
+   * authenticated user already reacted — if yes, removeReaction is called
+   * instead of addReaction. Omitting `reactionNodes` defaults to addReaction
+   * (safe fallback when node data is unavailable).
+   *
+   * CAUTION: always pass the relevant `.reactions?.nodes` array so toggle
+   * behaviour is correct. Do not call `addReaction` directly from the UI;
+   * route all reaction changes through this function.
+   */
+  const handleReaction = async (
+    subjectId: string,
+    content: string,
+    reactionNodes?: Array<{ content: string; user?: { login: string } }>
+  ) => {
+    try {
+      const remove = userHasReacted(reactionNodes, content, authUser?.login);
+      await addReaction(subjectId, content, remove);
       await refreshDiscussion();
     } catch (e: any) {
       setReplyError(e.message || 'Failed to update reaction.');
     }
   };
+
+  // True when the authenticated user is the discussion author.
+  // Controls visibility of resolution buttons (Mark Answer, Close).
+  const isAuthor = Boolean(authUser?.login && discussion?.author?.login && authUser.login === discussion.author.login);
 
   if (loading) return <div className="flex justify-center py-8"><Loader size={20} className="animate-spin text-ide-text-dim" /></div>;
   if (error) return (
@@ -481,6 +605,19 @@ function DiscussionThread({ number, onBack, onNavigateThread }: { number: number
           ← Back
         </button>
         <span className="text-[11px] text-ide-text-dim truncate flex-1">#{discussion.number}</span>
+        {/* Close Discussion — only shown to the discussion author while the discussion is open.
+            CAUTION: confirm() guard in handleClose prevents accidental triggers. */}
+        {isAuthor && !discussion.closedAt && (
+          <button
+            onClick={handleClose}
+            disabled={closingDiscussion}
+            className="text-[10px] px-2 py-0.5 rounded border border-red-500/40 text-red-300 hover:bg-red-900/20 disabled:opacity-50 transition-colors flex items-center gap-1"
+            title="Close this discussion"
+          >
+            {closingDiscussion ? <Loader size={10} className="animate-spin" /> : <X size={10} />}
+            {closingDiscussion ? 'Closing…' : 'Close'}
+          </button>
+        )}
         <a
           href={discussion.url}
           target="_blank"
@@ -490,6 +627,17 @@ function DiscussionThread({ number, onBack, onNavigateThread }: { number: number
           GitHub ↗
         </a>
       </div>
+
+      {/* Resolution error banner */}
+      {resolutionError && (
+        <div className="mx-3 mt-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-[11px] text-red-300 flex items-start gap-2">
+          <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+          <span className="flex-1">{resolutionError}</span>
+          <button onClick={() => setResolutionError(null)} className="text-red-300 hover:text-red-100">
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
         {/* Post */}
@@ -504,6 +652,9 @@ function DiscussionThread({ number, onBack, onNavigateThread }: { number: number
             {discussion.isAnswered && (
               <span className="text-[10px] px-1.5 py-0 rounded bg-green-500/20 text-green-300">✓ Answered</span>
             )}
+            {discussion.closedAt && (
+              <span className="text-[10px] px-1.5 py-0 rounded bg-red-500/20 text-red-300">Closed</span>
+            )}
           </div>
 
           <h3 className="text-[13px] font-semibold text-ide-text mb-2">{discussion.title}</h3>
@@ -515,17 +666,22 @@ function DiscussionThread({ number, onBack, onNavigateThread }: { number: number
           {/* Reactions */}
           <div className="flex gap-1.5 mt-2 flex-wrap">
             {Object.entries(REACTION_MAP).map(([key, emoji]) => {
-              const count = discussion.reactions?.nodes?.filter(r => r.content === key).length || 0;
+              const nodes = discussion.reactions?.nodes;
+              const count = nodes?.filter(r => r.content === key).length || 0;
+              const isMine = userHasReacted(nodes, key, authUser?.login);
               return (
                 <button
                   key={key}
-                  onClick={() => addReaction(discussion.id, key)}
+                  onClick={() => handleReaction(discussion.id, key, nodes)}
                   className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                    count > 0
+                    isMine
+                      ? 'border-ide-accent bg-ide-accent/20 text-ide-accent font-semibold'
+                      : count > 0
                       ? 'border-ide-accent/40 bg-ide-accent/10 text-ide-text'
                       : 'border-ide-border text-ide-text-dim hover:border-ide-accent/40'
                   }`}
-                  title={`React with ${emoji}`}
+                  title={isMine ? `Remove ${emoji} reaction` : `React with ${emoji}`}
+                  aria-pressed={isMine}
                 >
                   {emoji} {count > 0 ? count : ''}
                 </button>
@@ -555,16 +711,22 @@ function DiscussionThread({ number, onBack, onNavigateThread }: { number: number
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {Object.entries(REACTION_MAP).map(([key, emoji]) => {
-                    const count = comment.reactions?.nodes?.filter(r => r.content === key).length || 0;
+                    const nodes = comment.reactions?.nodes;
+                    const count = nodes?.filter(r => r.content === key).length || 0;
+                    const isMine = userHasReacted(nodes, key, authUser?.login);
                     return (
                       <button
                         key={key}
-                        onClick={() => handleReaction(comment.id, key)}
+                        onClick={() => handleReaction(comment.id, key, nodes)}
                         className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
-                          count > 0
+                          isMine
+                            ? 'border-ide-accent bg-ide-accent/20 text-ide-accent font-semibold'
+                            : count > 0
                             ? 'border-ide-accent/40 bg-ide-accent/10 text-ide-text'
                             : 'border-ide-border text-ide-text-dim hover:border-ide-accent/40'
                         }`}
+                        title={isMine ? `Remove ${emoji} reaction` : `React with ${emoji}`}
+                        aria-pressed={isMine}
                       >
                         {emoji} {count}
                       </button>
@@ -576,6 +738,21 @@ function DiscussionThread({ number, onBack, onNavigateThread }: { number: number
                   >
                     Reply
                   </button>
+                  {/* Mark Answer — only shown to the discussion author when the discussion is not
+                      yet answered and this comment is not already the accepted answer.
+                      CAUTION: Only works on Q&A-category discussions; GitHub returns an error for
+                      other category types which is surfaced in resolutionError. */}
+                  {isAuthor && !discussion.isAnswered && !comment.isAnswer && (
+                    <button
+                      onClick={() => handleMarkAnswer(comment.id)}
+                      disabled={markingAnswer === comment.id}
+                      className="text-[10px] px-2 py-0.5 rounded border border-green-500/40 text-green-300 hover:bg-green-900/20 disabled:opacity-50 transition-colors flex items-center gap-1"
+                      title="Mark this comment as the accepted answer"
+                    >
+                      {markingAnswer === comment.id ? <Loader size={10} className="animate-spin" /> : <CheckCircle size={10} />}
+                      {markingAnswer === comment.id ? 'Marking…' : '✓ Mark Answer'}
+                    </button>
+                  )}
                 </div>
 
                 {comment.replies?.nodes && comment.replies.nodes.length > 0 && (
@@ -592,16 +769,22 @@ function DiscussionThread({ number, onBack, onNavigateThread }: { number: number
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {Object.entries(REACTION_MAP).map(([key, emoji]) => {
-                            const count = reply.reactions?.nodes?.filter(r => r.content === key).length || 0;
+                            const nodes = reply.reactions?.nodes;
+                            const count = nodes?.filter(r => r.content === key).length || 0;
+                            const isMine = userHasReacted(nodes, key, authUser?.login);
                             return (
                               <button
                                 key={key}
-                                onClick={() => handleReaction(reply.id, key)}
+                                onClick={() => handleReaction(reply.id, key, nodes)}
                                 className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
-                                  count > 0
+                                  isMine
+                                    ? 'border-ide-accent bg-ide-accent/20 text-ide-accent font-semibold'
+                                    : count > 0
                                     ? 'border-ide-accent/40 bg-ide-accent/10 text-ide-text'
                                     : 'border-ide-border text-ide-text-dim hover:border-ide-accent/40'
                                 }`}
+                                title={isMine ? `Remove ${emoji} reaction` : `React with ${emoji}`}
+                                aria-pressed={isMine}
                               >
                                 {emoji} {count}
                               </button>
@@ -999,13 +1182,27 @@ function ReportCompose() {
 function MyReports() {
   const [reports, setReports] = useState<LocalReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+
+  const loadReports = useCallback(async (syncLive: boolean) => {
+    if (syncLive) setSyncing(true);
+    setLoading(true);
+    try {
+      const payload = await getMyReports(syncLive);
+      setReports(payload.reports);
+      if (syncLive) setLastSyncedAt(new Date().toISOString());
+    } catch {
+      // keep existing list on transient sync failures
+    } finally {
+      setLoading(false);
+      if (syncLive) setSyncing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    getMyReports()
-      .then(r => setReports(r.reports))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    loadReports(true);
+  }, [loadReports]);
 
   if (loading) return <div className="flex justify-center py-8"><Loader size={16} className="animate-spin text-ide-text-dim" /></div>;
 
@@ -1013,18 +1210,45 @@ function MyReports() {
     <div className="p-6 text-center text-ide-text-dim text-[12px]">
       No reports posted from this app yet.
       <div className="mt-1 text-[11px]">Use the Report tab to share bugs or wins.</div>
+      <button
+        onClick={() => loadReports(true)}
+        disabled={syncing}
+        className="mt-3 inline-flex items-center gap-1 rounded border border-ide-border px-2 py-1 text-[10px] text-ide-text-dim hover:text-ide-accent disabled:opacity-50"
+      >
+        <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
+        Sync Live Status
+      </button>
     </div>
   );
 
   return (
     <div className="divide-y divide-ide-border">
+      <div className="px-3 py-2 flex items-center justify-between bg-ide-bg/30">
+        <div className="text-[10px] text-ide-text-dim">
+          {lastSyncedAt ? `Live sync ${relativeTime(lastSyncedAt)}` : 'Live sync not run yet'}
+        </div>
+        <button
+          onClick={() => loadReports(true)}
+          disabled={syncing}
+          className="inline-flex items-center gap-1 rounded border border-ide-border px-2 py-1 text-[10px] text-ide-text-dim hover:text-ide-accent disabled:opacity-50"
+        >
+          <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
+          {syncing ? 'Syncing…' : 'Sync Live'}
+        </button>
+      </div>
       {reports.map(r => (
         <div key={r.id} className="px-3 py-2.5">
           <div className="flex items-start gap-2">
             <div className="flex-1 min-w-0">
               <div className="text-[12px] font-medium text-ide-text truncate">{r.title}</div>
               <div className="flex items-center gap-2 mt-0.5 text-[10px] text-ide-text-dim flex-wrap">
-                <span className={`px-1.5 py-0 rounded ${r.status === 'open' ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-300'}`}>
+                <span className={`px-1.5 py-0 rounded ${
+                  r.status === 'open'
+                    ? 'bg-green-500/20 text-green-300'
+                    : r.status === 'answered'
+                      ? 'bg-blue-500/20 text-blue-300'
+                      : 'bg-gray-500/20 text-gray-300'
+                }`}>
                   {r.status}
                 </span>
                 <span>{r.category}</span>
@@ -1054,10 +1278,17 @@ function MyReports() {
 }
 
 // ── Notifications Panel ────────────────────────
-function NotificationsPanel({ onRead }: { onRead: () => void }) {
+function NotificationsPanel({ onRead, onNavigateToThread }: { onRead: () => void; onNavigateToThread: (discussionNumber: number) => void }) {
   const [notifications, setNotifications] = useState<GHNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  // Poll state — tracks in-flight poll request and the last time a poll was completed.
+  // CAUTION: The GitHub API rate-limits the /notifications endpoint. If GitHub returns
+  // HTTP 429 (Too Many Requests) or X-Poll-Interval the server will relay a 429 error;
+  // surface that to the user rather than silently failing.
+  const [polling, setPolling] = useState(false);
+  const [pollError, setPollError] = useState<string | null>(null);
+  const [lastPolledAt, setLastPolledAt] = useState<Date | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -1079,14 +1310,74 @@ function NotificationsPanel({ onRead }: { onRead: () => void }) {
     onRead();
   };
 
+  /**
+   * Manually trigger a GitHub notification poll.
+   * This calls the server-side /api/github/poll endpoint which forces a fresh
+   * fetch from the GitHub API and stores results in the local DB.
+   *
+   * CAUTION: GitHub rate-limits the notification API. The server relays 429
+   * responses — on rate limit the user should wait before polling again.
+   * A 429 error is shown to the user and the last-polled timestamp is NOT updated.
+   */
+  const handlePoll = async () => {
+    setPolling(true);
+    setPollError(null);
+    try {
+      await pollNotifications();
+      setLastPolledAt(new Date());
+      // Reload the local notification list after a successful poll.
+      load();
+    } catch (e: any) {
+      // Surface GitHub rate-limit and other errors; do not swallow.
+      const msg = e.message || 'Poll failed.';
+      setPollError(msg.includes('429') || msg.toLowerCase().includes('rate') ? 'GitHub rate limit — wait a few minutes before polling again.' : msg);
+    } finally {
+      setPolling(false);
+    }
+  };
+
+  /**
+   * Extract the GitHub discussion number from a notification's discussion_url.
+   * Notification discussion_url format: https://api.github.com/repos/:owner/:repo/discussions/:number
+   * Returns null if the URL is absent, malformed, or not a discussion URL.
+   *
+   * CAUTION: Only navigates to discussion-type notifications. Issue/PR notifications
+   * have different URL shapes and are opened externally rather than inline.
+   */
+  const extractDiscussionNumber = (url?: string): number | null => {
+    if (!url) return null;
+    const m = url.match(/\/discussions\/(\d+)$/);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return isNaN(n) ? null : n;
+  };
+
   if (loading) return <div className="flex justify-center py-8"><Loader size={16} className="animate-spin text-ide-text-dim" /></div>;
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center px-3 py-2 border-b border-ide-border">
+      <div className="flex items-center px-3 py-2 border-b border-ide-border gap-2">
         <span className="flex-1 text-[11px] text-ide-text-dim">
           {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
         </span>
+        {/* Last polled timestamp — helps the user understand data freshness. */}
+        {lastPolledAt && (
+          <span className="text-[10px] text-ide-text-dim" title={lastPolledAt.toLocaleString()}>
+            Polled {relativeTime(lastPolledAt.toISOString())}
+          </span>
+        )}
+        {/* Poll GitHub — forces a fresh notification fetch from the GitHub API.
+            Disabled while a poll is in flight to prevent double-submission.
+            CAUTION: GitHub rate-limits this; pollError surfaces 429s. */}
+        <button
+          onClick={handlePoll}
+          disabled={polling}
+          className="text-[10px] text-ide-accent hover:underline flex items-center gap-1 disabled:opacity-50"
+          title="Fetch latest notifications from GitHub"
+        >
+          {polling ? <Loader size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+          {polling ? 'Polling…' : 'Poll GitHub'}
+        </button>
         {unreadCount > 0 && (
           <button
             onClick={handleMarkAll}
@@ -1097,40 +1388,64 @@ function NotificationsPanel({ onRead }: { onRead: () => void }) {
         )}
       </div>
 
+      {/* Poll error banner */}
+      {pollError && (
+        <div className="mx-3 mt-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-[11px] text-red-300 flex items-start gap-2">
+          <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+          <span className="flex-1">{pollError}</span>
+          <button onClick={() => setPollError(null)} className="text-red-300 hover:text-red-100"><X size={12} /></button>
+        </div>
+      )}
+
       {notifications.length === 0 ? (
         <div className="p-6 text-center text-ide-text-dim text-[12px]">
           No notifications yet.
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto divide-y divide-ide-border">
-          {notifications.map(n => (
-            <div
-              key={n.id}
-              className={`px-3 py-2 ${!n.read_at ? 'bg-ide-accent/5' : ''}`}
-            >
-              <div className="flex items-start gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] text-ide-text">{n.preview || `New ${n.type} on your report`}</div>
-                  {n.report_title && (
-                    <div className="text-[10px] text-ide-text-dim truncate mt-0.5">{n.report_title}</div>
+          {notifications.map(n => {
+            const discussionNumber = extractDiscussionNumber(n.discussion_url);
+            const isNavigable = discussionNumber !== null;
+            return (
+              <div
+                key={n.id}
+                className={`px-3 py-2 ${!n.read_at ? 'bg-ide-accent/5' : ''} ${isNavigable ? 'cursor-pointer hover:bg-ide-accent/10 transition-colors' : ''}`}
+                onClick={isNavigable ? () => onNavigateToThread(discussionNumber) : undefined}
+                title={isNavigable ? `Open discussion #${discussionNumber}` : undefined}
+                role={isNavigable ? 'button' : undefined}
+                tabIndex={isNavigable ? 0 : undefined}
+                onKeyDown={isNavigable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onNavigateToThread(discussionNumber); } : undefined}
+                aria-label={isNavigable ? `Open discussion #${discussionNumber}: ${n.preview || n.type}` : undefined}
+              >
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] text-ide-text flex items-center gap-1">
+                      {n.preview || `New ${n.type} on your report`}
+                      {isNavigable && <ChevronRight size={10} className="text-ide-accent flex-shrink-0" />}
+                    </div>
+                    {n.report_title && (
+                      <div className="text-[10px] text-ide-text-dim truncate mt-0.5">{n.report_title}</div>
+                    )}
+                    <div className="text-[10px] text-ide-text-dim mt-0.5">{relativeTime(n.created_at)}</div>
+                  </div>
+                  {!n.read_at && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation(); // don't also trigger navigation
+                        markNotificationRead(n.id);
+                        setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x));
+                        setUnreadCount(c => Math.max(0, c - 1));
+                      }}
+                      className="text-[10px] text-ide-text-dim hover:text-ide-accent shrink-0"
+                      title="Mark as read"
+                    >
+                      ✓
+                    </button>
                   )}
-                  <div className="text-[10px] text-ide-text-dim mt-0.5">{relativeTime(n.created_at)}</div>
                 </div>
-                {!n.read_at && (
-                  <button
-                    onClick={() => {
-                      markNotificationRead(n.id);
-                      setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x));
-                      setUnreadCount(c => Math.max(0, c - 1));
-                    }}
-                    className="text-[10px] text-ide-text-dim hover:text-ide-accent shrink-0"
-                  >
-                    ✓
-                  </button>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

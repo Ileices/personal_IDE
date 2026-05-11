@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { HelpCircle } from 'lucide-react';
-import { useHelp } from '../help/helpContext';
+import { HelpContext } from '../help/helpContext';
 import { HELP_ANCHORS } from '../help/helpRegistry';
 
 interface HelpTipProps {
@@ -9,7 +9,10 @@ interface HelpTipProps {
 }
 
 export function HelpTip({ helpId, className = '' }: HelpTipProps) {
-  const { openHelpFor } = useHelp();
+  const ctx = useContext(HelpContext);
+  // Silently render nothing when mounted outside HelpProvider (portals, error boundaries, HMR)
+  if (!ctx) return null;
+  const { openHelpFor } = ctx;
   const entry = HELP_ANCHORS[helpId];
   if (!entry) return null;
 

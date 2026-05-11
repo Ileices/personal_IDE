@@ -27,10 +27,17 @@ export class CheckpointService {
         files_snapshot TEXT DEFAULT '[]',
         git_commit_hash TEXT,
         can_rollback INTEGER NOT NULL DEFAULT 1,
+        type TEXT NOT NULL DEFAULT 'user',
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_checkpoints_project ON checkpoints(project_id);
     `);
+
+    const hasType = (this.db.prepare(`PRAGMA table_info(checkpoints)`).all() as any[])
+      .some((row: any) => row.name === 'type');
+    if (!hasType) {
+      this.db.exec(`ALTER TABLE checkpoints ADD COLUMN type TEXT NOT NULL DEFAULT 'user'`);
+    }
   }
 
   /** Initialize git in project if not already done */

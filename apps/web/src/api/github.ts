@@ -49,6 +49,8 @@ export interface GHDiscussion {
   updatedAt: string;
   url: string;
   isAnswered: boolean;
+  /** ISO timestamp set by GitHub when the discussion was closed; null/undefined if still open. */
+  closedAt?: string | null;
   upvoteCount: number;
   stateReason?: string;
   author: GHAuthor;
@@ -183,8 +185,9 @@ export function createReport(data: {
 }
 
 // My Reports
-export function getMyReports() {
-  return apiGet<{ reports: LocalReport[] }>(`${BASE}/my-reports`);
+export function getMyReports(syncLive = false) {
+  const suffix = syncLive ? '?sync=1' : '';
+  return apiGet<{ reports: LocalReport[] }>(`${BASE}/my-reports${suffix}`);
 }
 
 // Drafts
@@ -265,4 +268,50 @@ export function markCommentAsAnswer(commentId: string) {
 
 export function closeDiscussion(discussionId: string) {
   return apiPost<{ ok: boolean }>(`${BASE}/dev/close-discussion`, { discussionId });
+}
+
+// ── Discussion author self-service resolution ───────────────────────
+// These routes are NOT owner-restricted. GitHub enforces authorization on its side:
+// only the discussion author (or a collaborator with triage access) can mark answers
+// or close discussions. The server simply passes through the stored PAT.
+//
+// CAUTION: Always show a confirmation dialog before calling these — they mutate
+// public GitHub discussion state and are visible to all repository users.
+// Never call from automated paths without explicit user intent.
+//
+// Source finding: D https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16869230
+// Cluster: C5 https://github.com/orgs/community/discussions/195397#discussioncomment-16869608
+
+/**
+ * Mark a comment as the accepted answer on a discussion.
+ * The discussionId is in the path; commentId is in the body.
+ * Only works on Q&A-category discussions (GitHub limitation).
+ */
+export function markDiscussionAnswer(discussionId: string, commentId: string) {
+  return apiPost<{ ok: boolean }>(`${BASE}/discussions/${encodeURIComponent(discussionId)}/mark-answer`, { commentId });
+}
+
+/**
+ * Close a discussion by its GitHub node ID.
+ * Requires the authenticated user to be the discussion author or a collaborator.
+ */
+export function closeDiscussionByAuthor(discussionId: string) {
+  return apiPost<{ ok: boolean }>(`${BASE}/discussions/${encodeURIComponent(discussionId)}/close`, {});
+}
+
+// ── C4-G: Dynamic discussion categories ───────────────────────
+// Returns the live list from GitHub GraphQL (cached 30 min on server).
+// Falls back to the static CATEGORY_IDS constant if the fetch fails.
+
+export interface DiscussionCategory {
+  id: string;
+  name: string;
+  emoji: string;
+  emojiHTML: string;
+  description: string;
+  isAnswerable: boolean;
+}
+
+export function getDiscussionCategories() {
+  return apiGet<{ categories: DiscussionCategory[]; fallback?: boolean; error?: string }>(`${BASE}/discussion-categories`);
 }

@@ -29,7 +29,7 @@ interface HelpContextValue {
   goToControl: (helpId: string) => void;
 }
 
-const HelpContext = createContext<HelpContextValue | null>(null);
+export const HelpContext = createContext<HelpContextValue | null>(null);
 
 interface HelpProviderProps {
   children: React.ReactNode;

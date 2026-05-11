@@ -42,6 +42,17 @@ function defaultHierarchy(phase = 1, milestone = 'initial') {
   return { phase, milestone, parent_job_id: null, child_job_ids: [] };
 }
 
+function getDefaultProjectId(db: Database.Database): string | null {
+  const projects = db.prepare(`
+    SELECT id
+    FROM projects
+    ORDER BY last_accessed_at DESC, created_at DESC
+    LIMIT 2
+  `).all() as Array<{ id: string }>;
+
+  return projects.length === 1 ? projects[0].id : null;
+}
+
 // ── Atomic step factory (minimal viable step) ─
 function makeAtomicStep(
   description: string,
@@ -102,14 +113,15 @@ function insertJobRecord(
 
   db.prepare(`
     INSERT OR IGNORE INTO job_records
-      (id, job_id, job_category, source, source_record_ids, evidence_summary, priority, title,
+      (id, job_id, project_id, job_category, source, source_record_ids, evidence_summary, priority, title,
        affected_files, affected_devtags, affected_plantags, required_buildtags,
        blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
        implementation_status, created_cycle, last_updated_cycle, timestamp, created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
   `).run(
     randomUUID(),
     job.job_id,
+    getDefaultProjectId(db),
     job.job_category,
     job.source,
     JSON.stringify(job.source_record_ids),

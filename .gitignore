@@ -27,3 +27,7 @@ NANO_train/logs/
 *.key
 *.cert
 id_rsa*
+
+# Runtime-generated output (never commit)
+exports/
+build_runs/tmp/

@@ -10,6 +10,7 @@ import {
   RefreshCw, Briefcase, Clock3, PauseCircle, PlayCircle,
 } from 'lucide-react';
 import { API_BASE } from '../../config.js';
+import { useChatStore } from '../../stores/chatStore';
 
 export interface SuggestedJob {
   id: string;          // internal UI id (same as job_id from API)
@@ -316,12 +317,35 @@ interface GfLoopStatus {
   pendingJobs: number;
   inProgressJobs: number;
   currentJob: { job_id: string; title: string; priority: number } | null;
+  config?: {
+    last_model: string | null;
+    last_project_id: string | null;
+    last_max_iterations: number | null;
+    governance?: {
+      autoApproveChanges: boolean;
+      autoAnswerQuestions: boolean;
+      checkpointEvery: number;
+      jobMaxIterations: number;
+      mode: string;
+    };
+  };
+  activeRun?: {
+    auto_approve_changes?: number;
+    auto_answer_questions?: number;
+    checkpoint_every?: number;
+  } | null;
 }
 
 function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<GfLoopStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [maxIterations, setMaxIterations] = useState(50);
+  const [autoApproveChanges, setAutoApproveChanges] = useState(false);
+  const [autoAnswerQuestions, setAutoAnswerQuestions] = useState(false);
+  const [checkpointEvery, setCheckpointEvery] = useState(5);
+  const [hydratedFromStatus, setHydratedFromStatus] = useState(false);
+  const selectedModel = useChatStore((s) => s.selectedModel);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -337,13 +361,37 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
     return () => window.clearInterval(id);
   }, [open, fetchStatus]);
 
+  useEffect(() => {
+    if (!open) {
+      setHydratedFromStatus(false);
+      return;
+    }
+    if (hydratedFromStatus || !status?.config) return;
+    if (status.config.last_max_iterations) setMaxIterations(status.config.last_max_iterations);
+    if (status.config.governance) {
+      setAutoApproveChanges(status.config.governance.autoApproveChanges);
+      setAutoAnswerQuestions(status.config.governance.autoAnswerQuestions);
+      setCheckpointEvery(status.config.governance.checkpointEvery);
+    }
+    setHydratedFromStatus(true);
+  }, [open, status, hydratedFromStatus]);
+
   const start = async () => {
+    const boundedIterations = Math.min(500, Math.max(1, Math.trunc(maxIterations || 0)));
+    const boundedCheckpointEvery = Math.min(10, Math.max(1, Math.trunc(checkpointEvery || 0)));
     setBusy(true);
     try {
       await fetch(`${API_BASE}/api/god-factory/loop/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, maxIterations: 100 }),
+        body: JSON.stringify({
+          projectId,
+          model: selectedModel,
+          maxIterations: boundedIterations,
+          autoApproveChanges,
+          autoAnswerQuestions,
+          checkpointEvery: boundedCheckpointEvery,
+        }),
       });
       await fetchStatus();
     } catch { /* best-effort */ }
@@ -360,6 +408,18 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
   };
 
   const isRunning = status?.isRunning ?? false;
+  const activeGovernance = status?.activeRun
+    ? {
+        autoApproveChanges: status.activeRun.auto_approve_changes === 1,
+        autoAnswerQuestions: status.activeRun.auto_answer_questions === 1,
+        checkpointEvery: status.activeRun.checkpoint_every ?? checkpointEvery,
+      }
+    : {
+        autoApproveChanges,
+        autoAnswerQuestions,
+        checkpointEvery,
+      };
+  const governanceModeLabel = activeGovernance.autoApproveChanges ? 'UNSAFE OVERRIDE' : 'SAFE MODE';
 
   return (
     <div className="border-t border-ide-border/40">
@@ -379,6 +439,61 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
           <p className="text-[9px] text-ide-text-dim leading-relaxed">
             Automatically processes your highest-priority <em>Suggested Jobs</em> queue — building IDE enhancements autonomously, 24/7.
           </p>
+
+          <div className="grid grid-cols-1 gap-1 text-[9px]">
+            <div className="bg-ide-bg/40 rounded px-2 py-1">
+              <div className="text-ide-text-dim">Model</div>
+              <div className="text-ide-text font-medium truncate" title={selectedModel}>{selectedModel}</div>
+            </div>
+            <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
+              <span className="text-ide-text-dim">Max iterations</span>
+              <input
+                type="number"
+                min={1}
+                max={500}
+                step={1}
+                value={maxIterations}
+                onChange={(e) => setMaxIterations(Math.min(500, Math.max(1, Number(e.target.value) || 1)))}
+                className="w-16 px-1 py-0.5 rounded bg-ide-bg border border-ide-border/50 text-ide-text text-right"
+              />
+            </label>
+            <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
+              <span className="text-ide-text-dim">Checkpoint every</span>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                step={1}
+                value={checkpointEvery}
+                onChange={(e) => setCheckpointEvery(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
+                className="w-16 px-1 py-0.5 rounded bg-ide-bg border border-ide-border/50 text-ide-text text-right"
+              />
+            </label>
+            <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
+              <span className="text-ide-text-dim">Auto-approve changes</span>
+              <input
+                type="checkbox"
+                checked={autoApproveChanges}
+                onChange={(e) => setAutoApproveChanges(e.target.checked)}
+                className="accent-red-400"
+              />
+            </label>
+            <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
+              <span className="text-ide-text-dim">Auto-answer questions</span>
+              <input
+                type="checkbox"
+                checked={autoAnswerQuestions}
+                onChange={(e) => setAutoAnswerQuestions(e.target.checked)}
+                className="accent-yellow-400"
+              />
+            </label>
+            <div className={`rounded px-2 py-1 border text-[9px] ${activeGovernance.autoApproveChanges ? 'bg-red-500/10 border-red-500/30 text-red-200' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'}`}>
+              <div className="font-semibold">{governanceModeLabel}</div>
+              <div>
+                approval gate: {activeGovernance.autoApproveChanges ? 'bypassed' : 'required'} · answers: {activeGovernance.autoAnswerQuestions ? 'automatic' : 'operator required'} · inner-loop cap: {status?.config?.governance?.jobMaxIterations ?? 10} · checkpoint every {activeGovernance.checkpointEvery} step{activeGovernance.checkpointEvery === 1 ? '' : 's'}
+              </div>
+            </div>
+          </div>
 
           {/* Status grid */}
           {status && (
@@ -558,7 +673,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
 
   const loadSuggestedJobs = useCallback(() => {
     setJobsLoading(true);
-    fetch(`${API_BASE}/api/suggested-jobs/jobs?limit=10&status=suggested`)
+    const qp = new URLSearchParams({ limit: '10', status: 'suggested' });
+    if (projectId) qp.set('project_id', projectId);
+    fetch(`${API_BASE}/api/suggested-jobs/jobs?${qp.toString()}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: { jobs?: Record<string, unknown>[]; total?: number } | null) => {
         if (d?.jobs) {
@@ -568,19 +685,23 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       })
       .catch(() => {})
       .finally(() => setJobsLoading(false));
-  }, []);
+  }, [projectId]);
 
   const loadExternalJobs = useCallback(() => {
-    fetch(`${API_BASE}/api/suggested-jobs/jobs?limit=10&category=external_project`)
+    const qp = new URLSearchParams({ limit: '10', category: 'external_project' });
+    if (projectId) qp.set('project_id', projectId);
+    fetch(`${API_BASE}/api/suggested-jobs/jobs?${qp.toString()}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: { jobs?: Record<string, unknown>[] } | null) => {
         if (d?.jobs) setExternalJobs(d.jobs.map(mapApiJobToSuggestedJob));
       })
       .catch(() => {});
-  }, []);
+  }, [projectId]);
 
   const loadImplementingJobs = useCallback(() => {
-    fetch(`${API_BASE}/api/suggested-jobs/jobs?limit=5&status=implementing`)
+    const qp = new URLSearchParams({ limit: '5', status: 'implementing' });
+    if (projectId) qp.set('project_id', projectId);
+    fetch(`${API_BASE}/api/suggested-jobs/jobs?${qp.toString()}`)
       .then(r => r.ok ? r.json() : null)
       .then(async (d: { jobs?: Record<string, unknown>[] } | null) => {
         if (!d?.jobs?.length) { setImplementingJobs([]); return; }
@@ -595,7 +716,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         setImplementingJobs(details.filter((x): x is ImplementingJob => x !== null));
       })
       .catch(() => {});
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     let cancelled = false;

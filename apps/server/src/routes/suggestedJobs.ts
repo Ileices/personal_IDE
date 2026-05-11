@@ -52,6 +52,23 @@ function priorityOrder(priority: string): number {
 export async function suggestedJobsRoutes(app: FastifyInstance) {
   const db = (app as unknown as { db: import('better-sqlite3').Database }).db;
 
+  function resolveScopedProjectId(projectId: unknown): string | null {
+    const normalized = String(projectId || '').trim();
+    if (normalized) {
+      const row = db.prepare('SELECT id FROM projects WHERE id = ?').get(normalized) as { id: string } | undefined;
+      return row?.id ?? null;
+    }
+
+    const projects = db.prepare(`
+      SELECT id
+      FROM projects
+      ORDER BY last_accessed_at DESC, created_at DESC
+      LIMIT 2
+    `).all() as Array<{ id: string }>;
+
+    return projects.length === 1 ? projects[0].id : null;
+  }
+
   // ── GET /jobs ─────────────────────────────────
   // Query: status?, priority?, category?, source?, limit?, offset?
   app.get('/jobs', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -85,6 +102,12 @@ export async function suggestedJobsRoutes(app: FastifyInstance) {
       conditions.push("title LIKE ?");
       params.push(`%${q.search.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`);
     }
+    if (q.project_id) {
+      const scopedProjectId = resolveScopedProjectId(q.project_id);
+      if (!scopedProjectId) return reply.status(400).send({ error: 'project_id must reference an existing project.' });
+      conditions.push('project_id = ?');
+      params.push(scopedProjectId);
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -108,32 +131,43 @@ export async function suggestedJobsRoutes(app: FastifyInstance) {
   });
 
   // ── GET /jobs/stats ──────────────────────────
-  app.get('/jobs/stats', async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/jobs/stats', async (req: FastifyRequest, reply: FastifyReply) => {
+    const q = req.query as Record<string, string>;
+    const scopedProjectId = q.project_id ? resolveScopedProjectId(q.project_id) : null;
+    if (q.project_id && !scopedProjectId) {
+      return reply.status(400).send({ error: 'project_id must reference an existing project.' });
+    }
+    const whereScoped = scopedProjectId ? ' AND project_id = ?' : '';
+    const params = scopedProjectId ? [scopedProjectId] : [];
+
     const byStatus = db.prepare(`
       SELECT implementation_status as key, COUNT(*) as count FROM job_records
       WHERE implementation_status NOT IN ('rejected','archived')
+      ${whereScoped}
       GROUP BY implementation_status
-    `).all() as { key: string; count: number }[];
+    `).all(...params) as { key: string; count: number }[];
 
     const byCategory = db.prepare(`
       SELECT job_category as key, COUNT(*) as count FROM job_records
       WHERE implementation_status NOT IN ('rejected','archived')
+      ${whereScoped}
       GROUP BY job_category ORDER BY count DESC
-    `).all() as { key: string; count: number }[];
+    `).all(...params) as { key: string; count: number }[];
 
     const byPriority = db.prepare(`
       SELECT priority as key, COUNT(*) as count FROM job_records
       WHERE implementation_status NOT IN ('rejected','archived')
+      ${whereScoped}
       GROUP BY priority
       ORDER BY CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END
-    `).all() as { key: string; count: number }[];
+    `).all(...params) as { key: string; count: number }[];
 
     const bySource = db.prepare(`
-      SELECT source as key, COUNT(*) as count FROM job_records GROUP BY source
-    `).all() as { key: string; count: number }[];
+      SELECT source as key, COUNT(*) as count FROM job_records ${scopedProjectId ? 'WHERE project_id = ?' : ''} GROUP BY source
+    `).all(...params) as { key: string; count: number }[];
 
-    const total = (db.prepare(`SELECT COUNT(*) as cnt FROM job_records`).get() as { cnt: number }).cnt;
-    const active = (db.prepare(`SELECT COUNT(*) as cnt FROM job_records WHERE implementation_status NOT IN ('rejected','archived','implemented')`).get() as { cnt: number }).cnt;
+    const total = (db.prepare(`SELECT COUNT(*) as cnt FROM job_records ${scopedProjectId ? 'WHERE project_id = ?' : ''}`).get(...params) as { cnt: number }).cnt;
+    const active = (db.prepare(`SELECT COUNT(*) as cnt FROM job_records WHERE implementation_status NOT IN ('rejected','archived','implemented')${whereScoped}`).get(...params) as { cnt: number }).cnt;
 
     return reply.send({ total, active, byStatus, byCategory, byPriority, bySource });
   });
@@ -204,16 +238,20 @@ export async function suggestedJobsRoutes(app: FastifyInstance) {
     const affectedDevtags = Array.isArray(body.affected_devtags) ? body.affected_devtags : [];
     const affectedPlantags = Array.isArray(body.affected_plantags) ? body.affected_plantags : [];
     const requiredBuildtags = Array.isArray(body.required_buildtags) ? body.required_buildtags : [];
+    const scopedProjectId = resolveScopedProjectId(body.project_id ?? body.projectId);
+    if ((body.project_id ?? body.projectId) !== undefined && !scopedProjectId) {
+      return reply.status(400).send({ error: 'project_id must reference an existing project.' });
+    }
 
     db.prepare(`
       INSERT INTO job_records
-        (id, job_id, job_category, source, source_record_ids, priority, title,
+        (id, job_id, project_id, job_category, source, source_record_ids, priority, title,
          affected_files, affected_devtags, affected_plantags, required_buildtags,
          blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
          implementation_status, created_cycle, last_updated_cycle, timestamp, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
     `).run(
-      randomUUID(), jobId, category, 'user', '[]', priority, title,
+      randomUUID(), jobId, scopedProjectId, category, 'user', '[]', priority, title,
       JSON.stringify(affectedFiles), JSON.stringify(affectedDevtags),
       JSON.stringify(affectedPlantags), JSON.stringify(requiredBuildtags),
       '[]', '[]',

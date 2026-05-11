@@ -4,6 +4,7 @@ import { runSuggestedJobsCrawlerTick } from '../services/suggestedJobsCrawler/in
 import { assessToolPolicy, getToolPolicySnapshot } from '../services/godFactory/toolGatekeeper.js';
 import { getSubsystemRuntimeStatus, startSubsystemScheduler, stopSubsystemScheduler } from '../services/subsystemScheduler.js';
 import { getKv, loadSettings, setKv, type SubsystemId } from './subsystems.js';
+import { JOB_STATUS, RUN_STATUS, STOP_REASON } from '../services/lifecycle/stateMachine.js';
 
 type Db = import('better-sqlite3').Database;
 
@@ -17,6 +18,10 @@ type IdleCategory =
 
 type IdleResponse = 'accepted' | 'rejected' | 'deferred';
 
+const CONTROL_OWNER_LOGIN = 'Ileices';
+const SESSION_FIELD_MAX_ITEMS = 500;
+const SESSION_FIELD_MAX_BYTES = 256 * 1024;
+
 function parseJson<T>(raw: unknown, fallback: T): T {
   if (typeof raw !== 'string') return fallback;
   try {
@@ -26,10 +31,90 @@ function parseJson<T>(raw: unknown, fallback: T): T {
   }
 }
 
-function setJsonArrayField<T>(db: Db, table: string, idColumn: string, id: string, field: string, nextItem: T): void {
-  const row = db.prepare(`SELECT ${field} FROM ${table} WHERE ${idColumn} = ?`).get(id) as Record<string, unknown> | undefined;
-  const current = parseJson<T[]>(row?.[field], []);
-  db.prepare(`UPDATE ${table} SET ${field} = ? WHERE ${idColumn} = ?`).run(JSON.stringify([...current, nextItem]), id);
+function archiveInteractiveSessionChunk(db: Db, sessionId: string, field: string, items: unknown[]): void {
+  if (!items.length) return;
+
+  try {
+    const row = db.prepare(`
+      SELECT COALESCE(MAX(chunk_index), -1) AS max_idx
+      FROM interactive_session_chunks
+      WHERE session_id = ? AND field_name = ?
+    `).get(sessionId, field) as { max_idx?: number } | undefined;
+
+    const nextIndex = (row?.max_idx ?? -1) + 1;
+    db.prepare(`
+      INSERT INTO interactive_session_chunks (id, session_id, field_name, chunk_index, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `).run(randomUUID(), sessionId, field, nextIndex, JSON.stringify(items));
+  } catch {
+    // If chunk table is unavailable, we avoid failing the append path.
+  }
+}
+
+function appendInteractiveSessionField(db: Db, sessionId: string, field: string, nextItem: unknown): void {
+  const row = db.prepare(`SELECT ${field} FROM interactive_sessions WHERE session_id = ?`).get(sessionId) as Record<string, unknown> | undefined;
+  const current = parseJson<unknown[]>(row?.[field], []);
+  const next = [...current, nextItem];
+  const archived: unknown[] = [];
+
+  if (next.length > SESSION_FIELD_MAX_ITEMS) {
+    const overflow = next.length - SESSION_FIELD_MAX_ITEMS;
+    archived.push(...next.splice(0, overflow));
+  }
+
+  while (Buffer.byteLength(JSON.stringify(next), 'utf8') > SESSION_FIELD_MAX_BYTES && next.length > 1) {
+    const oldest = next.shift();
+    if (typeof oldest !== 'undefined') archived.push(oldest);
+  }
+
+  if (archived.length > 0) {
+    archiveInteractiveSessionChunk(db, sessionId, field, archived);
+  }
+
+  db.prepare(`UPDATE interactive_sessions SET ${field} = ? WHERE session_id = ?`).run(JSON.stringify(next), sessionId);
+}
+
+function formatLoopError(err: unknown): { code: string; summary: string } {
+  const summary = err instanceof Error ? (err.message || 'Unknown error') : String(err || 'Unknown error');
+  const code = err instanceof Error && err.name ? err.name : 'LoopError';
+  return {
+    code,
+    summary: summary.slice(0, 400),
+  };
+}
+
+function recordLoopError(
+  db: Db,
+  payload: { phase: string; runId?: string | null; jobId?: string | null; err: unknown; fatal?: boolean },
+): void {
+  const { code, summary } = formatLoopError(payload.err);
+
+  db.prepare(`
+    UPDATE god_factory_loop_state
+    SET last_error_code = ?,
+        last_error_summary = ?,
+        last_error_at = datetime('now')
+    WHERE id = 'singleton'
+  `).run(code, summary);
+
+  logGodFactoryAction(db, {
+    action_type: 'loop_error',
+    target_id: payload.jobId ?? null,
+    target_type: 'job',
+    authority_invoked: 'god_factory_loop',
+    justification_tags: [payload.phase, payload.fatal ? 'fatal' : 'recoverable', code],
+    result: summary,
+    cycle_id: payload.runId ?? null,
+  });
+
+  ensureNotification(db, {
+    category: 'god_factory_loop_error',
+    source_forensic_id: payload.jobId ?? payload.runId ?? undefined,
+    severity: payload.fatal ? 'error' : 'warning',
+    summary_tags: [payload.phase, code],
+    natural_language_summary: `God Factory ${payload.phase} error: ${summary}`,
+    cycle_id: payload.runId ?? undefined,
+  });
 }
 
 function logGodFactoryAction(
@@ -433,7 +518,7 @@ function refreshGodFactorySignals(db: Db): void {
   }
 }
 
-function createJobFromSuggestion(db: Db, suggestion: { suggestion_id: string; category: IdleCategory; natural_language_summary: string; source_files: string; source_devtags: string }): string {
+function createJobFromSuggestion(db: Db, suggestion: { suggestion_id: string; category: IdleCategory; natural_language_summary: string; source_files: string; source_devtags: string; project_id?: string | null }): string {
   const jobId = randomUUID();
   const categoryMap: Record<IdleCategory, string> = {
     trivial_enhancement: 'user_requested',
@@ -456,14 +541,23 @@ function createJobFromSuggestion(db: Db, suggestion: { suggestion_id: string; ca
 
   db.prepare(`
     INSERT INTO job_records
-      (id, job_id, job_category, source, source_record_ids, priority, title,
+      (id, job_id, project_id, job_category, source, source_record_ids, priority, title,
        affected_files, affected_devtags, affected_plantags, required_buildtags,
        blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
        implementation_status, created_cycle, last_updated_cycle, timestamp, created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
   `).run(
     randomUUID(),
     jobId,
+    suggestion.project_id ?? (() => {
+      const projects = db.prepare(`
+        SELECT id
+        FROM projects
+        ORDER BY last_accessed_at DESC, created_at DESC
+        LIMIT 2
+      `).all() as Array<{ id: string }>;
+      return projects.length === 1 ? projects[0].id : null;
+    })(),
     categoryMap[suggestion.category] || 'user_requested',
     'god_factory_agent',
     JSON.stringify([suggestion.suggestion_id]),
@@ -478,7 +572,7 @@ function createJobFromSuggestion(db: Db, suggestion: { suggestion_id: string; ca
     JSON.stringify({ phase: 1, milestone: 'idle_suggestion', parent_job_id: null, child_job_ids: [] }),
     '[]',
     JSON.stringify(sandboxSpec),
-    'suggested',
+    JOB_STATUS.SUGGESTED,
     0,
     0,
   );
@@ -488,6 +582,47 @@ function createJobFromSuggestion(db: Db, suggestion: { suggestion_id: string; ca
 
 export async function godFactoryRoutes(app: FastifyInstance) {
   const db = (app as unknown as { db: Db }).db;
+
+  function resolveScopedProjectId(projectId: unknown): string | null {
+    const normalized = String(projectId || '').trim();
+    if (normalized) {
+      const row = db.prepare('SELECT id FROM projects WHERE id = ?').get(normalized) as { id: string } | undefined;
+      return row?.id ?? null;
+    }
+
+    const projects = db.prepare(`
+      SELECT id
+      FROM projects
+      ORDER BY last_accessed_at DESC, created_at DESC
+      LIMIT 2
+    `).all() as Array<{ id: string }>;
+
+    return projects.length === 1 ? projects[0].id : null;
+  }
+
+  function isControlOwner(): boolean {
+    try {
+      const activeRow = db
+        .prepare(`SELECT github_login, github_user_id FROM auth_tokens WHERE is_active = 1 LIMIT 1`)
+        .get() as { github_login: string; github_user_id: number } | undefined;
+
+      // Mutating the IDE control plane must track the actively selected account only.
+      // Falling back to any saved owner row would keep privileges alive after a guest
+      // or different user becomes active, which turns "saved credential" into
+      // "current authority" and silently bypasses the intended session boundary.
+      return activeRow?.github_user_id !== -1 && activeRow?.github_login === CONTROL_OWNER_LOGIN;
+    } catch {
+      return false;
+    }
+  }
+
+  function requireControlOwner(reply: FastifyReply): boolean {
+    if (!isControlOwner()) {
+      reply.status(403).send({ error: 'Control-plane mutation endpoints require repository owner privileges.' });
+      return false;
+    }
+    return true;
+  }
 
   app.get('/queue', async (req: FastifyRequest, reply: FastifyReply) => {
     refreshGodFactorySignals(db);
@@ -513,16 +648,14 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       user_acknowledged: !!r.user_acknowledged,
     }));
 
-    const ids = notifications.map((n) => n.notification_id as string);
-    if (ids.length) {
-      const stmt = db.prepare('UPDATE notification_queue SET presented_to_user = 1 WHERE notification_id = ?');
-      const tx = db.transaction((list: string[]) => {
-        for (const id of list) stmt.run(id);
-      });
-      tx(ids);
-    }
-
     return reply.send({ notifications, total: notifications.length });
+  });
+
+  app.post('/queue/:id/present', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const result = db.prepare('UPDATE notification_queue SET presented_to_user = 1 WHERE notification_id = ?').run(id);
+    if (result.changes === 0) return reply.status(404).send({ error: 'Notification not found' });
+    return reply.send({ presented: true, notification_id: id });
   });
 
   app.post('/queue/:id/ack', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -569,22 +702,26 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       presented_to_user: !!r.presented_to_user,
     }));
 
-    const ids = suggestions.map((s) => s.suggestion_id as string);
-    if (ids.length) {
-      const stmt = db.prepare('UPDATE idle_suggestions SET presented_to_user = 1 WHERE suggestion_id = ?');
-      const tx = db.transaction((list: string[]) => {
-        for (const id of list) stmt.run(id);
-      });
-      tx(ids);
-    }
-
     return reply.send({ suggestions, total: suggestions.length });
   });
 
+  app.post('/idle-suggestions/:id/present', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const result = db.prepare('UPDATE idle_suggestions SET presented_to_user = 1 WHERE suggestion_id = ?').run(id);
+    if (result.changes === 0) return reply.status(404).send({ error: 'Suggestion not found' });
+    return reply.send({ presented: true, suggestion_id: id });
+  });
+
   app.post('/idle-suggestions/:id/respond', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireControlOwner(reply)) return;
+
     const { id } = req.params as { id: string };
     const body = req.body as Record<string, unknown>;
     const response = String(body.response || '') as IdleResponse;
+    const scopedProjectId = resolveScopedProjectId(body.project_id ?? body.projectId);
+    if ((body.project_id ?? body.projectId) !== undefined && !scopedProjectId) {
+      return reply.status(400).send({ error: 'project_id must reference an existing project.' });
+    }
 
     if (!['accepted', 'rejected', 'deferred'].includes(response)) {
       return reply.status(400).send({ error: 'response must be accepted|rejected|deferred' });
@@ -601,6 +738,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         natural_language_summary: suggestion.natural_language_summary as string,
         source_files: suggestion.source_files as string,
         source_devtags: suggestion.source_devtags as string,
+        project_id: scopedProjectId,
       });
 
       ensureNotification(db, {
@@ -623,14 +761,20 @@ export async function godFactoryRoutes(app: FastifyInstance) {
 
   // Alias: action endpoint for idle suggestions ('accept'|'defer'|'reject' → mapped to stored values)
   app.post('/idle-suggestions/:id/action', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireControlOwner(reply)) return;
+
     const { id } = req.params as { id: string };
     const body = req.body as Record<string, unknown>;
     const actionMap: Record<string, string> = { accept: 'accepted', defer: 'deferred', reject: 'rejected' };
     const action = String(body.action || '');
     const response = actionMap[action];
+    const scopedProjectId = resolveScopedProjectId(body.project_id ?? body.projectId);
 
     if (!response) {
       return reply.status(400).send({ error: 'action must be accept|defer|reject' });
+    }
+    if ((body.project_id ?? body.projectId) !== undefined && !scopedProjectId) {
+      return reply.status(400).send({ error: 'project_id must reference an existing project.' });
     }
 
     const suggestion = db.prepare('SELECT * FROM idle_suggestions WHERE suggestion_id = ?').get(id) as Record<string, unknown> | undefined;
@@ -644,6 +788,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         natural_language_summary: suggestion.natural_language_summary as string,
         source_files: suggestion.source_files as string,
         source_devtags: suggestion.source_devtags as string,
+        project_id: scopedProjectId,
       });
 
       ensureNotification(db, {
@@ -769,6 +914,8 @@ export async function godFactoryRoutes(app: FastifyInstance) {
   });
 
   app.post('/controls/background', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireControlOwner(reply)) return;
+
     const body = req.body as Record<string, unknown>;
     const control = String(body.control || '');
     const reason = String(body.reason || '').trim();
@@ -947,12 +1094,12 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     const exists = db.prepare('SELECT session_id FROM interactive_sessions WHERE session_id = ?').get(id) as { session_id?: string } | undefined;
     if (!exists) return reply.status(404).send({ error: 'Session not found' });
 
-    if (body.user_input) setJsonArrayField(db, 'interactive_sessions', 'session_id', id, 'user_inputs', body.user_input);
-    if (body.agent_response) setJsonArrayField(db, 'interactive_sessions', 'session_id', id, 'agent_responses', body.agent_response);
-    if (body.sub_agent_spawned) setJsonArrayField(db, 'interactive_sessions', 'session_id', id, 'sub_agents_spawned', body.sub_agent_spawned);
-    if (body.job_created) setJsonArrayField(db, 'interactive_sessions', 'session_id', id, 'jobs_created', body.job_created);
-    if (body.job_implemented) setJsonArrayField(db, 'interactive_sessions', 'session_id', id, 'jobs_implemented', body.job_implemented);
-    if (body.notification_presented) setJsonArrayField(db, 'interactive_sessions', 'session_id', id, 'notifications_presented', body.notification_presented);
+    if (body.user_input) appendInteractiveSessionField(db, id, 'user_inputs', body.user_input);
+    if (body.agent_response) appendInteractiveSessionField(db, id, 'agent_responses', body.agent_response);
+    if (body.sub_agent_spawned) appendInteractiveSessionField(db, id, 'sub_agents_spawned', body.sub_agent_spawned);
+    if (body.job_created) appendInteractiveSessionField(db, id, 'jobs_created', body.job_created);
+    if (body.job_implemented) appendInteractiveSessionField(db, id, 'jobs_implemented', body.job_implemented);
+    if (body.notification_presented) appendInteractiveSessionField(db, id, 'notifications_presented', body.notification_presented);
 
     if (body.end_cycle) {
       db.prepare('UPDATE interactive_sessions SET end_cycle = ? WHERE session_id = ?').run(String(body.end_cycle), id);
@@ -965,6 +1112,10 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     const body = req.body as Record<string, unknown>;
     const input = String(body.input || '').trim();
     if (!input) return reply.status(400).send({ error: 'input is required' });
+    const scopedProjectId = resolveScopedProjectId(body.project_id ?? body.projectId);
+    if ((body.project_id ?? body.projectId) !== undefined && !scopedProjectId) {
+      return reply.status(400).send({ error: 'project_id must reference an existing project.' });
+    }
 
     const brainstormId = randomUUID();
     const jobId = randomUUID();
@@ -987,14 +1138,15 @@ export async function godFactoryRoutes(app: FastifyInstance) {
 
     db.prepare(`
       INSERT INTO job_records
-        (id, job_id, job_category, source, source_record_ids, priority, title,
+        (id, job_id, project_id, job_category, source, source_record_ids, priority, title,
          affected_files, affected_devtags, affected_plantags, required_buildtags,
          blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
          implementation_status, created_cycle, last_updated_cycle, timestamp, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
     `).run(
       randomUUID(),
       jobId,
+      scopedProjectId,
       'user_requested',
       'god_factory_agent',
       JSON.stringify([brainstormId]),
@@ -1009,7 +1161,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       JSON.stringify({ phase: 1, milestone: 'brainstorm', parent_job_id: null, child_job_ids: [] }),
       '[]',
       JSON.stringify(sandboxSpec),
-      'suggested',
+      JOB_STATUS.SUGGESTED,
       0,
       0,
     );
@@ -1024,8 +1176,14 @@ export async function godFactoryRoutes(app: FastifyInstance) {
 
     try {
       runSuggestedJobsCrawlerTick(db);
-    } catch {
-      // non-fatal; brainstorm still creates a concrete job immediately
+    } catch (err: unknown) {
+      recordLoopError(db, {
+        phase: 'brainstorm_crawler_tick',
+        runId: null,
+        jobId,
+        err,
+        fatal: false,
+      });
     }
 
     return reply.status(201).send({ brainstorm_id: brainstormId, generated_job_id: jobId });
@@ -1166,77 +1324,271 @@ export async function godFactoryRoutes(app: FastifyInstance) {
   }
 
   function _updateGfLoopState(db: Db, patch: Record<string, unknown>) {
+    if (Object.keys(patch).length === 0) return;
     const sets = Object.keys(patch).map(k => `${k} = ?`).join(', ');
     const vals = Object.values(patch);
     db.prepare(`UPDATE god_factory_loop_state SET ${sets} WHERE id = 'singleton'`).run(...vals);
   }
 
+  function _recoverCrashedGfRuns(db: Db) {
+    const running = db.prepare(`
+      SELECT run_id, project_id
+      FROM god_factory_runs
+      WHERE status = '${RUN_STATUS.RUNNING}'
+    `).all() as Array<{ run_id: string; project_id: string }>;
+
+    if (!running.length) return;
+
+    const tx = db.transaction(() => {
+      const crashedProjectIds = [...new Set(running.map(r => r.project_id).filter(Boolean))];
+
+      for (const r of running) {
+        db.prepare(`
+          UPDATE god_factory_runs
+          SET status = '${RUN_STATUS.CRASHED}',
+              stop_reason = '${STOP_REASON.CRASH_RECOVERY}',
+              ended_at = datetime('now')
+          WHERE run_id = ?
+        `).run(r.run_id);
+      }
+
+      if (crashedProjectIds.length > 0) {
+        const placeholders = crashedProjectIds.map(() => '?').join(', ');
+        db.prepare(`
+          UPDATE job_records
+          SET implementation_status = '${JOB_STATUS.SUGGESTED}', timestamp = datetime('now')
+          WHERE implementation_status = '${JOB_STATUS.IMPLEMENTING}'
+            AND project_id IN (${placeholders})
+        `).run(...crashedProjectIds);
+      }
+
+      _updateGfLoopState(db, {
+        state: 'idle',
+        current_job_id: null,
+        current_run_id: null,
+        last_active_at: null,
+        stop_reason: STOP_REASON.RECOVERED,
+      });
+    });
+
+    tx();
+  }
+
+  _ensureGfLoopState(db);
+  _recoverCrashedGfRuns(db);
+
   // POST /api/god-factory/loop/start
-  // Body: { projectId, model?, maxIterations? }
+  // Body: { projectId, model?, maxIterations?, autoApproveChanges?, autoAnswerQuestions?, checkpointEvery? }
   app.post('/loop/start', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireControlOwner(reply)) return;
+
     _ensureGfLoopState(db);
     const state = db.prepare('SELECT state FROM god_factory_loop_state WHERE id = \'singleton\'').get() as { state: string } | undefined;
     if (state?.state === 'running') {
       return reply.status(409).send({ error: 'God Factory loop is already running' });
     }
 
-    const { projectId, model, maxIterations = 50 } = req.body as {
+    const { projectId, model, maxIterations = 50, autoApproveChanges, autoAnswerQuestions, checkpointEvery } = req.body as {
       projectId?: string;
       model?: string;
       maxIterations?: number;
+      autoApproveChanges?: boolean;
+      autoAnswerQuestions?: boolean;
+      checkpointEvery?: number;
     };
 
+    const normalizedProjectId = String(projectId || '').trim();
+    if (!normalizedProjectId) {
+      return reply.status(400).send({ error: 'projectId is required for scoped loop execution.' });
+    }
+
+    const normalizedModel = String(model || '').trim();
+    if (!normalizedModel || !normalizedModel.includes('/')) {
+      return reply.status(400).send({ error: 'model is required and must be in provider/model format.' });
+    }
+
+    const parsedMaxIterations = Number(maxIterations);
+    if (!Number.isFinite(parsedMaxIterations) || !Number.isInteger(parsedMaxIterations) || parsedMaxIterations < 1 || parsedMaxIterations > 500) {
+      return reply.status(400).send({ error: 'maxIterations must be an integer between 1 and 500.' });
+    }
+
+    if (autoApproveChanges !== undefined && typeof autoApproveChanges !== 'boolean') {
+      return reply.status(400).send({ error: 'autoApproveChanges must be a boolean when provided.' });
+    }
+    if (autoAnswerQuestions !== undefined && typeof autoAnswerQuestions !== 'boolean') {
+      return reply.status(400).send({ error: 'autoAnswerQuestions must be a boolean when provided.' });
+    }
+
+    const parsedCheckpointEvery = checkpointEvery === undefined ? 5 : Number(checkpointEvery);
+    if (!Number.isFinite(parsedCheckpointEvery) || !Number.isInteger(parsedCheckpointEvery) || parsedCheckpointEvery < 1 || parsedCheckpointEvery > 10) {
+      return reply.status(400).send({ error: 'checkpointEvery must be an integer between 1 and 10.' });
+    }
+
+    const normalizedAutoApproveChanges = autoApproveChanges ?? false;
+    const normalizedAutoAnswerQuestions = autoAnswerQuestions ?? false;
+    const jobLoopMaxIterations = 10;
+
     // Pick the best available suggested job to work on
-    function pickNextJob(): { job_id: string; title: string; atomic_steps: unknown; affected_files: unknown } | null {
+    function claimNextJob(projectId: string): { job_id: string; title: string; atomic_steps_raw: string; affected_files_raw: string } | null {
       const job = db.prepare(`
-        SELECT job_id, title, atomic_steps, affected_files
-        FROM job_records
-        WHERE implementation_status = 'suggested'
-        ORDER BY priority DESC, created_at ASC
-        LIMIT 1
-      `).get() as { job_id: string; title: string; atomic_steps: string; affected_files: string } | null;
+        UPDATE job_records
+        SET implementation_status = '${JOB_STATUS.IMPLEMENTING}', timestamp = datetime('now')
+        WHERE id = (
+          SELECT id
+          FROM job_records
+          WHERE implementation_status = '${JOB_STATUS.SUGGESTED}'
+            AND project_id = ?
+          ORDER BY
+            CASE priority
+              WHEN 'critical' THEN 4
+              WHEN 'high' THEN 3
+              WHEN 'medium' THEN 2
+              WHEN 'low' THEN 1
+              ELSE 0
+            END DESC,
+            created_at ASC
+          LIMIT 1
+        )
+        AND implementation_status = '${JOB_STATUS.SUGGESTED}'
+        AND project_id = ?
+        RETURNING job_id, title, atomic_steps AS atomic_steps_raw, affected_files AS affected_files_raw
+      `).get(projectId, projectId) as { job_id: string; title: string; atomic_steps_raw: string | null; affected_files_raw: string | null } | undefined;
+
       if (!job) return null;
       return {
         job_id: job.job_id,
         title: job.title,
-        atomic_steps: JSON.parse(job.atomic_steps || '[]'),
-        affected_files: JSON.parse(job.affected_files || '[]'),
+        atomic_steps_raw: job.atomic_steps_raw || '[]',
+        affected_files_raw: job.affected_files_raw || '[]',
       };
     }
 
     const runId = randomUUID();
-    _updateGfLoopState(db, { state: 'running', current_run_id: runId, started_at: new Date().toISOString() });
+    setKv(db, 'god_factory:loop:last_model', normalizedModel);
+    setKv(db, 'god_factory:loop:last_project_id', normalizedProjectId);
+    setKv(db, 'god_factory:loop:last_max_iterations', String(parsedMaxIterations));
+    setKv(db, 'god_factory:loop:last_auto_approve_changes', normalizedAutoApproveChanges ? '1' : '0');
+    setKv(db, 'god_factory:loop:last_auto_answer_questions', normalizedAutoAnswerQuestions ? '1' : '0');
+    setKv(db, 'god_factory:loop:last_checkpoint_every', String(parsedCheckpointEvery));
+    setKv(db, 'god_factory:loop:last_job_max_iterations', String(jobLoopMaxIterations));
+
+    _updateGfLoopState(db, {
+      state: 'running',
+      current_run_id: runId,
+      started_at: new Date().toISOString(),
+      last_active_at: new Date().toISOString(),
+      jobs_completed: 0,
+      jobs_failed: 0,
+      stop_reason: null,
+      last_error_code: null,
+      last_error_summary: null,
+      last_error_at: null,
+    });
+
+    db.prepare(`
+      INSERT INTO god_factory_runs (
+        run_id, project_id, model_id, max_iterations, iteration_count,
+        jobs_completed, jobs_failed, status, stop_reason, started_at, last_active_at,
+        auto_approve_changes, auto_answer_questions, checkpoint_every
+      ) VALUES (?, ?, ?, ?, 0, 0, 0, '${RUN_STATUS.RUNNING}', NULL, datetime('now'), datetime('now'), ?, ?, ?)
+    `).run(
+      runId,
+      normalizedProjectId,
+      normalizedModel,
+      parsedMaxIterations,
+      normalizedAutoApproveChanges ? 1 : 0,
+      normalizedAutoAnswerQuestions ? 1 : 0,
+      parsedCheckpointEvery,
+    );
 
     // Lazy-import to avoid circular deps at module load time
     let stopped = false;
     let iterationCount = 0;
 
     const tick = async () => {
-      if (stopped || iterationCount >= maxIterations) {
+      if (stopped || iterationCount >= parsedMaxIterations) {
         stopped = true;
-        _updateGfLoopState(db, { state: 'idle', current_job_id: null });
+        db.prepare(`
+          UPDATE god_factory_runs
+          SET status = '${RUN_STATUS.COMPLETED}',
+              stop_reason = ?,
+              iteration_count = ?,
+              ended_at = datetime('now'),
+              last_active_at = datetime('now')
+          WHERE run_id = ?
+        `).run(iterationCount >= parsedMaxIterations ? STOP_REASON.MAX_ITERATIONS : STOP_REASON.MANUAL, iterationCount, runId);
+        _updateGfLoopState(db, {
+          state: 'idle',
+          current_job_id: null,
+          current_run_id: null,
+          last_active_at: null,
+          stop_reason: iterationCount >= parsedMaxIterations ? STOP_REASON.MAX_ITERATIONS : STOP_REASON.MANUAL,
+        });
+        _gfLoopInstance = null;
         return;
       }
 
-      const job = pickNextJob();
+      const job = claimNextJob(normalizedProjectId);
       if (!job) {
-        _updateGfLoopState(db, { state: 'idle', current_job_id: null });
+        db.prepare(`
+          UPDATE god_factory_runs
+          SET status = '${RUN_STATUS.COMPLETED}',
+              stop_reason = '${STOP_REASON.QUEUE_EMPTY}',
+              iteration_count = ?,
+              ended_at = datetime('now'),
+              last_active_at = datetime('now')
+          WHERE run_id = ?
+        `).run(iterationCount, runId);
+        _updateGfLoopState(db, {
+          state: 'idle',
+          current_job_id: null,
+          current_run_id: null,
+          last_active_at: null,
+          stop_reason: STOP_REASON.QUEUE_EMPTY,
+        });
         stopped = true;
+        _gfLoopInstance = null;
         return;
       }
 
-      _updateGfLoopState(db, { current_job_id: job.job_id });
+      _updateGfLoopState(db, { current_job_id: job.job_id, last_active_at: new Date().toISOString() });
 
-      // Mark job as in-progress
-      db.prepare(`UPDATE job_records SET implementation_status = 'in_progress', updated_at = datetime('now') WHERE job_id = ?`).run(job.job_id);
+      let atomicSteps: unknown = [];
+      let affectedFiles: unknown = [];
+      try {
+        atomicSteps = JSON.parse(job.atomic_steps_raw);
+        affectedFiles = JSON.parse(job.affected_files_raw);
+      } catch (err: unknown) {
+        db.prepare(`UPDATE job_records SET implementation_status = '${JOB_STATUS.REJECTED}', timestamp = datetime('now') WHERE job_id = ?`).run(job.job_id);
+        db.prepare(`UPDATE god_factory_loop_state SET jobs_failed = jobs_failed + 1 WHERE id = 'singleton'`).run();
+        db.prepare(`
+          UPDATE god_factory_runs
+          SET jobs_failed = jobs_failed + 1,
+              iteration_count = ?,
+              last_active_at = datetime('now')
+          WHERE run_id = ?
+        `).run(iterationCount + 1, runId);
+        recordLoopError(db, {
+          phase: 'job_payload_parse',
+          runId,
+          jobId: job.job_id,
+          err,
+          fatal: false,
+        });
+        iterationCount++;
+        if (!stopped) {
+          setTimeout(() => { tick().catch(() => {}); }, 2_000);
+        }
+        return;
+      }
 
       // Build task prompt from job details
-      const stepsText = Array.isArray(job.atomic_steps)
-        ? (job.atomic_steps as string[]).map((s, i) => `${i + 1}. ${s}`).join('\n')
-        : String(job.atomic_steps);
-      const filesText = Array.isArray(job.affected_files)
-        ? (job.affected_files as string[]).slice(0, 10).join(', ')
-        : String(job.affected_files);
+      const stepsText = Array.isArray(atomicSteps)
+        ? (atomicSteps as string[]).map((s, i) => `${i + 1}. ${s}`).join('\n')
+        : String(atomicSteps);
+      const filesText = Array.isArray(affectedFiles)
+        ? (affectedFiles as string[]).slice(0, 10).join(', ')
+        : String(affectedFiles);
 
       const taskPrompt = [
         `## God Factory Job: ${job.title}`,
@@ -1255,25 +1607,23 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         const { appConfig } = await import('../config.js');
         const { getModel, extractProviderFromModelId } = await import('@personal-ide/shared');
 
-        const chosenModel = model || 'openai/gpt-4.1';
+        const chosenModel = normalizedModel;
         const provider = extractProviderFromModelId(chosenModel) as any;
         const loopConfig = {
-          maxIterations: 10, // per job
+          maxIterations: jobLoopMaxIterations, // per job
           stepDelayMs: appConfig.agent.stepDelayMs,
           maxTokensPerStep: appConfig.agent.maxTokensPerStep,
-          autoApproveChanges: true,
-          autoAnswerQuestions: true,
+          autoApproveChanges: normalizedAutoApproveChanges,
+          autoAnswerQuestions: normalizedAutoAnswerQuestions,
           model: chosenModel,
-          projectRoot: projectId
-            ? (db.prepare('SELECT root_path FROM projects WHERE id = ?').get(projectId) as { root_path?: string } | undefined)?.root_path ?? process.cwd()
-            : process.cwd(),
+          projectRoot: (db.prepare('SELECT root_path FROM projects WHERE id = ?').get(normalizedProjectId) as { root_path?: string } | undefined)?.root_path ?? process.cwd(),
           continuousMode: false,
           cooldownMs: 2000,
           bypassRateLimits: false,
           enableSmartChunking: true,
           provider,
           contextWindow: getModel(chosenModel)?.maxInputTokens || appConfig.contextDefaults.unknownModelContext,
-          checkpointEvery: 0,
+          checkpointEvery: parsedCheckpointEvery,
           autoFixErrors: true,
           autoRunTests: true,
           analyzeCodebase: false, // skip scan on GF jobs — already has context
@@ -1289,14 +1639,57 @@ export async function godFactoryRoutes(app: FastifyInstance) {
           },
         };
 
-        await loop.start(projectId || 'god-factory', taskPrompt);
+        await loop.start(normalizedProjectId || 'god-factory', taskPrompt);
+
+        // K: Analysis output contract (Cluster 5 finding K).
+        // If the loop ran to completion without changing any files, this is a
+        // traceable failed_no_output event — not a silent success. Token budget
+        // exhaustion without artifacts must be recorded so the operator can investigate.
+        const loopStatus = loop.getStatus();
+        if ((loopStatus as any).totalFilesChanged === 0) {
+          logGodFactoryAction(db, {
+            action_type: 'job_no_output',
+            target_id: job.job_id,
+            target_type: 'job',
+            authority_invoked: 'god_factory_loop',
+            justification_tags: ['failed_no_output', 'zero_files_changed', 'analysis_contract_k'],
+            result: JSON.stringify({
+              status: 'failed_no_output',
+              reason: 'Loop completed without any file changes',
+              iterations: (loopStatus as any).currentIteration ?? 0,
+              totalTokensUsed: (loopStatus as any).totalTokensUsed ?? 0,
+            }),
+            cycle_id: runId,
+          });
+        }
 
         // Mark complete if no errors thrown
-        db.prepare(`UPDATE job_records SET implementation_status = 'complete', updated_at = datetime('now') WHERE job_id = ?`).run(job.job_id);
+        db.prepare(`UPDATE job_records SET implementation_status = '${JOB_STATUS.IMPLEMENTED}', timestamp = datetime('now') WHERE job_id = ?`).run(job.job_id);
         db.prepare(`UPDATE god_factory_loop_state SET jobs_completed = jobs_completed + 1 WHERE id = 'singleton'`).run();
-      } catch (err: any) {
-        db.prepare(`UPDATE job_records SET implementation_status = 'failed', updated_at = datetime('now') WHERE job_id = ?`).run(job.job_id);
+        db.prepare(`
+          UPDATE god_factory_runs
+          SET jobs_completed = jobs_completed + 1,
+              iteration_count = ?,
+              last_active_at = datetime('now')
+          WHERE run_id = ?
+        `).run(iterationCount + 1, runId);
+      } catch (err: unknown) {
+        db.prepare(`UPDATE job_records SET implementation_status = '${JOB_STATUS.REJECTED}', timestamp = datetime('now') WHERE job_id = ?`).run(job.job_id);
         db.prepare(`UPDATE god_factory_loop_state SET jobs_failed = jobs_failed + 1 WHERE id = 'singleton'`).run();
+        db.prepare(`
+          UPDATE god_factory_runs
+          SET jobs_failed = jobs_failed + 1,
+              iteration_count = ?,
+              last_active_at = datetime('now')
+          WHERE run_id = ?
+        `).run(iterationCount + 1, runId);
+        recordLoopError(db, {
+          phase: 'job_execution',
+          runId,
+          jobId: job.job_id,
+          err,
+          fatal: false,
+        });
       }
 
       iterationCount++;
@@ -1304,7 +1697,34 @@ export async function godFactoryRoutes(app: FastifyInstance) {
 
       // Brief pause between jobs, then process next
       if (!stopped) {
-        setTimeout(() => { tick().catch(() => {}); }, 2_000);
+        setTimeout(() => {
+          tick().catch((err: unknown) => {
+            recordLoopError(db, {
+              phase: 'tick_schedule',
+              runId,
+              err,
+              fatal: true,
+            });
+            stopped = true;
+            _gfLoopInstance = null;
+            db.prepare(`
+              UPDATE god_factory_runs
+              SET status = '${RUN_STATUS.ERROR}',
+                  stop_reason = '${STOP_REASON.ERROR}',
+                  iteration_count = ?,
+                  ended_at = datetime('now'),
+                  last_active_at = datetime('now')
+              WHERE run_id = ?
+            `).run(iterationCount, runId);
+            _updateGfLoopState(db, {
+              state: 'idle',
+              current_job_id: null,
+              current_run_id: null,
+              last_active_at: null,
+              stop_reason: STOP_REASON.ERROR,
+            });
+          });
+        }, 2_000);
       }
     };
 
@@ -1314,8 +1734,29 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     };
 
     // Start async — don't await
-    tick().catch(() => {
-      _updateGfLoopState(db, { state: 'idle', current_job_id: null });
+    tick().catch((err: unknown) => {
+      recordLoopError(db, {
+        phase: 'loop_start',
+        runId,
+        err,
+        fatal: true,
+      });
+      db.prepare(`
+        UPDATE god_factory_runs
+        SET status = '${RUN_STATUS.ERROR}',
+            stop_reason = '${STOP_REASON.ERROR}',
+            iteration_count = ?,
+            ended_at = datetime('now'),
+            last_active_at = datetime('now')
+        WHERE run_id = ?
+      `).run(iterationCount, runId);
+      _updateGfLoopState(db, {
+        state: 'idle',
+        current_job_id: null,
+        current_run_id: null,
+        last_active_at: null,
+        stop_reason: STOP_REASON.ERROR,
+      });
     });
 
     return reply.send({ ok: true, runId, message: 'God Factory loop started' });
@@ -1323,13 +1764,45 @@ export async function godFactoryRoutes(app: FastifyInstance) {
 
   // POST /api/god-factory/loop/stop
   app.post('/loop/stop', async (_req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireControlOwner(reply)) return;
+
     _ensureGfLoopState(db);
+    const state = db.prepare('SELECT current_run_id FROM god_factory_loop_state WHERE id = ?').get('singleton') as { current_run_id?: string } | undefined;
+    const activeRun = state?.current_run_id
+      ? db.prepare('SELECT project_id FROM god_factory_runs WHERE run_id = ?').get(state.current_run_id) as { project_id?: string } | undefined
+      : undefined;
+
+    const restored = activeRun?.project_id
+      ? db.prepare(`
+          UPDATE job_records
+          SET implementation_status = '${JOB_STATUS.SUGGESTED}', timestamp = datetime('now')
+          WHERE implementation_status = '${JOB_STATUS.IMPLEMENTING}'
+            AND project_id = ?
+        `).run(activeRun.project_id)
+      : { changes: 0 };
+
     if (_gfLoopInstance) {
       _gfLoopInstance.stop();
       _gfLoopInstance = null;
     }
-    _updateGfLoopState(db, { state: 'idle', current_job_id: null });
-    return reply.send({ ok: true, message: 'God Factory loop stopped' });
+    if (state?.current_run_id) {
+      db.prepare(`
+        UPDATE god_factory_runs
+        SET status = '${RUN_STATUS.STOPPED}',
+            stop_reason = '${STOP_REASON.MANUAL}',
+            ended_at = datetime('now'),
+            last_active_at = datetime('now')
+        WHERE run_id = ?
+      `).run(state.current_run_id);
+    }
+    _updateGfLoopState(db, {
+      state: 'idle',
+      current_job_id: null,
+      current_run_id: null,
+      last_active_at: null,
+      stop_reason: STOP_REASON.MANUAL,
+    });
+    return reply.send({ ok: true, message: 'God Factory loop stopped', restored_jobs: restored.changes });
   });
 
   // GET /api/god-factory/loop/status
@@ -1337,13 +1810,42 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     _ensureGfLoopState(db);
     const row = db.prepare('SELECT * FROM god_factory_loop_state WHERE id = \'singleton\'').get() as Record<string, unknown> | undefined;
 
-    // Pending job count
-    const pendingCount = (db.prepare('SELECT COUNT(*) AS c FROM job_records WHERE implementation_status = \'suggested\'').get() as { c: number }).c;
-    const inProgressCount = (db.prepare('SELECT COUNT(*) AS c FROM job_records WHERE implementation_status = \'in_progress\'').get() as { c: number }).c;
+    const config = {
+      last_model: getKv(db, 'god_factory:loop:last_model') ?? null,
+      last_project_id: getKv(db, 'god_factory:loop:last_project_id') ?? null,
+      last_max_iterations: Number(getKv(db, 'god_factory:loop:last_max_iterations') ?? '0') || null,
+      governance: {
+        autoApproveChanges: getKv(db, 'god_factory:loop:last_auto_approve_changes') === '1',
+        autoAnswerQuestions: getKv(db, 'god_factory:loop:last_auto_answer_questions') === '1',
+        checkpointEvery: Number(getKv(db, 'god_factory:loop:last_checkpoint_every') ?? '5') || 5,
+        jobMaxIterations: Number(getKv(db, 'god_factory:loop:last_job_max_iterations') ?? '10') || 10,
+        mode: getKv(db, 'god_factory:loop:last_auto_approve_changes') === '1'
+          ? 'unsafe_override'
+          : 'safe',
+      },
+    };
+
+    const scopedProjectId = String(row?.current_run_id ? '' : (config.last_project_id ?? ''));
+
+    const activeRun = db.prepare(`
+      SELECT run_id, project_id, model_id, max_iterations, iteration_count, jobs_completed, jobs_failed, status, stop_reason, started_at, last_active_at, ended_at,
+             auto_approve_changes, auto_answer_questions, checkpoint_every
+      FROM god_factory_runs
+      WHERE run_id = ?
+      LIMIT 1
+    `).get((row?.current_run_id as string) || '') as Record<string, unknown> | undefined;
+
+    const statusProjectId = String(activeRun?.project_id || scopedProjectId || '').trim();
+    const pendingCount = statusProjectId
+      ? (db.prepare(`SELECT COUNT(*) AS c FROM job_records WHERE implementation_status = '${JOB_STATUS.SUGGESTED}' AND project_id = ?`).get(statusProjectId) as { c: number }).c
+      : (db.prepare(`SELECT COUNT(*) AS c FROM job_records WHERE implementation_status = '${JOB_STATUS.SUGGESTED}'`).get() as { c: number }).c;
+    const inProgressCount = statusProjectId
+      ? (db.prepare(`SELECT COUNT(*) AS c FROM job_records WHERE implementation_status = '${JOB_STATUS.IMPLEMENTING}' AND project_id = ?`).get(statusProjectId) as { c: number }).c
+      : (db.prepare(`SELECT COUNT(*) AS c FROM job_records WHERE implementation_status = '${JOB_STATUS.IMPLEMENTING}'`).get() as { c: number }).c;
 
     let currentJob: unknown = null;
     if (row?.current_job_id) {
-      currentJob = db.prepare('SELECT job_id, title, priority FROM job_records WHERE job_id = ?').get(row.current_job_id as string);
+      currentJob = db.prepare('SELECT job_id, title, priority, project_id FROM job_records WHERE job_id = ?').get(row.current_job_id as string);
     }
 
     return reply.send({
@@ -1352,6 +1854,8 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       pendingJobs: pendingCount,
       inProgressJobs: inProgressCount,
       currentJob,
+      config,
+      activeRun: activeRun ?? null,
     });
   });
 }

@@ -4,14 +4,72 @@
 // ============================================
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { randomUUID } from 'crypto';
-import { getGitHubService, CATEGORY_IDS, OWNER_LOGIN } from '../services/github/githubService.js';
+import { getGitHubService, CATEGORY_IDS, OWNER_LOGIN, type DiscussionCategory } from '../services/github/githubService.js';
 
 // ── Fastify plugin ─────────────────────────────
 export async function githubRoutes(app: FastifyInstance) {
   const db = (app as any).db;
+  const STATUS_CACHE_TTL_MS = 5 * 60 * 1000;
+  const STATUS_PROBE_LOCK_MS = 20 * 1000;
+  const POLL_COOLDOWN_MS = 60 * 1000;
+  const POLL_LOCK_MS = 20 * 1000;
 
   function gh() {
     return getGitHubService(db);
+  }
+
+  function readKv(key: string): string | null {
+    const row = db.prepare('SELECT value FROM app_kv WHERE key = ?').get(key) as { value?: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  function writeKv(key: string, value: string): void {
+    db.prepare(`
+      INSERT INTO app_kv (key, value, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+    `).run(key, value);
+  }
+
+  function deleteKv(key: string): void {
+    db.prepare('DELETE FROM app_kv WHERE key = ?').run(key);
+  }
+
+  function currentUserId(): number {
+    return gh().getActiveGitHubUserId();
+  }
+
+  function allowedDiscussionByPrefix(id: string): boolean {
+    return id.startsWith('D_kwDORS0FT8') || id.startsWith('D_kwDOEfmk4M');
+  }
+
+  function isAllowedDiscussionTarget(discussionId: string): boolean {
+    if (allowedDiscussionByPrefix(discussionId)) return true;
+
+    const cfg = readKv('github:allowed_discussion_ids');
+    if (cfg) {
+      try {
+        const ids = JSON.parse(cfg) as string[];
+        if (Array.isArray(ids) && ids.includes(discussionId)) return true;
+      } catch {
+        // ignore malformed allowlist config
+      }
+    }
+
+    const knownReport = db.prepare('SELECT 1 FROM github_reports WHERE discussion_id = ? LIMIT 1').get(discussionId) as { 1: number } | undefined;
+    if (knownReport) return true;
+
+    const knownDraft = db.prepare('SELECT 1 FROM github_dev_drafts WHERE discussion_id = ? LIMIT 1').get(discussionId) as { 1: number } | undefined;
+    if (knownDraft) return true;
+
+    return false;
+  }
+
+  function deriveReportStatus(isAnswered: boolean, stateReason?: string | null): 'open' | 'answered' | 'closed' {
+    // stateReason is only set when the discussion is closed/resolved by GitHub state transitions.
+    if (stateReason) return 'closed';
+    if (isAnswered) return 'answered';
+    return 'open';
   }
 
   // ── Helper: require GitHub token ───────────────
@@ -39,18 +97,54 @@ export async function githubRoutes(app: FastifyInstance) {
 
   /** GET /api/github/status — Check toolchain readiness */
   app.get('/status', async (_req, reply) => {
-    const { execSync } = await import('child_process');
+    const lockKey = 'github:status_probe_lock_until';
+    const cacheKey = 'github:status_probe_cache';
 
-    const check = (cmd: string): string | null => {
-      try {
-        return execSync(cmd, { timeout: 3000, stdio: 'pipe' }).toString().trim();
-      } catch {
-        return null;
-      }
+    const runStatusProbe = async () => {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      const check = async (cmd: string): Promise<string | null> => {
+        try {
+          const { stdout } = await execAsync(cmd, { timeout: 3000, windowsHide: true });
+          return stdout?.trim() || null;
+        } catch {
+          return null;
+        }
+      };
+
+      const gitVersion = await check('git --version');
+      const ghVersion = await check('gh --version');
+      const payload = {
+        gitVersion,
+        ghVersion,
+        checkedAt: Date.now(),
+      };
+      writeKv(cacheKey, JSON.stringify(payload));
     };
 
-    const gitVersion = check('git --version');
-    const ghVersion  = check('gh --version');
+    const now = Date.now();
+    const lockUntil = Number(readKv(lockKey) || '0');
+    const cacheRaw = readKv(cacheKey);
+    let cache: { gitVersion: string | null; ghVersion: string | null; checkedAt: number } | null = null;
+    if (cacheRaw) {
+      try {
+        cache = JSON.parse(cacheRaw);
+      } catch {
+        cache = null;
+      }
+    }
+
+    const isFresh = !!cache && Number(cache.checkedAt || 0) > now - STATUS_CACHE_TTL_MS;
+    if (!isFresh && lockUntil < now) {
+      writeKv(lockKey, String(now + STATUS_PROBE_LOCK_MS));
+      void runStatusProbe()
+        .catch(() => {})
+        .finally(() => deleteKv(lockKey));
+    }
+
+    const gitVersion = cache?.gitVersion ?? null;
+    const ghVersion = cache?.ghVersion ?? null;
     const hasToken   = !!gh().getToken();
     const isOwner    = gh().isOwner();
     const activeAccount = db.prepare(`
@@ -87,6 +181,10 @@ export async function githubRoutes(app: FastifyInstance) {
       canPost:    hasToken,
       cliReady:   !!gitVersion && !!ghVersion,
       setupMode:  hasToken ? 'token-ready' : 'token-required',
+      statusCache: {
+        stale: !isFresh,
+        checkedAt: cache?.checkedAt ?? null,
+      },
       activeAccount: effectiveAccount && effectiveAccount.github_user_id !== -1
         ? {
             login: effectiveAccount.github_login,
@@ -116,8 +214,9 @@ export async function githubRoutes(app: FastifyInstance) {
       const result = await gh().listDiscussions({ first, after: cursor, categoryId, orderBy: sort as any });
 
       // Augment with local "posted from this app" flag
+      const githubUserId = currentUserId();
       const localIds = new Set(
-        (db.prepare('SELECT discussion_id FROM github_reports WHERE discussion_id IS NOT NULL').all() as any[])
+        (db.prepare('SELECT discussion_id FROM github_reports WHERE discussion_id IS NOT NULL AND github_user_id = ?').all(githubUserId) as any[])
           .map((r: any) => r.discussion_id)
       );
 
@@ -152,15 +251,33 @@ export async function githubRoutes(app: FastifyInstance) {
     if (!requireToken(reply)) return;
 
     const { id } = req.params as any;
-    const { body, replyToId } = req.body as any;
+    const payload = (req.body ?? {}) as Record<string, unknown>;
+    const bodyText = typeof payload.body === 'string'
+      ? payload.body
+      : payload.body == null
+        ? ''
+        : String(payload.body);
+    const replyToId = payload.replyToId ? String(payload.replyToId) : undefined;
 
-    if (!body?.trim()) return reply.code(400).send({ error: 'Comment body is required.' });
+    if (!isAllowedDiscussionTarget(String(id))) {
+      return reply.code(403).send({
+        error: 'Discussion target is outside the allowed posting scope. Add it to github:allowed_discussion_ids to permit posting.',
+      });
+    }
+
+    if (!bodyText.trim()) return reply.code(400).send({ error: 'Comment body is required.' });
 
     try {
-      const comment = await gh().addDiscussionComment({ discussionId: id, body, replyToId });
+      const comment = await gh().addDiscussionComment({ discussionId: id, body: bodyText, replyToId });
       reply.send({ comment });
     } catch (err: any) {
-      reply.code(500).send({ error: err.message || 'Failed to post comment.' });
+      reply.code(500).send({
+        error: err?.message || 'Failed to post comment.',
+        context: {
+          route: 'POST /api/github/discussions/:id/comment',
+          discussionId: String(id),
+        },
+      });
     }
   });
 
@@ -188,9 +305,120 @@ export async function githubRoutes(app: FastifyInstance) {
     }
   });
 
+  /**
+   * POST /api/github/discussions/:id/mark-answer
+   * Mark a comment as the accepted answer for a discussion.
+   *
+   * This route is accessible to any authenticated user (not just repo owners) because
+   * GitHub's GraphQL markDiscussionCommentAsAnswer mutation already enforces that the
+   * caller must be the discussion author or a collaborator with write access.
+   * We do NOT require requireOwner() here — GitHub enforces authorization on its side
+   * and will return a permission error if the caller lacks rights.
+   *
+   * Body: { commentId: string }
+   *
+   * CAUTION: The GitHub API only allows marking an answer on discussions in categories
+   * that support answers (Q&A type). Attempting to mark an answer on a non-answerable
+   * category (e.g. Announcements, Ideas) will fail with a GraphQL error — surface this
+   * to the user rather than swallowing it.
+   *
+   * Source finding: D https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16869230
+   * Cluster: C5 https://github.com/orgs/community/discussions/195397#discussioncomment-16869608
+   */
+  app.post('/discussions/:id/mark-answer', async (req: FastifyRequest, reply) => {
+    if (!requireToken(reply)) return;
+
+    const { commentId } = req.body as any;
+    if (!commentId || typeof commentId !== 'string' || !commentId.trim()) {
+      return reply.code(400).send({ error: 'commentId is required.' });
+    }
+
+    try {
+      await gh().markCommentAsAnswer(commentId.trim());
+      reply.send({ ok: true });
+    } catch (err: any) {
+      // Surface specific GitHub authorization or category errors to the caller.
+      // Do not swallow — the operator needs to know if marking an answer failed
+      // so they can decide whether to retry or take action on GitHub.com.
+      reply.code(500).send({
+        error: err.message || 'Failed to mark comment as answer.',
+        context: {
+          route: 'POST /api/github/discussions/:id/mark-answer',
+          commentId: String(commentId),
+        },
+      });
+    }
+  });
+
+  /**
+   * POST /api/github/discussions/:id/close
+   * Close a discussion (sets GitHub discussion state to CLOSED).
+   *
+   * Accessible to any authenticated user — GitHub enforces authorization.
+   * Only the discussion author or a collaborator with triage/write access can
+   * close a discussion via the API; the server passes through the stored token
+   * and GitHub returns an error if the caller lacks permission.
+   *
+   * Body: {} (empty — the discussionId is in the path param :id)
+   *
+   * CAUTION: Closing a discussion is visible to all GitHub users. Before calling
+   * this from any automated path, ensure explicit user confirmation has been shown
+   * in the UI (checklist rule: never take destructive actions without user confirm).
+   *
+   * Source finding: D https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16869230
+   * Cluster: C5 https://github.com/orgs/community/discussions/195397#discussioncomment-16869608
+   */
+  app.post('/discussions/:id/close', async (req: FastifyRequest, reply) => {
+    if (!requireToken(reply)) return;
+
+    const { id } = req.params as any;
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      return reply.code(400).send({ error: 'Discussion ID (path param :id) is required.' });
+    }
+
+    try {
+      await gh().closeDiscussion(id.trim());
+      reply.send({ ok: true });
+    } catch (err: any) {
+      reply.code(500).send({
+        error: err.message || 'Failed to close discussion.',
+        context: {
+          route: 'POST /api/github/discussions/:id/close',
+          discussionId: String(id),
+        },
+      });
+    }
+  });
+
   // ────────────────────────────────────────────────
   // PHASE 3 — Reporting Engine
   // ────────────────────────────────────────────────
+
+  /**
+   * GET /api/github/discussion-categories
+   * C4-G: Dynamic discussion category list from GitHub GraphQL.
+   * Replaces hardcoded CATEGORY_IDS constant for category pickers in the UI.
+   * Cached 30 min inside GitHubService.getDiscussionCategories().
+   * Falls back to CATEGORY_IDS on error.
+   */
+  app.get('/discussion-categories', async (_req: FastifyRequest, reply) => {
+    if (!requireToken(reply)) return;
+    try {
+      const cats = await gh().getDiscussionCategories();
+      reply.send({ categories: cats });
+    } catch (err: any) {
+      // Degrade gracefully — return the static fallback so the UI doesn't break
+      const fallback: DiscussionCategory[] = Object.entries(CATEGORY_IDS).map(([name, id]) => ({
+        id,
+        name,
+        emoji: '',
+        emojiHTML: '',
+        description: '',
+        isAnswerable: false,
+      }));
+      reply.send({ categories: fallback, fallback: true, error: err?.message });
+    }
+  });
 
   /** POST /api/github/report — Create a new report (Discussion + optional Issue) */
   app.post('/report', async (req: FastifyRequest, reply) => {
@@ -202,7 +430,17 @@ export async function githubRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'Title and body are required.' });
     }
 
-    const categoryId = CATEGORY_IDS[category] || CATEGORY_IDS['General'];
+    const categoryId = await (async () => {
+      // C4-G: try dynamic lookup first; fall back to hardcoded CATEGORY_IDS
+      try {
+        const cats = await gh().getDiscussionCategories();
+        const match = cats.find(c => c.name === category);
+        if (match) return match.id;
+      } catch { /* ignore — use fallback */ }
+      return CATEGORY_IDS[category] || CATEGORY_IDS['General'];
+    })();
+
+    const githubUserId = currentUserId();
 
     try {
       // Create the Discussion
@@ -221,8 +459,8 @@ export async function githubRoutes(app: FastifyInstance) {
       // Store locally
       const reportId = randomUUID();
       db.prepare(`
-        INSERT INTO github_reports (id, discussion_id, discussion_number, issue_number, title, body, category, labels, report_type, discussion_url, issue_url)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO github_reports (id, discussion_id, discussion_number, issue_number, title, body, category, labels, report_type, discussion_url, issue_url, github_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         reportId,
         discussion.id,
@@ -235,13 +473,14 @@ export async function githubRoutes(app: FastifyInstance) {
         reportType || 'general',
         discussion.url,
         issue?.html_url ?? null,
+        githubUserId,
       );
 
       // Track for notification polling
       db.prepare(`
-        INSERT OR REPLACE INTO github_tracked (discussion_node_id, report_id, known_comment_count, known_is_answered)
-        VALUES (?, ?, 0, 0)
-      `).run(discussion.id, reportId);
+        INSERT OR REPLACE INTO github_tracked (discussion_node_id, report_id, known_comment_count, known_is_answered, github_user_id)
+        VALUES (?, ?, 0, 0, ?)
+      `).run(discussion.id, reportId, githubUserId);
 
       // Delete draft if one was in progress
       if (draftId) {
@@ -267,24 +506,87 @@ export async function githubRoutes(app: FastifyInstance) {
   });
 
   /** GET /api/github/my-reports — Reports posted from this instance */
-  app.get('/my-reports', async (_req, reply) => {
+  app.get('/my-reports', async (req: FastifyRequest, reply) => {
     try {
+      const githubUserId = currentUserId();
+      const sync = (req.query as { sync?: string | boolean } | undefined)?.sync;
+      const shouldSync = sync === true || sync === '1' || sync === 'true';
+
       const reports = db.prepare(`
-        SELECT * FROM github_reports ORDER BY created_at DESC LIMIT 100
-      `).all();
+        SELECT * FROM github_reports WHERE github_user_id = ? ORDER BY created_at DESC LIMIT 100
+      `).all(githubUserId);
+
+      if (shouldSync && gh().getToken()) {
+        const reportByDiscussionId = new Map<string, any>();
+        for (const report of reports as any[]) {
+          if (typeof report.discussion_id === 'string' && report.discussion_id.trim()) {
+            reportByDiscussionId.set(report.discussion_id, report);
+          }
+        }
+
+        const discussionIds = [...reportByDiscussionId.keys()];
+        if (discussionIds.length > 0) {
+          const snapshots = await gh().pollTrackedDiscussions(discussionIds);
+          const updateReport = db.prepare(`
+            UPDATE github_reports
+            SET status = ?,
+                comment_count = ?,
+                last_comment_at = ?,
+                discussion_url = COALESCE(?, discussion_url)
+            WHERE id = ? AND github_user_id = ?
+          `);
+
+          const updateTracked = db.prepare(`
+            UPDATE github_tracked
+            SET known_comment_count = ?,
+                known_is_answered = ?,
+                last_polled_at = datetime('now')
+            WHERE discussion_node_id = ? AND github_user_id = ?
+          `);
+
+          const tx = db.transaction((rows: Array<{ id: string; commentCount: number; isAnswered: boolean; stateReason: string | null; updatedAt: string | null; url: string | null }>) => {
+            for (const row of rows) {
+              const report = reportByDiscussionId.get(row.id);
+              if (!report) continue;
+
+              updateReport.run(
+                deriveReportStatus(row.isAnswered, row.stateReason),
+                row.commentCount,
+                row.updatedAt,
+                row.url,
+                report.id,
+                githubUserId,
+              );
+
+              updateTracked.run(
+                row.commentCount,
+                row.isAnswered ? 1 : 0,
+                row.id,
+                githubUserId,
+              );
+            }
+          });
+
+          tx(snapshots);
+        }
+      }
+
+      const refreshedReports = db.prepare(`
+        SELECT * FROM github_reports WHERE github_user_id = ? ORDER BY created_at DESC LIMIT 100
+      `).all(githubUserId);
 
       // Attach any unread notification counts
       const notifCounts = db.prepare(`
         SELECT report_id, COUNT(*) as unread
         FROM github_notifications
-        WHERE read_at IS NULL
+        WHERE read_at IS NULL AND github_user_id = ?
         GROUP BY report_id
-      `).all() as any[];
+      `).all(githubUserId) as any[];
 
       const unreadMap = Object.fromEntries(notifCounts.map((r: any) => [r.report_id, r.unread]));
 
       reply.send({
-        reports: (reports as any[]).map(r => ({
+        reports: (refreshedReports as any[]).map(r => ({
           ...r,
           labels: JSON.parse(r.labels || '[]'),
           unreadReplies: unreadMap[r.id] ?? 0,
@@ -331,17 +633,19 @@ export async function githubRoutes(app: FastifyInstance) {
 
   /** GET /api/github/notifications — Unread notification list + count */
   app.get('/notifications', async (_req, reply) => {
+    const githubUserId = currentUserId();
     const notifications = db.prepare(`
       SELECT n.*, r.title as report_title, r.discussion_url
       FROM github_notifications n
       LEFT JOIN github_reports r ON n.report_id = r.id
+      WHERE n.github_user_id = ?
       ORDER BY n.created_at DESC
       LIMIT 50
-    `).all();
+    `).all(githubUserId);
 
     const unreadCount = (db.prepare(`
-      SELECT COUNT(*) as c FROM github_notifications WHERE read_at IS NULL
-    `).get() as any).c;
+      SELECT COUNT(*) as c FROM github_notifications WHERE read_at IS NULL AND github_user_id = ?
+    `).get(githubUserId) as any).c;
 
     reply.send({ notifications, unreadCount });
   });
@@ -349,19 +653,45 @@ export async function githubRoutes(app: FastifyInstance) {
   /** POST /api/github/notifications/:id/read — Mark a notification as read */
   app.post('/notifications/:id/read', async (req: FastifyRequest, reply) => {
     const { id } = req.params as any;
+    const githubUserId = currentUserId();
     if (id === 'all') {
-      db.prepare("UPDATE github_notifications SET read_at = datetime('now') WHERE read_at IS NULL").run();
+      db.prepare("UPDATE github_notifications SET read_at = datetime('now') WHERE read_at IS NULL AND github_user_id = ?").run(githubUserId);
     } else {
-      db.prepare("UPDATE github_notifications SET read_at = datetime('now') WHERE id = ?").run(id);
+      db.prepare("UPDATE github_notifications SET read_at = datetime('now') WHERE id = ? AND github_user_id = ?").run(id, githubUserId);
     }
     reply.send({ ok: true });
   });
 
   /** POST /api/github/poll — Background poll for new replies on tracked discussions */
   app.post('/poll', async (_req, reply) => {
+    if (!requireToken(reply)) return;
+    const githubUserId = currentUserId();
+    const lockKey = `github:poll:lock_until:${githubUserId}`;
+    const lastKey = `github:poll:last_run:${githubUserId}`;
+    const now = Date.now();
+
+    const lockUntil = Number(readKv(lockKey) || '0');
+    if (lockUntil > now) {
+      return reply.code(409).send({ error: 'Poll already in progress. Try again shortly.' });
+    }
+
+    const lastRun = Number(readKv(lastKey) || '0');
+    const elapsed = now - lastRun;
+    if (elapsed < POLL_COOLDOWN_MS) {
+      return reply.code(429).send({
+        error: 'Poll cooldown active',
+        retry_after_ms: POLL_COOLDOWN_MS - elapsed,
+      });
+    }
+
+    writeKv(lockKey, String(now + POLL_LOCK_MS));
+
     try {
-      const tracked = db.prepare('SELECT * FROM github_tracked').all() as any[];
-      if (tracked.length === 0) return reply.send({ checked: 0, newNotifications: 0 });
+      const tracked = db.prepare('SELECT * FROM github_tracked WHERE github_user_id = ?').all(githubUserId) as any[];
+      if (tracked.length === 0) {
+        writeKv(lastKey, String(Date.now()));
+        return reply.send({ checked: 0, newNotifications: 0 });
+      }
 
       const ids = tracked.map((t: any) => t.discussion_node_id);
       const results = await gh().pollTrackedDiscussions(ids);
@@ -374,21 +704,38 @@ export async function githubRoutes(app: FastifyInstance) {
 
         const newComments = result.commentCount - (trackedRow.known_comment_count || 0);
         const nowAnswered = result.isAnswered && !trackedRow.known_is_answered;
+        const nextStatus = deriveReportStatus(result.isAnswered, result.stateReason);
+
+        db.prepare(`
+          UPDATE github_reports
+          SET status = ?,
+              comment_count = ?,
+              last_comment_at = ?,
+              discussion_url = COALESCE(?, discussion_url)
+          WHERE id = ? AND github_user_id = ?
+        `).run(
+          nextStatus,
+          result.commentCount,
+          result.updatedAt,
+          result.url,
+          trackedRow.report_id,
+          githubUserId,
+        );
 
         if (newComments > 0) {
           // Create notification for new replies
           db.prepare(`
-            INSERT INTO github_notifications (id, report_id, type, preview, thread_url)
-            VALUES (?, ?, 'reply', ?, ?)
-          `).run(randomUUID(), trackedRow.report_id, `${newComments} new comment${newComments > 1 ? 's' : ''}`, '');
+            INSERT INTO github_notifications (id, report_id, type, preview, thread_url, github_user_id)
+            VALUES (?, ?, 'reply', ?, ?, ?)
+          `).run(randomUUID(), trackedRow.report_id, `${newComments} new comment${newComments > 1 ? 's' : ''}`, '', githubUserId);
           newNotifications++;
         }
 
         if (nowAnswered) {
           db.prepare(`
-            INSERT INTO github_notifications (id, report_id, type, preview, thread_url)
-            VALUES (?, ?, 'answered', 'Your discussion was marked as Answered!', '')
-          `).run(randomUUID(), trackedRow.report_id);
+            INSERT INTO github_notifications (id, report_id, type, preview, thread_url, github_user_id)
+            VALUES (?, ?, 'answered', 'Your discussion was marked as Answered!', '', ?)
+          `).run(randomUUID(), trackedRow.report_id, githubUserId);
           newNotifications++;
         }
 
@@ -396,13 +743,17 @@ export async function githubRoutes(app: FastifyInstance) {
         db.prepare(`
           UPDATE github_tracked
           SET known_comment_count = ?, known_is_answered = ?, last_polled_at = datetime('now')
-          WHERE discussion_node_id = ?
-        `).run(result.commentCount, result.isAnswered ? 1 : 0, result.id);
+          WHERE discussion_node_id = ? AND github_user_id = ?
+        `).run(result.commentCount, result.isAnswered ? 1 : 0, result.id, githubUserId);
       }
+
+      writeKv(lastKey, String(Date.now()));
 
       reply.send({ checked: results.length, newNotifications });
     } catch (err: any) {
       reply.code(500).send({ error: err.message || 'Polling failed.' });
+    } finally {
+      deleteKv(lockKey);
     }
   });
 
@@ -505,10 +856,11 @@ Format your response as JSON with these fields:
 
       // Store the dev draft
       const draftId = randomUUID();
+      const githubUserId = currentUserId();
       db.prepare(`
-        INSERT INTO github_dev_drafts (id, discussion_id, discussion_number, discussion_title, analysis, draft_response)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(draftId, discussionId || '', discussionNumber, discussionTitle || '', analysis, draftResponse);
+        INSERT INTO github_dev_drafts (id, discussion_id, discussion_number, discussion_title, analysis, draft_response, github_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(draftId, discussionId || '', discussionNumber, discussionTitle || '', analysis, draftResponse, githubUserId);
 
       reply.send({ draftId, analysis, draftResponse });
     } catch (err: any) {
@@ -519,10 +871,11 @@ Format your response as JSON with these fields:
   /** GET /api/github/dev/drafts — List dev drafts awaiting approval */
   app.get('/dev/drafts', async (_req, reply) => {
     if (!requireOwner(reply)) return;
+    const githubUserId = currentUserId();
 
     const drafts = db.prepare(`
-      SELECT * FROM github_dev_drafts ORDER BY created_at DESC LIMIT 50
-    `).all();
+      SELECT * FROM github_dev_drafts WHERE github_user_id = ? ORDER BY created_at DESC LIMIT 50
+    `).all(githubUserId);
     reply.send({ drafts });
   });
 
@@ -532,8 +885,9 @@ Format your response as JSON with these fields:
 
     const { id } = req.params as any;
     const { draftResponse } = req.body as any;
+    const githubUserId = currentUserId();
 
-    db.prepare('UPDATE github_dev_drafts SET draft_response = ? WHERE id = ?').run(draftResponse || '', id);
+    db.prepare('UPDATE github_dev_drafts SET draft_response = ? WHERE id = ? AND github_user_id = ?').run(draftResponse || '', id, githubUserId);
     reply.send({ ok: true });
   });
 
@@ -543,7 +897,8 @@ Format your response as JSON with these fields:
     if (!requireToken(reply)) return;
 
     const { id } = req.params as any;
-    const draft = db.prepare('SELECT * FROM github_dev_drafts WHERE id = ?').get(id) as any;
+    const githubUserId = currentUserId();
+    const draft = db.prepare('SELECT * FROM github_dev_drafts WHERE id = ? AND github_user_id = ?').get(id, githubUserId) as any;
 
     if (!draft) return reply.code(404).send({ error: 'Draft not found.' });
     if (draft.status === 'posted') return reply.code(400).send({ error: 'Draft already posted.' });
@@ -555,8 +910,8 @@ Format your response as JSON with these fields:
       });
 
       db.prepare(`
-        UPDATE github_dev_drafts SET status = 'posted', posted_url = ? WHERE id = ?
-      `).run(comment.url || '', id);
+        UPDATE github_dev_drafts SET status = 'posted', posted_url = ? WHERE id = ? AND github_user_id = ?
+      `).run(comment.url || '', id, githubUserId);
 
       // ── Inject a Suggested Job so the fix flows into the God Factory pipeline ──
       // Parse the analysis JSON for root_cause + solution if available

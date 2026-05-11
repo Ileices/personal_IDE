@@ -5,13 +5,22 @@
 /** Base URL for the running server. Override via TEST_SERVER_URL env var. */
 export const SERVER = process.env.TEST_SERVER_URL || 'http://localhost:3001';
 
+function jsonRequestInit(method: string, body?: Record<string, any>, headers?: Record<string, string>) {
+  const baseHeaders: Record<string, string> = { Origin: 'http://localhost:5173', ...headers };
+  if (body !== undefined) {
+    baseHeaders['Content-Type'] = 'application/json';
+  }
+
+  return {
+    method,
+    headers: baseHeaders,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  };
+}
+
 /** JSON POST helper */
 export async function post(path: string, body?: Record<string, any>, headers?: Record<string, string>) {
-  const res = await fetch(`${SERVER}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', ...headers },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const res = await fetch(`${SERVER}${path}`, jsonRequestInit('POST', body, headers));
   const text = await res.text();
   let json: any;
   try { json = JSON.parse(text); } catch { json = text; }
@@ -31,11 +40,7 @@ export async function get(path: string, headers?: Record<string, string>) {
 
 /** JSON PUT helper */
 export async function put(path: string, body?: Record<string, any>, headers?: Record<string, string>) {
-  const res = await fetch(`${SERVER}${path}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', ...headers },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const res = await fetch(`${SERVER}${path}`, jsonRequestInit('PUT', body, headers));
   const text = await res.text();
   let json: any;
   try { json = JSON.parse(text); } catch { json = text; }
@@ -44,11 +49,7 @@ export async function put(path: string, body?: Record<string, any>, headers?: Re
 
 /** JSON DELETE helper */
 export async function del(path: string, body?: Record<string, any>, headers?: Record<string, string>) {
-  const res = await fetch(`${SERVER}${path}`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', ...headers },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const res = await fetch(`${SERVER}${path}`, jsonRequestInit('DELETE', body, headers));
   const text = await res.text();
   let json: any;
   try { json = JSON.parse(text); } catch { json = text; }
