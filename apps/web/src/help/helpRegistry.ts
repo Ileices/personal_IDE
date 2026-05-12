@@ -3240,9 +3240,14 @@ export const HELP_SECTIONS: HelpSection[] = [
       { url: 'https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887772', label: '#17 — Truth-ledger backlink for model routing integrity pass (#56)' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/58', label: 'Discussion #58 — Intel Panel + God Factory convergence execution thread (multi-pass hardening)' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/59', label: 'Discussion #59 — Pass report + competitive benchmark (Copilot/Replit/Base44)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/60', label: 'Discussion #60 — Intel notification action controls pass (run/pause/resume from alerts)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/61', label: 'Discussion #61 — Benchmark addendum (control latency + operator UX)' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887811', label: '#17 — Truth-ledger backlink for convergence + benchmark discussions (#58/#59)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887866', label: '#17 — Truth-ledger backlink for Intel notification actionability pass (#60/#61)' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16887810', label: '#20 — Cross-link update to convergence + benchmark discussions (#58/#59)' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/24#discussioncomment-16887809', label: '#24 — Cross-link update to convergence + benchmark discussions (#58/#59)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16887868', label: '#20 — Cross-link update for Intel notification actionability pass (#60/#61)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/24#discussioncomment-16887869', label: '#24 — Cross-link update for Intel notification actionability pass (#60/#61)' },
     ],
   },
   {
@@ -3328,7 +3333,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     status: 'active',
     details: [
       '╭─ ✦ Help Governance Snapshot',
-      '│ Last Updated: 2026-05-10',
+      '│ Last Updated: 2026-05-12',
       '│ Canonical Discussion: https://github.com/Ileices/personal_IDE/discussions/17',
       '│ Rule: Help is the final promise surface; we strengthen and align it instead of weakening it.',
       '╰─ Every major Help claim should map to evidence: discussion comment + code path + commit.',
@@ -3348,7 +3353,10 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Latest truth-ledger backlink for model routing pass: https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887772',
       'Intel Panel + God Factory convergence execution thread: https://github.com/Ileices/personal_IDE/discussions/58',
       'Competitive benchmark + surpass strategy thread: https://github.com/Ileices/personal_IDE/discussions/59',
+      'Intel notification actionability pass thread: https://github.com/Ileices/personal_IDE/discussions/60',
+      'Control-latency benchmark addendum thread: https://github.com/Ileices/personal_IDE/discussions/61',
       'Latest truth-ledger backlink for convergence + benchmark pass: https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887811',
+      'Latest truth-ledger backlink for Intel notification actionability pass: https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887866',
       'Update discipline: any GitHub/Community feature change should include synchronized updates in this ledger discussion and in-app Help links.'
     ]
   },

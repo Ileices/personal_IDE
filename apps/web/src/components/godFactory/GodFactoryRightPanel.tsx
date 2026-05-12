@@ -33,6 +33,8 @@ export interface IntelNotification {
   message: string;
   timestamp: string;
   source: string;
+  category?: string;
+  subsystem?: SubsystemId | null;
 }
 
 interface IdleSuggestion {
@@ -195,6 +197,17 @@ interface SchedulerStatus {
   running: boolean;
   tickMs: number;
   lastTickAt?: string | null;
+}
+
+function mapCategoryToSubsystem(category: string): SubsystemId | null {
+  const c = String(category || '').toLowerCase();
+  if (!c) return null;
+  if (c.includes('gap') || c.includes('debt') || c.includes('regression')) return 'gap_analysis';
+  if (c.includes('model')) return 'suggested_jobs_crawler';
+  if (c.includes('idle')) return 'god_factory_idle_scan';
+  if (c.includes('project') || c.includes('state') || c.includes('drift')) return 'project_state_crawler';
+  if (c.includes('job') || c.includes('queue')) return 'suggested_jobs_crawler';
+  return 'ide_codebase_crawler';
 }
 
 interface BackgroundSubAgentStatus {
@@ -649,6 +662,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           message: String(n.natural_language_summary || ''),
           timestamp: String(n.timestamp || new Date().toISOString()),
           source: String(n.category || 'god_factory').replace(/_/g, ' '),
+          category: String(n.category || ''),
+          subsystem: mapCategoryToSubsystem(String(n.category || '')),
         }));
         setNotifications(mapped);
       })
@@ -1615,12 +1630,33 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                     {(() => {
                       const cat = selectedNotification.notification.category as string;
                       const id = selectedNotification.notification.notification_id;
+                      const mappedSubsystem = mapCategoryToSubsystem(cat);
                       const isGapCategory = cat === 'gap_report' || cat === 'code_health' || cat === 'drift' || cat === 'regression_trend';
                       const isModelAlert = cat === 'model_behavior_alert' || cat === 'model_performance';
                       const isDebt = cat === 'debt_warning';
                       const isCritical = selectedNotification.notification.severity === 'critical' || selectedNotification.notification.severity === 'fatal';
                       return (
                         <>
+                          {mappedSubsystem && (
+                            <>
+                              <button
+                                onClick={() => void runSubsystem(mappedSubsystem)}
+                                disabled={runningSubsystem === mappedSubsystem}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 disabled:opacity-40 flex items-center gap-1"
+                              >
+                                {runningSubsystem === mappedSubsystem ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Play className="w-2 h-2" />}
+                                Run Crawler
+                              </button>
+                              <button
+                                onClick={() => void runControl(subsystems[mappedSubsystem].enabled ? 'pause_subsystem' : 'resume_subsystem', mappedSubsystem)}
+                                disabled={controlBusy === `pause_subsystem:${mappedSubsystem}` || controlBusy === `resume_subsystem:${mappedSubsystem}`}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-ide-border/25 text-ide-text-dim border border-ide-border/40 hover:bg-ide-border/50 disabled:opacity-40 flex items-center gap-1"
+                              >
+                                <SlidersHorizontal className="w-2 h-2" />
+                                {subsystems[mappedSubsystem].enabled ? 'Pause Crawler' : 'Resume Crawler'}
+                              </button>
+                            </>
+                          )}
                           {(isGapCategory || isCritical) && (
                             <button
                               onClick={() => void notifFlushToJob(id)}
@@ -1796,12 +1832,35 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
               ) : notifications.map(n => (
                 <div key={n.id} className="flex items-start gap-1.5 p-1.5 rounded bg-ide-bg/30 group">
                   <span className={`text-[10px] mt-0.5 ${notifColor(n.type)}`}>●</span>
-                  <button onClick={() => void inspectNotification(n.id)} className="flex-1 min-w-0 text-left">
-                    <div className="text-[10px] text-ide-text leading-snug">{n.message}</div>
-                    <div className="text-[9px] text-ide-text-dim mt-0.5">
-                      {n.source} · {new Date(n.timestamp).toLocaleTimeString()}
+                  <div className="flex-1 min-w-0">
+                    <button onClick={() => void inspectNotification(n.id)} className="w-full text-left">
+                      <div className="text-[10px] text-ide-text leading-snug">{n.message}</div>
+                      <div className="text-[9px] text-ide-text-dim mt-0.5">
+                        {n.source} · {new Date(n.timestamp).toLocaleTimeString()}
+                      </div>
+                    </button>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {n.subsystem && (
+                        <>
+                          <button
+                            onClick={() => void runSubsystem(n.subsystem as SubsystemId)}
+                            disabled={runningSubsystem === n.subsystem}
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 disabled:opacity-40 flex items-center gap-1"
+                          >
+                            {runningSubsystem === n.subsystem ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Play className="w-2 h-2" />}
+                            Run
+                          </button>
+                          <button
+                            onClick={() => void runControl(subsystems[n.subsystem as SubsystemId].enabled ? 'pause_subsystem' : 'resume_subsystem', n.subsystem as SubsystemId)}
+                            disabled={controlBusy === `pause_subsystem:${n.subsystem}` || controlBusy === `resume_subsystem:${n.subsystem}`}
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-ide-border/25 text-ide-text-dim border border-ide-border/40 hover:bg-ide-border/50 disabled:opacity-40"
+                          >
+                            {subsystems[n.subsystem as SubsystemId].enabled ? 'Pause' : 'Resume'}
+                          </button>
+                        </>
+                      )}
                     </div>
-                  </button>
+                  </div>
                   <button
                     onClick={() => void acknowledgeNotification(n.id)}
                     className="opacity-0 group-hover:opacity-100 text-ide-text-dim hover:text-red-400">
