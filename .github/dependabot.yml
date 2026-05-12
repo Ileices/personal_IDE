@@ -14,29 +14,18 @@ updates:
     commit-message:
       prefix: "deps"
       prefix-development: "deps(dev)"
+    groups:
+      runtime-patches:
+        dependency-type: "production"
+        update-types:
+          - "patch"
+          - "minor"
+      tooling-patches:
+        dependency-type: "development"
+        update-types:
+          - "patch"
+          - "minor"
     ignore:
-      # Ignore NANO corpus prototype - this is training data, not deployed code
+      # Keep major upgrades as planned migration projects, not auto-merge noise.
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-
-  # Server package
-  - package-ecosystem: "npm"
-    directory: "/apps/server"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "server"
-
-  # Web package
-  - package-ecosystem: "npm"
-    directory: "/apps/web"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "frontend"

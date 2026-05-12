@@ -12,19 +12,19 @@
     "@monaco-editor/react": "^4.7.0",
     "@personal-ide/shared": "workspace:*",
     "lucide-react": "^0.470.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "react-markdown": "^9.0.0",
     "react-syntax-highlighter": "^15.6.0",
     "remark-gfm": "^4.0.1",
-    "zustand": "^5.0.0"
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/react-syntax-highlighter": "^15.5.0",
     "@vitejs/plugin-react": "^4.3.0",
-    "autoprefixer": "^10.4.0",
+    "autoprefixer": "^10.5.0",
     "picomatch": "^4.0.4",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
