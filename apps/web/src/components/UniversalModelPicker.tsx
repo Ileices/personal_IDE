@@ -19,8 +19,7 @@ import {
   Search, ChevronDown, ChevronUp, Check, Plus, Trash2,
   Zap, Brain, Cpu, Globe, Code2, BookOpen, X, CheckSquare,
   Square as SquareIcon, LayoutList, Tag, Star,
-} from 'lucide-react';
-import { API_BASE } from '../config';
+} from 'lucide-react';import { API_BASE } from '../config';
 import { OLLAMA_CATALOG } from './LocalModelCatalog';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -46,7 +45,7 @@ export function getProviderLabel(id: string): string {
     'deepseek-direct': 'DeepSeek', qwen: 'Qwen', zhipuai: 'ZhipuAI',
     moonshot: 'Moonshot', minimax: 'MiniMax', xai: 'xAI/Grok',
     perplexity: 'Perplexity', fireworks: 'Fireworks', siliconflow: 'SiliconFlow',
-    github: 'GitHub', ollama: 'Ollama (local)', nano: 'Nano (local)',
+    github: 'GitHub Models', ollama: 'Ollama (local)', nano: 'Nano (local)',
   };
   return labels[p] || p.charAt(0).toUpperCase() + p.slice(1);
 }
@@ -74,6 +73,7 @@ function providerColor(provider: string): string {
     xai: 'text-red-400 bg-red-500/10',
     fireworks: 'text-amber-400 bg-amber-500/10',
     siliconflow: 'text-teal-400 bg-teal-500/10',
+    github: 'text-slate-300 bg-slate-500/10',
   };
   return colors[provider] || 'text-ide-text-dim bg-ide-panel';
 }
@@ -244,9 +244,11 @@ export function ModelDropdown({
     allModels, isLoading, fetchModels, fetchInstalledLocalModels,
     installedLocalModels, workingModels, failedModels,
     preferTestedModelsFirst, hideFailedModels,
+    favoritedModels, toggleFavorite,
   } = useModelStore();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [pendingInstallModel, setPendingInstallModel] = useState<ModelDefinition | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -272,6 +274,9 @@ export function ModelDropdown({
     if (hideFailedModels) {
       list = list.filter(m => !failedModels[m.id] || m.id === value);
     }
+    if (showFavoritesOnly) {
+      list = list.filter(m => favoritedModels.has(m.id));
+    }
     if (!search) {
       return preferTestedModelsFirst ? sortModelsByHealth(list, workingModels, failedModels) : list;
     }
@@ -282,7 +287,7 @@ export function ModelDropdown({
       m.publisher.toLowerCase().includes(q)
     );
     return preferTestedModelsFirst ? sortModelsByHealth(searched, workingModels, failedModels) : searched;
-  }, [search, allModels, hideFailedModels, failedModels, preferTestedModelsFirst, workingModels, value]);
+  }, [search, allModels, hideFailedModels, failedModels, preferTestedModelsFirst, workingModels, value, showFavoritesOnly, favoritedModels]);
 
   const groups = useMemo(() => groupByProvider(filtered), [filtered]);
   const selected = allModels.find(m => m.id === value);
@@ -323,6 +328,7 @@ export function ModelDropdown({
               {getProviderLabel(selected.id)}
             </span>
             <span className="text-ide-text truncate">{selected.name}</span>
+            {favoritedModels.has(selected.id) && <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400 flex-shrink-0" />}
             {isFreeModel(selected) && <span className="text-[9px] text-green-400 font-medium ml-auto">FREE</span>}
               {workingModels.has(selected.id) && <span className="text-[9px] text-green-400">TESTED</span>}
               {failedModels[selected.id] && <span className="text-[9px] text-red-400">{failureBadge(failedModels[selected.id].classification)}</span>}
@@ -347,6 +353,20 @@ export function ModelDropdown({
                 className="w-full pl-6 pr-2 py-1 bg-ide-bg border border-ide-border rounded text-xs focus:outline-none focus:border-ide-accent"
               />
             </div>
+            {favoritedModels.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowFavoritesOnly(v => !v)}
+                className={`mt-1.5 w-full flex items-center gap-1.5 px-2 py-1 rounded text-[10px] transition-colors ${
+                  showFavoritesOnly
+                    ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                    : 'text-ide-text-dim hover:bg-ide-border border border-ide-border/50'
+                }`}
+              >
+                <Star className={`w-3 h-3 ${showFavoritesOnly ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                {showFavoritesOnly ? `Favorites (${favoritedModels.size}) — click to show all` : `Show ${favoritedModels.size} favorite${favoritedModels.size !== 1 ? 's' : ''}`}
+              </button>
+            )}
           </div>
           <div className="max-h-72 overflow-y-auto">
             {groups.map(([provider, models]) => (
@@ -371,6 +391,15 @@ export function ModelDropdown({
                       {failedModels[m.id] && <span className="text-[9px] px-1 py-0.5 bg-red-500/15 text-red-300 rounded">{failureBadge(failedModels[m.id].classification)}</span>}
                       {m.id.startsWith('ollama/') && !installedLocalModels.has(m.id) && <span className="text-[9px] px-1 py-0.5 bg-yellow-500/15 text-yellow-300 rounded">NOT INSTALLED</span>}
                       {m.supportsTools && <span className="text-[9px] text-purple-400" title="Tools">🔧</span>}
+                      {/* Star / favorite button */}
+                      <button
+                        type="button"
+                        title={favoritedModels.has(m.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        onClick={e => { e.stopPropagation(); toggleFavorite(m.id); }}
+                        className={`p-0.5 rounded hover:bg-ide-border transition-colors ${favoritedModels.has(m.id) ? 'text-yellow-400' : 'text-ide-text-dim/40 hover:text-yellow-400'}`}
+                      >
+                        <Star className={`w-3 h-3 ${favoritedModels.has(m.id) ? 'fill-yellow-400' : ''}`} />
+                      </button>
                       {value === m.id && <Check className="w-3 h-3 text-ide-accent" />}
                     </div>
                   </button>

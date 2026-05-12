@@ -399,11 +399,13 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
               <div className="border rounded-lg p-3 border-ide-accent/30 bg-ide-accent/5">                <div className="flex items-center gap-2 mb-2">
                   <span className="font-medium text-sm">GitHub Token (PAT)</span>
                   <span className="text-[10px] bg-ide-accent/20 text-ide-accent px-1.5 py-0.5 rounded">
-                    Required for Copilot Models
+                    GitHub Models Access
                   </span>
                 </div>
                 <p className="text-xs text-ide-text-dim mb-2">
-                  Update your GitHub Personal Access Token when it expires. Needs <code className="text-ide-accent">models:read</code> and <code className="text-ide-accent">read:user</code> scopes.
+                  GitHub PAT for the <strong className="text-ide-text">GitHub Models marketplace</strong> (models.github.ai) — GPT-4o, o4-mini, DeepSeek R1, and more.
+                  Needs <code className="text-ide-accent">models:read</code> and <code className="text-ide-accent">read:user</code> scopes.
+                  <span className="block mt-1 text-yellow-400/80">Note: This is separate from GitHub Copilot (subscription). GitHub Models is available to all GitHub users.</span>
                 </p>
                 <div className="flex gap-1.5">
                   <input
@@ -499,7 +501,8 @@ export function ProviderSettings({ onClose }: { onClose: () => void }) {
               </div>
 
               {/* ── Other Providers ── */}
-              {providers.map(p => (
+              {/* github provider is managed by the PAT section above — skip it here */}
+              {providers.filter(p => p.id !== 'github').map(p => (
               <div
                 key={p.id}
                 className={`border rounded-lg p-3 transition-colors ${

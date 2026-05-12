@@ -15,7 +15,7 @@ interface Props {
 type Step = 'welcome' | 'provider' | 'project' | 'done';
 
 const PROVIDER_OPTIONS = [
-  { id: 'github', label: 'GitHub Copilot', desc: 'Best models — GPT-4.1, o4-mini, Claude. Free with Copilot subscription.', color: 'text-purple-400', placeholder: 'ghp_xxxxxxxxxxxx' },
+  { id: 'github', label: 'GitHub Models', desc: 'Access GPT-4o, o4-mini, DeepSeek R1 via GitHub Models marketplace. Free with a GitHub account (models:read scope).', color: 'text-slate-300', placeholder: 'ghp_xxxxxxxxxxxx' },
   { id: 'openai', label: 'OpenAI', desc: 'GPT-4o, o3-mini. Pay-per-token.', color: 'text-green-400', placeholder: 'sk-xxxxxxxxxxxx' },
   { id: 'ollama', label: 'Ollama (Local)', desc: 'Run models locally — no API key needed.', color: 'text-blue-400', placeholder: 'http://localhost:11434' },
   { id: 'groq', label: 'Groq', desc: 'Ultra-fast inference. Free tier available.', color: 'text-orange-400', placeholder: 'gsk_xxxxxxxxxxxx' },

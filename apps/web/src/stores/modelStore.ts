@@ -15,6 +15,7 @@ import { API_BASE } from '../config';
 
 const WORKING_MODELS_KEY = 'personal_ide_working_models';
 const FAILED_MODELS_KEY = 'personal_ide_failed_models';
+const FAVORITES_KEY = 'personal_ide_model_favorites';
 
 export interface FailedModelRecord {
   modelId: string;
@@ -49,6 +50,19 @@ function saveWorkingModels(set: Set<string>) {
 
 function saveFailedModels(records: Record<string, FailedModelRecord>) {
   try { localStorage.setItem(FAILED_MODELS_KEY, JSON.stringify(records)); } catch {}
+}
+
+function loadFavorites(): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveFavorites(set: Set<string>) {
+  try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(Array.from(set))); } catch {}
 }
 
 export function sortModelsByHealth(models: ModelDefinition[], workingModels: Set<string>, failedModels: Record<string, FailedModelRecord>): ModelDefinition[] {
@@ -102,6 +116,8 @@ interface ModelStore {
   workingModels: Set<string>;
   /** Models that failed a validation/test and should be deprioritized or hidden */
   failedModels: Record<string, FailedModelRecord>;
+  /** Models the user has starred as favorites (float to top when filter active) */
+  favoritedModels: Set<string>;
   /** Whether pickers should automatically put working models first */
   preferTestedModelsFirst: boolean;
   /** Whether pickers should hide failed models from the main lists by default */
@@ -123,6 +139,7 @@ interface ModelStore {
   clearSessionSkips: () => void;
   setPreferTestedModelsFirst: (value: boolean) => void;
   setHideFailedModels: (value: boolean) => void;
+  toggleFavorite: (modelId: string) => void;
   testModel: (modelId: string) => Promise<{ success: boolean; classification: string; error?: string }>;
   testAllModels: (modelIds?: string[]) => Promise<void>;
 }
@@ -197,6 +214,7 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   installedLocalModels: new Set(),
   workingModels: loadWorkingModels(),
   failedModels: loadFailedModels(),
+  favoritedModels: loadFavorites(),
   preferTestedModelsFirst: true,
   hideFailedModels: false,
   bulkTestInProgress: false,
@@ -343,6 +361,17 @@ export const useModelStore = create<ModelStore>((set, get) => ({
 
   setPreferTestedModelsFirst: (value) => set({ preferTestedModelsFirst: value }),
   setHideFailedModels: (value) => set({ hideFailedModels: value }),
+
+  toggleFavorite: (modelId: string) => {
+    const next = new Set(get().favoritedModels);
+    if (next.has(modelId)) {
+      next.delete(modelId);
+    } else {
+      next.add(modelId);
+    }
+    saveFavorites(next);
+    set({ favoritedModels: next });
+  },
 
   testModel: async (modelId: string) => {
     try {

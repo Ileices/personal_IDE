@@ -6,17 +6,17 @@ import type { ProviderConfig } from '../types/providers.js';
 
 /** All supported providers with setup info */
 export const PROVIDERS: ProviderConfig[] = [
-  // ── GitHub Models (Copilot) ──
+  // ── GitHub Models (marketplace via PAT — NOT GitHub Copilot) ──
   {
     id: 'github',
-    name: 'GitHub Copilot Models',
-    description: 'All models available through your GitHub Copilot subscription. GPT-4.1, o3, o4-mini, Claude, Gemini, and more.',
+    name: 'GitHub Models',
+    description: 'Models available via the GitHub Models marketplace (models.github.ai). Access GPT-4o, o4-mini, DeepSeek R1, and more using a GitHub PAT with models:read scope.',
     baseURL: 'https://models.github.ai/inference',
     requiresApiKey: true,
     isLocal: false,
     isFree: true,
     setupUrl: 'https://github.com/settings/tokens',
-    notes: 'Use a PAT with models:read and read:user scopes. Free tier included with GitHub account.',
+    notes: 'Use a PAT with models:read and read:user scopes. This is NOT the same as GitHub Copilot — it is the GitHub Models marketplace accessible to all GitHub users.',
     enabled: true,
   },
 

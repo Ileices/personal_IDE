@@ -5,7 +5,7 @@
 // ============================================
 import OpenAI from 'openai';
 import type { ProviderType, UnifiedModel, TokenLimitCheck } from '@personal-ide/shared';
-import { MODELS } from '@personal-ide/shared';
+import { MODELS, extractProviderFromModelId } from '@personal-ide/shared';
 import { appConfig } from '../../config.js';
 import { smartDecrypt } from '../crypto/index.js';
 
@@ -130,10 +130,13 @@ export async function fetchProviderModels(
       return await fetchNanoModels(client);
     }
 
-    // GitHub Models API does NOT have a /models listing endpoint — it returns 404.
-    // Use the curated model list from shared constants instead.
+    // GitHub Models API: only return models that actually route through the
+    // GitHub Models inference endpoint (https://models.github.ai/inference).
+    // Models like groq/, gemini/, anthropic/ have their own direct APIs and
+    // must NOT be returned here — they would show as GitHub models and fail.
     if (provider === 'github') {
-      const models: UnifiedModel[] = MODELS.map(m => ({
+      const githubCatalogModels = MODELS.filter(m => extractProviderFromModelId(m.id) === 'github');
+      const models: UnifiedModel[] = githubCatalogModels.map(m => ({
         id: m.id,
         name: m.name,
         provider: 'github' as ProviderType,
