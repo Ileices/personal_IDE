@@ -134,13 +134,13 @@ export async function modelsRoutes(app: FastifyInstance) {
     // The model ID the provider's API actually expects (strip the prefix for github-routed models)
     const providerModelId = (() => {
       const slashIdx = modelId.indexOf('/');
-      if (routingProvider === 'github') return slashIdx > 0 ? modelId.slice(slashIdx + 1) : modelId;
+      if (routingProvider === 'github') return modelId;
       return slashIdx > 0 ? modelId.slice(slashIdx + 1) : modelId;
     })();
 
     const classify = (message: string): TestClassification => {
       const msg = message.toLowerCase();
-      if (msg.includes('not configured') || msg.includes('no api key') || msg.includes('no github token') || msg.includes('unauthorized') || msg.includes('401')) return 'not_configured';
+      if (msg.includes('not configured') || msg.includes('no api key') || msg.includes('no github token') || msg.includes('unauthorized') || msg.includes('401') || msg.includes('403') || msg.includes('forbidden')) return 'not_configured';
       if (msg.includes('not installed')) return 'not_installed';
       if (msg.includes('rate') && (msg.includes('limit') || msg.includes('exceeded'))) return 'rate_limited';
       if (msg.includes('429')) return 'rate_limited';
@@ -240,7 +240,7 @@ export async function modelsRoutes(app: FastifyInstance) {
 
     const classifyMsg = (message: string): TestClassification => {
       const msg = message.toLowerCase();
-      if (msg.includes('unauthorized') || msg.includes('401') || msg.includes('no api key') || msg.includes('no github token') || msg.includes('not configured')) return 'not_configured';
+      if (msg.includes('unauthorized') || msg.includes('401') || msg.includes('403') || msg.includes('forbidden') || msg.includes('no api key') || msg.includes('no github token') || msg.includes('not configured')) return 'not_configured';
       if (msg.includes('rate') && (msg.includes('limit') || msg.includes('exceeded'))) return 'rate_limited';
       if (msg.includes('429')) return 'rate_limited';
       if (msg.includes('quota') || msg.includes('billing') || msg.includes('credit') || msg.includes('payment')) return 'cost_blocked';
@@ -288,7 +288,9 @@ export async function modelsRoutes(app: FastifyInstance) {
 
       for (const modelId of ids) {
         const slashIdx = modelId.indexOf('/');
-        const providerModelId = slashIdx > 0 ? modelId.slice(slashIdx + 1) : modelId;
+        const providerModelId = rp === 'github'
+          ? modelId
+          : (slashIdx > 0 ? modelId.slice(slashIdx + 1) : modelId);
         const probeStart = Date.now();
 
         try {

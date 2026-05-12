@@ -79,11 +79,21 @@ export function getClientFromDb(db: any, provider: ProviderType = 'github'): Ope
   }
 
   if (provider === 'github') {
-    const row = db.prepare('SELECT token_encrypted FROM auth_tokens WHERE is_active = 1').get() as any;
-    if (!row || !row.token_encrypted) return null;
-    const token = smartDecrypt(row.token_encrypted, appConfig.security.encryptKey);
+    const authRow = db.prepare('SELECT token_encrypted FROM auth_tokens WHERE is_active = 1').get() as any;
+    if (authRow?.token_encrypted) {
+      const token = smartDecrypt(authRow.token_encrypted, appConfig.security.encryptKey);
+      if (token) return createGitHubClient(token);
+    }
+
+    // Fallback: support legacy/provider-configured GitHub API keys
+    const cfgRow = db.prepare(
+      "SELECT api_key_encrypted, base_url FROM provider_configs WHERE provider_id = 'github' AND enabled = 1"
+    ).get() as any;
+    if (!cfgRow?.api_key_encrypted) return null;
+    const token = smartDecrypt(cfgRow.api_key_encrypted, appConfig.security.encryptKey);
     if (!token) return null;
-    return createGitHubClient(token);
+    const base = cfgRow.base_url || 'https://models.github.ai/inference';
+    return createProviderClient('github', base, token);
   }
 
   // Generic provider from DB

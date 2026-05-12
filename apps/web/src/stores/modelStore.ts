@@ -10,7 +10,7 @@
 // should use this store so new models appear everywhere at once.
 // ============================================
 import { create } from 'zustand';
-import { MODELS, type ModelDefinition } from '@personal-ide/shared';
+import { MODELS, type ModelDefinition, extractProviderFromModelId } from '@personal-ide/shared';
 import { API_BASE } from '../config';
 
 const WORKING_MODELS_KEY = 'personal_ide_working_models';
@@ -171,7 +171,7 @@ function inferTier(provider: string): ModelDefinition['tier'] {
   if (p.includes('ollama')) return 'ollama_local';
   if (p.includes('anthropic') || p.includes('claude')) return 'anthropic_sonnet';
   if (p.includes('openai') || p.includes('gpt')) return 'openai_direct';
-  if (p === 'github') return 'openai_direct'; // GitHub Copilot API uses OpenAI-compatible models
+  if (p === 'github') return 'openai_direct'; // GitHub Models is OpenAI-compatible (models.github.ai)
   if (p.includes('deepseek')) return 'deepseek_direct';
   if (p.includes('qwen') || p.includes('alibaba') || p.includes('dashscope')) return 'qwen_free';
   if (p.includes('mistral')) return 'mistral_free';
@@ -341,7 +341,7 @@ export const useModelStore = create<ModelStore>((set, get) => ({
     const normalized = provider.toLowerCase();
     const nextFailed = { ...get().failedModels };
     Object.keys(nextFailed).forEach(modelId => {
-      const modelProvider = (nextFailed[modelId]?.provider || modelId.split('/')[0] || '').toLowerCase();
+      const modelProvider = String(extractProviderFromModelId(modelId) || '').toLowerCase();
       if (modelProvider === normalized) {
         delete nextFailed[modelId];
       }
@@ -386,14 +386,14 @@ export const useModelStore = create<ModelStore>((set, get) => ({
         return { success: true, classification: 'working' };
       }
       get().markFailed(modelId, {
-        provider: modelId.split('/')[0] || 'unknown',
+        provider: extractProviderFromModelId(modelId) || 'unknown',
         classification: data.classification || 'error',
         error: data.error || 'Model test failed',
       });
       return { success: false, classification: data.classification || 'error', error: data.error || 'Model test failed' };
     } catch (err: any) {
       get().markFailed(modelId, {
-        provider: modelId.split('/')[0] || 'unknown',
+        provider: extractProviderFromModelId(modelId) || 'unknown',
         classification: 'error',
         error: err.message || 'Model test failed',
       });
@@ -425,7 +425,7 @@ export const useModelStore = create<ModelStore>((set, get) => ({
             get().markWorking(r.modelId);
           } else {
             get().markFailed(r.modelId, {
-              provider: r.modelId.split('/')[0] || 'unknown',
+              provider: extractProviderFromModelId(r.modelId) || 'unknown',
               classification: r.classification as FailedModelRecord['classification'],
               error: r.error || 'Model test failed',
             });

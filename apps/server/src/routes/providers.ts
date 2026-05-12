@@ -153,21 +153,17 @@ export async function providersRoutes(app: FastifyInstance): Promise<void> {
       return config ? config.enabled === 1 : defaultEnabled;
     };
 
-    // Always try GitHub when an active PAT exists.
-    // A disabled provider toggle should not hide a valid paid Copilot catalog.
-    const authRow = db.prepare('SELECT token_encrypted FROM auth_tokens WHERE is_active = 1').get() as any;
-    if (authRow?.token_encrypted) {
-      try {
-        const ghClient = getClientFromDb(db, 'github');
-        if (ghClient) {
-          const models = await fetchProviderModels(ghClient, 'github');
-          allModels.push(...models);
-        }
-      } catch (err: any) {
-        errors.push({ provider: 'github', error: err.message });
+    // Always try GitHub models when any valid token source exists (auth_tokens or provider_configs).
+    try {
+      const ghClient = getClientFromDb(db, 'github');
+      if (ghClient) {
+        const models = await fetchProviderModels(ghClient, 'github');
+        allModels.push(...models);
+      } else {
+        errors.push({ provider: 'github', error: 'No GitHub token configured. Go to Provider Settings → GitHub to add your PAT.' });
       }
-    } else {
-      errors.push({ provider: 'github', error: 'No GitHub token configured. Go to Provider Settings → GitHub to add your PAT.' });
+    } catch (err: any) {
+      errors.push({ provider: 'github', error: err.message });
     }
 
     // Try Ollama (no API key needed) when enabled in settings
