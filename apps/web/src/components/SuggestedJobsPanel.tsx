@@ -1045,7 +1045,13 @@ function StatsTab() {
 }
 
 // ── Main Panel ────────────────────────────────
-export function SuggestedJobsPanel() {
+export function SuggestedJobsPanel({
+  showGodFactoryCompanion = false,
+  onToggleGodFactoryCompanion,
+}: {
+  showGodFactoryCompanion?: boolean;
+  onToggleGodFactoryCompanion?: (enabled: boolean) => void;
+}) {
   const [activeTab, setActiveTab] = useState<Tab>('jobs');
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
@@ -1146,6 +1152,19 @@ export function SuggestedJobsPanel() {
         <span className="text-[11px] font-semibold uppercase tracking-wider text-ide-text-dim flex-1 truncate">
           Suggested Jobs
         </span>
+        {!!onToggleGodFactoryCompanion && (
+          <button
+            onClick={() => onToggleGodFactoryCompanion(!showGodFactoryCompanion)}
+            className={`mr-2 rounded border px-2 py-0.5 text-[9px] uppercase tracking-wider transition-colors ${
+              showGodFactoryCompanion
+                ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-300'
+                : 'border-ide-border bg-ide-bg/40 text-ide-text-dim hover:text-ide-text'
+            }`}
+            title="Toggle God Factory companion in the main editor panel"
+          >
+            {showGodFactoryCompanion ? 'Companion: God Factory' : 'Companion: IDE Agent'}
+          </button>
+        )}
         {actionLoading && (
           <RefreshCw size={12} className="text-ide-accent animate-spin mr-1" />
         )}

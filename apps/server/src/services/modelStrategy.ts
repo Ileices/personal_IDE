@@ -43,6 +43,64 @@ function dedupeModels(models: string[]): string[] {
   return out;
 }
 
+function applyCooldownOverrides(db: any, models: string[]): string[] {
+  if (!models.length) return models;
+  try {
+    const nowIso = new Date().toISOString();
+    const rows = db.prepare(`
+      SELECT model_id, override_type, cooldown_until, sleep_until, skip_next_cycles
+      FROM model_cooldown_overrides
+      WHERE active = 1
+    `).all() as Array<{
+      model_id: string;
+      override_type: 'cooldown' | 'skip' | 'sleep';
+      cooldown_until: string | null;
+      sleep_until: string | null;
+      skip_next_cycles: number;
+    }>;
+
+    const blocked = new Set<string>();
+
+    for (const row of rows) {
+      if (!row?.model_id) continue;
+
+      if (row.override_type === 'cooldown') {
+        if (row.cooldown_until && row.cooldown_until > nowIso) {
+          blocked.add(row.model_id);
+        } else {
+          db.prepare(`UPDATE model_cooldown_overrides SET active = 0, updated_at = datetime('now') WHERE model_id = ?`).run(row.model_id);
+        }
+        continue;
+      }
+
+      if (row.override_type === 'sleep') {
+        if (row.sleep_until && row.sleep_until > nowIso) {
+          blocked.add(row.model_id);
+        } else {
+          db.prepare(`UPDATE model_cooldown_overrides SET active = 0, updated_at = datetime('now') WHERE model_id = ?`).run(row.model_id);
+        }
+        continue;
+      }
+
+      if ((row.skip_next_cycles || 0) > 0) {
+        blocked.add(row.model_id);
+        const nextCycles = (row.skip_next_cycles || 0) - 1;
+        if (nextCycles <= 0) {
+          db.prepare(`UPDATE model_cooldown_overrides SET active = 0, skip_next_cycles = 0, updated_at = datetime('now') WHERE model_id = ?`).run(row.model_id);
+        } else {
+          db.prepare(`UPDATE model_cooldown_overrides SET skip_next_cycles = ?, updated_at = datetime('now') WHERE model_id = ?`).run(nextCycles, row.model_id);
+        }
+      } else {
+        db.prepare(`UPDATE model_cooldown_overrides SET active = 0, updated_at = datetime('now') WHERE model_id = ?`).run(row.model_id);
+      }
+    }
+
+    return models.filter((m) => !blocked.has(m));
+  } catch {
+    return models;
+  }
+}
+
 function normalizeStrategy(input?: Partial<ModelStrategySettings>): ModelStrategySettings {
   const preset = getPreset(input?.presetId || DEFAULT_SETTINGS.presetId) || DEFAULT_PRESET;
   const blockedModels = dedupeModels(input?.blockedModels || DEFAULT_SETTINGS.blockedModels);
@@ -148,10 +206,20 @@ export function resolveModelStrategy(
   explicitFallbacks?: string[],
 ): { settings: ModelStrategySettings; primaryModel: string; fallbackModels: string[] } {
   const settings = loadModelStrategy(db);
-  const primaryModel = (preferredModel || settings.primaryModel || DEFAULT_SETTINGS.primaryModel).trim();
-  const fallbackSource = explicitFallbacks?.length ? explicitFallbacks : settings.fallbackModels;
+  const requestedPrimary = (preferredModel || settings.primaryModel || DEFAULT_SETTINGS.primaryModel).trim();
+  const fallbackSource = explicitFallbacks?.length
+    ? explicitFallbacks
+    : [
+        ...(requestedPrimary !== settings.primaryModel ? [settings.primaryModel] : []),
+        ...settings.fallbackModels,
+      ];
   const fallbackModels = dedupeModels(fallbackSource)
-    .filter((model) => model !== primaryModel && !settings.blockedModels.includes(model));
+    .filter((model) => model !== requestedPrimary && !settings.blockedModels.includes(model));
 
-  return { settings, primaryModel, fallbackModels };
+  const orderedCandidates = dedupeModels([requestedPrimary, ...fallbackModels]);
+  const cooledCandidates = applyCooldownOverrides(db, orderedCandidates);
+  const primaryModel = cooledCandidates[0] || requestedPrimary;
+  const cooledFallbackModels = cooledCandidates.filter((model) => model !== primaryModel);
+
+  return { settings, primaryModel, fallbackModels: cooledFallbackModels };
 }

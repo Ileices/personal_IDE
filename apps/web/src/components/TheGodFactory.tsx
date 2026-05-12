@@ -351,9 +351,10 @@ export function TheGodFactory() {
   const { activeProject } = useProjectStore();
   const { selectedModel, setModel } = useChatStore();
   const { allModels, fetchModels } = useModelStore();
+  const [ideRootPath, setIdeRootPath] = useState<string | undefined>(undefined);
 
-  // Use the chatStore's model as default, but allow local override
-  const [localModel, setLocalModel] = useState(selectedModel || 'gemini/gemini-2.5-flash-lite');
+  // Use the global chat-store model as default to keep God Factory aligned with the rest of the app.
+  const [localModel, setLocalModel] = useState(selectedModel || 'github/openai/gpt-4.1-mini');
 
   const [messages, setMessages]           = useState<GodMessage[]>(loadConv);
   const [input, setInput]                 = useState('');
@@ -389,8 +390,10 @@ export function TheGodFactory() {
   const sessionIntroShownRef = useRef<string | null>(null);
   const autonomousModeRef = useRef(false);
 
-  // Keep local model in sync with global if global changes and we haven't overridden
-  useEffect(() => { if (selectedModel && !localModel) setLocalModel(selectedModel); }, [selectedModel]);
+  // Keep local model synced with the global model selection to avoid stale provider drift.
+  useEffect(() => {
+    if (selectedModel && selectedModel !== localModel) setLocalModel(selectedModel);
+  }, [selectedModel]);
   // Force-refresh models on mount so GitHub PAT models are always current
   useEffect(() => { void fetchModels(true); }, [fetchModels]);
   useEffect(() => {
@@ -410,6 +413,11 @@ export function TheGodFactory() {
     let active = true;
     (async () => {
       try {
+        const rootRes = await fetch(`${API_BASE}/api/codebase/root`);
+        const rootData = await rootRes.json().catch(() => ({}));
+        if (active && typeof rootData?.root === 'string' && rootData.root.trim()) {
+          setIdeRootPath(rootData.root);
+        }
         const [treeRes, docsRes, stateRes, projectStateRes, feedbackIndexRes] = await Promise.all([
           fetch(`${API_BASE}/api/codebase/tree?path=.&depth=3`),
           fetch(`${API_BASE}/api/codebase/docs`),
@@ -512,7 +520,7 @@ export function TheGodFactory() {
         body: JSON.stringify({
           start_cycle: `${Date.now()}`,
           notifications_presented: [],
-          project_id: activeProject?.id ?? null,
+          project_id: null,
         }),
       });
       if (!res.ok) return null;
@@ -524,7 +532,7 @@ export function TheGodFactory() {
     } catch {
       return null;
     }
-  }, [activeProject?.id]);
+  }, []);
 
   const ensureGodFactorySession = useCallback(async () => {
     return godFactorySessionIdRef.current || await createGodFactorySession();
@@ -1179,9 +1187,29 @@ export function TheGodFactory() {
     systemContext: string,
     abortCtrl: AbortController,
   ): Promise<{ content: string; msgId: string }> => {
-    const requestModel = allModels.some(model => model.id === localModel)
-      ? localModel
-      : (allModels[0]?.id || localModel);
+    const modelCandidates = allModels.some(model => model.id === localModel)
+      ? [localModel]
+      : (allModels[0]?.id ? [allModels[0].id] : [localModel]);
+
+    let requestModel = modelCandidates[0];
+    let fallbackModels: string[] | undefined;
+
+    try {
+      const strategyRes = await fetch(`${API_BASE}/api/model-strategy`);
+      const strategy = strategyRes.ok ? await strategyRes.json().catch(() => null) : null;
+      if (strategy?.settings) {
+        if (!requestModel && strategy.settings.primaryModel) {
+          requestModel = strategy.settings.primaryModel;
+        }
+        fallbackModels = [
+          ...(strategy.settings.fallbackModels || []),
+          strategy.settings.primaryModel,
+        ].filter((modelId: string, index: number, arr: string[]) => !!modelId && modelId !== requestModel && arr.indexOf(modelId) === index);
+      }
+    } catch {
+      fallbackModels = undefined;
+    }
+
     const msgId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
     setMessages(prev => [...prev, {
       id: msgId, role: 'assistant', content: '', timestamp: new Date().toISOString(),
@@ -1193,6 +1221,7 @@ export function TheGodFactory() {
       body: JSON.stringify({
         message: prompt,
         model: requestModel,
+        fallbackModels,
         mode: 'agent',
         projectId: activeProject?.id || 'default',
         conversationId: conversationId || undefined,
@@ -1237,15 +1266,15 @@ export function TheGodFactory() {
     }
     setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', content: fullContent || m.content } : m));
     return { content: fullContent, msgId };
-  }, [localModel, allModels, activeProject, conversationId, selectedFiles]);
+  }, [localModel, allModels, conversationId, selectedFiles]);
 
   const takeBackup = async (): Promise<string | null> => {
-    if (!autoBackup || !activeProject?.rootPath) return null;
+    if (!autoBackup || !ideRootPath) return null;
     try {
       const res = await fetch(`${API_BASE}/api/files/backup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectRoot: activeProject.rootPath }),
+        body: JSON.stringify({ projectRoot: ideRootPath }),
       });
       if (!res.ok) return null;
       const data = await res.json();
@@ -1295,7 +1324,8 @@ export function TheGodFactory() {
         `Your job is to improve Personal IDE itself — its built-in features, UX, architecture, models, onboarding, docs, and developer tooling.`,
         `Do NOT behave like a generic external project builder unless the user explicitly asks you to inspect an imported project. Your default scope is the Personal IDE application codebase and help/documentation system.`,
         `You have full access to the Personal IDE codebase, terminal, filesystem, and documentation.`,
-        `Active project context: ${activeProject?.name || 'Personal IDE internal codebase (self-improvement mode)'}`,
+        `Primary scope: Personal IDE internal codebase (self-improvement mode).`,
+        `External telemetry project (read-only signals): ${activeProject?.name || 'none selected'}`,
         selectedFiles.length > 0 ? `Context files: ${selectedFiles.join(', ')}` : '',
         `Model: ${localModel}  Date: ${new Date().toISOString().slice(0, 10)}`,
         `When the user asks about how the app works, use the help/docs and source code to answer with specific details from Personal IDE.`,
@@ -1508,7 +1538,7 @@ export function TheGodFactory() {
             <span className="text-xs text-ide-text-dim px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded-full">
               Self-Improvement Agent
             </span>
-            {activeProject && <span className="text-xs text-ide-text-dim">· {activeProject.name}</span>}
+            <span className="text-xs text-ide-text-dim">Primary scope: Personal IDE codebase</span>
           </div>
           <div className="flex items-center gap-1.5">
             {/* Tool iteration counter */}
@@ -1586,7 +1616,7 @@ export function TheGodFactory() {
         {/* File context selector dropdown */}
         {showFileSelector && (
           <FileContextSelector
-            projectRoot={activeProject?.rootPath}
+            projectRoot={ideRootPath}
             selected={selectedFiles}
             onToggle={(path) => setSelectedFiles(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path])}
             onClose={() => setShowFileSelector(false)}

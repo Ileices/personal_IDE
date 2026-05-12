@@ -17,6 +17,7 @@ export interface SuggestedJob {
   job_id: string;      // canonical API id for action calls
   title: string;
   category: string;
+  scope: 'internal' | 'external';
   priority: 'critical' | 'high' | 'medium' | 'low';
   source: string;
   description: string;
@@ -74,6 +75,25 @@ interface ModelStrategySnapshot {
     cleanupFailedModels: boolean;
   };
   failedModels: string[];
+}
+
+interface WorkingModelProbe {
+  model: string;
+  latencyMs?: number;
+  classification?: string;
+  provider?: string;
+}
+
+interface BlameRegistryModel {
+  modelId?: string;
+  model?: string;
+  avgQuality?: number;
+  successRate?: number;
+  strategyConfig?: {
+    action?: string;
+    reason?: string;
+    recommended?: boolean;
+  } | null;
 }
 
 interface NotificationDetailResponse {
@@ -142,6 +162,9 @@ function mapApiJobToSuggestedJob(raw: Record<string, unknown>): SuggestedJob {
   const tags = Array.isArray(raw.affected_devtags) ? raw.affected_devtags as string[] : [];
   const files = Array.isArray(raw.affected_files) ? raw.affected_files as string[] : [];
   const steps = Array.isArray(raw.atomic_steps) ? raw.atomic_steps : [];
+  const rawCategory = String(raw.job_category || '');
+  const rawSource = String(raw.source || '');
+  const externalScope = rawCategory === 'external_project' || rawSource === 'project_state_crawler';
   const sbSpec = (raw.sandbox_spec && typeof raw.sandbox_spec === 'object')
     ? raw.sandbox_spec as { status: string; cycles_used: number; cycle_limit: number }
     : { status: 'not_started', cycles_used: 0, cycle_limit: 50 };
@@ -154,9 +177,10 @@ function mapApiJobToSuggestedJob(raw: Record<string, unknown>): SuggestedJob {
     id: raw.job_id as string,
     job_id: raw.job_id as string,
     title: raw.title as string,
-    category: (raw.job_category as string || '').replace(/_/g, ' '),
+    category: rawCategory.replace(/_/g, ' '),
+    scope: externalScope ? 'external' : 'internal',
     priority: (raw.priority as SuggestedJob['priority']) || 'medium',
-    source: (raw.source as string || '').replace(/_/g, ' '),
+    source: rawSource.replace(/_/g, ' '),
     description: descParts.join(' · '),
     implementation_status: raw.implementation_status as string,
     affected_devtags: tags,
@@ -345,6 +369,8 @@ interface GfLoopStatus {
     last_model: string | null;
     last_project_id: string | null;
     last_max_iterations: number | null;
+    cooldown_profile?: string;
+    auto_cooldown_profile?: boolean;
     governance?: {
       autoApproveChanges: boolean;
       autoAnswerQuestions: boolean;
@@ -365,9 +391,12 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
   const [status, setStatus] = useState<GfLoopStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [maxIterations, setMaxIterations] = useState(50);
+  const [jobMaxIterations, setJobMaxIterations] = useState(50);
   const [autoApproveChanges, setAutoApproveChanges] = useState(false);
   const [autoAnswerQuestions, setAutoAnswerQuestions] = useState(false);
   const [checkpointEvery, setCheckpointEvery] = useState(5);
+  const [cooldownProfile, setCooldownProfile] = useState<'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl'>('safe-exhaustive');
+  const [autoCooldownProfile, setAutoCooldownProfile] = useState(true);
   const [hydratedFromStatus, setHydratedFromStatus] = useState(false);
   const selectedModel = useChatStore((s) => s.selectedModel);
 
@@ -392,16 +421,22 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
     }
     if (hydratedFromStatus || !status?.config) return;
     if (status.config.last_max_iterations) setMaxIterations(status.config.last_max_iterations);
+    if (typeof status.config.last_max_iterations === 'number') setMaxIterations(status.config.last_max_iterations);
+    if (status.config.cooldown_profile) setCooldownProfile(status.config.cooldown_profile as 'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl');
+    if (typeof status.config.auto_cooldown_profile === 'boolean') setAutoCooldownProfile(status.config.auto_cooldown_profile);
     if (status.config.governance) {
       setAutoApproveChanges(status.config.governance.autoApproveChanges);
       setAutoAnswerQuestions(status.config.governance.autoAnswerQuestions);
       setCheckpointEvery(status.config.governance.checkpointEvery);
+      setJobMaxIterations(status.config.governance.jobMaxIterations || 50);
     }
     setHydratedFromStatus(true);
   }, [open, status, hydratedFromStatus]);
 
   const start = async () => {
-    const boundedIterations = Math.min(500, Math.max(1, Math.trunc(maxIterations || 0)));
+    const normalizedIterations = Math.trunc(maxIterations || 0);
+    const boundedIterations = normalizedIterations <= 0 ? 0 : Math.min(100000, Math.max(1, normalizedIterations));
+    const boundedJobIterations = Math.min(5000, Math.max(1, Math.trunc(jobMaxIterations || 0)));
     const boundedCheckpointEvery = Math.min(10, Math.max(1, Math.trunc(checkpointEvery || 0)));
     setBusy(true);
     try {
@@ -412,9 +447,12 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
           projectId,
           model: selectedModel,
           maxIterations: boundedIterations,
+          jobMaxIterations: boundedJobIterations,
           autoApproveChanges,
           autoAnswerQuestions,
           checkpointEvery: boundedCheckpointEvery,
+          cooldownProfile,
+          autoCooldownProfile,
         }),
       });
       await fetchStatus();
@@ -453,7 +491,7 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
       >
         <div className="flex items-center gap-1.5">
           <Zap className={`w-3 h-3 ${isRunning ? 'text-yellow-400 animate-pulse' : 'text-ide-text-dim'}`} />
-          God Factory Loop
+          THE GOD FACTORY Loop
           {isRunning && <span className="text-[9px] px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-medium">RUNNING</span>}
         </div>
         {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
@@ -473,11 +511,27 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
               <span className="text-ide-text-dim">Max iterations</span>
               <input
                 type="number"
-                min={1}
-                max={500}
+                min={0}
+                max={100000}
                 step={1}
                 value={maxIterations}
-                onChange={(e) => setMaxIterations(Math.min(500, Math.max(1, Number(e.target.value) || 1)))}
+                onChange={(e) => {
+                  const n = Math.trunc(Number(e.target.value) || 0);
+                  setMaxIterations(n <= 0 ? 0 : Math.min(100000, Math.max(1, n)));
+                }}
+                className="w-16 px-1 py-0.5 rounded bg-ide-bg border border-ide-border/50 text-ide-text text-right"
+              />
+            </label>
+            <div className="text-[8px] text-ide-text-dim -mt-0.5 px-2">0 = unlimited (24/7 until manually stopped)</div>
+            <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
+              <span className="text-ide-text-dim">Per-job step cap</span>
+              <input
+                type="number"
+                min={1}
+                max={5000}
+                step={1}
+                value={jobMaxIterations}
+                onChange={(e) => setJobMaxIterations(Math.min(5000, Math.max(1, Number(e.target.value) || 1)))}
                 className="w-16 px-1 py-0.5 rounded bg-ide-bg border border-ide-border/50 text-ide-text text-right"
               />
             </label>
@@ -491,6 +545,29 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
                 value={checkpointEvery}
                 onChange={(e) => setCheckpointEvery(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
                 className="w-16 px-1 py-0.5 rounded bg-ide-bg border border-ide-border/50 text-ide-text text-right"
+              />
+            </label>
+            <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
+              <span className="text-ide-text-dim">Cooldown profile</span>
+              <select
+                value={cooldownProfile}
+                onChange={(e) => setCooldownProfile(e.target.value as 'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl')}
+                className="w-28 px-1 py-0.5 rounded bg-ide-bg border border-ide-border/50 text-ide-text"
+              >
+                <option value="safe-exhaustive">safe-exhaustive</option>
+                <option value="aggressive">aggressive</option>
+                <option value="paced">paced</option>
+                <option value="slow">slow</option>
+                <option value="crawl">crawl</option>
+              </select>
+            </label>
+            <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
+              <span className="text-ide-text-dim">Auto cooldown profile</span>
+              <input
+                type="checkbox"
+                checked={autoCooldownProfile}
+                onChange={(e) => setAutoCooldownProfile(e.target.checked)}
+                className="accent-cyan-400"
               />
             </label>
             <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
@@ -608,6 +685,10 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [brainstormConfirm, setBrainstormConfirm] = useState<string | null>(null);
   const [sections, setSections] = useState({ notifications: true, idleSuggestions: true, jobs: true, externalProjects: false, implementingPipeline: false, health: true, modelCycle: true, modelHealth: true, background: false, subsystems: false, siliconFactory: false, brainstorm: false, employer: false });
   const [blameStats, setBlameStats] = useState<any[]>([]);
+  const [workingModels, setWorkingModels] = useState<WorkingModelProbe[]>([]);
+  const [blameRegistry, setBlameRegistry] = useState<BlameRegistryModel[]>([]);
+  const [strategyBusy, setStrategyBusy] = useState<string | null>(null);
+  const [lastCycleSummary, setLastCycleSummary] = useState<string>('Not applied yet');
   const [subsystems, setSubsystems] = useState<Record<SubsystemId, SubsystemConfig>>({
     ide_codebase_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 60, maxDepth: 5, manualOnly: false },
     project_state_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 90, maxDepth: 5, manualOnly: false },
@@ -735,19 +816,20 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
 
   const loadSuggestedJobs = useCallback(() => {
     setJobsLoading(true);
-    const qp = new URLSearchParams({ limit: '10', status: 'suggested' });
-    if (projectId) qp.set('project_id', projectId);
+    const qp = new URLSearchParams({ limit: '50', status: 'suggested' });
     fetch(`${API_BASE}/api/suggested-jobs/jobs?${qp.toString()}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: { jobs?: Record<string, unknown>[]; total?: number } | null) => {
         if (d?.jobs) {
-          setJobs(d.jobs.map(mapApiJobToSuggestedJob));
-          setTotalJobs(d.total ?? d.jobs.length);
+          const mapped = d.jobs.map(mapApiJobToSuggestedJob);
+          const internalJobs = mapped.filter(job => job.scope === 'internal');
+          setJobs(internalJobs.slice(0, 10));
+          setTotalJobs(internalJobs.length);
         }
       })
       .catch(() => {})
       .finally(() => setJobsLoading(false));
-  }, [projectId]);
+  }, []);
 
   // ── Rate usage loader (uses /api/blame/usage-summary server-side aggregation) ──
   const loadRateUsage = useCallback(() => {
@@ -759,6 +841,119 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       })
       .catch(() => {});
   }, []);
+
+  const loadBlameRegistry = useCallback(() => {
+    fetch(`${API_BASE}/api/blame/registry`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { models?: BlameRegistryModel[] } | null) => {
+        if (d?.models) setBlameRegistry(d.models);
+      })
+      .catch(() => {});
+  }, []);
+
+  const probeWorkingModels = useCallback(async () => {
+    setStrategyBusy('probe');
+    try {
+      const res = await fetch(`${API_BASE}/api/models/bulk-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'github', max: 20, timeoutMs: 15000 }),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      const raw = Array.isArray(data?.results) ? data.results : [];
+      const good = raw
+        .filter((r: any) => r?.ok && (r?.classification || 'working') !== 'failed')
+        .map((r: any) => ({
+          model: String(r.model || ''),
+          provider: String(r.provider || ''),
+          latencyMs: typeof r.latencyMs === 'number' ? r.latencyMs : undefined,
+          classification: typeof r.classification === 'string' ? r.classification : 'working',
+        }))
+        .filter((r: WorkingModelProbe) => r.model)
+        .sort((a: WorkingModelProbe, b: WorkingModelProbe) => (a.latencyMs ?? 1e9) - (b.latencyMs ?? 1e9));
+
+      setWorkingModels(good);
+      setLastCycleSummary(good.length
+        ? `Loaded ${good.length} working GitHub models`
+        : 'Bulk test returned no working GitHub models');
+    } catch {
+      setLastCycleSummary('Model probe failed');
+    } finally {
+      setStrategyBusy(null);
+    }
+  }, []);
+
+  const applyIntelligentCycle = useCallback(async () => {
+    setStrategyBusy('apply');
+    try {
+      const candidateIds = (workingModels.length ? workingModels.map(m => m.model) : modelHealth.map(m => m.model_id))
+        .filter(Boolean);
+      const uniqueCandidates = Array.from(new Set(candidateIds));
+      if (uniqueCandidates.length === 0) {
+        setLastCycleSummary('No model candidates available to apply');
+        return;
+      }
+
+      const usageByModel = new Map(rateUsage.map(r => [r.model, r.usagePct ?? Math.min(100, Math.round((r.count / Math.max(1, r.limitEst)) * 100))]));
+      const healthByModel = new Map(modelHealth.map(h => [h.model_id, h]));
+      const employerByModel = new Map(employerSuggestions.map(s => [s.model_id, s]));
+      const blameByModel = new Map(blameRegistry.map(r => [r.modelId || r.model || '', r]));
+
+      const scored = uniqueCandidates.map(modelId => {
+        const health = healthByModel.get(modelId);
+        const usage = usageByModel.get(modelId) ?? 0;
+        const employer = employerByModel.get(modelId);
+        const blame = blameByModel.get(modelId);
+        const role = (employer?.recommended_role || '').toLowerCase();
+        const action = (blame?.strategyConfig?.action || '').toLowerCase();
+
+        let score = 0;
+        score += (health?.composite_quality_score ?? 0.65) * 100;
+        score += (health?.success_rate ?? 0.65) * 30;
+        score -= usage * 0.35;
+        if (role.includes('architect')) score += 7;
+        if (role.includes('implementer')) score += 4;
+        if (action.includes('promote')) score += 6;
+        if (action.includes('deprioritize') || action.includes('retire')) score -= 12;
+
+        return { modelId, score };
+      }).sort((a, b) => b.score - a.score);
+
+      const primaryModel = scored[0]?.modelId;
+      const fallbackModels = scored.slice(1, 9).map(s => s.modelId);
+      const blockedModels = blameRegistry
+        .filter(r => {
+          const action = (r.strategyConfig?.action || '').toLowerCase();
+          return action.includes('retire') || action.includes('deprioritize') || action.includes('block');
+        })
+        .map(r => r.modelId || r.model || '')
+        .filter(Boolean);
+
+      if (!primaryModel) {
+        setLastCycleSummary('Could not determine a primary model');
+        return;
+      }
+
+      await fetch(`${API_BASE}/api/model-strategy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          presetId: 'intel-auto-cycle',
+          primaryModel,
+          fallbackModels,
+          blockedModels: Array.from(new Set(blockedModels)).slice(0, 12),
+          cleanupFailedModels: true,
+        }),
+      });
+
+      setLastCycleSummary(`Applied cycle: ${primaryModel} + ${fallbackModels.length} fallback(s)`);
+      loadModelStrategy();
+    } catch {
+      setLastCycleSummary('Failed to apply intelligent cycle');
+    } finally {
+      setStrategyBusy(null);
+    }
+  }, [workingModels, modelHealth, rateUsage, employerSuggestions, blameRegistry, loadModelStrategy]);
 
   // ── Employer Crawler loaders ──
   const loadEmployerStatus = useCallback(() => {
@@ -816,14 +1011,13 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
 
   const loadExternalJobs = useCallback(() => {
     const qp = new URLSearchParams({ limit: '10', category: 'external_project' });
-    if (projectId) qp.set('project_id', projectId);
     fetch(`${API_BASE}/api/suggested-jobs/jobs?${qp.toString()}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: { jobs?: Record<string, unknown>[] } | null) => {
         if (d?.jobs) setExternalJobs(d.jobs.map(mapApiJobToSuggestedJob));
       })
       .catch(() => {});
-  }, [projectId]);
+  }, []);
 
   const loadImplementingJobs = useCallback(() => {
     const qp = new URLSearchParams({ limit: '5', status: 'implementing' });
@@ -898,6 +1092,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       loadRateUsage();
       loadEmployerStatus();
       loadEmployerSuggestions();
+      loadBlameRegistry();
 
       jobsTimer = window.setInterval(() => {
         loadSuggestedJobs();
@@ -915,6 +1110,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         loadSiliconDashboard();
         loadRateUsage();
         loadEmployerStatus();
+        loadBlameRegistry();
       }, 20_000);
 
       void loadSubsystemSettings();
@@ -939,7 +1135,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (jobsTimer) window.clearInterval(jobsTimer);
       if (gfTimer) window.clearInterval(gfTimer);
     };
-  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions]);
+  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions, loadBlameRegistry]);
 
   // ── Persist auto-intel settings to localStorage ──
   useEffect(() => { try { localStorage.setItem('gf_autoIntelEnabled', autoIntelEnabled ? '1' : '0'); } catch {} }, [autoIntelEnabled]);
@@ -1577,6 +1773,11 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         </button>
       </div>
 
+      <div className="border-b border-ide-border/40 px-3 py-2 text-[9px] leading-snug bg-ide-bg/25">
+        <div className="text-purple-300 font-semibold">Primary Focus: Personal IDE Internal Codebase</div>
+        <div className="text-cyan-300/90 mt-0.5">External telemetry: {projectName || 'none selected'} (analysis only)</div>
+      </div>
+
       {(selectedNotification || selectedModel) && (
         <div className="absolute inset-0 z-10 bg-ide-panel/95 backdrop-blur-sm flex flex-col border-l border-ide-border">
           <div className="flex items-center justify-between px-3 py-2 border-b border-ide-border">
@@ -1954,6 +2155,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   <div className="text-[9px] text-ide-text-dim leading-snug mb-1.5">{job.description}</div>
                   <div className="flex items-center justify-between">
                     <span className="text-[9px] text-purple-400/70">{job.category}</span>
+                    <span className="text-[8px] px-1 py-0.5 rounded border border-purple-500/30 text-purple-200 bg-purple-500/10">internal function</span>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => void implementJob(job)}
@@ -2183,6 +2385,30 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           </button>
           {sections.modelCycle && (
             <div className="px-2 pb-2 space-y-1.5 text-[9px]">
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  onClick={() => void probeWorkingModels()}
+                  disabled={strategyBusy !== null}
+                  className="px-2 py-1 rounded border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-40 flex items-center justify-center gap-1"
+                  title="Run bulk model tests and keep the currently working GitHub models"
+                >
+                  {strategyBusy === 'probe' ? <RefreshCw className="w-3 h-3 animate-spin" /> : <PlayCircle className="w-3 h-3" />}
+                  Load working
+                </button>
+                <button
+                  onClick={() => void applyIntelligentCycle()}
+                  disabled={strategyBusy !== null}
+                  className="px-2 py-1 rounded border border-green-500/30 bg-green-500/10 text-green-300 hover:bg-green-500/20 disabled:opacity-40 flex items-center justify-center gap-1"
+                  title="Auto-rank models from health, usage, and feedback then apply to /api/model-strategy"
+                >
+                  {strategyBusy === 'apply' ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                  Apply cycle
+                </button>
+              </div>
+              <div className="rounded border border-ide-border/30 bg-ide-bg/20 px-2 py-1 text-ide-text-dim">
+                Last cycle: <span className="text-ide-text">{lastCycleSummary}</span>
+              </div>
+
               {!modelStrategy ? (
                 <div className="text-[10px] text-ide-text-dim px-1 py-2 text-center">No strategy loaded</div>
               ) : (
@@ -2231,6 +2457,44 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   </div>
                 </>
               )}
+
+              {workingModels.length > 0 && (
+                <div className="rounded border border-ide-border/30 bg-ide-bg/20 px-2 py-1.5">
+                  <div className="text-ide-text-dim mb-1">Working models ({workingModels.length})</div>
+                  <div className="space-y-0.5 max-h-28 overflow-y-auto pr-1">
+                    {workingModels.slice(0, 12).map((wm, i) => (
+                      <div key={`${wm.model}-${i}`} className="flex items-center justify-between gap-2">
+                        <span className="text-ide-text truncate" title={wm.model}>{wm.model}</span>
+                        <span className="text-cyan-300 font-mono">{wm.latencyMs ? `${wm.latencyMs}ms` : 'ok'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5">
+                <div className="text-[9px] uppercase tracking-wider text-amber-200 mb-1">Feedback bridge: Blame + Employer</div>
+                <div className="space-y-0.5">
+                  {blameRegistry
+                    .filter(r => !!r.strategyConfig?.action || !!r.strategyConfig?.recommended)
+                    .slice(0, 4)
+                    .map((r, idx) => (
+                      <div key={`${r.modelId || r.model}-${idx}`} className="flex items-center justify-between gap-2">
+                        <span className="text-ide-text-dim truncate" title={r.modelId || r.model || ''}>{r.modelId || r.model}</span>
+                        <span className="text-amber-300">{r.strategyConfig?.action || (r.strategyConfig?.recommended ? 'recommended' : 'observe')}</span>
+                      </div>
+                    ))}
+                  {employerSuggestions.slice(0, 2).map((s) => (
+                    <div key={s.model_id} className="flex items-center justify-between gap-2">
+                      <span className="text-ide-text-dim truncate" title={s.model_id}>{s.model_id}</span>
+                      <span className="text-cyan-300">{s.recommended_role || 'unknown role'}</span>
+                    </div>
+                  ))}
+                  {blameRegistry.length === 0 && employerSuggestions.length === 0 && (
+                    <div className="text-ide-text-dim">No feedback payload loaded yet</div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

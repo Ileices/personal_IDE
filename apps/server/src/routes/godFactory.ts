@@ -5,6 +5,9 @@ import { assessToolPolicy, getToolPolicySnapshot } from '../services/godFactory/
 import { getSubsystemRuntimeStatus, startSubsystemScheduler, stopSubsystemScheduler } from '../services/subsystemScheduler.js';
 import { getKv, loadSettings, setKv, type SubsystemId } from './subsystems.js';
 import { JOB_STATUS, RUN_STATUS, STOP_REASON } from '../services/lifecycle/stateMachine.js';
+import { resolveModelStrategy } from '../services/modelStrategy.js';
+import { extractProviderFromModelId, type ProviderType } from '@personal-ide/shared';
+import { getClientFromDb as getProviderClient } from '../services/llm/providers.js';
 
 type Db = import('better-sqlite3').Database;
 
@@ -28,6 +31,44 @@ function parseJson<T>(raw: unknown, fallback: T): T {
     return JSON.parse(raw) as T;
   } catch {
     return fallback;
+  }
+}
+
+function safeParseJobPayload<T extends unknown[]>(
+  raw: unknown,
+  fieldName: string,
+  fallback: T,
+): { success: boolean; data?: T; error?: string } {
+  if (raw === null || raw === undefined) {
+    return { success: true, data: fallback };
+  }
+
+  if (raw === '') {
+    return { success: true, data: fallback };
+  }
+
+  if (typeof raw !== 'string') {
+    if (Array.isArray(raw)) {
+      return { success: true, data: raw as T };
+    }
+    return { success: true, data: fallback };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return {
+        success: false,
+        error: `${fieldName} is not a JSON array (got ${typeof parsed})`,
+      };
+    }
+    return { success: true, data: parsed as T };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      error: `Failed to parse ${fieldName}: ${errorMsg}`,
+    };
   }
 }
 
@@ -1545,11 +1586,148 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     tx();
   }
 
+  type CooldownProfileId = 'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl';
+  type CooldownProfile = {
+    warningPct: number;
+    criticalPct: number;
+    cooldownSec: number;
+    sleepSec: number;
+    lowSuccessSkipCycles: number;
+  };
+
+  const COOLDOWN_PROFILES: Record<CooldownProfileId, CooldownProfile> = {
+    'safe-exhaustive': { warningPct: 55, criticalPct: 85, cooldownSec: 1800, sleepSec: 7200, lowSuccessSkipCycles: 1 },
+    aggressive: { warningPct: 45, criticalPct: 75, cooldownSec: 900, sleepSec: 3600, lowSuccessSkipCycles: 0 },
+    paced: { warningPct: 60, criticalPct: 88, cooldownSec: 2400, sleepSec: 10_800, lowSuccessSkipCycles: 1 },
+    slow: { warningPct: 70, criticalPct: 92, cooldownSec: 3600, sleepSec: 14_400, lowSuccessSkipCycles: 2 },
+    crawl: { warningPct: 80, criticalPct: 95, cooldownSec: 5400, sleepSec: 21_600, lowSuccessSkipCycles: 3 },
+  };
+
+  function chooseRateLimitEstimate(modelId: string): number {
+    const src = String(modelId || '').toLowerCase();
+    if (src.includes('gpt-4.1') || src.includes('gpt-4o')) return 50;
+    if (src.includes('claude-opus')) return 20;
+    if (src.includes('claude-sonnet')) return 40;
+    if (src.includes('claude-haiku')) return 100;
+    if (src.includes('gemini-pro')) return 60;
+    if (src.includes('gemini-flash')) return 120;
+    if (src.includes('copilot')) return 50;
+    return 60;
+  }
+
+  function upsertCooldownOverride(modelId: string, overrideType: 'cooldown' | 'sleep' | 'skip', durationSec: number, skipCycles: number, reason: string) {
+    const now = Date.now();
+    const cooldownUntil = overrideType === 'cooldown' ? new Date(now + durationSec * 1000).toISOString() : null;
+    const sleepUntil = overrideType === 'sleep' ? new Date(now + durationSec * 1000).toISOString() : null;
+    const skipNextCycles = overrideType === 'skip' ? Math.max(1, skipCycles) : 0;
+
+    db.prepare(`
+      INSERT INTO model_cooldown_overrides (id, model_id, override_type, cooldown_until, skip_next_cycles, sleep_until, injected_by, reason, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'god_factory', ?, 1, datetime('now'), datetime('now'))
+      ON CONFLICT(model_id) DO UPDATE SET
+        override_type = excluded.override_type,
+        cooldown_until = excluded.cooldown_until,
+        skip_next_cycles = excluded.skip_next_cycles,
+        sleep_until = excluded.sleep_until,
+        reason = excluded.reason,
+        active = 1,
+        updated_at = datetime('now')
+    `).run(randomUUID(), modelId, overrideType, cooldownUntil, skipNextCycles, sleepUntil, reason);
+  }
+
+  function applyCooldownProfile(profileId: CooldownProfileId, custom?: Partial<CooldownProfile>) {
+    const base = COOLDOWN_PROFILES[profileId] || COOLDOWN_PROFILES['safe-exhaustive'];
+    const profile: CooldownProfile = {
+      warningPct: custom?.warningPct ?? base.warningPct,
+      criticalPct: custom?.criticalPct ?? base.criticalPct,
+      cooldownSec: custom?.cooldownSec ?? base.cooldownSec,
+      sleepSec: custom?.sleepSec ?? base.sleepSec,
+      lowSuccessSkipCycles: custom?.lowSuccessSkipCycles ?? base.lowSuccessSkipCycles,
+    };
+
+    const cutoff = new Date(Date.now() - 3600 * 1000).toISOString();
+    const usageRows = db.prepare(`
+      SELECT COALESCE(attributed_source, model) AS model_id, COUNT(*) AS cnt
+      FROM blame_records
+      WHERE created_at >= ?
+      GROUP BY COALESCE(attributed_source, model)
+    `).all(cutoff) as Array<{ model_id: string; cnt: number }>;
+    const usage = new Map<string, number>(usageRows.map(r => [r.model_id, r.cnt]));
+
+    const registryRows = db.prepare(`
+      SELECT model_id, success_rate, total_runs
+      FROM model_registry
+      ORDER BY total_runs DESC
+      LIMIT 200
+    `).all() as Array<{ model_id: string; success_rate: number; total_runs: number }>;
+
+    let applied = 0;
+    let cleared = 0;
+
+    for (const row of registryRows) {
+      const modelId = String(row.model_id || '').trim();
+      if (!modelId) continue;
+      const limit = Math.max(1, chooseRateLimitEstimate(modelId));
+      const count = usage.get(modelId) ?? 0;
+      const usagePct = Math.min(100, Math.round((count / limit) * 100));
+
+      if (usagePct >= profile.criticalPct) {
+        upsertCooldownOverride(modelId, 'sleep', profile.sleepSec, 0, `cooldown-profile:${profileId}:critical:${usagePct}%`);
+        applied++;
+        continue;
+      }
+
+      if (usagePct >= profile.warningPct) {
+        upsertCooldownOverride(modelId, 'cooldown', profile.cooldownSec, 0, `cooldown-profile:${profileId}:warning:${usagePct}%`);
+        applied++;
+        continue;
+      }
+
+      if (profile.lowSuccessSkipCycles > 0 && (row.total_runs || 0) >= 5 && (row.success_rate || 0) < 0.45) {
+        upsertCooldownOverride(modelId, 'skip', 0, profile.lowSuccessSkipCycles, `cooldown-profile:${profileId}:low-success`);
+        applied++;
+        continue;
+      }
+
+      const clearResult = db.prepare(`
+        UPDATE model_cooldown_overrides
+        SET active = 0, updated_at = datetime('now')
+        WHERE model_id = ? AND active = 1
+      `).run(modelId);
+      if ((clearResult.changes || 0) > 0) cleared += clearResult.changes || 0;
+    }
+
+    return { profileId, profile, applied, cleared, examined: registryRows.length };
+  }
+
+  app.get('/loop/cooldown-profiles', async (_req: FastifyRequest, reply: FastifyReply) => {
+    return reply.send({
+      profiles: COOLDOWN_PROFILES,
+      activeProfile: getKv(db, 'god_factory:loop:last_cooldown_profile') || 'safe-exhaustive',
+      autoApply: getKv(db, 'god_factory:loop:last_auto_cooldown_profile') === '1',
+    });
+  });
+
+  app.post('/loop/cooldown-profile/apply', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireControlOwner(reply)) return;
+    const body = (req.body || {}) as { profile?: CooldownProfileId; custom?: Partial<CooldownProfile>; autoApply?: boolean };
+    const profileId = (body.profile || 'safe-exhaustive') as CooldownProfileId;
+    if (!COOLDOWN_PROFILES[profileId]) {
+      return reply.status(400).send({ error: 'Unknown cooldown profile.' });
+    }
+    const result = applyCooldownProfile(profileId, body.custom);
+    setKv(db, 'god_factory:loop:last_cooldown_profile', profileId);
+    if (body.autoApply !== undefined) {
+      setKv(db, 'god_factory:loop:last_auto_cooldown_profile', body.autoApply ? '1' : '0');
+    }
+    return reply.send({ ok: true, ...result });
+  });
+
   _ensureGfLoopState(db);
   _recoverCrashedGfRuns(db);
 
   // POST /api/god-factory/loop/start
-  // Body: { projectId, model?, maxIterations?, autoApproveChanges?, autoAnswerQuestions?, checkpointEvery? }
+  // Body: { projectId, model?, maxIterations?, jobMaxIterations?, autoApproveChanges?, autoAnswerQuestions?, checkpointEvery?, cooldownProfile?, autoCooldownProfile? }
   app.post('/loop/start', async (req: FastifyRequest, reply: FastifyReply) => {
     if (!requireControlOwner(reply)) return;
 
@@ -1559,13 +1737,16 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: 'God Factory loop is already running' });
     }
 
-    const { projectId, model, maxIterations = 50, autoApproveChanges, autoAnswerQuestions, checkpointEvery } = req.body as {
+    const { projectId, model, maxIterations = 50, jobMaxIterations, autoApproveChanges, autoAnswerQuestions, checkpointEvery, cooldownProfile, autoCooldownProfile } = req.body as {
       projectId?: string;
       model?: string;
       maxIterations?: number;
+      jobMaxIterations?: number;
       autoApproveChanges?: boolean;
       autoAnswerQuestions?: boolean;
       checkpointEvery?: number;
+      cooldownProfile?: CooldownProfileId;
+      autoCooldownProfile?: boolean;
     };
 
     const normalizedProjectId = String(projectId || '').trim();
@@ -1573,15 +1754,13 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'projectId is required for scoped loop execution.' });
     }
 
-    const normalizedModel = String(model || '').trim();
-    if (!normalizedModel || !normalizedModel.includes('/')) {
-      return reply.status(400).send({ error: 'model is required and must be in provider/model format.' });
-    }
+    const requestedModel = String(model || '').trim();
 
     const parsedMaxIterations = Number(maxIterations);
-    if (!Number.isFinite(parsedMaxIterations) || !Number.isInteger(parsedMaxIterations) || parsedMaxIterations < 1 || parsedMaxIterations > 500) {
-      return reply.status(400).send({ error: 'maxIterations must be an integer between 1 and 500.' });
+    if (!Number.isFinite(parsedMaxIterations) || !Number.isInteger(parsedMaxIterations) || parsedMaxIterations < -1 || parsedMaxIterations > 100000) {
+      return reply.status(400).send({ error: 'maxIterations must be an integer between -1 and 100000 (-1 = unlimited).' });
     }
+    const isUnlimitedIterations = parsedMaxIterations <= 0;
 
     if (autoApproveChanges !== undefined && typeof autoApproveChanges !== 'boolean') {
       return reply.status(400).send({ error: 'autoApproveChanges must be a boolean when provided.' });
@@ -1595,9 +1774,37 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'checkpointEvery must be an integer between 1 and 10.' });
     }
 
+    const parsedJobMaxIterations = jobMaxIterations === undefined
+      ? Number(getKv(db, 'god_factory:loop:last_job_max_iterations') || '50') || 50
+      : Number(jobMaxIterations);
+    if (!Number.isFinite(parsedJobMaxIterations) || !Number.isInteger(parsedJobMaxIterations) || parsedJobMaxIterations < 1 || parsedJobMaxIterations > 5000) {
+      return reply.status(400).send({ error: 'jobMaxIterations must be an integer between 1 and 5000.' });
+    }
+
+    const selectedCooldownProfile = (cooldownProfile || (getKv(db, 'god_factory:loop:last_cooldown_profile') as CooldownProfileId) || 'safe-exhaustive') as CooldownProfileId;
+    if (!COOLDOWN_PROFILES[selectedCooldownProfile]) {
+      return reply.status(400).send({ error: 'Invalid cooldownProfile.' });
+    }
+    const autoCooldownEnabled = autoCooldownProfile ?? (getKv(db, 'god_factory:loop:last_auto_cooldown_profile') === '1');
+
+    const preferredModel = requestedModel && requestedModel.includes('/') ? requestedModel : undefined;
+    const strategyAtStart = resolveModelStrategy(db, preferredModel);
+    const configuredCandidates = [strategyAtStart.primaryModel, ...strategyAtStart.fallbackModels].filter((m) => {
+      const provider = extractProviderFromModelId(m) as ProviderType;
+      return !!getProviderClient(db, provider);
+    });
+    if (configuredCandidates.length === 0) {
+      return reply.status(400).send({ error: 'No configured models available in the current strategy chain.' });
+    }
+    const normalizedModel = configuredCandidates[0];
+
     const normalizedAutoApproveChanges = autoApproveChanges ?? false;
     const normalizedAutoAnswerQuestions = autoAnswerQuestions ?? false;
-    const jobLoopMaxIterations = 10;
+    const jobLoopMaxIterations = parsedJobMaxIterations;
+
+    if (isUnlimitedIterations && autoCooldownEnabled) {
+      applyCooldownProfile(selectedCooldownProfile);
+    }
 
     // Pick the best available suggested job to work on
     function claimNextJob(projectId: string): { job_id: string; title: string; atomic_steps_raw: string; affected_files_raw: string } | null {
@@ -1637,11 +1844,13 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     const runId = randomUUID();
     setKv(db, 'god_factory:loop:last_model', normalizedModel);
     setKv(db, 'god_factory:loop:last_project_id', normalizedProjectId);
-    setKv(db, 'god_factory:loop:last_max_iterations', String(parsedMaxIterations));
+    setKv(db, 'god_factory:loop:last_max_iterations', String(isUnlimitedIterations ? 0 : parsedMaxIterations));
     setKv(db, 'god_factory:loop:last_auto_approve_changes', normalizedAutoApproveChanges ? '1' : '0');
     setKv(db, 'god_factory:loop:last_auto_answer_questions', normalizedAutoAnswerQuestions ? '1' : '0');
     setKv(db, 'god_factory:loop:last_checkpoint_every', String(parsedCheckpointEvery));
     setKv(db, 'god_factory:loop:last_job_max_iterations', String(jobLoopMaxIterations));
+    setKv(db, 'god_factory:loop:last_cooldown_profile', selectedCooldownProfile);
+    setKv(db, 'god_factory:loop:last_auto_cooldown_profile', autoCooldownEnabled ? '1' : '0');
 
     _updateGfLoopState(db, {
       state: 'running',
@@ -1677,7 +1886,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     let iterationCount = 0;
 
     const tick = async () => {
-      if (stopped || iterationCount >= parsedMaxIterations) {
+      if (stopped || (!isUnlimitedIterations && iterationCount >= parsedMaxIterations)) {
         stopped = true;
         db.prepare(`
           UPDATE god_factory_runs
@@ -1687,16 +1896,20 @@ export async function godFactoryRoutes(app: FastifyInstance) {
               ended_at = datetime('now'),
               last_active_at = datetime('now')
           WHERE run_id = ?
-        `).run(iterationCount >= parsedMaxIterations ? STOP_REASON.MAX_ITERATIONS : STOP_REASON.MANUAL, iterationCount, runId);
+        `).run((!isUnlimitedIterations && iterationCount >= parsedMaxIterations) ? STOP_REASON.MAX_ITERATIONS : STOP_REASON.MANUAL, iterationCount, runId);
         _updateGfLoopState(db, {
           state: 'idle',
           current_job_id: null,
           current_run_id: null,
           last_active_at: null,
-          stop_reason: iterationCount >= parsedMaxIterations ? STOP_REASON.MAX_ITERATIONS : STOP_REASON.MANUAL,
+          stop_reason: (!isUnlimitedIterations && iterationCount >= parsedMaxIterations) ? STOP_REASON.MAX_ITERATIONS : STOP_REASON.MANUAL,
         });
         _gfLoopInstance = null;
         return;
+      }
+
+      if (autoCooldownEnabled && iterationCount > 0 && iterationCount % 5 === 0) {
+        applyCooldownProfile(selectedCooldownProfile);
       }
 
       const job = claimNextJob(normalizedProjectId);
@@ -1724,12 +1937,11 @@ export async function godFactoryRoutes(app: FastifyInstance) {
 
       _updateGfLoopState(db, { current_job_id: job.job_id, last_active_at: new Date().toISOString() });
 
-      let atomicSteps: unknown = [];
-      let affectedFiles: unknown = [];
-      try {
-        atomicSteps = JSON.parse(job.atomic_steps_raw);
-        affectedFiles = JSON.parse(job.affected_files_raw);
-      } catch (err: unknown) {
+      const stepsResult = safeParseJobPayload(job.atomic_steps_raw, 'atomic_steps', []);
+      const filesResult = safeParseJobPayload(job.affected_files_raw, 'affected_files', []);
+
+      if (!stepsResult.success || !filesResult.success) {
+        const errorDetail = [stepsResult.error, filesResult.error].filter(Boolean).join('; ');
         db.prepare(`UPDATE job_records SET implementation_status = '${JOB_STATUS.REJECTED}', timestamp = datetime('now') WHERE job_id = ?`).run(job.job_id);
         db.prepare(`UPDATE god_factory_loop_state SET jobs_failed = jobs_failed + 1 WHERE id = 'singleton'`).run();
         db.prepare(`
@@ -1743,7 +1955,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
           phase: 'job_payload_parse',
           runId,
           jobId: job.job_id,
-          err,
+          err: new Error(errorDetail),
           fatal: false,
         });
         iterationCount++;
@@ -1752,6 +1964,9 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         }
         return;
       }
+
+      const atomicSteps = stepsResult.data || [];
+      const affectedFiles = filesResult.data || [];
 
       // Build task prompt from job details
       const stepsText = Array.isArray(atomicSteps)
@@ -1778,7 +1993,13 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         const { appConfig } = await import('../config.js');
         const { getModel, extractProviderFromModelId } = await import('@personal-ide/shared');
 
-        const chosenModel = normalizedModel;
+        const strategy = resolveModelStrategy(db, normalizedModel);
+        const chain = [strategy.primaryModel, ...strategy.fallbackModels];
+        const chosenModel = chain.find((modelId) => {
+          const canUse = getProviderClient(db, extractProviderFromModelId(modelId) as ProviderType);
+          if (!canUse) return false;
+          return true;
+        }) || normalizedModel;
         const provider = extractProviderFromModelId(chosenModel) as any;
         const loopConfig = {
           maxIterations: jobLoopMaxIterations, // per job
@@ -1787,6 +2008,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
           autoApproveChanges: normalizedAutoApproveChanges,
           autoAnswerQuestions: normalizedAutoAnswerQuestions,
           model: chosenModel,
+          fallbackModels: chain.filter((m) => m !== chosenModel),
           projectRoot: (db.prepare('SELECT root_path FROM projects WHERE id = ?').get(normalizedProjectId) as { root_path?: string } | undefined)?.root_path ?? process.cwd(),
           continuousMode: false,
           cooldownMs: 2000,
@@ -1984,7 +2206,14 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     const config = {
       last_model: getKv(db, 'god_factory:loop:last_model') ?? null,
       last_project_id: getKv(db, 'god_factory:loop:last_project_id') ?? null,
-      last_max_iterations: Number(getKv(db, 'god_factory:loop:last_max_iterations') ?? '0') || null,
+      last_max_iterations: (() => {
+        const raw = getKv(db, 'god_factory:loop:last_max_iterations');
+        if (raw === null || raw === undefined || raw === '') return null;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : null;
+      })(),
+      cooldown_profile: getKv(db, 'god_factory:loop:last_cooldown_profile') || 'safe-exhaustive',
+      auto_cooldown_profile: getKv(db, 'god_factory:loop:last_auto_cooldown_profile') === '1',
       governance: {
         autoApproveChanges: getKv(db, 'god_factory:loop:last_auto_approve_changes') === '1',
         autoAnswerQuestions: getKv(db, 'god_factory:loop:last_auto_answer_questions') === '1',

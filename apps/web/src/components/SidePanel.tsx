@@ -36,9 +36,11 @@ interface SidePanelProps {
   width: number;
   onClose?: () => void;
   onNewProject?: () => void;
+  showGodFactoryCompanion?: boolean;
+  onToggleGodFactoryCompanion?: (enabled: boolean) => void;
 }
 
-export function SidePanel({ view, width, onClose, onNewProject }: SidePanelProps) {
+export function SidePanel({ view, width, onClose, onNewProject, showGodFactoryCompanion, onToggleGodFactoryCompanion }: SidePanelProps) {
   const [showMidwife, setShowMidwife] = useState(false);
   const [showNano, setShowNano] = useState(false);
   const [showProviders, setShowProviders] = useState(false);
@@ -88,7 +90,12 @@ export function SidePanel({ view, width, onClose, onNewProject }: SidePanelProps
       {view === 'forensic' && <ForensicView />}
       {view === 'gap' && <GapAnalysisPanel />}
       {view === 'project-state-crawler' && <ProjectStateCrawlerPanel />}
-      {view === 'suggested-jobs' && <SuggestedJobsPanel />}
+      {view === 'suggested-jobs' && (
+        <SuggestedJobsPanel
+          showGodFactoryCompanion={!!showGodFactoryCompanion}
+          onToggleGodFactoryCompanion={onToggleGodFactoryCompanion}
+        />
+      )}
       {view === 'community' && <CommunityHubPanel />}
       {view === 'help' && <HelpView />}
     </div>

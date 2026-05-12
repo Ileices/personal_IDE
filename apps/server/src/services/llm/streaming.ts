@@ -41,40 +41,54 @@ export async function streamChatResponse(
     onContent?: (fullContent: string) => void;
     onDone?: (fullContent: string, usage: any) => void;
     signal?: AbortSignal;
+    deferStartUntilReady?: boolean;
   }
 ): Promise<void> {
-  // Set SSE headers
-  reply.raw.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no',
-  });
+  let started = false;
 
   const sendEvent = (event: ChatStreamEvent) => {
     reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
-  try {
-    // Emit immediately so clients can bind conversation/message IDs without
-    // waiting for upstream model stream initialization.
+  const startSse = () => {
+    if (started) return;
+    if (!reply.raw.headersSent) {
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+    }
     sendEvent({
       type: 'message_start',
       messageId: options?.messageId || '',
       conversationId: options?.conversationId || '',
     });
+    started = true;
+  };
+
+  try {
+    if (!options?.deferStartUntilReady) {
+      startSse();
+    }
 
     const modelParams = buildModelParams(model, {
       temperature: options?.temperature,
       maxTokens: options?.maxTokens,
       jsonMode: options?.jsonMode,
     });
+    console.log(`[streaming] Built params for ${model}:`, JSON.stringify(modelParams));
     const stream = await client.chat.completions.create({
       model: stripModelPrefix(model),
       messages,
       stream: true,
       ...modelParams,
     }, { signal: options?.signal ?? AbortSignal.timeout(10 * 60_000) });
+
+    if (options?.deferStartUntilReady) {
+      startSse();
+    }
 
     let fullContent = '';
 
@@ -113,10 +127,15 @@ export async function streamChatResponse(
 
     options?.onContent?.(fullContent);
   } catch (error: any) {
+    if (!started) {
+      throw error;
+    }
     const errorMsg = error?.message || 'Unknown LLM error';
     sendEvent({ type: 'error', error: errorMsg });
   } finally {
-    reply.raw.end();
+    if (started) {
+      reply.raw.end();
+    }
   }
 }
 

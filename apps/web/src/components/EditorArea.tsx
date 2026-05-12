@@ -12,9 +12,11 @@ import { AgentControls } from './AgentControls';
 import { PreviewPanel } from './PreviewPanel';
 import { ErrorPanel } from './ErrorPanel';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
+import { TheGodFactory } from './TheGodFactory';
 import { useProjectStore } from '../stores/projectStore';
 import { API_BASE } from '../config.js';
 import { HelpTip } from './HelpTip';
+import type { ActivityView } from './ActivityBar';
 
 export type EditorTab = 'code' | 'chat' | 'agent' | 'preview';
 
@@ -22,6 +24,8 @@ interface EditorAreaProps {
   activeTab: EditorTab;
   onTabChange: (tab: EditorTab) => void;
   previewUrl?: string;
+  activeView?: ActivityView;
+  showGodFactoryCompanion?: boolean;
 }
 
 const TAB_DEFS: { id: EditorTab; icon: React.ElementType; label: string }[] = [
@@ -38,7 +42,7 @@ const TAB_HELP_IDS: Record<EditorTab, string> = {
   preview: 'editor.tab.preview'
 };
 
-export function EditorArea({ activeTab, onTabChange, previewUrl }: EditorAreaProps) {
+export function EditorArea({ activeTab, onTabChange, previewUrl, activeView, showGodFactoryCompanion }: EditorAreaProps) {
   const { activeProject } = useProjectStore();
   const [runState, setRunState] = useState<'idle' | 'running' | 'error'>('idle');
   const [runLabel, setRunLabel] = useState('Build & Run');
@@ -163,7 +167,7 @@ export function EditorArea({ activeTab, onTabChange, previewUrl }: EditorAreaPro
         {/* Agent */}
         <div className={`absolute inset-0 overflow-hidden ${activeTab === 'agent' ? '' : 'hidden'}`}>
           <PanelErrorBoundary name="Agent">
-            <AgentControls />
+            {activeView === 'suggested-jobs' && showGodFactoryCompanion ? <TheGodFactory /> : <AgentControls />}
           </PanelErrorBoundary>
         </div>
 

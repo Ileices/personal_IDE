@@ -5,7 +5,7 @@
 // ============================================
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ChatRequest, ProviderType } from '@personal-ide/shared';
-import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
+import { getModel, extractProviderFromModelId, getDefaultPreset } from '@personal-ide/shared';
 import { getClientFromDb as getGitHubClient } from '../services/llm/client.js';
 import { getClientFromDb as getProviderClient } from '../services/llm/providers.js';
 import { streamChatResponse, completeChatResponse } from '../services/llm/streaming.js';
@@ -28,15 +28,26 @@ function getClientForModel(db: any, modelId: string): import('openai').default |
 /** Determine if an error is a retryable fallback condition (rate limit, auth, unavailable) */
 function isFallbackError(err: any): boolean {
   const msg = String(err?.message || err || '').toLowerCase();
-  const status = err?.status || err?.statusCode || 0;
-  return (
-    status === 429 || status === 401 || status === 403 ||
-    status === 503 || status === 502 || status === 500 ||
+  // OpenAI library uses .status, some APIs use .statusCode, fallback to 0 if neither
+  const status = err?.status ?? err?.statusCode ?? err?.response?.status ?? 0;
+  
+  const isRetryableStatus = (
+    status === 400 || // Parameter errors from API (different param names for O1, etc.)
+    status === 429 || status === 401 || status === 403 || status === 404 ||
+    status === 503 || status === 502 || status === 500
+  );
+  
+  const isRetryableMessage = (
     msg.includes('rate limit') || msg.includes('quota') ||
     msg.includes('unauthorized') || msg.includes('insufficient_quota') ||
-    msg.includes('model_not_found') || msg.includes('overloaded') ||
-    msg.includes('unavailable') || msg.includes('timeout')
+    msg.includes('model_not_found') || msg.includes('unknown model') ||
+    msg.includes('model not found') || msg.includes('overloaded') ||
+    msg.includes('unavailable') || msg.includes('timeout') ||
+    msg.includes('unsupported parameter') || msg.includes('not supported') ||
+    msg.includes('503') || msg.includes('502') || msg.includes('500') || msg.includes('400')
   );
+  
+  return isRetryableStatus || isRetryableMessage;
 }
 
 export async function chatRoutes(app: FastifyInstance) {
@@ -56,9 +67,22 @@ export async function chatRoutes(app: FastifyInstance) {
       body.projectId = 'default';
     }
 
+    console.log(`[chat] Request received: model=${body.model}, mode=${body.mode}, projectId=${body.projectId}, fallbackCount=${body.fallbackModels?.length || 0}`);
+
     const strategy = resolveModelStrategy(db, body.model, body.fallbackModels);
+    console.log(`[chat] Strategy resolved: primaryModel=${strategy.primaryModel}, fallbackCount=${strategy.fallbackModels.length}`);
     body.model = strategy.primaryModel;
-    body.fallbackModels = strategy.fallbackModels;
+
+    const defaultPreset = getDefaultPreset();
+    const guaranteedFallbacks = [
+      ...(strategy.fallbackModels || []),
+      strategy.settings.primaryModel,
+      ...(strategy.settings.fallbackModels || []),
+      defaultPreset.primaryModel,
+      ...(defaultPreset.fallbackChain || []),
+    ].filter((m, idx, arr) => !!m && m !== body.model && arr.indexOf(m) === idx);
+
+    body.fallbackModels = guaranteedFallbacks;
 
     // Detect provider from model string
     const provider = extractProviderFromModelId(body.model) as ProviderType;
@@ -110,20 +134,42 @@ export async function chatRoutes(app: FastifyInstance) {
     }
 
     // Resolve the best project for memory/file-context when running in
-    // default IDE mode (no explicit active project selected).
+    // default IDE mode (no explicit active project selected), and guarantee
+    // a valid project id for persistence writes.
     let effectiveProjectId = body.projectId;
+    const projects = memory.listProjects();
     if (!effectiveProjectId || effectiveProjectId === 'default') {
-      const projects = memory.listProjects();
       if (projects.length > 0) {
         effectiveProjectId = projects[0].id;
+      }
+    }
+    if (!effectiveProjectId || !memory.getProject(effectiveProjectId)) {
+      if (projects.length > 0) {
+        effectiveProjectId = projects[0].id;
+      } else {
+        const fallbackProject = memory.createProject(
+          'Default Project',
+          process.cwd(),
+          'Auto-created fallback for global chat sessions'
+        );
+        effectiveProjectId = fallbackProject.id;
       }
     }
 
     // Get or create conversation
     let conversationId = body.conversationId;
+    if (conversationId) {
+      const existingConversation = db.prepare(
+        'SELECT id FROM conversations WHERE id = ? LIMIT 1'
+      ).get(conversationId) as any;
+      if (!existingConversation) {
+        conversationId = undefined;
+      }
+    }
+
     if (!conversationId) {
       conversationId = memory.createConversation(
-        effectiveProjectId || body.projectId,
+        effectiveProjectId,
         body.message.slice(0, 50),
         body.mode,
         body.model
@@ -136,7 +182,7 @@ export async function chatRoutes(app: FastifyInstance) {
     // Build memory context
     let memoryContext = '';
     if (body.autoInjectMemory !== false) {
-      memoryContext = memory.buildMemoryContext(effectiveProjectId || body.projectId, body.message);
+      memoryContext = memory.buildMemoryContext(effectiveProjectId, body.message);
     }
 
     // Build system prompt based on mode
@@ -151,7 +197,7 @@ export async function chatRoutes(app: FastifyInstance) {
 
     // Add file context if requested
     if (body.contextFiles && body.contextFiles.length > 0) {
-      const project = memory.getProject(effectiveProjectId || body.projectId);
+      const project = memory.getProject(effectiveProjectId);
       if (project) {
         for (const fp of body.contextFiles.slice(0, 10)) {
           try {
@@ -182,15 +228,23 @@ export async function chatRoutes(app: FastifyInstance) {
       const modelId = modelsToTry[i];
       const modelProvider = extractProviderFromModelId(modelId) as ProviderType;
       const modelClient = getClientForModel(db, modelId);
-      if (!modelClient) continue; // provider not configured — skip
+      if (!modelClient) {
+        console.log(`[chat-fallback] Skipping ${modelId} — provider not configured`);
+        continue;
+      }
 
       // Skip rate-limited models
       const canProceed = rateLimiter.canRequest(modelId);
-      if (!canProceed.allowed) continue;
+      if (!canProceed.allowed) {
+        console.log(`[chat-fallback] Skipping ${modelId} — rate limited`);
+        continue;
+      }
 
       usedModel = modelId;
       const modelDef = getModel(modelId);
       const callStartMs = Date.now();
+
+      console.log(`[chat-fallback] Attempting model ${i + 1}/${modelsToTry.length}: ${modelId}`);
 
       try {
         rateLimiter.recordStart(modelId);
@@ -246,7 +300,7 @@ export async function chatRoutes(app: FastifyInstance) {
             response: fullContent,
             source: 'chat',
             timestamp: Date.now(),
-            metadata: { model: modelId, projectId: body.projectId },
+            metadata: { model: modelId, projectId: effectiveProjectId },
           });
           reply.raw.write(`data: ${JSON.stringify({
             type: 'message_start',
@@ -277,7 +331,7 @@ export async function chatRoutes(app: FastifyInstance) {
             mode: body.mode,
             interactionType: body.mode,
             buildPhase: 'chat_response',
-            projectId: body.projectId,
+              projectId: effectiveProjectId,
             conversationId: conversationId || undefined,
             taskType: body.mode,
             quality: structured?.confidence ?? undefined,
@@ -297,8 +351,8 @@ export async function chatRoutes(app: FastifyInstance) {
 
           memory.addMessage(conversationId!, 'assistant', fullContent, modelId, body.mode, structured);
           if (structured?.summary) {
-            memory.addNote(effectiveProjectId || body.projectId, {
-              projectId: effectiveProjectId || body.projectId,
+            memory.addNote(effectiveProjectId, {
+              projectId: effectiveProjectId,
               source: 'auto_summary',
               category: body.mode,
               title: `${body.mode}: ${structured.summary.slice(0, 100)}`,
@@ -314,12 +368,15 @@ export async function chatRoutes(app: FastifyInstance) {
           break;
         }
 
+        console.log(`[chat-fallback] Calling streamChatResponse for model: ${modelId}, messageCount: ${messages.length}`);
         await streamChatResponse(modelClient, modelId, messages, reply, {
           maxTokens: modelDef?.maxOutputTokens || 4096,
           temperature: body.mode === 'agent' ? 0.3 : 0.7,
+          deferStartUntilReady: true,
           conversationId,
           messageId: userMessageId,
           onDone: (fullContent, usage) => {
+            console.log(`[chat-fallback] Model ${modelId} completed successfully`);
             rateLimiter.recordEnd(modelId);
             const latencyMs = Date.now() - callStartMs;
 
@@ -335,7 +392,7 @@ export async function chatRoutes(app: FastifyInstance) {
               mode: body.mode,
               interactionType: body.mode,
               buildPhase: 'chat_response',
-              projectId: body.projectId,
+              projectId: effectiveProjectId,
               conversationId: conversationId || undefined,
               taskType: body.mode,
               quality: structured?.confidence ?? undefined,
@@ -364,8 +421,8 @@ export async function chatRoutes(app: FastifyInstance) {
 
             // Auto-save summary if structured output found
             if (structured?.summary) {
-              memory.addNote(effectiveProjectId || body.projectId, {
-                projectId: effectiveProjectId || body.projectId,
+              memory.addNote(effectiveProjectId, {
+                projectId: effectiveProjectId,
                 source: 'auto_summary',
                 category: body.mode,
                 title: `${body.mode}: ${structured.summary.slice(0, 100)}`,
@@ -386,7 +443,7 @@ export async function chatRoutes(app: FastifyInstance) {
               timestamp: Date.now(),
               metadata: {
                 model: modelId,
-                projectId: body.projectId,
+                projectId: effectiveProjectId,
               },
             });
           },
@@ -400,19 +457,28 @@ export async function chatRoutes(app: FastifyInstance) {
         rateLimiter.recordEnd(modelId);
 
         const isFallbackable = isFallbackError(err);
+        const errStatus = err?.status ?? err?.statusCode ?? err?.response?.status ?? 'unknown';
+        const errMsg = err?.message || String(err);
+        const isLastModel = i === modelsToTry.length - 1;
+        
+        console.log(
+          `[chat-fallback] Model ${modelId} failed: status=${errStatus}, ` +
+          `fallbackable=${isFallbackable}, isLast=${isLastModel}, error=${errMsg}`
+        );
+
         // Write a failure BLAME record for this model attempt
         writeBlameRecord(db, {
           model: modelId,
           mode: body.mode,
           interactionType: body.mode,
           buildPhase: 'chat_response',
-          projectId: body.projectId,
+          projectId: effectiveProjectId,
           conversationId: conversationId || undefined,
           taskType: body.mode,
           success: false,
-          errorType: err?.status === 429 ? 'rate_limited'
-            : err?.status === 401 || err?.status === 403 ? 'auth_or_quota'
-            : err?.status === 503 || err?.status === 502 ? 'provider_unreachable'
+          errorType: errStatus === 429 ? 'rate_limited'
+            : errStatus === 401 || errStatus === 403 ? 'auth_or_quota'
+            : errStatus === 503 || errStatus === 502 ? 'provider_unreachable'
             : 'model_error',
           latencyMs: Date.now() - callStartMs,
           durationMs: Date.now() - callStartMs,
@@ -424,9 +490,11 @@ export async function chatRoutes(app: FastifyInstance) {
         });
         if (!isFallbackable || i === modelsToTry.length - 1) {
           // Not retryable OR no more fallbacks — surface the error
+          console.log(`[chat-fallback] Terminating fallback chain: isFallbackable=${isFallbackable}, isLastModel=${isLastModel}`);
           if (!reply.raw.writableEnded) {
             if (!reply.raw.headersSent) {
-              reply.raw.writeHead(500, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+              // SSE must always send 200; errors are conveyed in the stream
+              reply.raw.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
             }
             reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: err.message || 'Model error' })}\n\n`);
             reply.raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
@@ -435,13 +503,16 @@ export async function chatRoutes(app: FastifyInstance) {
           return;
         }
         // Continue to next fallback
+        console.log(`[chat-fallback] Retrying with next model in fallback chain`);
       }
     }
 
     // If we exhausted all models without streaming anything
     if (!reply.raw.writableEnded) {
+      console.log(`[chat-fallback] All ${modelsToTry.length} models exhausted. Last error: ${lastError?.message || 'unknown'}`);
       if (!reply.raw.headersSent) {
-        reply.raw.writeHead(503, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+        // SSE must always send 200; errors are conveyed in the stream
+        reply.raw.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       }
       reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: `All models unavailable. Tried: ${modelsToTry.slice(0, 3).join(', ')}` })}\n\n`);
       reply.raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);

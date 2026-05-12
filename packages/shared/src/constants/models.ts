@@ -700,14 +700,19 @@ export function buildModelParams(
   const model = getModel(modelId);
   const params: Record<string, any> = {};
 
+  // Detect reasoning models by name (for GitHub models not in MODELS array)
+  // GitHub models: github/o1, github/o1-mini, github/o3, etc.
+  // OpenAI direct: openai-direct/o3-mini, etc.
+  const isReasoningModel = /\/(o[1-9]|o\d+-mini|o[3-9])[/-]?/.test(modelId);
+  const supportsTemp = model?.supportsTemperature !== false && !isReasoningModel;
+  const tokenParam = model?.outputTokenParam || (isReasoningModel ? 'max_completion_tokens' : 'max_tokens');
+
   // Temperature — reasoning models reject it
-  const supportsTemp = model?.supportsTemperature !== false;
   if (supportsTemp && options.temperature !== undefined) {
     params.temperature = options.temperature;
   }
 
   // Output tokens — reasoning models need max_completion_tokens
-  const tokenParam = model?.outputTokenParam || 'max_tokens';
   if (options.maxTokens) {
     params[tokenParam] = options.maxTokens;
   } else {

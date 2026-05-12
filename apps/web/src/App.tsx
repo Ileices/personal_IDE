@@ -45,6 +45,7 @@ export default function App() {
   const [draggingSide, setDraggingSide] = useState(false);
   const [draggingTerm, setDraggingTerm] = useState(false);
   const [helpFocus, setHelpFocus] = useState<{ helpId: string; nonce: number } | null>(null);
+  const [showGodFactoryCompanion, setShowGodFactoryCompanion] = useState<boolean>(() => getStored('ide_suggested_jobs_gf_companion', false));
 
   const { events: agentEvents } = useAgentStore();
   const [previewUrl, setPreviewUrl] = useState('http://localhost:5173');
@@ -109,6 +110,7 @@ export default function App() {
   useEffect(() => { setStored('ide_side_w', sideWidth); }, [sideWidth]);
   useEffect(() => { setStored('ide_term_h', termHeight); }, [termHeight]);
   useEffect(() => { setStored('ide_term_open', termOpen); }, [termOpen]);
+  useEffect(() => { setStored('ide_suggested_jobs_gf_companion', showGodFactoryCompanion); }, [showGodFactoryCompanion]);
 
   useEffect(() => {
     const last = agentEvents[agentEvents.length - 1];
@@ -196,7 +198,16 @@ export default function App() {
           </div>
         ) : (
           <>
-        <SidePanel view={activeView} width={sideWidth} onNewProject={() => setShowNewProject(true)} />
+        <SidePanel
+          view={activeView}
+          width={sideWidth}
+          onNewProject={() => setShowNewProject(true)}
+          showGodFactoryCompanion={showGodFactoryCompanion}
+          onToggleGodFactoryCompanion={(enabled) => {
+            setShowGodFactoryCompanion(enabled);
+            if (enabled) setActiveTab('agent');
+          }}
+        />
         <div
           className="w-1 cursor-col-resize bg-ide-border hover:bg-ide-accent/40 transition-colors flex-shrink-0"
           onMouseDown={() => setDraggingSide(true)}
@@ -204,7 +215,13 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           <div className="flex-1 overflow-hidden">
             <PanelErrorBoundary name="Editor">
-              <EditorArea activeTab={activeTab} onTabChange={setActiveTab} previewUrl={previewUrl} />
+              <EditorArea
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                previewUrl={previewUrl}
+                activeView={activeView}
+                showGodFactoryCompanion={showGodFactoryCompanion}
+              />
             </PanelErrorBoundary>
           </div>
           {termOpen && (
