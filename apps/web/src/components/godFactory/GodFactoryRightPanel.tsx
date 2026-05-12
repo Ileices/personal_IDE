@@ -63,6 +63,17 @@ interface ModelHealthRecord {
   composite_quality_score: number;
 }
 
+interface ModelStrategySnapshot {
+  settings: {
+    presetId: string;
+    primaryModel: string;
+    fallbackModels: string[];
+    blockedModels: string[];
+    cleanupFailedModels: boolean;
+  };
+  failedModels: string[];
+}
+
 interface NotificationDetailResponse {
   notification: Record<string, unknown> & {
     notification_id: string;
@@ -560,6 +571,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [notifications, setNotifications] = useState<IntelNotification[]>([]);
   const [idleSuggestions, setIdleSuggestions] = useState<IdleSuggestion[]>([]);
   const [modelHealth, setModelHealth] = useState<ModelHealthRecord[]>([]);
+  const [modelStrategy, setModelStrategy] = useState<ModelStrategySnapshot | null>(null);
   const [codebaseHealth, setCodebaseHealth] = useState<CodebaseHealthPayload | null>(null);
   const [backgroundStatus, setBackgroundStatus] = useState<BackgroundStatusPayload | null>(null);
   const [selectedNotification, setSelectedNotification] = useState<NotificationDetailResponse | null>(null);
@@ -581,7 +593,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [jobsLoading, setJobsLoading] = useState(false);
   const [brainstorm, setBrainstorm] = useState('');
   const [brainstormConfirm, setBrainstormConfirm] = useState<string | null>(null);
-  const [sections, setSections] = useState({ notifications: true, idleSuggestions: true, jobs: true, externalProjects: false, implementingPipeline: false, health: true, modelHealth: true, background: false, subsystems: false, siliconFactory: false, brainstorm: false, employer: false });
+  const [sections, setSections] = useState({ notifications: true, idleSuggestions: true, jobs: true, externalProjects: false, implementingPipeline: false, health: true, modelCycle: true, modelHealth: true, background: false, subsystems: false, siliconFactory: false, brainstorm: false, employer: false });
   const [blameStats, setBlameStats] = useState<any[]>([]);
   const [subsystems, setSubsystems] = useState<Record<SubsystemId, SubsystemConfig>>({
     ide_codebase_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 60, maxDepth: 5, manualOnly: false },
@@ -657,6 +669,15 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       .then(r => r.ok ? r.json() : null)
       .then((d: { models?: ModelHealthRecord[] } | null) => {
         if (d?.models) setModelHealth(d.models);
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadModelStrategy = useCallback(() => {
+    fetch(`${API_BASE}/api/model-strategy`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: ModelStrategySnapshot | null) => {
+        if (d?.settings) setModelStrategy(d);
       })
       .catch(() => {});
   }, []);
@@ -854,6 +875,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       loadQueue();
       loadIdleSuggestions();
       loadModelHealth();
+      loadModelStrategy();
       loadCodebaseHealth();
       loadBackgroundStatus();
       loadRecentActions();
@@ -871,6 +893,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         loadQueue();
         loadIdleSuggestions();
         loadModelHealth();
+        loadModelStrategy();
         loadCodebaseHealth();
         loadBackgroundStatus();
         loadRecentActions();
@@ -901,7 +924,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (jobsTimer) window.clearInterval(jobsTimer);
       if (gfTimer) window.clearInterval(gfTimer);
     };
-  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions]);
+  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions]);
 
   // ── Persist auto-intel settings to localStorage ──
   useEffect(() => { try { localStorage.setItem('gf_autoIntelEnabled', autoIntelEnabled ? '1' : '0'); } catch {} }, [autoIntelEnabled]);
@@ -2085,6 +2108,70 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
               <div className="text-[9px] text-ide-text-dim">
                 <span className="text-purple-400">Tip:</span> Ask THE GOD FACTORY to scan for debt, gaps, or patterns
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Model Health ── */}
+        <div className="border-b border-ide-border/50">
+          <button onClick={() => toggleSection('modelCycle')}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
+            <div className="flex items-center gap-1.5">
+              <PlayCircle className="w-3 h-3 text-cyan-400" />
+              Model Cycle Strategy
+            </div>
+            {sections.modelCycle ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          {sections.modelCycle && (
+            <div className="px-2 pb-2 space-y-1.5 text-[9px]">
+              {!modelStrategy ? (
+                <div className="text-[10px] text-ide-text-dim px-1 py-2 text-center">No strategy loaded</div>
+              ) : (
+                <>
+                  <div className="rounded border border-ide-border/30 bg-ide-bg/30 px-2 py-1.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-ide-text-dim">Preset</span>
+                      <span className="text-ide-text uppercase">{modelStrategy.settings.presetId}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-ide-text-dim">Primary</span>
+                      <span className="text-ide-text truncate max-w-[150px]" title={modelStrategy.settings.primaryModel}>
+                        {modelStrategy.settings.primaryModel}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-ide-text-dim">Fallbacks</span>
+                      <span className="text-cyan-300">{modelStrategy.settings.fallbackModels.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-ide-text-dim">Blocked</span>
+                      <span className="text-yellow-300">{modelStrategy.settings.blockedModels.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-ide-text-dim">Failed (registry)</span>
+                      <span className="text-red-300">{modelStrategy.failedModels.length}</span>
+                    </div>
+                  </div>
+
+                  {modelStrategy.settings.fallbackModels.length > 0 && (
+                    <div className="rounded border border-ide-border/30 bg-ide-bg/20 px-2 py-1.5">
+                      <div className="text-ide-text-dim mb-1">Fallback order</div>
+                      <div className="space-y-0.5">
+                        {modelStrategy.settings.fallbackModels.slice(0, 8).map((m, idx) => (
+                          <div key={m} className="flex items-center justify-between gap-2">
+                            <span className="text-ide-text-dim">{idx + 1}.</span>
+                            <span className="text-ide-text truncate" title={m}>{m}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-[9px] text-ide-text-dim">
+                    Chat, God Factory, and loop fallback rotation should read this same chain.
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
