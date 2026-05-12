@@ -581,7 +581,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [jobsLoading, setJobsLoading] = useState(false);
   const [brainstorm, setBrainstorm] = useState('');
   const [brainstormConfirm, setBrainstormConfirm] = useState<string | null>(null);
-  const [sections, setSections] = useState({ notifications: true, idleSuggestions: true, jobs: true, externalProjects: false, implementingPipeline: false, health: true, modelHealth: true, background: false, subsystems: false, siliconFactory: false, brainstorm: false });
+  const [sections, setSections] = useState({ notifications: true, idleSuggestions: true, jobs: true, externalProjects: false, implementingPipeline: false, health: true, modelHealth: true, background: false, subsystems: false, siliconFactory: false, brainstorm: false, employer: false });
   const [blameStats, setBlameStats] = useState<any[]>([]);
   const [subsystems, setSubsystems] = useState<Record<SubsystemId, SubsystemConfig>>({
     ide_codebase_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 60, maxDepth: 5, manualOnly: false },
@@ -600,17 +600,28 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
   const [runningSubsystem, setRunningSubsystem] = useState<SubsystemId | null>(null);
 
-  // ── Auto-intelligence toggle state ──
-  const [autoIntelEnabled, setAutoIntelEnabled] = useState(false);
-  const [autoIntelIntervalMin, setAutoIntelIntervalMin] = useState(15);
+  // ── Auto-intelligence toggle state (localStorage-persisted) ──
+  const [autoIntelEnabled, setAutoIntelEnabled] = useState(() => {
+    try { return localStorage.getItem('gf_autoIntelEnabled') === '1'; } catch { return false; }
+  });
+  const [autoIntelIntervalMin, setAutoIntelIntervalMin] = useState(() => {
+    try { return parseInt(localStorage.getItem('gf_autoIntelIntervalMin') || '15', 10); } catch { return 15; }
+  });
   const [autoIntelCountdown, setAutoIntelCountdown] = useState(0);
   const [autoIntelBusy, setAutoIntelBusy] = useState(false);
   const [autoIntelLastRun, setAutoIntelLastRun] = useState<string | null>(null);
   const [autoIntelError, setAutoIntelError] = useState<string | null>(null);
   const [autoIntelFailCount, setAutoIntelFailCount] = useState(0);
 
-  // ── Rate usage state ──
-  const [rateUsage, setRateUsage] = useState<Array<{ model: string; count: number; limitEst: number }>>([]);
+// ── Rate usage state (server-aggregated via /api/blame/usage-summary) ──
+  const [rateUsage, setRateUsage] = useState<Array<{ model: string; count: number; limitEst: number; usagePct?: number; status?: string }>>([]); 
+
+  // ── Employer Crawler state ──
+  type EmployerSuggestion = { model_id: string; recommended_role: string; role_confidence: number; task_types: string; avoid_task_types: string; retirement_recommended: number; sample_count: number; success_rate: number; cooldown_override_type?: string };
+  const [employerSuggestions, setEmployerSuggestions] = useState<EmployerSuggestion[]>([]);
+  const [employerStatus, setEmployerStatus] = useState<{ last_cycle: number; models_analyzed: number; pending_retirement: number; active_cooldown_overrides: number } | null>(null);
+  const [employerAnalyzing, setEmployerAnalyzing] = useState(false);
+  const [cooldownBusy, setCooldownBusy] = useState<string | null>(null);
 
   // ── Notification action busy state ──
   const [notifActionBusy, setNotifActionBusy] = useState<string | null>(null);
@@ -702,26 +713,70 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       .finally(() => setJobsLoading(false));
   }, [projectId]);
 
-  // ── Rate usage loader (derived from blame stats) ──
+  // ── Rate usage loader (uses /api/blame/usage-summary server-side aggregation) ──
   const loadRateUsage = useCallback(() => {
-    fetch(`${API_BASE}/api/blame/records?limit=200&window=3600`)
+    fetch(`${API_BASE}/api/blame/usage-summary?window=3600&top=8`)
       .then(r => r.ok ? r.json() : null)
-      .then((d: { records?: Array<{ attributed_source?: string; model_id?: string }> } | null) => {
-        if (!d?.records?.length) return;
-        const counts: Record<string, number> = {};
-        for (const rec of d.records) {
-          const key = rec.attributed_source || rec.model_id || 'unknown';
-          counts[key] = (counts[key] || 0) + 1;
-        }
-        const usage = Object.entries(counts).map(([model, count]) => ({
-          model,
-          count,
-          limitEst: model.includes('copilot') ? 50 : model.includes('gpt-4') ? 40 : 60,
-        }));
-        setRateUsage(usage.sort((a, b) => b.count - a.count).slice(0, 5));
+      .then((d: { models?: Array<{ model: string; count: number; limitEst: number; usagePct: number; status: string }> } | null) => {
+        if (!d?.models?.length) return;
+        setRateUsage(d.models);
       })
       .catch(() => {});
   }, []);
+
+  // ── Employer Crawler loaders ──
+  const loadEmployerStatus = useCallback(() => {
+    fetch(`${API_BASE}/api/employer/status`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setEmployerStatus(d); })
+      .catch(() => {});
+  }, []);
+
+  const loadEmployerSuggestions = useCallback(() => {
+    fetch(`${API_BASE}/api/employer/suggestions?limit=20`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { suggestions?: EmployerSuggestion[] } | null) => {
+        if (d?.suggestions) setEmployerSuggestions(d.suggestions);
+      })
+      .catch(() => {});
+  }, []);
+
+  const runEmployerAnalysis = useCallback(async () => {
+    setEmployerAnalyzing(true);
+    try {
+      await fetch(`${API_BASE}/api/employer/analyze`, { method: 'POST' });
+      loadEmployerStatus();
+      loadEmployerSuggestions();
+    } finally {
+      setEmployerAnalyzing(false);
+    }
+  }, [loadEmployerStatus, loadEmployerSuggestions]);
+
+  const injectCooldown = useCallback(async (modelId: string, type: 'cooldown' | 'skip' | 'sleep' | 'clear', durationSec?: number) => {
+    setCooldownBusy(modelId);
+    try {
+      await fetch(`${API_BASE}/api/employer/cooldowns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: modelId, type, duration_sec: durationSec ?? 3600, reason: 'Manual override from Intel Panel' }),
+      });
+      loadRateUsage();
+      loadEmployerStatus();
+    } finally {
+      setCooldownBusy(null);
+    }
+  }, [loadRateUsage, loadEmployerStatus]);
+
+  const retireModel = useCallback(async (modelId: string) => {
+    if (!window.confirm(`Mark ${modelId} for retirement? A suggested job will be created to remove it.`)) return;
+    await fetch(`${API_BASE}/api/employer/retire/${encodeURIComponent(modelId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Retired from Intel Panel by user' }),
+    });
+    loadEmployerStatus();
+    loadEmployerSuggestions();
+  }, [loadEmployerStatus, loadEmployerSuggestions]);
 
   const loadExternalJobs = useCallback(() => {
     const qp = new URLSearchParams({ limit: '10', category: 'external_project' });
@@ -804,6 +859,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       loadRecentActions();
       loadSiliconDashboard();
       loadRateUsage();
+      loadEmployerStatus();
+      loadEmployerSuggestions();
 
       jobsTimer = window.setInterval(() => {
         loadSuggestedJobs();
@@ -819,6 +876,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         loadRecentActions();
         loadSiliconDashboard();
         loadRateUsage();
+        loadEmployerStatus();
       }, 20_000);
 
       void loadSubsystemSettings();
@@ -843,7 +901,11 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (jobsTimer) window.clearInterval(jobsTimer);
       if (gfTimer) window.clearInterval(gfTimer);
     };
-  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage]);
+  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions]);
+
+  // ── Persist auto-intel settings to localStorage ──
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelEnabled', autoIntelEnabled ? '1' : '0'); } catch {} }, [autoIntelEnabled]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelIntervalMin', String(autoIntelIntervalMin)); } catch {} }, [autoIntelIntervalMin]);
 
   const toggleSection = (key: keyof typeof sections) =>
     setSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -2055,21 +2117,55 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   </div>
                 </button>
               ))}
-              {rateUsage.length > 0 && (
+              {rateUsage.length === 0 ? (
+                <div className="text-[9px] text-ide-text-dim px-1 pb-1 text-center">No usage data yet</div>
+              ) : (
                 <div className="mt-2">
                   <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Rate Usage (last 1h)</div>
                   {rateUsage.map(u => {
-                    const pct = Math.min(100, Math.round((u.count / u.limitEst) * 100));
+                    const pct = u.usagePct ?? Math.min(100, Math.round((u.count / u.limitEst) * 100));
                     const barColor = pct >= 90 ? 'bg-red-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-green-500';
                     const textColor = pct >= 90 ? 'text-red-400' : pct >= 60 ? 'text-yellow-400' : 'text-green-400';
+                    const isBusy = cooldownBusy === u.model;
                     return (
-                      <div key={u.model} className="mb-1.5">
+                      <div key={u.model} className="mb-2">
                         <div className="flex items-center justify-between text-[9px] mb-0.5">
-                          <span className="text-ide-text-dim truncate max-w-[110px]" title={u.model}>{u.model}</span>
+                          <span className="text-ide-text-dim truncate max-w-[100px]" title={u.model}>{u.model.split('/').pop() || u.model}</span>
                           <span className={textColor}>{u.count}/{u.limitEst}</span>
                         </div>
-                        <div className="h-1 rounded bg-ide-border/40 overflow-hidden">
+                        <div className="h-1 rounded bg-ide-border/40 overflow-hidden mb-1">
                           <div className={`h-full rounded ${barColor}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        {/* Manual cooldown controls */}
+                        <div className="flex gap-1">
+                          <button
+                            title="Inject 1h cooldown for this model"
+                            disabled={isBusy}
+                            onClick={() => void injectCooldown(u.model, 'cooldown', 3600)}
+                            className="flex-1 text-[8px] px-1 py-0.5 rounded bg-orange-900/40 text-orange-300 hover:bg-orange-800/50 disabled:opacity-40 border border-orange-700/30">
+                            {isBusy ? <RefreshCw className="w-2 h-2 animate-spin mx-auto" /> : 'Cooldown'}
+                          </button>
+                          <button
+                            title="Skip this model on its next cycle"
+                            disabled={isBusy}
+                            onClick={() => void injectCooldown(u.model, 'skip')}
+                            className="flex-1 text-[8px] px-1 py-0.5 rounded bg-yellow-900/40 text-yellow-300 hover:bg-yellow-800/50 disabled:opacity-40 border border-yellow-700/30">
+                            Skip
+                          </button>
+                          <button
+                            title="Put this model to sleep for 4h"
+                            disabled={isBusy}
+                            onClick={() => void injectCooldown(u.model, 'sleep', 14400)}
+                            className="flex-1 text-[8px] px-1 py-0.5 rounded bg-slate-700/40 text-slate-300 hover:bg-slate-600/50 disabled:opacity-40 border border-slate-600/30">
+                            Sleep
+                          </button>
+                          <button
+                            title="Clear any active cooldown override"
+                            disabled={isBusy}
+                            onClick={() => void injectCooldown(u.model, 'clear')}
+                            className="flex-1 text-[8px] px-1 py-0.5 rounded bg-green-900/40 text-green-300 hover:bg-green-800/50 disabled:opacity-40 border border-green-700/30">
+                            Clear
+                          </button>
                         </div>
                       </div>
                     );
@@ -2156,6 +2252,79 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   ))}
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Employer Crawler — Model Stratification ── */}
+        <div className="border-b border-ide-border/50">
+          <button onClick={() => toggleSection('employer')}
+            className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-ide-text-dim hover:text-ide-text hover:bg-ide-bg/30">
+            <div className="flex items-center gap-1.5">
+              <Briefcase className="w-3 h-3 text-amber-400" />
+              Employer Crawler
+              {employerStatus && employerStatus.pending_retirement > 0 && (
+                <span className="text-[8px] bg-red-500/20 text-red-400 border border-red-500/30 rounded px-1 ml-1">
+                  {employerStatus.pending_retirement} retire
+                </span>
+              )}
+            </div>
+            {sections.employer ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+          {sections.employer && (
+            <div className="px-2 pb-2 space-y-1.5">
+              {/* Status row */}
+              {employerStatus && (
+                <div className="text-[9px] text-ide-text-dim grid grid-cols-2 gap-x-2 gap-y-0.5 px-1 py-1 rounded bg-ide-bg/30 border border-ide-border/20">
+                  <span>Cycle: <span className="text-ide-text font-mono">{employerStatus.last_cycle}</span></span>
+                  <span>Analyzed: <span className="text-ide-text font-mono">{employerStatus.models_analyzed}</span></span>
+                  <span>Retirements: <span className={employerStatus.pending_retirement > 0 ? 'text-red-400 font-mono' : 'text-ide-text font-mono'}>{employerStatus.pending_retirement}</span></span>
+                  <span>Overrides: <span className="text-amber-400 font-mono">{employerStatus.active_cooldown_overrides}</span></span>
+                </div>
+              )}
+              <button
+                disabled={employerAnalyzing}
+                onClick={() => void runEmployerAnalysis()}
+                className="w-full flex items-center justify-center gap-1 text-[9px] px-2 py-1 rounded bg-amber-900/30 text-amber-300 hover:bg-amber-800/40 disabled:opacity-50 border border-amber-700/30">
+                {employerAnalyzing ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Zap className="w-2 h-2" />}
+                {employerAnalyzing ? 'Analyzing...' : 'Run Analysis Pass'}
+              </button>
+              {/* Model role suggestions */}
+              {employerSuggestions.length === 0 ? (
+                <div className="text-[9px] text-ide-text-dim text-center py-1">No analysis data — run a pass first</div>
+              ) : employerSuggestions.slice(0, 8).map(s => {
+                const roleColor = s.recommended_role === 'architect' ? 'text-purple-400' :
+                  s.recommended_role === 'senior_developer' ? 'text-blue-400' :
+                  s.recommended_role === 'micro_editor' ? 'text-green-400' :
+                  s.recommended_role === 'documenter' ? 'text-cyan-400' :
+                  s.recommended_role === 'unreliable' ? 'text-red-400' : 'text-ide-text-dim';
+                const tasks = (() => { try { return JSON.parse(s.task_types || '[]') as string[]; } catch { return []; } })();
+                return (
+                  <div key={s.model_id} className="rounded border border-ide-border/30 bg-ide-bg/30 px-2 py-1.5 text-[9px]">
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span className="text-ide-text truncate max-w-[110px]" title={s.model_id}>{s.model_id.split('/').pop() || s.model_id}</span>
+                      <span className={`${roleColor} font-semibold capitalize`}>{s.recommended_role.replace(/_/g, ' ')}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-ide-text-dim mb-0.5">
+                      <span>{Math.round(s.success_rate * 100)}% success · {s.sample_count} runs</span>
+                      <span className="text-ide-text-dim">{Math.round(s.role_confidence * 100)}% conf</span>
+                    </div>
+                    {tasks.length > 0 && (
+                      <div className="text-ide-text-dim truncate">{tasks.slice(0, 3).join(', ')}</div>
+                    )}
+                    {s.cooldown_override_type && (
+                      <div className="text-orange-400 text-[8px] mt-0.5">Override: {s.cooldown_override_type}</div>
+                    )}
+                    {s.retirement_recommended === 1 && (
+                      <button
+                        onClick={() => void retireModel(s.model_id)}
+                        className="mt-1 w-full text-[8px] px-1 py-0.5 rounded bg-red-900/40 text-red-300 hover:bg-red-800/50 border border-red-700/30">
+                        Mark Retired
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

@@ -2438,6 +2438,76 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+
+  // ──────────────────────────────────────────
+  // Migration v115: Employer Crawler + Cooldown Overrides
+  // employer_analysis: stratification decisions from blame data
+  // model_cooldown_overrides: manual rate control (inject/skip/sleep per model)
+  // blame_records timestamp index for fast window queries
+  // ──────────────────────────────────────────
+  {
+    version: 115,
+    name: 'employer_crawler_and_cooldown_overrides',
+    up(db: Database.Database) {
+      db.exec(`
+        -- Employer analysis: role assignment decisions per model from blame data
+        CREATE TABLE IF NOT EXISTS employer_analysis (
+          id TEXT PRIMARY KEY,
+          model_id TEXT NOT NULL,
+          analysis_cycle INTEGER NOT NULL DEFAULT 0,
+          recommended_role TEXT NOT NULL DEFAULT 'general',
+          role_confidence REAL NOT NULL DEFAULT 0.5,
+          task_types TEXT NOT NULL DEFAULT '[]',
+          avoid_task_types TEXT NOT NULL DEFAULT '[]',
+          strengths TEXT NOT NULL DEFAULT '[]',
+          weaknesses TEXT NOT NULL DEFAULT '[]',
+          retirement_recommended INTEGER NOT NULL DEFAULT 0,
+          retirement_reason TEXT,
+          retirement_job_id TEXT,
+          suggested_job_created INTEGER NOT NULL DEFAULT 0,
+          sample_count INTEGER NOT NULL DEFAULT 0,
+          avg_quality REAL NOT NULL DEFAULT 0,
+          success_rate REAL NOT NULL DEFAULT 0,
+          avg_tokens INTEGER NOT NULL DEFAULT 0,
+          context_window_tier TEXT NOT NULL DEFAULT 'unknown',
+          notes TEXT,
+          analyzed_at TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_employer_analysis_model
+          ON employer_analysis(model_id, analyzed_at);
+        CREATE INDEX IF NOT EXISTS idx_employer_analysis_role
+          ON employer_analysis(recommended_role, role_confidence);
+        CREATE INDEX IF NOT EXISTS idx_employer_retirement
+          ON employer_analysis(retirement_recommended, analyzed_at);
+
+        -- Manual cooldown overrides per model: inject cooldown, skip next, sleep until
+        CREATE TABLE IF NOT EXISTS model_cooldown_overrides (
+          id TEXT PRIMARY KEY,
+          model_id TEXT NOT NULL UNIQUE,
+          override_type TEXT NOT NULL CHECK (override_type IN ('cooldown','skip','sleep')),
+          cooldown_until TEXT,
+          skip_next_cycles INTEGER NOT NULL DEFAULT 0,
+          sleep_until TEXT,
+          injected_by TEXT NOT NULL DEFAULT 'user',
+          reason TEXT,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_cooldown_overrides_model
+          ON model_cooldown_overrides(model_id, active);
+        CREATE INDEX IF NOT EXISTS idx_cooldown_overrides_type
+          ON model_cooldown_overrides(override_type, active);
+
+        -- blame_records fast timestamp index for rolling-window rate queries
+        CREATE INDEX IF NOT EXISTS idx_blame_records_timestamp
+          ON blame_records(created_at);
+      `);
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────

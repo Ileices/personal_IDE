@@ -46,6 +46,7 @@ import { contextWindowRoutes } from './routes/contextWindow.js';
 import { appUpdateRoutes } from './routes/appUpdate.js';
 import { featuresRoutes } from './routes/features.js';
 import { githubRoutes } from './routes/github.js';
+import { employerRoutes } from './routes/employer.js';
 import { startNanoLiaisonAgent } from './services/nanoLiaison/index.js';
 import { startSubsystemScheduler } from './services/subsystemScheduler.js';
 import { startSiliconFactorySupervisor } from './services/siliconFactory/index.js';
@@ -189,6 +190,9 @@ async function main() {
 
   // GitHub Community — discussions, reporting, notifications, dev-mode tools
   await app.register(githubRoutes, { prefix: '/api/github' });
+
+  // Employer Crawler — model stratification, role assignment, retirement, cooldown overrides
+  await app.register(employerRoutes, { prefix: '/api/employer' });
 
   // Health — rich diagnostic endpoint (replaces inline handler)
   await app.register(healthRoutes);

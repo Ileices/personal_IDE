@@ -1325,4 +1325,63 @@ export async function blameRoutes(app: FastifyInstance) {
 
     return reply.send({ ok: true, updated: updates.length });
   });
+
+  // GET /usage-summary — aggregate request counts per model for a rolling time window
+  // Query: window? (seconds, default 3600), top? (max models to return, default 10)
+  // Used by: Intel Panel rate usage indicator, Employer Crawler stratification
+  app.get('/usage-summary', async (req: FastifyRequest, reply: FastifyReply) => {
+    const q = req.query as Record<string, string>;
+    const windowSec = Math.max(60, Math.min(86400, parseInt(q.window || '3600', 10)));
+    const top = Math.max(1, Math.min(50, parseInt(q.top || '10', 10)));
+
+    // Cutoff ISO timestamp
+    const cutoff = new Date(Date.now() - windowSec * 1000).toISOString();
+
+    // Per-model rate limits (req/hour estimates; normalized to windowSec)
+    const HOURLY_LIMITS: Record<string, number> = {
+      'github/copilot': 50,
+      'openai/gpt-4': 40,
+      'openai/gpt-4o': 60,
+      'anthropic/claude-opus': 20,
+      'anthropic/claude-sonnet': 40,
+      'anthropic/claude-haiku': 100,
+      'google/gemini-pro': 60,
+      'google/gemini-flash': 120,
+    };
+    const DEFAULT_HOURLY = 60;
+
+    type BlameRow = { attributed_source: string | null; model: string; cnt: number };
+    const rows = db.prepare(`
+      SELECT
+        COALESCE(attributed_source, model) AS attributed_source,
+        model,
+        COUNT(*) AS cnt
+      FROM blame_records
+      WHERE created_at >= ?
+      GROUP BY COALESCE(attributed_source, model)
+      ORDER BY cnt DESC
+      LIMIT ?
+    `).all(cutoff, top) as BlameRow[];
+
+    const windowFactor = windowSec / 3600;
+
+    const models = rows.map(r => {
+      const src = r.attributed_source || r.model || 'unknown';
+      // Find limit key by prefix match
+      const limitKey = Object.keys(HOURLY_LIMITS).find(k => src.toLowerCase().includes(k.split('/')[1] || '')) ?? null;
+      const hourlyLimit = limitKey ? HOURLY_LIMITS[limitKey] : DEFAULT_HOURLY;
+      const limitEst = Math.round(hourlyLimit * windowFactor);
+      const pct = limitEst > 0 ? Math.min(100, Math.round((r.cnt / limitEst) * 100)) : 0;
+      return {
+        model: src,
+        count: r.cnt,
+        limitEst,
+        windowSeconds: windowSec,
+        usagePct: pct,
+        status: pct >= 90 ? 'critical' : pct >= 60 ? 'warning' : 'ok',
+      };
+    });
+
+    return reply.send({ window_seconds: windowSec, models });
+  });
 }
