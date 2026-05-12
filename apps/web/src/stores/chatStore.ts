@@ -79,12 +79,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       const strategy = await apiGet<ModelStrategyResponse>('/model-strategy');
-      if (strategy?.settings?.primaryModel) {
-        effectiveModel = strategy.settings.primaryModel;
-        fallbackModels = strategy.settings.fallbackModels || [];
-        if (effectiveModel !== selectedModel) {
+      if (strategy?.settings) {
+        // Preserve the user's explicit picker choice as primary for this chat send.
+        // Strategy contributes only fallback ordering unless no model is selected.
+        if (!effectiveModel && strategy.settings.primaryModel) {
+          effectiveModel = strategy.settings.primaryModel;
           set({ selectedModel: effectiveModel });
         }
+        fallbackModels = (strategy.settings.fallbackModels || [])
+          .filter((m) => m && m !== effectiveModel);
       }
     } catch { /* strategy endpoint may be unavailable during startup */ }
 

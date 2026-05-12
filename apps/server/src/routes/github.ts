@@ -73,9 +73,9 @@ export async function githubRoutes(app: FastifyInstance) {
   }
 
   // ── Helper: append app disclaimer to outgoing GitHub posts ──
-  const APP_DISCLAIMER = '\n\n---\n*Posted from [Personal\\_IDE](https://github.com/Ileices/personal_IDE)*';
+  const APP_DISCLAIMER = '\n\n---\n*Sent from a [Personal\\_IDE](https://github.com/Ileices/personal_IDE)*';
   function withDisclaimer(body: string): string {
-    if (body.includes('Posted from') && body.includes('personal_IDE')) return body;
+    if ((body.includes('Posted from') || body.includes('Sent from')) && body.includes('personal_IDE')) return body;
     return body + APP_DISCLAIMER;
   }
 

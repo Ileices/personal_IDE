@@ -3234,6 +3234,15 @@ export const HELP_SECTIONS: HelpSection[] = [
       { url: 'https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16867042', label: '#17 — Pass 1: Community Hub + GitHub Integration parity' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16867043', label: '#17 — Pass 2: GitHub roadmap phase-by-phase status map' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/8', label: 'Discussion #8 — GitHub Integration & Community Engine: Full Roadmap (Phases 1–9)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/56', label: 'Discussion #56 — Model routing integrity pass (selected-model precedence + fallback-only strategy chain)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16887770', label: '#20 — Cross-link note to model routing integrity pass (#56)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/24#discussioncomment-16887771', label: '#24 — Cross-link note to model routing integrity pass (#56)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887772', label: '#17 — Truth-ledger backlink for model routing integrity pass (#56)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/58', label: 'Discussion #58 — Intel Panel + God Factory convergence execution thread (multi-pass hardening)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/59', label: 'Discussion #59 — Pass report + competitive benchmark (Copilot/Replit/Base44)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887811', label: '#17 — Truth-ledger backlink for convergence + benchmark discussions (#58/#59)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16887810', label: '#20 — Cross-link update to convergence + benchmark discussions (#58/#59)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/24#discussioncomment-16887809', label: '#24 — Cross-link update to convergence + benchmark discussions (#58/#59)' },
     ],
   },
   {
@@ -3335,6 +3344,11 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Related security advisories thread: https://github.com/Ileices/personal_IDE/discussions/10',
       'Original architecture gap analysis (Two Halves, What Works, What Does Not): https://github.com/Ileices/personal_IDE/discussions/2',
       'Project State — May 2026 (What Actually Works, What Does Not, and the Real Gap — covers God Factory tool inventory, Intel Panel pipeline status, agent self-awareness gap, and D2 Nano Sea priority updates): https://github.com/Ileices/personal_IDE/discussions/24',
+      'Model routing integrity pass (selected model precedence in chat send + fallback-only strategy chain): https://github.com/Ileices/personal_IDE/discussions/56',
+      'Latest truth-ledger backlink for model routing pass: https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887772',
+      'Intel Panel + God Factory convergence execution thread: https://github.com/Ileices/personal_IDE/discussions/58',
+      'Competitive benchmark + surpass strategy thread: https://github.com/Ileices/personal_IDE/discussions/59',
+      'Latest truth-ledger backlink for convergence + benchmark pass: https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16887811',
       'Update discipline: any GitHub/Community feature change should include synchronized updates in this ledger discussion and in-app Help links.'
     ]
   },
