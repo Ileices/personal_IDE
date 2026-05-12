@@ -13,7 +13,7 @@
 // new models are added they appear everywhere at once.
 // ============================================
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { MODELS, type ModelDefinition } from '@personal-ide/shared';
+import { MODELS, type ModelDefinition, extractProviderFromModelId } from '@personal-ide/shared';
 import { sortModelsByHealth, useModelStore } from '../stores/modelStore';
 import {
   Search, ChevronDown, ChevronUp, Check, Plus, Trash2,
@@ -37,15 +37,19 @@ export function isFreeModel(m: ModelDefinition): boolean {
   );
 }
 
-export function getProviderLabel(id: string): string {
-  const p = id.split('/')[0];
+/** Pass a routing provider key OR a full model ID (auto-extracts provider). */
+export function getProviderLabel(idOrProvider: string): string {
+  const p = idOrProvider.includes('/') ? extractProviderFromModelId(idOrProvider) : idOrProvider;
   const labels: Record<string, string> = {
-    openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini',
-    groq: 'Groq', cerebras: 'Cerebras', deepseek: 'DeepSeek',
-    'deepseek-direct': 'DeepSeek', qwen: 'Qwen', zhipuai: 'ZhipuAI',
-    moonshot: 'Moonshot', minimax: 'MiniMax', xai: 'xAI/Grok',
-    perplexity: 'Perplexity', fireworks: 'Fireworks', siliconflow: 'SiliconFlow',
-    github: 'GitHub Models', ollama: 'Ollama (local)', nano: 'Nano (local)',
+    github: 'GitHub Models',
+    'openai-direct': 'OpenAI (Direct)', 'deepseek-direct': 'DeepSeek (Direct)',
+    anthropic: 'Anthropic', gemini: 'Gemini', groq: 'Groq', cerebras: 'Cerebras',
+    deepseek: 'DeepSeek', qwen: 'Qwen', zhipuai: 'ZhipuAI', moonshot: 'Moonshot',
+    minimax: 'MiniMax', xai: 'xAI/Grok', perplexity: 'Perplexity',
+    fireworks: 'Fireworks', siliconflow: 'SiliconFlow', ollama: 'Ollama (local)',
+    nano: 'Nano (local)', openrouter: 'OpenRouter', mistral: 'Mistral',
+    together: 'Together AI', cohere: 'Cohere', huggingface: 'HuggingFace',
+    lmstudio: 'LM Studio',
   };
   return labels[p] || p.charAt(0).toUpperCase() + p.slice(1);
 }
@@ -53,16 +57,26 @@ export function getProviderLabel(id: string): string {
 export function groupByProvider(models: ModelDefinition[]): [string, ModelDefinition[]][] {
   const groups: Record<string, ModelDefinition[]> = {};
   for (const m of models) {
-    const p = m.id.split('/')[0];
+    // Use routing provider — openai/gpt-4.1 routes via GitHub Models, not OpenAI Direct
+    const p = extractProviderFromModelId(m.id);
     if (!groups[p]) groups[p] = [];
     groups[p].push(m);
   }
-  return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  return Object.entries(groups).sort(([a], [b]) => {
+    // GitHub Models first (PAT models), local last
+    if (a === 'github') return -1;
+    if (b === 'github') return 1;
+    if (a === 'ollama' || a === 'nano') return 1;
+    if (b === 'ollama' || b === 'nano') return -1;
+    return a.localeCompare(b);
+  });
 }
 
-function providerColor(provider: string): string {
+function providerColor(idOrProvider: string): string {
+  const p = idOrProvider.includes('/') ? extractProviderFromModelId(idOrProvider) : idOrProvider;
   const colors: Record<string, string> = {
-    openai: 'text-green-400 bg-green-500/10',
+    github: 'text-slate-300 bg-slate-500/10',
+    'openai-direct': 'text-green-400 bg-green-500/10',
     anthropic: 'text-orange-400 bg-orange-500/10',
     gemini: 'text-blue-400 bg-blue-500/10',
     groq: 'text-purple-400 bg-purple-500/10',
@@ -73,9 +87,12 @@ function providerColor(provider: string): string {
     xai: 'text-red-400 bg-red-500/10',
     fireworks: 'text-amber-400 bg-amber-500/10',
     siliconflow: 'text-teal-400 bg-teal-500/10',
-    github: 'text-slate-300 bg-slate-500/10',
+    ollama: 'text-lime-400 bg-lime-500/10',
+    nano: 'text-emerald-400 bg-emerald-500/10',
+    openrouter: 'text-violet-400 bg-violet-500/10',
+    mistral: 'text-indigo-400 bg-indigo-500/10',
   };
-  return colors[provider] || 'text-ide-text-dim bg-ide-panel';
+  return colors[p] || 'text-ide-text-dim bg-ide-panel';
 }
 
 function getLocalCatalogEntry(modelId: string) {
@@ -246,9 +263,10 @@ export function ModelDropdown({
     preferTestedModelsFirst, hideFailedModels,
     favoritedModels, toggleFavorite,
   } = useModelStore();
+  type ModelFilter = 'all' | 'favorites' | 'working' | 'failed' | 'rate_limited' | 'cost_blocked' | 'discontinued' | 'not_tested';
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<ModelFilter>('all');
   const [pendingInstallModel, setPendingInstallModel] = useState<ModelDefinition | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -271,23 +289,30 @@ export function ModelDropdown({
 
   const filtered = useMemo(() => {
     let list = allModels;
-    if (hideFailedModels) {
-      list = list.filter(m => !failedModels[m.id] || m.id === value);
+    // Apply status filter
+    switch (activeFilter) {
+      case 'favorites': list = list.filter(m => favoritedModels.has(m.id)); break;
+      case 'working':   list = list.filter(m => workingModels.has(m.id)); break;
+      case 'not_tested': list = list.filter(m => !workingModels.has(m.id) && !failedModels[m.id]); break;
+      case 'failed':    list = list.filter(m => !!failedModels[m.id]); break;
+      case 'rate_limited': list = list.filter(m => failedModels[m.id]?.classification === 'rate_limited'); break;
+      case 'cost_blocked': list = list.filter(m => failedModels[m.id]?.classification === 'cost_blocked'); break;
+      case 'discontinued': list = list.filter(m => failedModels[m.id]?.classification === 'discontinued'); break;
+      default:
+        // 'all' — hide failed if the global setting is on, but always show the current selection
+        if (hideFailedModels) list = list.filter(m => !failedModels[m.id] || m.id === value);
+        break;
     }
-    if (showFavoritesOnly) {
-      list = list.filter(m => favoritedModels.has(m.id));
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(m =>
+        m.id.toLowerCase().includes(q) ||
+        m.name.toLowerCase().includes(q) ||
+        m.publisher.toLowerCase().includes(q)
+      );
     }
-    if (!search) {
-      return preferTestedModelsFirst ? sortModelsByHealth(list, workingModels, failedModels) : list;
-    }
-    const q = search.toLowerCase();
-    const searched = list.filter(m =>
-      m.id.toLowerCase().includes(q) ||
-      m.name.toLowerCase().includes(q) ||
-      m.publisher.toLowerCase().includes(q)
-    );
-    return preferTestedModelsFirst ? sortModelsByHealth(searched, workingModels, failedModels) : searched;
-  }, [search, allModels, hideFailedModels, failedModels, preferTestedModelsFirst, workingModels, value, showFavoritesOnly, favoritedModels]);
+    return preferTestedModelsFirst ? sortModelsByHealth(list, workingModels, failedModels) : list;
+  }, [search, allModels, hideFailedModels, failedModels, preferTestedModelsFirst, workingModels, value, activeFilter, favoritedModels]);
 
   const groups = useMemo(() => groupByProvider(filtered), [filtered]);
   const selected = allModels.find(m => m.id === value);
@@ -324,7 +349,7 @@ export function ModelDropdown({
       >
         {selected ? (
           <span className="flex items-center gap-1.5 min-w-0">
-            <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${providerColor(selected.id.split('/')[0])}`}>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${providerColor(selected.id)}`}>
               {getProviderLabel(selected.id)}
             </span>
             <span className="text-ide-text truncate">{selected.name}</span>
@@ -353,20 +378,37 @@ export function ModelDropdown({
                 className="w-full pl-6 pr-2 py-1 bg-ide-bg border border-ide-border rounded text-xs focus:outline-none focus:border-ide-accent"
               />
             </div>
-            {favoritedModels.size > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowFavoritesOnly(v => !v)}
-                className={`mt-1.5 w-full flex items-center gap-1.5 px-2 py-1 rounded text-[10px] transition-colors ${
-                  showFavoritesOnly
-                    ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
-                    : 'text-ide-text-dim hover:bg-ide-border border border-ide-border/50'
-                }`}
-              >
-                <Star className={`w-3 h-3 ${showFavoritesOnly ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                {showFavoritesOnly ? `Favorites (${favoritedModels.size}) — click to show all` : `Show ${favoritedModels.size} favorite${favoritedModels.size !== 1 ? 's' : ''}`}
-              </button>
-            )}
+            {/* Filter chips — browse by model status */}
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {([
+                { key: 'all' as const, label: `All (${allModels.length})` },
+                { key: 'favorites' as const, label: `⭐ Fav${favoritedModels.size > 0 ? ` (${favoritedModels.size})` : ''}`, cls: 'yellow' },
+                { key: 'working' as const, label: `✅ Working${workingModels.size > 0 ? ` (${workingModels.size})` : ''}`, cls: 'green' },
+                { key: 'not_tested' as const, label: '❓ Not Tested', cls: 'slate' },
+                { key: 'failed' as const, label: '❌ Failed', cls: 'red' },
+                { key: 'rate_limited' as const, label: '🚦 Rate Limit', cls: 'orange' },
+                { key: 'cost_blocked' as const, label: '💰 Cost', cls: 'amber' },
+                { key: 'discontinued' as const, label: '🚫 Dead', cls: 'gray' },
+              ]).map(({ key, label, cls }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveFilter(key)}
+                  className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${
+                    activeFilter === key
+                      ? cls === 'yellow' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
+                        : cls === 'green' ? 'bg-green-500/20 text-green-300 border-green-500/30'
+                        : cls === 'red' ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                        : cls === 'orange' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30'
+                        : cls === 'amber' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        : 'bg-ide-accent/20 text-ide-accent border-ide-accent/30'
+                      : 'bg-ide-bg text-ide-text-dim border-ide-border hover:border-ide-accent/40'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="max-h-72 overflow-y-auto">
             {groups.map(([provider, models]) => (
@@ -539,7 +581,7 @@ export function ModelPoolEditor({
         )}
         {models.map((id, idx) => {
           const def = allModels.find(m => m.id === id);
-          const provider = id.split('/')[0];
+          const provider = extractProviderFromModelId(id);
           return (
             <div key={id} className="flex items-center gap-1.5 px-2 py-1 bg-ide-bg border border-ide-border rounded group">
               <span className="text-[9px] text-ide-text-dim font-mono w-4 text-right">{idx + 1}</span>

@@ -404,10 +404,48 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   testAllModels: async (modelIds?: string[]) => {
     const ids = modelIds && modelIds.length > 0 ? modelIds : get().allModels.map(m => m.id);
     set({ bulkTestInProgress: true, bulkTestProgress: { completed: 0, total: ids.length } });
-    for (let idx = 0; idx < ids.length; idx++) {
-      await get().testModel(ids[idx]);
-      set({ bulkTestProgress: { completed: idx + 1, total: ids.length } });
+
+    try {
+      // Use the bulk-test endpoint — it groups by provider, uses short timeouts,
+      // writes to model_registry, and writes a blame_record for the session.
+      const res = await fetch(`${API_BASE}/api/models/bulk-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelIds: ids }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const results: Array<{ modelId: string; success: boolean; classification: string; error?: string }> = data.results || [];
+
+        // Apply results to local store state
+        for (const r of results) {
+          set({ bulkTestProgress: { completed: (get().bulkTestProgress.completed + 1), total: ids.length } });
+          if (r.success) {
+            get().markWorking(r.modelId);
+          } else {
+            get().markFailed(r.modelId, {
+              provider: r.modelId.split('/')[0] || 'unknown',
+              classification: r.classification as FailedModelRecord['classification'],
+              error: r.error || 'Model test failed',
+            });
+          }
+        }
+      } else {
+        // Fallback to individual tests if bulk endpoint is unavailable
+        for (let idx = 0; idx < ids.length; idx++) {
+          await get().testModel(ids[idx]);
+          set({ bulkTestProgress: { completed: idx + 1, total: ids.length } });
+        }
+      }
+    } catch {
+      // Fallback to individual tests
+      for (let idx = 0; idx < ids.length; idx++) {
+        await get().testModel(ids[idx]);
+        set({ bulkTestProgress: { completed: idx + 1, total: ids.length } });
+      }
     }
+
     set({ bulkTestInProgress: false });
   },
 }));
