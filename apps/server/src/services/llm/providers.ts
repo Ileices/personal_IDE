@@ -9,6 +9,14 @@ import { MODELS, extractProviderFromModelId } from '@personal-ide/shared';
 import { appConfig } from '../../config.js';
 import { smartDecrypt } from '../crypto/index.js';
 
+function decryptTokenOrPlain(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const decrypted = smartDecrypt(value, appConfig.security.encryptKey);
+  if (decrypted && decrypted.length > 0) return decrypted;
+  // Backward compatibility for legacy/plaintext rows.
+  return value.length > 10 ? value : null;
+}
+
 /** Create an OpenAI-compatible client for any provider */
 export function createProviderClient(
   provider: ProviderType,
@@ -79,9 +87,29 @@ export function getClientFromDb(db: any, provider: ProviderType = 'github'): Ope
   }
 
   if (provider === 'github') {
-    const authRow = db.prepare('SELECT token_encrypted FROM auth_tokens WHERE is_active = 1').get() as any;
+    // Prefer active non-guest GitHub account.
+    const authRow = db.prepare(`
+      SELECT token_encrypted
+      FROM auth_tokens
+      WHERE is_active = 1 AND github_user_id != -1
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get() as any;
     if (authRow?.token_encrypted) {
-      const token = smartDecrypt(authRow.token_encrypted, appConfig.security.encryptKey);
+      const token = decryptTokenOrPlain(authRow.token_encrypted);
+      if (token) return createGitHubClient(token);
+    }
+
+    // Fallback to most recent saved GitHub account when guest/local profile is active.
+    const fallbackAuthRow = db.prepare(`
+      SELECT token_encrypted
+      FROM auth_tokens
+      WHERE github_user_id != -1
+      ORDER BY is_active DESC, updated_at DESC
+      LIMIT 1
+    `).get() as any;
+    if (fallbackAuthRow?.token_encrypted) {
+      const token = decryptTokenOrPlain(fallbackAuthRow.token_encrypted);
       if (token) return createGitHubClient(token);
     }
 
@@ -90,7 +118,7 @@ export function getClientFromDb(db: any, provider: ProviderType = 'github'): Ope
       "SELECT api_key_encrypted, base_url FROM provider_configs WHERE provider_id = 'github' AND enabled = 1"
     ).get() as any;
     if (!cfgRow?.api_key_encrypted) return null;
-    const token = smartDecrypt(cfgRow.api_key_encrypted, appConfig.security.encryptKey);
+    const token = decryptTokenOrPlain(cfgRow.api_key_encrypted);
     if (!token) return null;
     const base = cfgRow.base_url || 'https://models.github.ai/inference';
     return createProviderClient('github', base, token);
