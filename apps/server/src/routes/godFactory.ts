@@ -1470,6 +1470,39 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     });
   });
 
+  // GET /api/god-factory/signals
+  // Forces a fresh signal synthesis pass and returns compact queue/suggestion summary.
+  app.get('/signals', async (_req: FastifyRequest, reply: FastifyReply) => {
+    refreshGodFactorySignals(db);
+
+    const queueCounts = db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN user_acknowledged = 0 THEN 1 ELSE 0 END) AS unacknowledged
+      FROM notification_queue
+    `).get() as { total?: number; unacknowledged?: number } | undefined;
+
+    const suggestionCounts = db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN user_response IS NULL THEN 1 ELSE 0 END) AS pending
+      FROM idle_suggestions
+    `).get() as { total?: number; pending?: number } | undefined;
+
+    return reply.send({
+      ok: true,
+      refreshed_at: new Date().toISOString(),
+      notifications: {
+        total: queueCounts?.total ?? 0,
+        unacknowledged: queueCounts?.unacknowledged ?? 0,
+      },
+      idle_suggestions: {
+        total: suggestionCounts?.total ?? 0,
+        pending: suggestionCounts?.pending ?? 0,
+      },
+    });
+  });
+
   app.get('/auto-intel/settings', async (_req: FastifyRequest, reply: FastifyReply) => {
     const settings = loadAutoIntelSettings();
     const lastRunAt = getKv(db, AUTO_INTEL_LAST_RUN_KEY);

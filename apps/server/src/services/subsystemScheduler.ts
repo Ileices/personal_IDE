@@ -120,7 +120,10 @@ async function runAutoIntelCycle(db: Database.Database, settings: AutoIntelSetti
   const baseUrl = `http://127.0.0.1:${serverPort}`;
 
   // Trigger the same God Factory signal-refresh path the Intel panel uses.
-  await fetch(`${baseUrl}/api/god-factory/queue?limit=1`).catch(() => null);
+  const signalsRes = await fetch(`${baseUrl}/api/god-factory/signals`).catch(() => null);
+  if (!signalsRes || !signalsRes.ok) {
+    throw new Error('auto-intel signals refresh failed');
+  }
 
   // Keep crawlers moving even when the browser UI is closed.
   executeSubsystem(db, { subsystem: 'suggested_jobs_crawler', depth: 4 });

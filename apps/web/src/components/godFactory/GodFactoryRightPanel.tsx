@@ -1703,7 +1703,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       const flushRes = await fetch(`${API_BASE}/api/god-factory/gap-reports/flush-to-jobs`, { method: 'POST' }).catch(() => null);
       if (!flushRes || !flushRes.ok) throw new Error('flush-to-jobs failed');
       // Step 2: refresh God Factory signals
-      await fetch(`${API_BASE}/api/god-factory/signals`, { method: 'GET' }).catch(() => null);
+      const signalsRes = await fetch(`${API_BASE}/api/god-factory/signals`, { method: 'GET' }).catch(() => null);
+      if (!signalsRes || !signalsRes.ok) throw new Error('signals refresh failed');
       // Step 3: reload queue and jobs
       loadQueue();
       loadSuggestedJobs();
