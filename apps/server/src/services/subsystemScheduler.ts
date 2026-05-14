@@ -13,6 +13,7 @@ type AutoIntelSettings = {
   intervalSec: number;
   executeJobs: boolean;
   analyzeEmployer: boolean;
+  reflectExternalJobs: boolean;
   projectId: string | null;
   model: string | null;
   maxIterations: number;
@@ -25,6 +26,7 @@ const DEFAULT_AUTO_INTEL_SETTINGS: AutoIntelSettings = {
   intervalSec: 15 * 60,
   executeJobs: false,
   analyzeEmployer: true,
+  reflectExternalJobs: true,
   projectId: null,
   model: null,
   maxIterations: 0,
@@ -99,6 +101,7 @@ function loadAutoIntelSettings(db: Database.Database): AutoIntelSettings {
       intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(parsed.intervalSec || DEFAULT_AUTO_INTEL_SETTINGS.intervalSec))),
       executeJobs: !!parsed.executeJobs,
       analyzeEmployer: parsed.analyzeEmployer ?? DEFAULT_AUTO_INTEL_SETTINGS.analyzeEmployer,
+      reflectExternalJobs: parsed.reflectExternalJobs ?? DEFAULT_AUTO_INTEL_SETTINGS.reflectExternalJobs,
       projectId: parsed.projectId ? String(parsed.projectId) : null,
       model: parsed.model ? String(parsed.model) : null,
       maxIterations: Number.isFinite(Number(parsed.maxIterations)) ? Number(parsed.maxIterations) : DEFAULT_AUTO_INTEL_SETTINGS.maxIterations,
@@ -135,6 +138,18 @@ async function runAutoIntelCycle(db: Database.Database, settings: AutoIntelSetti
 
   if (settings.analyzeEmployer) {
     await fetch(`${baseUrl}/api/employer/analyze`, { method: 'POST' }).catch(() => null);
+  }
+
+  if (settings.reflectExternalJobs) {
+    const reflectRes = await fetch(`${baseUrl}/api/god-factory/external-jobs/reflect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: settings.projectId || null }),
+    }).catch(() => null);
+
+    if (!reflectRes || !reflectRes.ok) {
+      throw new Error('auto-intel external reflection failed');
+    }
   }
 
   if (!settings.executeJobs) return;

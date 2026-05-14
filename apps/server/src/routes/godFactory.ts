@@ -565,6 +565,117 @@ function flushFlaggedGapReportsToJobs(db: Db): number {
   return created;
 }
 
+/**
+ * External project jobs should create internal improvement work for Personal IDE itself.
+ *
+ * For each active external_project job, generate a reflection job that focuses on
+ * improving the IDE pipeline/tooling so future external builds succeed more often.
+ */
+function reflectExternalProjectsToInternalJobs(db: Db, options?: { projectId?: string | null; limit?: number }): number {
+  const limit = Math.max(1, Math.min(200, Number(options?.limit || 40)));
+  const scopedProjectId = options?.projectId ? String(options.projectId) : null;
+
+  const externalJobs = db.prepare(`
+    SELECT job_id, title, description, priority, source, affected_files, affected_devtags
+    FROM job_records
+    WHERE job_category = 'external_project'
+      AND implementation_status NOT IN ('rejected', 'archived')
+    ORDER BY
+      CASE priority
+        WHEN 'critical' THEN 0
+        WHEN 'high' THEN 1
+        WHEN 'medium' THEN 2
+        ELSE 3
+      END,
+      datetime(created_at) DESC
+    LIMIT ?
+  `).all(limit) as Array<{
+    job_id: string;
+    title: string;
+    description: string | null;
+    priority: string;
+    source: string | null;
+    affected_files: string | null;
+    affected_devtags: string | null;
+  }>;
+
+  if (externalJobs.length === 0) return 0;
+
+  let created = 0;
+
+  for (const ext of externalJobs) {
+    const marker = `reflection_from_external_job:${ext.job_id}`;
+    const existing = db.prepare(`
+      SELECT job_id
+      FROM job_records
+      WHERE source = 'god_factory_agent'
+        AND job_category = 'god_factory_scan'
+        AND implementation_status NOT IN ('rejected', 'archived')
+        AND description LIKE ?
+      LIMIT 1
+    `).get(`%${marker}%`) as { job_id?: string } | undefined;
+
+    if (existing?.job_id) continue;
+
+    const reflectionJobId = randomUUID();
+    const extPriority = String(ext.priority || 'medium');
+    const mappedPriority = extPriority === 'critical' || extPriority === 'high' ? 'high' : 'medium';
+    const sourceIds = JSON.stringify([ext.job_id]);
+    const affectedFiles = parseJson<string[]>(ext.affected_files, []);
+    const affectedDevtags = parseJson<string[]>(ext.affected_devtags, []);
+    const title = `Reflect external outcome: ${String(ext.title || 'External project issue').slice(0, 110)}`;
+    const description = [
+      'External project signal indicates a Personal IDE pipeline/tooling opportunity.',
+      `Source external job: ${ext.job_id}`,
+      `Source origin: ${ext.source || 'unknown'}`,
+      marker,
+      '',
+      'Goal: improve Personal IDE generation quality for future external builds by implementing reusable internal fixes/tools.',
+      ext.description ? `External description: ${ext.description.slice(0, 900)}` : null,
+    ].filter(Boolean).join('\n');
+
+    db.prepare(`
+      INSERT INTO job_records
+        (id, job_id, project_id, job_category, source, source_record_ids,
+         priority, title, description, affected_files, affected_devtags,
+         affected_plantags, required_buildtags, blocking_jobs, blocked_by_jobs,
+         hierarchy, atomic_steps, sandbox_spec, implementation_status,
+         created_cycle, last_updated_cycle, timestamp, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+    `).run(
+      randomUUID(),
+      reflectionJobId,
+      scopedProjectId,
+      'god_factory_scan',
+      'god_factory_agent',
+      sourceIds,
+      mappedPriority,
+      title,
+      description,
+      JSON.stringify(affectedFiles),
+      JSON.stringify(affectedDevtags),
+      '[]',
+      '[]',
+      '[]',
+      '[]',
+      JSON.stringify({ phase: 1, milestone: 'external_reflection', parent_job_id: ext.job_id, child_job_ids: [] }),
+      JSON.stringify([
+        'Inspect external failure/success pattern and root-cause in Personal IDE pipeline',
+        'Design internal tool/policy/runtime hardening to improve next external build',
+        'Implement and verify with tests/telemetry, then document in help/discussion links',
+      ]),
+      JSON.stringify({ sandbox_id: null, status: 'not_started', cycle_limit: 50, cycles_used: 0, test_results: [], human_review_required: false, human_review_completed: false }),
+      JOB_STATUS.SUGGESTED,
+      0,
+      0,
+    );
+
+    created += 1;
+  }
+
+  return created;
+}
+
 function refreshGodFactorySignals(db: Db): void {
   // Wire gap reports to jobs — converts flagged gap_reports into job_records entries.
   // This closes the highest-priority wiring gap: gap analysis DOES write flagged records,
@@ -789,6 +900,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     intervalSec: number;
     executeJobs: boolean;
     analyzeEmployer: boolean;
+    reflectExternalJobs: boolean;
     projectId: string | null;
     model: string | null;
     maxIterations: number;
@@ -801,6 +913,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     intervalSec: 15 * 60,
     executeJobs: false,
     analyzeEmployer: true,
+    reflectExternalJobs: true,
     projectId: null,
     model: null,
     maxIterations: 0,
@@ -818,6 +931,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(parsed.intervalSec || DEFAULT_AUTO_INTEL_SETTINGS.intervalSec))),
         executeJobs: !!parsed.executeJobs,
         analyzeEmployer: parsed.analyzeEmployer ?? DEFAULT_AUTO_INTEL_SETTINGS.analyzeEmployer,
+        reflectExternalJobs: parsed.reflectExternalJobs ?? DEFAULT_AUTO_INTEL_SETTINGS.reflectExternalJobs,
         projectId: parsed.projectId ? String(parsed.projectId) : null,
         model: parsed.model ? String(parsed.model) : null,
         maxIterations: Number.isFinite(Number(parsed.maxIterations)) ? Number(parsed.maxIterations) : DEFAULT_AUTO_INTEL_SETTINGS.maxIterations,
@@ -839,6 +953,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(patch.intervalSec ?? current.intervalSec))),
       executeJobs: patch.executeJobs ?? current.executeJobs,
       analyzeEmployer: patch.analyzeEmployer ?? current.analyzeEmployer,
+      reflectExternalJobs: patch.reflectExternalJobs ?? current.reflectExternalJobs,
       enabled: patch.enabled ?? current.enabled,
       projectId: patch.projectId === undefined ? current.projectId : (patch.projectId ? String(patch.projectId) : null),
       model: patch.model === undefined ? current.model : (patch.model ? String(patch.model) : null),
@@ -1471,6 +1586,21 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       message: created > 0
         ? `Flushed ${created} gap report(s) into job_records.`
         : 'No unacknowledged flagged gap reports found.',
+    });
+  });
+
+  app.post('/external-jobs/reflect', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = (req.body || {}) as { projectId?: string | null; limit?: number };
+    const created = reflectExternalProjectsToInternalJobs(db, {
+      projectId: body.projectId ?? null,
+      limit: body.limit,
+    });
+
+    return reply.status(200).send({
+      jobs_created: created,
+      message: created > 0
+        ? `Created ${created} internal reflection job(s) from external_project records.`
+        : 'No new external reflection jobs needed.',
     });
   });
 

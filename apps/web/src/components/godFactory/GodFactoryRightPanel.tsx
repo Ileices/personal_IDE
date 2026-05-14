@@ -166,6 +166,7 @@ interface AutoIntelSettingsResponse {
     intervalSec: number;
     executeJobs: boolean;
     analyzeEmployer: boolean;
+    reflectExternalJobs: boolean;
     projectId: string | null;
     model: string | null;
     maxIterations: number;
@@ -741,6 +742,14 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       return true;
     }
   });
+  const [autoIntelReflectExternal, setAutoIntelReflectExternal] = useState(() => {
+    try {
+      const raw = localStorage.getItem('gf_autoIntelReflectExternal');
+      return raw === null ? true : raw === '1';
+    } catch {
+      return true;
+    }
+  });
   const [autoIntelIntervalMin, setAutoIntelIntervalMin] = useState(() => {
     try { return parseInt(localStorage.getItem('gf_autoIntelIntervalMin') || '15', 10); } catch { return 15; }
   });
@@ -1081,6 +1090,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         setAutoIntelEnabled(!!d.settings.enabled);
         setAutoIntelExecuteJobs(!!d.settings.executeJobs);
         setAutoIntelAnalyzeEmployer(d.settings.analyzeEmployer ?? true);
+        setAutoIntelReflectExternal(d.settings.reflectExternalJobs ?? true);
         setAutoIntelIntervalMin(Math.max(1, Math.round(Number(d.settings.intervalSec || 900) / 60)));
         if (d.runtime?.last_run_at) setAutoIntelLastRun(d.runtime.last_run_at);
         if (d.runtime?.last_error) setAutoIntelError(d.runtime.last_error);
@@ -1194,12 +1204,14 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   useEffect(() => { try { localStorage.setItem('gf_autoIntelEnabled', autoIntelEnabled ? '1' : '0'); } catch {} }, [autoIntelEnabled]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelExecuteJobs', autoIntelExecuteJobs ? '1' : '0'); } catch {} }, [autoIntelExecuteJobs]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelAnalyzeEmployer', autoIntelAnalyzeEmployer ? '1' : '0'); } catch {} }, [autoIntelAnalyzeEmployer]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelReflectExternal', autoIntelReflectExternal ? '1' : '0'); } catch {} }, [autoIntelReflectExternal]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelIntervalMin', String(autoIntelIntervalMin)); } catch {} }, [autoIntelIntervalMin]);
   useEffect(() => {
     const payload = {
       enabled: autoIntelEnabled,
       executeJobs: autoIntelExecuteJobs,
       analyzeEmployer: autoIntelAnalyzeEmployer,
+      reflectExternalJobs: autoIntelReflectExternal,
       intervalSec: Math.max(60, autoIntelIntervalMin * 60),
       projectId: projectId || null,
       model: chatSelectedModel || null,
@@ -1212,7 +1224,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(() => {});
-  }, [autoIntelEnabled, autoIntelExecuteJobs, autoIntelAnalyzeEmployer, autoIntelIntervalMin, projectId, chatSelectedModel]);
+  }, [autoIntelEnabled, autoIntelExecuteJobs, autoIntelAnalyzeEmployer, autoIntelReflectExternal, autoIntelIntervalMin, projectId, chatSelectedModel]);
   useEffect(() => {
     try {
       readyNoticeShownRef.current = sessionStorage.getItem(GF_READY_NOTICE_KEY) === '1';
@@ -1721,9 +1733,19 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (autoIntelAnalyzeEmployer) {
         await fetch(`${API_BASE}/api/employer/analyze`, { method: 'POST' }).catch(() => null);
       }
+      // Step 2c: reflect external project outcomes into internal IDE-improvement jobs
+      if (autoIntelReflectExternal) {
+        const reflectRes = await fetch(`${API_BASE}/api/god-factory/external-jobs/reflect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: projectId || null }),
+        }).catch(() => null);
+        if (!reflectRes || !reflectRes.ok) throw new Error('external reflection failed');
+      }
       // Step 3: reload queue and jobs
       loadQueue();
       loadSuggestedJobs();
+      loadExternalJobs();
       loadImplementingJobs();
       loadBackgroundStatus();
       loadCodebaseHealth();
@@ -1783,6 +1805,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   }, [
     autoIntelBusy,
     autoIntelAnalyzeEmployer,
+    autoIntelReflectExternal,
     autoIntelExecuteJobs,
     autoIntelFailCount,
     autoIntelIntervalMin,
@@ -1791,6 +1814,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     loadCodebaseHealth,
     loadEmployerStatus,
     loadEmployerSuggestions,
+    loadExternalJobs,
     loadImplementingJobs,
     loadQueue,
     loadSuggestedJobs,
@@ -2129,6 +2153,15 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   type="checkbox"
                   checked={autoIntelAnalyzeEmployer}
                   onChange={e => setAutoIntelAnalyzeEmployer(e.target.checked)}
+                  className="accent-purple-400"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 rounded bg-ide-bg/30 px-1.5 py-1">
+                <span className="text-ide-text-dim">Reflect external jobs into internal improvements</span>
+                <input
+                  type="checkbox"
+                  checked={autoIntelReflectExternal}
+                  onChange={e => setAutoIntelReflectExternal(e.target.checked)}
                   className="accent-purple-400"
                 />
               </label>
