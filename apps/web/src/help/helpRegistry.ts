@@ -510,6 +510,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       { url: 'https://github.com/Ileices/personal_IDE/discussions/69', label: 'Discussion #69 — Competitive gap pass: Copilot/Base44/Replit surpass plan' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/70', label: 'Discussion #70 — Pass update: external reflection jobs now feed internal IDE improvements' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/71', label: 'Discussion #71 — Pass update: cooldown horizon controls + welcome dedupe' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/72', label: 'Discussion #72 — Pass update: manual rate overrides + blame origin fallback summary' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/18', label: 'Discussion #18 — God Factory Agent Roadmap: Full IDE-Self-Programming Control Plane' },
     ],
   },
