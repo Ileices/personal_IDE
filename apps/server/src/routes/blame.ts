@@ -3,6 +3,8 @@
 // Full forensic attribution + quality analysis
 // ============================================
 import { createHash, randomUUID } from 'crypto';
+import { access, readdir, readFile, stat } from 'fs/promises';
+import path from 'path';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 const QUALITY_WEIGHTS = {
@@ -124,6 +126,115 @@ const parseJsonArray = <T = string>(value: unknown): T[] => {
     return [];
   }
 };
+
+const USER_SIGNATURE_RE = /\$usersignature\[([^\]\r\n]+)\]/gi;
+const SCANNED_CODE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json',
+  '.py', '.java', '.cs', '.cpp', '.cc', '.c', '.h', '.hpp',
+  '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.kts', '.scala',
+  '.css', '.scss', '.less', '.html', '.md', '.sql', '.sh', '.ps1', '.yml', '.yaml',
+]);
+
+function shouldSkipDir(name: string): boolean {
+  const n = name.toLowerCase();
+  return n === '.git' || n === 'node_modules' || n === 'dist' || n === 'build' || n === '.next' || n === '.turbo' || n === 'coverage';
+}
+
+async function collectCandidateFiles(root: string, maxFiles: number): Promise<string[]> {
+  const out: string[] = [];
+  const queue: string[] = [root];
+
+  while (queue.length > 0 && out.length < maxFiles) {
+    const dir = queue.shift()!;
+    let entries: Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }> = [];
+    try {
+      entries = await readdir(dir, { withFileTypes: true }) as Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>;
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (out.length >= maxFiles) break;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!shouldSkipDir(entry.name)) queue.push(full);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+
+      const ext = path.extname(entry.name).toLowerCase();
+      if (SCANNED_CODE_EXTENSIONS.has(ext)) out.push(full);
+    }
+  }
+
+  return out;
+}
+
+async function scanCodeOriginAssumptions(root: string, maxFiles: number) {
+  const files = await collectCandidateFiles(root, maxFiles);
+  const signatureCounts = new Map<string, number>();
+  const taggedFiles = new Set<string>();
+  let taggedLines = 0;
+
+  for (const file of files) {
+    let s = '';
+    try {
+      const st = await stat(file);
+      if (!st.isFile() || st.size > 512 * 1024) continue;
+      s = await readFile(file, 'utf8');
+    } catch {
+      continue;
+    }
+
+    USER_SIGNATURE_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = USER_SIGNATURE_RE.exec(s)) !== null) {
+      const tag = String(match[1] || '').trim().toLowerCase();
+      if (!tag) continue;
+      taggedFiles.add(file);
+      taggedLines += 1;
+      signatureCounts.set(tag, (signatureCounts.get(tag) || 0) + 1);
+    }
+  }
+
+  const topTags = [...signatureCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([tag, count]) => ({ tag, count }));
+
+  return {
+    scanned_files: files.length,
+    tagged_files: taggedFiles.size,
+    tagged_lines: taggedLines,
+    untagged_files: Math.max(0, files.length - taggedFiles.size),
+    top_user_tags: topTags,
+  };
+}
+
+async function resolveWorkspaceScanRoot(startDir: string): Promise<string> {
+  let dir = path.resolve(startDir);
+
+  for (let i = 0; i < 8; i += 1) {
+    try {
+      await access(path.join(dir, 'pnpm-workspace.yaml'));
+      return dir;
+    } catch {
+      // keep walking
+    }
+    try {
+      await access(path.join(dir, '.git'));
+      return dir;
+    } catch {
+      // keep walking
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return path.resolve(startDir);
+}
 
 const clamp01 = (n: number): number => Math.max(0, Math.min(1, n));
 const clamp100 = (n: number): number => Math.max(0, Math.min(100, n));
@@ -1329,6 +1440,36 @@ export async function blameRoutes(app: FastifyInstance) {
   // GET /usage-summary — aggregate request counts per model for a rolling time window
   // Query: window? (seconds, default 3600), top? (max models to return, default 10)
   // Used by: Intel Panel rate usage indicator, Employer Crawler stratification
+  app.get('/code-origin-summary', async (req: FastifyRequest, reply: FastifyReply) => {
+    const q = req.query as Record<string, string | undefined>;
+    const maxFiles = Math.max(50, Math.min(5000, Number(q.maxFiles || 2000)));
+    const scanRoot = await resolveWorkspaceScanRoot(process.cwd());
+
+    const scan = await scanCodeOriginAssumptions(scanRoot, maxFiles);
+
+    const blameCounts = db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN COALESCE(attributed_source, '') <> '' THEN 1 ELSE 0 END) AS attributed
+      FROM blame_records
+    `).get() as { total?: number; attributed?: number } | undefined;
+
+    const total = Number(blameCounts?.total || 0);
+    const attributed = Number(blameCounts?.attributed || 0);
+    const assumeCopilotForUntagged = attributed === 0;
+
+    return reply.send({
+      scan_root: scanRoot,
+      attribution: {
+        total_blame_records: total,
+        attributed_records: attributed,
+        mode: assumeCopilotForUntagged ? 'assume_github_copilot_for_untagged' : 'use_recorded_blame_attribution',
+        assumption_rule: 'If no blame attribution exists, untagged code is assumed to originate from github/copilot while $usersignature[TAG] markers are treated as user-authored spans.',
+      },
+      code_origin: scan,
+    });
+  });
+
   app.get('/usage-summary', async (req: FastifyRequest, reply: FastifyReply) => {
     const q = req.query as Record<string, string>;
     const windowSec = Math.max(60, Math.min(86400, parseInt(q.window || '3600', 10)));

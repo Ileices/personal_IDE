@@ -834,6 +834,19 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [employerStatus, setEmployerStatus] = useState<{ last_cycle: number; models_analyzed: number; pending_retirement: number; active_cooldown_overrides: number } | null>(null);
   const [employerAnalyzing, setEmployerAnalyzing] = useState(false);
   const [cooldownBusy, setCooldownBusy] = useState<string | null>(null);
+  const [manualCooldownSec, setManualCooldownSec] = useState(() => {
+    try { return Math.max(300, Math.min(7 * 24 * 3600, Number(localStorage.getItem('gf_manualCooldownSec') || '3600'))); } catch { return 3600; }
+  });
+  const [manualSleepSec, setManualSleepSec] = useState(() => {
+    try { return Math.max(900, Math.min(7 * 24 * 3600, Number(localStorage.getItem('gf_manualSleepSec') || '14400'))); } catch { return 14400; }
+  });
+  const [manualSkipCycles, setManualSkipCycles] = useState(() => {
+    try { return Math.max(1, Math.min(12, Number(localStorage.getItem('gf_manualSkipCycles') || '1'))); } catch { return 1; }
+  });
+  const [codeOriginSummary, setCodeOriginSummary] = useState<{
+    attribution?: { mode?: string; total_blame_records?: number; attributed_records?: number };
+    code_origin?: { scanned_files?: number; tagged_files?: number; tagged_lines?: number; untagged_files?: number; top_user_tags?: Array<{ tag: string; count: number }> };
+  } | null>(null);
 
   // ── Notification action busy state ──
   const [notifActionBusy, setNotifActionBusy] = useState<string | null>(null);
@@ -956,6 +969,13 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       .then((d: { models?: BlameRegistryModel[] } | null) => {
         if (d?.models) setBlameRegistry(d.models);
       })
+      .catch(() => {});
+  }, []);
+
+  const loadCodeOriginSummary = useCallback(() => {
+    fetch(`${API_BASE}/api/blame/code-origin-summary?maxFiles=1200`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d) => { if (d) setCodeOriginSummary(d); })
       .catch(() => {});
   }, []);
 
@@ -1091,13 +1111,19 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     }
   }, [loadEmployerStatus, loadEmployerSuggestions]);
 
-  const injectCooldown = useCallback(async (modelId: string, type: 'cooldown' | 'skip' | 'sleep' | 'clear', durationSec?: number) => {
+  const injectCooldown = useCallback(async (modelId: string, type: 'cooldown' | 'skip' | 'sleep' | 'clear', durationSec?: number, skipCycles?: number) => {
     setCooldownBusy(modelId);
     try {
       await fetch(`${API_BASE}/api/employer/cooldowns`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_id: modelId, type, duration_sec: durationSec ?? 3600, reason: 'Manual override from Intel Panel' }),
+        body: JSON.stringify({
+          model_id: modelId,
+          type,
+          duration_sec: durationSec ?? 3600,
+          skip_cycles: Math.max(1, Math.min(12, Number(skipCycles || 1))),
+          reason: 'Manual override from Intel Panel',
+        }),
       });
       loadRateUsage();
       loadEmployerStatus();
@@ -1221,6 +1247,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       loadEmployerStatus();
       loadEmployerSuggestions();
       loadBlameRegistry();
+      loadCodeOriginSummary();
       loadAutoIntelSettings();
 
       jobsTimer = window.setInterval(() => {
@@ -1240,6 +1267,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         loadRateUsage();
         loadEmployerStatus();
         loadBlameRegistry();
+        loadCodeOriginSummary();
       }, 20_000);
 
       void loadSubsystemSettings();
@@ -1266,13 +1294,16 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (jobsTimer) window.clearInterval(jobsTimer);
       if (gfTimer) window.clearInterval(gfTimer);
     };
-  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions, loadBlameRegistry, loadAutoIntelSettings]);
+  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions, loadBlameRegistry, loadCodeOriginSummary, loadAutoIntelSettings]);
 
   // ── Persist auto-intel settings to localStorage ──
   useEffect(() => { try { localStorage.setItem('gf_autoIntelEnabled', autoIntelEnabled ? '1' : '0'); } catch {} }, [autoIntelEnabled]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelExecuteJobs', autoIntelExecuteJobs ? '1' : '0'); } catch {} }, [autoIntelExecuteJobs]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelAnalyzeEmployer', autoIntelAnalyzeEmployer ? '1' : '0'); } catch {} }, [autoIntelAnalyzeEmployer]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelReflectExternal', autoIntelReflectExternal ? '1' : '0'); } catch {} }, [autoIntelReflectExternal]);
+  useEffect(() => { try { localStorage.setItem('gf_manualCooldownSec', String(manualCooldownSec)); } catch {} }, [manualCooldownSec]);
+  useEffect(() => { try { localStorage.setItem('gf_manualSleepSec', String(manualSleepSec)); } catch {} }, [manualSleepSec]);
+  useEffect(() => { try { localStorage.setItem('gf_manualSkipCycles', String(manualSkipCycles)); } catch {} }, [manualSkipCycles]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelCooldownProfile', autoIntelCooldownProfile); } catch {} }, [autoIntelCooldownProfile]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelCooldownHorizonHours', String(autoIntelCooldownHorizonHours)); } catch {} }, [autoIntelCooldownHorizonHours]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelAutoCooldownProfile', autoIntelAutoCooldownProfile ? '1' : '0'); } catch {} }, [autoIntelAutoCooldownProfile]);
@@ -2838,6 +2869,50 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                 <div className="text-[9px] text-ide-text-dim px-1 pb-1 text-center">No usage data yet</div>
               ) : (
                 <div className="mt-2">
+                  <div className="mb-1 grid grid-cols-3 gap-1">
+                    <label className="rounded bg-ide-bg/30 px-1 py-0.5 text-[8px] text-ide-text-dim flex items-center justify-between gap-1">
+                      <span>Cooldown</span>
+                      <select
+                        value={manualCooldownSec}
+                        onChange={e => setManualCooldownSec(Math.max(300, Math.min(7 * 24 * 3600, Number(e.target.value) || 3600)))}
+                        className="bg-ide-bg border border-ide-border/40 rounded px-0.5 text-ide-text text-[8px]"
+                      >
+                        <option value={1800}>30m</option>
+                        <option value={3600}>1h</option>
+                        <option value={7200}>2h</option>
+                        <option value={14400}>4h</option>
+                        <option value={86400}>24h</option>
+                      </select>
+                    </label>
+                    <label className="rounded bg-ide-bg/30 px-1 py-0.5 text-[8px] text-ide-text-dim flex items-center justify-between gap-1">
+                      <span>Sleep</span>
+                      <select
+                        value={manualSleepSec}
+                        onChange={e => setManualSleepSec(Math.max(900, Math.min(7 * 24 * 3600, Number(e.target.value) || 14400)))}
+                        className="bg-ide-bg border border-ide-border/40 rounded px-0.5 text-ide-text text-[8px]"
+                      >
+                        <option value={3600}>1h</option>
+                        <option value={14400}>4h</option>
+                        <option value={28800}>8h</option>
+                        <option value={86400}>24h</option>
+                        <option value={259200}>3d</option>
+                      </select>
+                    </label>
+                    <label className="rounded bg-ide-bg/30 px-1 py-0.5 text-[8px] text-ide-text-dim flex items-center justify-between gap-1">
+                      <span>Skip</span>
+                      <select
+                        value={manualSkipCycles}
+                        onChange={e => setManualSkipCycles(Math.max(1, Math.min(12, Number(e.target.value) || 1)))}
+                        className="bg-ide-bg border border-ide-border/40 rounded px-0.5 text-ide-text text-[8px]"
+                      >
+                        <option value={1}>1x</option>
+                        <option value={2}>2x</option>
+                        <option value={3}>3x</option>
+                        <option value={5}>5x</option>
+                        <option value={8}>8x</option>
+                      </select>
+                    </label>
+                  </div>
                   <div className="text-[9px] uppercase tracking-wider text-ide-text-dim mb-1">Rate Usage (last 1h)</div>
                   {rateUsage.map(u => {
                     const pct = u.usagePct ?? Math.min(100, Math.round((u.count / u.limitEst) * 100));
@@ -2856,23 +2931,23 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                         {/* Manual cooldown controls */}
                         <div className="flex gap-1">
                           <button
-                            title="Inject 1h cooldown for this model"
+                            title="Inject configured cooldown for this model"
                             disabled={isBusy}
-                            onClick={() => void injectCooldown(u.model, 'cooldown', 3600)}
+                            onClick={() => void injectCooldown(u.model, 'cooldown', manualCooldownSec)}
                             className="flex-1 text-[8px] px-1 py-0.5 rounded bg-orange-900/40 text-orange-300 hover:bg-orange-800/50 disabled:opacity-40 border border-orange-700/30">
                             {isBusy ? <RefreshCw className="w-2 h-2 animate-spin mx-auto" /> : 'Cooldown'}
                           </button>
                           <button
-                            title="Skip this model on its next cycle"
+                            title="Skip this model for configured cycles"
                             disabled={isBusy}
-                            onClick={() => void injectCooldown(u.model, 'skip')}
+                            onClick={() => void injectCooldown(u.model, 'skip', undefined, manualSkipCycles)}
                             className="flex-1 text-[8px] px-1 py-0.5 rounded bg-yellow-900/40 text-yellow-300 hover:bg-yellow-800/50 disabled:opacity-40 border border-yellow-700/30">
                             Skip
                           </button>
                           <button
-                            title="Put this model to sleep for 4h"
+                            title="Put this model to sleep for configured duration"
                             disabled={isBusy}
-                            onClick={() => void injectCooldown(u.model, 'sleep', 14400)}
+                            onClick={() => void injectCooldown(u.model, 'sleep', manualSleepSec)}
                             className="flex-1 text-[8px] px-1 py-0.5 rounded bg-slate-700/40 text-slate-300 hover:bg-slate-600/50 disabled:opacity-40 border border-slate-600/30">
                             Sleep
                           </button>
@@ -2887,6 +2962,27 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {codeOriginSummary?.attribution && codeOriginSummary?.code_origin && (
+                <div className="mt-2 rounded border border-ide-border/30 bg-ide-bg/30 px-2 py-1.5 text-[9px]">
+                  <div className="uppercase tracking-wider text-ide-text-dim mb-1">Code Origin Attribution</div>
+                  <div className="text-ide-text-dim">
+                    mode: <span className="text-ide-text">{codeOriginSummary.attribution.mode || 'unknown'}</span>
+                  </div>
+                  <div className="text-ide-text-dim">
+                    scanned: {codeOriginSummary.code_origin.scanned_files || 0} files · tagged: {codeOriginSummary.code_origin.tagged_files || 0} · untagged: {codeOriginSummary.code_origin.untagged_files || 0}
+                  </div>
+                  {!!codeOriginSummary.code_origin.top_user_tags?.length && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {codeOriginSummary.code_origin.top_user_tags.slice(0, 4).map(tag => (
+                        <span key={tag.tag} className="px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                          {tag.tag} ({tag.count})
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
