@@ -14,6 +14,8 @@ type AutoIntelSettings = {
   executeJobs: boolean;
   analyzeEmployer: boolean;
   reflectExternalJobs: boolean;
+  cooldownProfile: 'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl';
+  cooldownHorizonHours: number;
   projectId: string | null;
   model: string | null;
   maxIterations: number;
@@ -21,12 +23,22 @@ type AutoIntelSettings = {
   autoCooldownProfile: boolean;
 };
 
+const VALID_COOLDOWN_PROFILES = new Set<AutoIntelSettings['cooldownProfile']>([
+  'safe-exhaustive',
+  'aggressive',
+  'paced',
+  'slow',
+  'crawl',
+]);
+
 const DEFAULT_AUTO_INTEL_SETTINGS: AutoIntelSettings = {
   enabled: false,
   intervalSec: 15 * 60,
   executeJobs: false,
   analyzeEmployer: true,
   reflectExternalJobs: true,
+  cooldownProfile: 'safe-exhaustive',
+  cooldownHorizonHours: 24,
   projectId: null,
   model: null,
   maxIterations: 0,
@@ -96,12 +108,17 @@ function loadAutoIntelSettings(db: Database.Database): AutoIntelSettings {
     const raw = getKv(db, AUTO_INTEL_SETTINGS_KEY);
     if (!raw) return DEFAULT_AUTO_INTEL_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<AutoIntelSettings>;
+    const parsedCooldownProfile = String(parsed.cooldownProfile || DEFAULT_AUTO_INTEL_SETTINGS.cooldownProfile) as AutoIntelSettings['cooldownProfile'];
     return {
       enabled: !!parsed.enabled,
       intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(parsed.intervalSec || DEFAULT_AUTO_INTEL_SETTINGS.intervalSec))),
       executeJobs: !!parsed.executeJobs,
       analyzeEmployer: parsed.analyzeEmployer ?? DEFAULT_AUTO_INTEL_SETTINGS.analyzeEmployer,
       reflectExternalJobs: parsed.reflectExternalJobs ?? DEFAULT_AUTO_INTEL_SETTINGS.reflectExternalJobs,
+      cooldownProfile: VALID_COOLDOWN_PROFILES.has(parsedCooldownProfile)
+        ? parsedCooldownProfile
+        : DEFAULT_AUTO_INTEL_SETTINGS.cooldownProfile,
+      cooldownHorizonHours: Math.max(1, Math.min(7 * 24, Number(parsed.cooldownHorizonHours || DEFAULT_AUTO_INTEL_SETTINGS.cooldownHorizonHours))),
       projectId: parsed.projectId ? String(parsed.projectId) : null,
       model: parsed.model ? String(parsed.model) : null,
       maxIterations: Number.isFinite(Number(parsed.maxIterations)) ? Number(parsed.maxIterations) : DEFAULT_AUTO_INTEL_SETTINGS.maxIterations,
@@ -191,7 +208,9 @@ async function runAutoIntelCycle(db: Database.Database, settings: AutoIntelSetti
       autoApproveChanges: false,
       autoAnswerQuestions: false,
       checkpointEvery: 5,
+      cooldownProfile: settings.cooldownProfile,
       autoCooldownProfile: settings.autoCooldownProfile,
+      cooldownHorizonHours: settings.cooldownHorizonHours,
     }),
   }).catch(() => null);
 }

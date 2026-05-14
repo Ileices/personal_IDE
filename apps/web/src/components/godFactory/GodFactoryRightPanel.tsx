@@ -14,6 +14,27 @@ import { useChatStore } from '../../stores/chatStore';
 
 const GF_READY_NOTICE_KEY = 'gf_ready_notice_seen';
 
+type CooldownProfileId = 'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl';
+
+function readReadyNoticeSeen(): boolean {
+  try {
+    if (localStorage.getItem(GF_READY_NOTICE_KEY) === '1') return true;
+  } catch {
+    // no-op
+  }
+  try {
+    if (sessionStorage.getItem(GF_READY_NOTICE_KEY) === '1') return true;
+  } catch {
+    // no-op
+  }
+  return false;
+}
+
+function markReadyNoticeSeen(): void {
+  try { localStorage.setItem(GF_READY_NOTICE_KEY, '1'); } catch {}
+  try { sessionStorage.setItem(GF_READY_NOTICE_KEY, '1'); } catch {}
+}
+
 export interface SuggestedJob {
   id: string;          // internal UI id (same as job_id from API)
   job_id: string;      // canonical API id for action calls
@@ -167,6 +188,8 @@ interface AutoIntelSettingsResponse {
     executeJobs: boolean;
     analyzeEmployer: boolean;
     reflectExternalJobs: boolean;
+    cooldownProfile: CooldownProfileId;
+    cooldownHorizonHours: number;
     projectId: string | null;
     model: string | null;
     maxIterations: number;
@@ -392,6 +415,7 @@ interface GfLoopStatus {
     last_max_iterations: number | null;
     cooldown_profile?: string;
     auto_cooldown_profile?: boolean;
+    cooldown_horizon_hours?: number;
     governance?: {
       autoApproveChanges: boolean;
       autoAnswerQuestions: boolean;
@@ -416,8 +440,9 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
   const [autoApproveChanges, setAutoApproveChanges] = useState(false);
   const [autoAnswerQuestions, setAutoAnswerQuestions] = useState(false);
   const [checkpointEvery, setCheckpointEvery] = useState(5);
-  const [cooldownProfile, setCooldownProfile] = useState<'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl'>('safe-exhaustive');
+  const [cooldownProfile, setCooldownProfile] = useState<CooldownProfileId>('safe-exhaustive');
   const [autoCooldownProfile, setAutoCooldownProfile] = useState(true);
+  const [cooldownHorizonHours, setCooldownHorizonHours] = useState(24);
   const [hydratedFromStatus, setHydratedFromStatus] = useState(false);
   const selectedModel = useChatStore((s) => s.selectedModel);
 
@@ -443,8 +468,9 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
     if (hydratedFromStatus || !status?.config) return;
     if (status.config.last_max_iterations) setMaxIterations(status.config.last_max_iterations);
     if (typeof status.config.last_max_iterations === 'number') setMaxIterations(status.config.last_max_iterations);
-    if (status.config.cooldown_profile) setCooldownProfile(status.config.cooldown_profile as 'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl');
+    if (status.config.cooldown_profile) setCooldownProfile(status.config.cooldown_profile as CooldownProfileId);
     if (typeof status.config.auto_cooldown_profile === 'boolean') setAutoCooldownProfile(status.config.auto_cooldown_profile);
+    if (typeof status.config.cooldown_horizon_hours === 'number') setCooldownHorizonHours(Math.max(1, Math.min(168, Math.trunc(status.config.cooldown_horizon_hours))));
     if (status.config.governance) {
       setAutoApproveChanges(status.config.governance.autoApproveChanges);
       setAutoAnswerQuestions(status.config.governance.autoAnswerQuestions);
@@ -474,6 +500,7 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
           checkpointEvery: boundedCheckpointEvery,
           cooldownProfile,
           autoCooldownProfile,
+          cooldownHorizonHours,
         }),
       });
       await fetchStatus();
@@ -572,7 +599,7 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
               <span className="text-ide-text-dim">Cooldown profile</span>
               <select
                 value={cooldownProfile}
-                onChange={(e) => setCooldownProfile(e.target.value as 'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl')}
+                onChange={(e) => setCooldownProfile(e.target.value as CooldownProfileId)}
                 className="w-28 px-1 py-0.5 rounded bg-ide-bg border border-ide-border/50 text-ide-text"
               >
                 <option value="safe-exhaustive">safe-exhaustive</option>
@@ -580,6 +607,20 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
                 <option value="paced">paced</option>
                 <option value="slow">slow</option>
                 <option value="crawl">crawl</option>
+              </select>
+            </label>
+            <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
+              <span className="text-ide-text-dim">Cooldown horizon</span>
+              <select
+                value={cooldownHorizonHours}
+                onChange={(e) => setCooldownHorizonHours(Math.max(1, Math.min(168, Number(e.target.value) || 24)))}
+                className="w-28 px-1 py-0.5 rounded bg-ide-bg border border-ide-border/50 text-ide-text"
+              >
+                <option value={1}>1 hour</option>
+                <option value={2}>2 hours</option>
+                <option value={10}>10 hours</option>
+                <option value={24}>24 hours</option>
+                <option value={168}>1 week</option>
               </select>
             </label>
             <label className="bg-ide-bg/40 rounded px-2 py-1 flex items-center justify-between gap-2">
@@ -750,6 +791,30 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       return true;
     }
   });
+  const [autoIntelCooldownProfile, setAutoIntelCooldownProfile] = useState<CooldownProfileId>(() => {
+    try {
+      const raw = localStorage.getItem('gf_autoIntelCooldownProfile') as CooldownProfileId | null;
+      return raw || 'safe-exhaustive';
+    } catch {
+      return 'safe-exhaustive';
+    }
+  });
+  const [autoIntelCooldownHorizonHours, setAutoIntelCooldownHorizonHours] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem('gf_autoIntelCooldownHorizonHours') || '24');
+      return Math.max(1, Math.min(168, Number.isFinite(raw) ? raw : 24));
+    } catch {
+      return 24;
+    }
+  });
+  const [autoIntelAutoCooldownProfile, setAutoIntelAutoCooldownProfile] = useState(() => {
+    try {
+      const raw = localStorage.getItem('gf_autoIntelAutoCooldownProfile');
+      return raw === null ? true : raw === '1';
+    } catch {
+      return true;
+    }
+  });
   const [autoIntelIntervalMin, setAutoIntelIntervalMin] = useState(() => {
     try { return parseInt(localStorage.getItem('gf_autoIntelIntervalMin') || '15', 10); } catch { return 15; }
   });
@@ -772,7 +837,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
 
   // ── Notification action busy state ──
   const [notifActionBusy, setNotifActionBusy] = useState<string | null>(null);
-  const readyNoticeShownRef = useRef(false);
+  const readyNoticeShownRef = useRef(readReadyNoticeSeen());
   const chatSelectedModel = useChatStore((s) => s.selectedModel);
 
   const loadQueue = useCallback(() => {
@@ -1091,6 +1156,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         setAutoIntelExecuteJobs(!!d.settings.executeJobs);
         setAutoIntelAnalyzeEmployer(d.settings.analyzeEmployer ?? true);
         setAutoIntelReflectExternal(d.settings.reflectExternalJobs ?? true);
+        setAutoIntelCooldownProfile((d.settings.cooldownProfile || 'safe-exhaustive') as CooldownProfileId);
+        setAutoIntelCooldownHorizonHours(Math.max(1, Math.min(168, Number(d.settings.cooldownHorizonHours || 24))));
+        setAutoIntelAutoCooldownProfile(d.settings.autoCooldownProfile ?? true);
         setAutoIntelIntervalMin(Math.max(1, Math.round(Number(d.settings.intervalSec || 900) / 60)));
         if (d.runtime?.last_run_at) setAutoIntelLastRun(d.runtime.last_run_at);
         if (d.runtime?.last_error) setAutoIntelError(d.runtime.last_error);
@@ -1182,7 +1250,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
 
     if (codebaseReady && !readyNoticeShownRef.current) {
       readyNoticeShownRef.current = true;
-      try { sessionStorage.setItem(GF_READY_NOTICE_KEY, '1'); } catch {}
+      markReadyNoticeSeen();
       setNotifications(prev => [{
         id: `codebase-${Date.now()}`,
         type: 'success' as const,
@@ -1205,6 +1273,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   useEffect(() => { try { localStorage.setItem('gf_autoIntelExecuteJobs', autoIntelExecuteJobs ? '1' : '0'); } catch {} }, [autoIntelExecuteJobs]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelAnalyzeEmployer', autoIntelAnalyzeEmployer ? '1' : '0'); } catch {} }, [autoIntelAnalyzeEmployer]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelReflectExternal', autoIntelReflectExternal ? '1' : '0'); } catch {} }, [autoIntelReflectExternal]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelCooldownProfile', autoIntelCooldownProfile); } catch {} }, [autoIntelCooldownProfile]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelCooldownHorizonHours', String(autoIntelCooldownHorizonHours)); } catch {} }, [autoIntelCooldownHorizonHours]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelAutoCooldownProfile', autoIntelAutoCooldownProfile ? '1' : '0'); } catch {} }, [autoIntelAutoCooldownProfile]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelIntervalMin', String(autoIntelIntervalMin)); } catch {} }, [autoIntelIntervalMin]);
   useEffect(() => {
     const payload = {
@@ -1212,26 +1283,21 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       executeJobs: autoIntelExecuteJobs,
       analyzeEmployer: autoIntelAnalyzeEmployer,
       reflectExternalJobs: autoIntelReflectExternal,
+      cooldownProfile: autoIntelCooldownProfile,
+      cooldownHorizonHours: autoIntelCooldownHorizonHours,
       intervalSec: Math.max(60, autoIntelIntervalMin * 60),
       projectId: projectId || null,
       model: chatSelectedModel || null,
       maxIterations: 0,
       jobMaxIterations: 50,
-      autoCooldownProfile: true,
+      autoCooldownProfile: autoIntelAutoCooldownProfile,
     };
     fetch(`${API_BASE}/api/god-factory/auto-intel/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(() => {});
-  }, [autoIntelEnabled, autoIntelExecuteJobs, autoIntelAnalyzeEmployer, autoIntelReflectExternal, autoIntelIntervalMin, projectId, chatSelectedModel]);
-  useEffect(() => {
-    try {
-      readyNoticeShownRef.current = sessionStorage.getItem(GF_READY_NOTICE_KEY) === '1';
-    } catch {
-      readyNoticeShownRef.current = false;
-    }
-  }, []);
+  }, [autoIntelEnabled, autoIntelExecuteJobs, autoIntelAnalyzeEmployer, autoIntelReflectExternal, autoIntelCooldownProfile, autoIntelCooldownHorizonHours, autoIntelAutoCooldownProfile, autoIntelIntervalMin, projectId, chatSelectedModel]);
 
   const toggleSection = (key: keyof typeof sections) =>
     setSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1775,6 +1841,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
               autoApproveChanges: false,
               autoAnswerQuestions: false,
               checkpointEvery: 5,
+              cooldownProfile: autoIntelCooldownProfile,
+              autoCooldownProfile: autoIntelAutoCooldownProfile,
+              cooldownHorizonHours: autoIntelCooldownHorizonHours,
             }),
           });
 
@@ -1806,6 +1875,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     autoIntelBusy,
     autoIntelAnalyzeEmployer,
     autoIntelReflectExternal,
+    autoIntelCooldownProfile,
+    autoIntelAutoCooldownProfile,
+    autoIntelCooldownHorizonHours,
     autoIntelExecuteJobs,
     autoIntelFailCount,
     autoIntelIntervalMin,
@@ -2165,6 +2237,43 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   className="accent-purple-400"
                 />
               </label>
+              <label className="flex items-center justify-between gap-2 rounded bg-ide-bg/30 px-1.5 py-1">
+                <span className="text-ide-text-dim">Auto cooldown shaping</span>
+                <input
+                  type="checkbox"
+                  checked={autoIntelAutoCooldownProfile}
+                  onChange={e => setAutoIntelAutoCooldownProfile(e.target.checked)}
+                  className="accent-purple-400"
+                />
+              </label>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-ide-text-dim">Cooldown profile</span>
+                <select
+                  value={autoIntelCooldownProfile}
+                  onChange={e => setAutoIntelCooldownProfile(e.target.value as CooldownProfileId)}
+                  className="bg-ide-bg border border-ide-border/40 rounded px-1 text-ide-text text-[9px]"
+                >
+                  <option value="safe-exhaustive">safe-exhaustive</option>
+                  <option value="aggressive">aggressive</option>
+                  <option value="paced">paced</option>
+                  <option value="slow">slow</option>
+                  <option value="crawl">crawl</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-ide-text-dim">Rate horizon</span>
+                <select
+                  value={autoIntelCooldownHorizonHours}
+                  onChange={e => setAutoIntelCooldownHorizonHours(Math.max(1, Math.min(168, Number(e.target.value) || 24)))}
+                  className="bg-ide-bg border border-ide-border/40 rounded px-1 text-ide-text text-[9px]"
+                >
+                  <option value={1}>1 hour</option>
+                  <option value={2}>2 hours</option>
+                  <option value={10}>10 hours</option>
+                  <option value={24}>24 hours</option>
+                  <option value={168}>1 week</option>
+                </select>
+              </div>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-ide-text-dim">Interval</span>
                 <select

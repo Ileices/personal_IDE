@@ -901,6 +901,8 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     executeJobs: boolean;
     analyzeEmployer: boolean;
     reflectExternalJobs: boolean;
+    cooldownProfile: CooldownProfileId;
+    cooldownHorizonHours: number;
     projectId: string | null;
     model: string | null;
     maxIterations: number;
@@ -914,6 +916,8 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     executeJobs: false,
     analyzeEmployer: true,
     reflectExternalJobs: true,
+    cooldownProfile: 'safe-exhaustive',
+    cooldownHorizonHours: 24,
     projectId: null,
     model: null,
     maxIterations: 0,
@@ -926,12 +930,15 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       const raw = getKv(db, AUTO_INTEL_SETTINGS_KEY);
       if (!raw) return DEFAULT_AUTO_INTEL_SETTINGS;
       const parsed = JSON.parse(raw) as Partial<AutoIntelSettings>;
+      const parsedCooldownProfile = String(parsed.cooldownProfile || DEFAULT_AUTO_INTEL_SETTINGS.cooldownProfile) as CooldownProfileId;
       return {
         enabled: !!parsed.enabled,
         intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(parsed.intervalSec || DEFAULT_AUTO_INTEL_SETTINGS.intervalSec))),
         executeJobs: !!parsed.executeJobs,
         analyzeEmployer: parsed.analyzeEmployer ?? DEFAULT_AUTO_INTEL_SETTINGS.analyzeEmployer,
         reflectExternalJobs: parsed.reflectExternalJobs ?? DEFAULT_AUTO_INTEL_SETTINGS.reflectExternalJobs,
+        cooldownProfile: COOLDOWN_PROFILES[parsedCooldownProfile] ? parsedCooldownProfile : DEFAULT_AUTO_INTEL_SETTINGS.cooldownProfile,
+        cooldownHorizonHours: Math.max(1, Math.min(7 * 24, Number(parsed.cooldownHorizonHours || DEFAULT_AUTO_INTEL_SETTINGS.cooldownHorizonHours))),
         projectId: parsed.projectId ? String(parsed.projectId) : null,
         model: parsed.model ? String(parsed.model) : null,
         maxIterations: Number.isFinite(Number(parsed.maxIterations)) ? Number(parsed.maxIterations) : DEFAULT_AUTO_INTEL_SETTINGS.maxIterations,
@@ -950,10 +957,17 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     const next: AutoIntelSettings = {
       ...current,
       ...patch,
+      cooldownProfile: (() => {
+        const requested = String(patch.cooldownProfile ?? current.cooldownProfile) as CooldownProfileId;
+        return COOLDOWN_PROFILES[requested] ? requested : current.cooldownProfile;
+      })(),
       intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(patch.intervalSec ?? current.intervalSec))),
       executeJobs: patch.executeJobs ?? current.executeJobs,
       analyzeEmployer: patch.analyzeEmployer ?? current.analyzeEmployer,
       reflectExternalJobs: patch.reflectExternalJobs ?? current.reflectExternalJobs,
+      cooldownHorizonHours: Number.isFinite(Number(patch.cooldownHorizonHours ?? current.cooldownHorizonHours))
+        ? Math.max(1, Math.min(7 * 24, Number(patch.cooldownHorizonHours ?? current.cooldownHorizonHours)))
+        : current.cooldownHorizonHours,
       enabled: patch.enabled ?? current.enabled,
       projectId: patch.projectId === undefined ? current.projectId : (patch.projectId ? String(patch.projectId) : null),
       model: patch.model === undefined ? current.model : (patch.model ? String(patch.model) : null),
@@ -1859,6 +1873,28 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     crawl: { warningPct: 80, criticalPct: 95, cooldownSec: 5400, sleepSec: 21_600, lowSuccessSkipCycles: 3 },
   };
 
+  function deriveCooldownCustomFromHorizon(horizonHours: number): Partial<CooldownProfile> {
+    const h = Math.max(1, Math.min(7 * 24, Number(horizonHours || 24)));
+    const horizonSec = h * 3600;
+
+    // Stretch cooldown/sleep durations toward the desired exhaustion horizon.
+    const cooldownSec = Math.max(300, Math.min(7 * 24 * 3600, Math.round(horizonSec * 0.08)));
+    const sleepSec = Math.max(900, Math.min(7 * 24 * 3600, Math.round(horizonSec * 0.25)));
+
+    // Longer horizons become more conservative sooner.
+    const warningPct = Math.max(35, Math.min(88, Math.round(40 + h * 0.2)));
+    const criticalPct = Math.max(65, Math.min(97, warningPct + 25));
+    const lowSuccessSkipCycles = Math.max(0, Math.min(6, Math.round(h / 24)));
+
+    return {
+      warningPct,
+      criticalPct,
+      cooldownSec,
+      sleepSec,
+      lowSuccessSkipCycles,
+    };
+  }
+
   function chooseRateLimitEstimate(modelId: string): number {
     const src = String(modelId || '').toLowerCase();
     if (src.includes('gpt-4.1') || src.includes('gpt-4o')) return 50;
@@ -1961,29 +1997,35 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       profiles: COOLDOWN_PROFILES,
       activeProfile: getKv(db, 'god_factory:loop:last_cooldown_profile') || 'safe-exhaustive',
       autoApply: getKv(db, 'god_factory:loop:last_auto_cooldown_profile') === '1',
+      horizonHours: Number(getKv(db, 'god_factory:loop:last_cooldown_horizon_hours') || '24') || 24,
     });
   });
 
   app.post('/loop/cooldown-profile/apply', async (req: FastifyRequest, reply: FastifyReply) => {
     if (!requireControlOwner(reply)) return;
-    const body = (req.body || {}) as { profile?: CooldownProfileId; custom?: Partial<CooldownProfile>; autoApply?: boolean };
+    const body = (req.body || {}) as { profile?: CooldownProfileId; custom?: Partial<CooldownProfile>; autoApply?: boolean; horizonHours?: number };
     const profileId = (body.profile || 'safe-exhaustive') as CooldownProfileId;
     if (!COOLDOWN_PROFILES[profileId]) {
       return reply.status(400).send({ error: 'Unknown cooldown profile.' });
     }
-    const result = applyCooldownProfile(profileId, body.custom);
+    const horizonHours = Number.isFinite(Number(body.horizonHours))
+      ? Math.max(1, Math.min(7 * 24, Number(body.horizonHours)))
+      : Number(getKv(db, 'god_factory:loop:last_cooldown_horizon_hours') || '24') || 24;
+    const horizonCustom = deriveCooldownCustomFromHorizon(horizonHours);
+    const result = applyCooldownProfile(profileId, { ...horizonCustom, ...(body.custom || {}) });
     setKv(db, 'god_factory:loop:last_cooldown_profile', profileId);
+    setKv(db, 'god_factory:loop:last_cooldown_horizon_hours', String(horizonHours));
     if (body.autoApply !== undefined) {
       setKv(db, 'god_factory:loop:last_auto_cooldown_profile', body.autoApply ? '1' : '0');
     }
-    return reply.send({ ok: true, ...result });
+    return reply.send({ ok: true, horizonHours, ...result });
   });
 
   _ensureGfLoopState(db);
   _recoverCrashedGfRuns(db);
 
   // POST /api/god-factory/loop/start
-  // Body: { projectId, model?, maxIterations?, jobMaxIterations?, autoApproveChanges?, autoAnswerQuestions?, checkpointEvery?, cooldownProfile?, autoCooldownProfile? }
+  // Body: { projectId, model?, maxIterations?, jobMaxIterations?, autoApproveChanges?, autoAnswerQuestions?, checkpointEvery?, cooldownProfile?, autoCooldownProfile?, cooldownHorizonHours? }
   app.post('/loop/start', async (req: FastifyRequest, reply: FastifyReply) => {
     if (!requireControlOwner(reply)) return;
 
@@ -1993,7 +2035,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: 'God Factory loop is already running' });
     }
 
-    const { projectId, model, maxIterations = 50, jobMaxIterations, autoApproveChanges, autoAnswerQuestions, checkpointEvery, cooldownProfile, autoCooldownProfile } = req.body as {
+    const { projectId, model, maxIterations = 50, jobMaxIterations, autoApproveChanges, autoAnswerQuestions, checkpointEvery, cooldownProfile, autoCooldownProfile, cooldownHorizonHours } = req.body as {
       projectId?: string;
       model?: string;
       maxIterations?: number;
@@ -2003,6 +2045,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       checkpointEvery?: number;
       cooldownProfile?: CooldownProfileId;
       autoCooldownProfile?: boolean;
+      cooldownHorizonHours?: number;
     };
 
     const normalizedProjectId = String(projectId || '').trim();
@@ -2042,6 +2085,9 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Invalid cooldownProfile.' });
     }
     const autoCooldownEnabled = autoCooldownProfile ?? (getKv(db, 'god_factory:loop:last_auto_cooldown_profile') === '1');
+    const selectedCooldownHorizonHours = Number.isFinite(Number(cooldownHorizonHours))
+      ? Math.max(1, Math.min(7 * 24, Number(cooldownHorizonHours)))
+      : Number(getKv(db, 'god_factory:loop:last_cooldown_horizon_hours') || '24') || 24;
 
     const preferredModel = requestedModel && requestedModel.includes('/') ? requestedModel : undefined;
     const strategyAtStart = resolveModelStrategy(db, preferredModel);
@@ -2059,7 +2105,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     const jobLoopMaxIterations = parsedJobMaxIterations;
 
     if (isUnlimitedIterations && autoCooldownEnabled) {
-      applyCooldownProfile(selectedCooldownProfile);
+      applyCooldownProfile(selectedCooldownProfile, deriveCooldownCustomFromHorizon(selectedCooldownHorizonHours));
     }
 
     // Pick the best available suggested job to work on
@@ -2107,6 +2153,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     setKv(db, 'god_factory:loop:last_job_max_iterations', String(jobLoopMaxIterations));
     setKv(db, 'god_factory:loop:last_cooldown_profile', selectedCooldownProfile);
     setKv(db, 'god_factory:loop:last_auto_cooldown_profile', autoCooldownEnabled ? '1' : '0');
+    setKv(db, 'god_factory:loop:last_cooldown_horizon_hours', String(selectedCooldownHorizonHours));
 
     _updateGfLoopState(db, {
       state: 'running',
@@ -2470,6 +2517,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       })(),
       cooldown_profile: getKv(db, 'god_factory:loop:last_cooldown_profile') || 'safe-exhaustive',
       auto_cooldown_profile: getKv(db, 'god_factory:loop:last_auto_cooldown_profile') === '1',
+      cooldown_horizon_hours: Number(getKv(db, 'god_factory:loop:last_cooldown_horizon_hours') || '24') || 24,
       governance: {
         autoApproveChanges: getKv(db, 'god_factory:loop:last_auto_approve_changes') === '1',
         autoAnswerQuestions: getKv(db, 'god_factory:loop:last_auto_answer_questions') === '1',
