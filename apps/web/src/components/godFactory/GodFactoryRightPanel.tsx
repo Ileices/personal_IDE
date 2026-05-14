@@ -3,7 +3,7 @@
 // Collapsible sidebar with: Notifications, Suggested Jobs,
 // Codebase Health snapshot, and Brainstorm Pad.
 // ============================================
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Zap, ChevronDown, ChevronRight, ChevronLeft,
   AlertTriangle, Star, Shield, Sparkles, Send, X, SlidersHorizontal, Play,
@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { API_BASE } from '../../config.js';
 import { useChatStore } from '../../stores/chatStore';
+
+const GF_READY_NOTICE_KEY = 'gf_ready_notice_seen';
 
 export interface SuggestedJob {
   id: string;          // internal UI id (same as job_id from API)
@@ -710,6 +712,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [autoIntelEnabled, setAutoIntelEnabled] = useState(() => {
     try { return localStorage.getItem('gf_autoIntelEnabled') === '1'; } catch { return false; }
   });
+  const [autoIntelExecuteJobs, setAutoIntelExecuteJobs] = useState(() => {
+    try { return localStorage.getItem('gf_autoIntelExecuteJobs') === '1'; } catch { return false; }
+  });
   const [autoIntelIntervalMin, setAutoIntelIntervalMin] = useState(() => {
     try { return parseInt(localStorage.getItem('gf_autoIntelIntervalMin') || '15', 10); } catch { return 15; }
   });
@@ -731,6 +736,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
 
   // ── Notification action busy state ──
   const [notifActionBusy, setNotifActionBusy] = useState<string | null>(null);
+  const readyNoticeShownRef = useRef(false);
+  const chatSelectedModel = useChatStore((s) => s.selectedModel);
 
   const loadQueue = useCallback(() => {
     fetch(`${API_BASE}/api/god-factory/queue?limit=20`)
@@ -1119,7 +1126,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       }, 15000);
     })();
 
-    if (codebaseReady) {
+    if (codebaseReady && !readyNoticeShownRef.current) {
+      readyNoticeShownRef.current = true;
+      try { sessionStorage.setItem(GF_READY_NOTICE_KEY, '1'); } catch {}
       setNotifications(prev => [{
         id: `codebase-${Date.now()}`,
         type: 'success' as const,
@@ -1139,7 +1148,15 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
 
   // ── Persist auto-intel settings to localStorage ──
   useEffect(() => { try { localStorage.setItem('gf_autoIntelEnabled', autoIntelEnabled ? '1' : '0'); } catch {} }, [autoIntelEnabled]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelExecuteJobs', autoIntelExecuteJobs ? '1' : '0'); } catch {} }, [autoIntelExecuteJobs]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelIntervalMin', String(autoIntelIntervalMin)); } catch {} }, [autoIntelIntervalMin]);
+  useEffect(() => {
+    try {
+      readyNoticeShownRef.current = sessionStorage.getItem(GF_READY_NOTICE_KEY) === '1';
+    } catch {
+      readyNoticeShownRef.current = false;
+    }
+  }, []);
 
   const toggleSection = (key: keyof typeof sections) =>
     setSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1639,7 +1656,46 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       // Step 3: reload queue and jobs
       loadQueue();
       loadSuggestedJobs();
+      loadImplementingJobs();
+      loadBackgroundStatus();
       loadCodebaseHealth();
+
+      // Step 4: optionally advance pending work through the real autonomous loop
+      if (autoIntelExecuteJobs) {
+        if (!projectId) {
+          throw new Error('Auto-run queued jobs requires an active project selection.');
+        }
+
+        const loopStatusRes = await fetch(`${API_BASE}/api/god-factory/loop/status`);
+        const loopStatus = loopStatusRes.ok
+          ? await loopStatusRes.json() as { isRunning?: boolean; pendingJobs?: number }
+          : null;
+
+        if (loopStatus && !loopStatus.isRunning && (loopStatus.pendingJobs || 0) > 0) {
+          const startRes = await fetch(`${API_BASE}/api/god-factory/loop/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              model: chatSelectedModel,
+              maxIterations: 0,
+              jobMaxIterations: 50,
+              autoApproveChanges: false,
+              autoAnswerQuestions: false,
+              checkpointEvery: 5,
+            }),
+          });
+
+          if (!startRes.ok) {
+            const startData = await startRes.json().catch(() => null) as { error?: string } | null;
+            throw new Error(startData?.error || 'Failed to start the God Factory loop.');
+          }
+
+          loadImplementingJobs();
+          loadBackgroundStatus();
+        }
+      }
+
       setAutoIntelLastRun(new Date().toISOString());
       setAutoIntelFailCount(0);
       setAutoIntelCountdown(autoIntelIntervalMin * 60);
@@ -1654,7 +1710,19 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     } finally {
       setAutoIntelBusy(false);
     }
-  }, [autoIntelBusy, autoIntelIntervalMin, autoIntelFailCount, loadQueue, loadSuggestedJobs, loadCodebaseHealth]);
+  }, [
+    autoIntelBusy,
+    autoIntelExecuteJobs,
+    autoIntelFailCount,
+    autoIntelIntervalMin,
+    chatSelectedModel,
+    loadBackgroundStatus,
+    loadCodebaseHealth,
+    loadImplementingJobs,
+    loadQueue,
+    loadSuggestedJobs,
+    projectId,
+  ]);
 
   // ── Auto-intelligence interval effect ──
   useEffect(() => {
@@ -1973,6 +2041,15 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           </div>
           {autoIntelEnabled && (
             <div className="mt-1.5 space-y-1 text-[9px]">
+              <label className="flex items-center justify-between gap-2 rounded bg-ide-bg/30 px-1.5 py-1">
+                <span className="text-ide-text-dim">Auto-run queued jobs</span>
+                <input
+                  type="checkbox"
+                  checked={autoIntelExecuteJobs}
+                  onChange={e => setAutoIntelExecuteJobs(e.target.checked)}
+                  className="accent-purple-400"
+                />
+              </label>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-ide-text-dim">Interval</span>
                 <select
@@ -1994,6 +2071,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
               </div>
               {autoIntelLastRun && (
                 <div className="text-ide-text-dim">Last: {new Date(autoIntelLastRun).toLocaleTimeString()}</div>
+              )}
+              {autoIntelExecuteJobs && !projectId && (
+                <div className="text-yellow-400 leading-snug">Select an active project before auto-executing Suggested Jobs.</div>
               )}
               <button
                 onClick={() => void runAutoIntelPipeline()}

@@ -293,6 +293,7 @@ function buildSessionBriefing(notifications: GodFactoryQueueItem[], suggestions:
 
 const HIST_KEY = 'god_factory_prompt_history';
 const CONV_KEY = 'god_factory_conversation';
+const SESSION_KEY = 'god_factory_session_id';
 
 const loadHistory  = (): PromptHistoryItem[] => { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; } };
 const saveHistory  = (v: PromptHistoryItem[]) => { try { localStorage.setItem(HIST_KEY, JSON.stringify(v.slice(0, 300))); } catch {} };
@@ -368,7 +369,9 @@ export function TheGodFactory() {
   const [showFileSelector, setShowFileSelector] = useState(false);
   const [copied, setCopied]               = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [godFactorySessionId, setGodFactorySessionId] = useState<string | null>(null);
+  const [godFactorySessionId, setGodFactorySessionId] = useState<string | null>(() => {
+    try { return localStorage.getItem(SESSION_KEY); } catch { return null; }
+  });
   const [sessionEpoch, setSessionEpoch] = useState(0);
 
   // Tool-calling state
@@ -386,7 +389,7 @@ export function TheGodFactory() {
   const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
-  const godFactorySessionIdRef = useRef<string | null>(null);
+  const godFactorySessionIdRef = useRef<string | null>(godFactorySessionId);
   const sessionIntroShownRef = useRef<string | null>(null);
   const autonomousModeRef = useRef(false);
 
@@ -406,6 +409,14 @@ export function TheGodFactory() {
   useEffect(() => { saveConv(messages); }, [messages]);
   useEffect(() => { saveHistory(history); }, [history]);
   useEffect(() => { godFactorySessionIdRef.current = godFactorySessionId; }, [godFactorySessionId]);
+  useEffect(() => {
+    try {
+      if (godFactorySessionId) localStorage.setItem(SESSION_KEY, godFactorySessionId);
+      else localStorage.removeItem(SESSION_KEY);
+    } catch {
+      // no-op
+    }
+  }, [godFactorySessionId]);
   useEffect(() => { autonomousModeRef.current = autonomousMode; }, [autonomousMode]);
 
   // ── Load codebase tree on mount ───────────────────────────────────────────
@@ -1449,6 +1460,7 @@ export function TheGodFactory() {
     sessionIntroShownRef.current = null;
     setSessionEpoch(prev => prev + 1);
     try { localStorage.removeItem(CONV_KEY); } catch {}
+    try { localStorage.removeItem(SESSION_KEY); } catch {}
   };
   const copyMsg        = (content: string, id: string) => { navigator.clipboard.writeText(content).catch(() => {}); setCopied(id); setTimeout(() => setCopied(null), 1500); };
   const exportConv     = () => {
