@@ -780,6 +780,75 @@ function createJobFromSuggestion(db: Db, suggestion: { suggestion_id: string; ca
 
 export async function godFactoryRoutes(app: FastifyInstance) {
   const db = (app as unknown as { db: Db }).db;
+  const AUTO_INTEL_SETTINGS_KEY = 'god_factory:auto_intel:settings';
+  const AUTO_INTEL_LAST_RUN_KEY = 'god_factory:auto_intel:last_run_at';
+  const AUTO_INTEL_LAST_ERROR_KEY = 'god_factory:auto_intel:last_error';
+
+  type AutoIntelSettings = {
+    enabled: boolean;
+    intervalSec: number;
+    executeJobs: boolean;
+    projectId: string | null;
+    model: string | null;
+    maxIterations: number;
+    jobMaxIterations: number;
+    autoCooldownProfile: boolean;
+  };
+
+  const DEFAULT_AUTO_INTEL_SETTINGS: AutoIntelSettings = {
+    enabled: false,
+    intervalSec: 15 * 60,
+    executeJobs: false,
+    projectId: null,
+    model: null,
+    maxIterations: 0,
+    jobMaxIterations: 50,
+    autoCooldownProfile: true,
+  };
+
+  function loadAutoIntelSettings(): AutoIntelSettings {
+    try {
+      const raw = getKv(db, AUTO_INTEL_SETTINGS_KEY);
+      if (!raw) return DEFAULT_AUTO_INTEL_SETTINGS;
+      const parsed = JSON.parse(raw) as Partial<AutoIntelSettings>;
+      return {
+        enabled: !!parsed.enabled,
+        intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(parsed.intervalSec || DEFAULT_AUTO_INTEL_SETTINGS.intervalSec))),
+        executeJobs: !!parsed.executeJobs,
+        projectId: parsed.projectId ? String(parsed.projectId) : null,
+        model: parsed.model ? String(parsed.model) : null,
+        maxIterations: Number.isFinite(Number(parsed.maxIterations)) ? Number(parsed.maxIterations) : DEFAULT_AUTO_INTEL_SETTINGS.maxIterations,
+        jobMaxIterations: Number.isFinite(Number(parsed.jobMaxIterations))
+          ? Math.max(1, Math.min(5000, Number(parsed.jobMaxIterations)))
+          : DEFAULT_AUTO_INTEL_SETTINGS.jobMaxIterations,
+        autoCooldownProfile: parsed.autoCooldownProfile ?? DEFAULT_AUTO_INTEL_SETTINGS.autoCooldownProfile,
+      };
+    } catch {
+      return DEFAULT_AUTO_INTEL_SETTINGS;
+    }
+  }
+
+  function saveAutoIntelSettings(patch: Partial<AutoIntelSettings>): AutoIntelSettings {
+    const current = loadAutoIntelSettings();
+    const next: AutoIntelSettings = {
+      ...current,
+      ...patch,
+      intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(patch.intervalSec ?? current.intervalSec))),
+      executeJobs: patch.executeJobs ?? current.executeJobs,
+      enabled: patch.enabled ?? current.enabled,
+      projectId: patch.projectId === undefined ? current.projectId : (patch.projectId ? String(patch.projectId) : null),
+      model: patch.model === undefined ? current.model : (patch.model ? String(patch.model) : null),
+      maxIterations: Number.isFinite(Number(patch.maxIterations ?? current.maxIterations))
+        ? Number(patch.maxIterations ?? current.maxIterations)
+        : current.maxIterations,
+      jobMaxIterations: Number.isFinite(Number(patch.jobMaxIterations ?? current.jobMaxIterations))
+        ? Math.max(1, Math.min(5000, Number(patch.jobMaxIterations ?? current.jobMaxIterations)))
+        : current.jobMaxIterations,
+      autoCooldownProfile: patch.autoCooldownProfile ?? current.autoCooldownProfile,
+    };
+    setKv(db, AUTO_INTEL_SETTINGS_KEY, JSON.stringify(next));
+    return next;
+  }
 
   function resolveScopedProjectId(projectId: unknown): string | null {
     const normalized = String(projectId || '').trim();
@@ -1399,6 +1468,26 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         ? `Flushed ${created} gap report(s) into job_records.`
         : 'No unacknowledged flagged gap reports found.',
     });
+  });
+
+  app.get('/auto-intel/settings', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const settings = loadAutoIntelSettings();
+    const lastRunAt = getKv(db, AUTO_INTEL_LAST_RUN_KEY);
+    const lastError = getKv(db, AUTO_INTEL_LAST_ERROR_KEY);
+    return reply.send({
+      settings,
+      runtime: {
+        last_run_at: lastRunAt || null,
+        last_error: lastError || null,
+      },
+    });
+  });
+
+  app.post('/auto-intel/settings', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireControlOwner(reply)) return;
+    const body = (req.body || {}) as Partial<AutoIntelSettings>;
+    const settings = saveAutoIntelSettings(body);
+    return reply.send({ ok: true, settings });
   });
 
   app.post('/actions', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -2222,6 +2311,11 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         mode: getKv(db, 'god_factory:loop:last_auto_approve_changes') === '1'
           ? 'unsafe_override'
           : 'safe',
+      },
+      auto_intel: {
+        settings: loadAutoIntelSettings(),
+        last_run_at: getKv(db, AUTO_INTEL_LAST_RUN_KEY) || null,
+        last_error: getKv(db, AUTO_INTEL_LAST_ERROR_KEY) || null,
       },
     };
 

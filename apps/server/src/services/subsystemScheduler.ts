@@ -4,6 +4,31 @@ import { executeSubsystem, getKv, loadSettings, setKv, type SubsystemConfig, typ
 
 const SCHEDULER_TICK_MS = 15_000;
 const PROJECT_ROTATION_KEY = 'subsystems:project_rotation_index';
+const AUTO_INTEL_SETTINGS_KEY = 'god_factory:auto_intel:settings';
+const AUTO_INTEL_LAST_RUN_KEY = 'god_factory:auto_intel:last_run_at';
+const AUTO_INTEL_LAST_ERROR_KEY = 'god_factory:auto_intel:last_error';
+
+type AutoIntelSettings = {
+  enabled: boolean;
+  intervalSec: number;
+  executeJobs: boolean;
+  projectId: string | null;
+  model: string | null;
+  maxIterations: number;
+  jobMaxIterations: number;
+  autoCooldownProfile: boolean;
+};
+
+const DEFAULT_AUTO_INTEL_SETTINGS: AutoIntelSettings = {
+  enabled: false,
+  intervalSec: 15 * 60,
+  executeJobs: false,
+  projectId: null,
+  model: null,
+  maxIterations: 0,
+  jobMaxIterations: 50,
+  autoCooldownProfile: true,
+};
 
 type SchedulerStatus = {
   running: boolean;
@@ -62,6 +87,90 @@ function pickRotatingProject(db: Database.Database, memory: MemoryService) {
   return project;
 }
 
+function loadAutoIntelSettings(db: Database.Database): AutoIntelSettings {
+  try {
+    const raw = getKv(db, AUTO_INTEL_SETTINGS_KEY);
+    if (!raw) return DEFAULT_AUTO_INTEL_SETTINGS;
+    const parsed = JSON.parse(raw) as Partial<AutoIntelSettings>;
+    return {
+      enabled: !!parsed.enabled,
+      intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(parsed.intervalSec || DEFAULT_AUTO_INTEL_SETTINGS.intervalSec))),
+      executeJobs: !!parsed.executeJobs,
+      projectId: parsed.projectId ? String(parsed.projectId) : null,
+      model: parsed.model ? String(parsed.model) : null,
+      maxIterations: Number.isFinite(Number(parsed.maxIterations)) ? Number(parsed.maxIterations) : DEFAULT_AUTO_INTEL_SETTINGS.maxIterations,
+      jobMaxIterations: Number.isFinite(Number(parsed.jobMaxIterations))
+        ? Math.max(1, Math.min(5000, Number(parsed.jobMaxIterations)))
+        : DEFAULT_AUTO_INTEL_SETTINGS.jobMaxIterations,
+      autoCooldownProfile: parsed.autoCooldownProfile ?? DEFAULT_AUTO_INTEL_SETTINGS.autoCooldownProfile,
+    };
+  } catch {
+    return DEFAULT_AUTO_INTEL_SETTINGS;
+  }
+}
+
+function shouldRunAutoIntelNow(db: Database.Database, settings: AutoIntelSettings): boolean {
+  if (!settings.enabled) return false;
+  const lastRun = new Date(getKv(db, AUTO_INTEL_LAST_RUN_KEY) || 0).getTime() || 0;
+  return Date.now() - lastRun >= settings.intervalSec * 1000;
+}
+
+async function runAutoIntelCycle(db: Database.Database, settings: AutoIntelSettings): Promise<void> {
+  const serverPort = Number(process.env.SERVER_PORT || 3001);
+  const baseUrl = `http://127.0.0.1:${serverPort}`;
+
+  // Trigger the same God Factory signal-refresh path the Intel panel uses.
+  await fetch(`${baseUrl}/api/god-factory/queue?limit=1`).catch(() => null);
+
+  // Keep crawlers moving even when the browser UI is closed.
+  executeSubsystem(db, { subsystem: 'suggested_jobs_crawler', depth: 4 });
+  executeSubsystem(db, { subsystem: 'gap_analysis', depth: 4 });
+  executeSubsystem(db, { subsystem: 'god_factory_idle_scan', depth: 1 });
+
+  if (!settings.executeJobs) return;
+
+  const loopRow = db.prepare(`SELECT state FROM god_factory_loop_state WHERE id = 'singleton'`).get() as { state?: string } | undefined;
+  if (loopRow?.state === 'running') return;
+
+  const scopedProjectId = settings.projectId || (() => {
+    const row = db.prepare(`
+      SELECT id
+      FROM projects
+      ORDER BY datetime(last_accessed_at) DESC, datetime(created_at) DESC
+      LIMIT 1
+    `).get() as { id?: string } | undefined;
+    return row?.id || null;
+  })();
+
+  if (!scopedProjectId) return;
+
+  const pendingRow = db.prepare(`
+    SELECT COUNT(*) AS cnt
+    FROM job_records
+    WHERE implementation_status = 'suggested'
+      AND project_id = ?
+  `).get(scopedProjectId) as { cnt?: number } | undefined;
+
+  if ((pendingRow?.cnt || 0) <= 0) return;
+
+  const selectedModel = settings.model || getKv(db, 'god_factory:loop:last_model') || null;
+
+  await fetch(`${baseUrl}/api/god-factory/loop/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: scopedProjectId,
+      model: selectedModel,
+      maxIterations: settings.maxIterations,
+      jobMaxIterations: settings.jobMaxIterations,
+      autoApproveChanges: false,
+      autoAnswerQuestions: false,
+      checkpointEvery: 5,
+      autoCooldownProfile: settings.autoCooldownProfile,
+    }),
+  }).catch(() => null);
+}
+
 export function getSubsystemSchedulerStatus(): SchedulerStatus {
   return {
     running: schedulerTimer !== null,
@@ -110,6 +219,7 @@ async function tick(db: Database.Database): Promise<void> {
   lastTickAt = new Date().toISOString();
   try {
     const settings = loadSettings(db);
+    const autoIntelSettings = loadAutoIntelSettings(db);
     const memory = new MemoryService(db);
 
     if (shouldRunNow(db, 'ide_codebase_crawler', settings.ide_codebase_crawler)) {
@@ -137,6 +247,17 @@ async function tick(db: Database.Database): Promise<void> {
 
     if (shouldRunNow(db, 'god_factory_idle_scan', settings.god_factory_idle_scan)) {
       executeSubsystem(db, { subsystem: 'god_factory_idle_scan', depth: settings.god_factory_idle_scan.maxDepth });
+    }
+
+    if (shouldRunAutoIntelNow(db, autoIntelSettings)) {
+      try {
+        await runAutoIntelCycle(db, autoIntelSettings);
+        setKv(db, AUTO_INTEL_LAST_RUN_KEY, new Date().toISOString());
+        setKv(db, AUTO_INTEL_LAST_ERROR_KEY, '');
+      } catch (err) {
+        const summary = err instanceof Error ? err.message : String(err || 'unknown auto-intel error');
+        setKv(db, AUTO_INTEL_LAST_ERROR_KEY, summary.slice(0, 400));
+      }
     }
   } catch (err) {
     console.error('Subsystem scheduler tick failed:', err);

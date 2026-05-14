@@ -294,6 +294,7 @@ function buildSessionBriefing(notifications: GodFactoryQueueItem[], suggestions:
 const HIST_KEY = 'god_factory_prompt_history';
 const CONV_KEY = 'god_factory_conversation';
 const SESSION_KEY = 'god_factory_session_id';
+const SESSION_BRIEF_KEY_PREFIX = 'god_factory_session_brief_shown:';
 
 const loadHistory  = (): PromptHistoryItem[] => { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; } };
 const saveHistory  = (v: PromptHistoryItem[]) => { try { localStorage.setItem(HIST_KEY, JSON.stringify(v.slice(0, 300))); } catch {} };
@@ -565,6 +566,15 @@ export function TheGodFactory() {
 
   const injectSessionBriefing = useCallback(async (sessionId: string) => {
     if (sessionIntroShownRef.current === sessionId) return;
+    try {
+      const persisted = sessionStorage.getItem(`${SESSION_BRIEF_KEY_PREFIX}${sessionId}`) === '1';
+      if (persisted) {
+        sessionIntroShownRef.current = sessionId;
+        return;
+      }
+    } catch {
+      // no-op
+    }
 
     try {
       const [queueRes, suggestionsRes] = await Promise.all([
@@ -593,6 +603,7 @@ export function TheGodFactory() {
       }
     } finally {
       sessionIntroShownRef.current = sessionId;
+      try { sessionStorage.setItem(`${SESSION_BRIEF_KEY_PREFIX}${sessionId}`, '1'); } catch {}
     }
   }, [appendGodFactorySession, localModel]);
 

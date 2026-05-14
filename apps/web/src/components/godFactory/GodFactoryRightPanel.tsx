@@ -160,6 +160,23 @@ interface GodFactoryActionRecord {
   timestamp: string;
 }
 
+interface AutoIntelSettingsResponse {
+  settings: {
+    enabled: boolean;
+    intervalSec: number;
+    executeJobs: boolean;
+    projectId: string | null;
+    model: string | null;
+    maxIterations: number;
+    jobMaxIterations: number;
+    autoCooldownProfile: boolean;
+  };
+  runtime?: {
+    last_run_at?: string | null;
+    last_error?: string | null;
+  };
+}
+
 function mapApiJobToSuggestedJob(raw: Record<string, unknown>): SuggestedJob {
   const tags = Array.isArray(raw.affected_devtags) ? raw.affected_devtags as string[] : [];
   const files = Array.isArray(raw.affected_files) ? raw.affected_files as string[] : [];
@@ -723,6 +740,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [autoIntelLastRun, setAutoIntelLastRun] = useState<string | null>(null);
   const [autoIntelError, setAutoIntelError] = useState<string | null>(null);
   const [autoIntelFailCount, setAutoIntelFailCount] = useState(0);
+  const [autoIntelServerSynced, setAutoIntelServerSynced] = useState(false);
 
 // ── Rate usage state (server-aggregated via /api/blame/usage-summary) ──
   const [rateUsage, setRateUsage] = useState<Array<{ model: string; count: number; limitEst: number; usagePct?: number; status?: string }>>([]); 
@@ -1046,6 +1064,21 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       .catch(() => {});
   }, [projectId]);
 
+  const loadAutoIntelSettings = useCallback(() => {
+    fetch(`${API_BASE}/api/god-factory/auto-intel/settings`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: AutoIntelSettingsResponse | null) => {
+        if (!d?.settings) return;
+        setAutoIntelEnabled(!!d.settings.enabled);
+        setAutoIntelExecuteJobs(!!d.settings.executeJobs);
+        setAutoIntelIntervalMin(Math.max(1, Math.round(Number(d.settings.intervalSec || 900) / 60)));
+        if (d.runtime?.last_run_at) setAutoIntelLastRun(d.runtime.last_run_at);
+        if (d.runtime?.last_error) setAutoIntelError(d.runtime.last_error);
+        setAutoIntelServerSynced(true);
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     let jobsTimer: number | undefined;
@@ -1100,6 +1133,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       loadEmployerStatus();
       loadEmployerSuggestions();
       loadBlameRegistry();
+      loadAutoIntelSettings();
 
       jobsTimer = window.setInterval(() => {
         loadSuggestedJobs();
@@ -1144,12 +1178,29 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (jobsTimer) window.clearInterval(jobsTimer);
       if (gfTimer) window.clearInterval(gfTimer);
     };
-  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions, loadBlameRegistry]);
+  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions, loadBlameRegistry, loadAutoIntelSettings]);
 
   // ── Persist auto-intel settings to localStorage ──
   useEffect(() => { try { localStorage.setItem('gf_autoIntelEnabled', autoIntelEnabled ? '1' : '0'); } catch {} }, [autoIntelEnabled]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelExecuteJobs', autoIntelExecuteJobs ? '1' : '0'); } catch {} }, [autoIntelExecuteJobs]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelIntervalMin', String(autoIntelIntervalMin)); } catch {} }, [autoIntelIntervalMin]);
+  useEffect(() => {
+    const payload = {
+      enabled: autoIntelEnabled,
+      executeJobs: autoIntelExecuteJobs,
+      intervalSec: Math.max(60, autoIntelIntervalMin * 60),
+      projectId: projectId || null,
+      model: chatSelectedModel || null,
+      maxIterations: 0,
+      jobMaxIterations: 50,
+      autoCooldownProfile: true,
+    };
+    fetch(`${API_BASE}/api/god-factory/auto-intel/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }, [autoIntelEnabled, autoIntelExecuteJobs, autoIntelIntervalMin, projectId, chatSelectedModel]);
   useEffect(() => {
     try {
       readyNoticeShownRef.current = sessionStorage.getItem(GF_READY_NOTICE_KEY) === '1';
@@ -2072,6 +2123,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
               {autoIntelLastRun && (
                 <div className="text-ide-text-dim">Last: {new Date(autoIntelLastRun).toLocaleTimeString()}</div>
               )}
+              <div className="text-ide-text-dim">
+                Server 24/7: {autoIntelServerSynced ? 'synced' : 'local fallback'}
+              </div>
               {autoIntelExecuteJobs && !projectId && (
                 <div className="text-yellow-400 leading-snug">Select an active project before auto-executing Suggested Jobs.</div>
               )}
