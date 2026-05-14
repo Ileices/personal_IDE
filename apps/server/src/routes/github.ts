@@ -73,10 +73,14 @@ export async function githubRoutes(app: FastifyInstance) {
   }
 
   // ── Helper: append app disclaimer to outgoing GitHub posts ──
-  const APP_DISCLAIMER = '\n\n---\n*Sent from a [Personal\\_IDE](https://github.com/Ileices/personal_IDE)*';
+  // Keep this idempotent: if operators copy/paste previously posted text, avoid duplicate footers.
+  const APP_DISCLAIMER = '\n\n---\n*Sent from a [Personal_IDE](https://github.com/Ileices/personal_IDE)*';
+  const APP_DISCLAIMER_RE = /sent\s+from\s+a\s+\[?personal(?:_|\\_)?ide\]?\s*\(https:\/\/github\.com\/Ileices\/personal_IDE\)/i;
+
   function withDisclaimer(body: string): string {
-    if ((body.includes('Posted from') || body.includes('Sent from')) && body.includes('personal_IDE')) return body;
-    return body + APP_DISCLAIMER;
+    const text = typeof body === 'string' ? body : String(body ?? '');
+    if (APP_DISCLAIMER_RE.test(text)) return text;
+    return text + APP_DISCLAIMER;
   }
 
   // ── Helper: require GitHub token ───────────────
@@ -458,7 +462,7 @@ export async function githubRoutes(app: FastifyInstance) {
       if (reportType === 'bug' || crossPostIssue) {
         issue = await gh().createIssue({
           title,
-          body: `${body}\n\n---\n_Originally reported via [Discussion #${discussion.number}](${discussion.url})_`,
+          body: withDisclaimer(`${body}\n\n---\n_Originally reported via [Discussion #${discussion.number}](${discussion.url})_`),
           labels: labels || ['bug'],
         });
       }

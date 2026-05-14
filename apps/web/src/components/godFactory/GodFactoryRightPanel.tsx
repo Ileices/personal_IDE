@@ -165,6 +165,7 @@ interface AutoIntelSettingsResponse {
     enabled: boolean;
     intervalSec: number;
     executeJobs: boolean;
+    analyzeEmployer: boolean;
     projectId: string | null;
     model: string | null;
     maxIterations: number;
@@ -732,6 +733,14 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [autoIntelExecuteJobs, setAutoIntelExecuteJobs] = useState(() => {
     try { return localStorage.getItem('gf_autoIntelExecuteJobs') === '1'; } catch { return false; }
   });
+  const [autoIntelAnalyzeEmployer, setAutoIntelAnalyzeEmployer] = useState(() => {
+    try {
+      const raw = localStorage.getItem('gf_autoIntelAnalyzeEmployer');
+      return raw === null ? true : raw === '1';
+    } catch {
+      return true;
+    }
+  });
   const [autoIntelIntervalMin, setAutoIntelIntervalMin] = useState(() => {
     try { return parseInt(localStorage.getItem('gf_autoIntelIntervalMin') || '15', 10); } catch { return 15; }
   });
@@ -1071,6 +1080,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         if (!d?.settings) return;
         setAutoIntelEnabled(!!d.settings.enabled);
         setAutoIntelExecuteJobs(!!d.settings.executeJobs);
+        setAutoIntelAnalyzeEmployer(d.settings.analyzeEmployer ?? true);
         setAutoIntelIntervalMin(Math.max(1, Math.round(Number(d.settings.intervalSec || 900) / 60)));
         if (d.runtime?.last_run_at) setAutoIntelLastRun(d.runtime.last_run_at);
         if (d.runtime?.last_error) setAutoIntelError(d.runtime.last_error);
@@ -1183,11 +1193,13 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   // ── Persist auto-intel settings to localStorage ──
   useEffect(() => { try { localStorage.setItem('gf_autoIntelEnabled', autoIntelEnabled ? '1' : '0'); } catch {} }, [autoIntelEnabled]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelExecuteJobs', autoIntelExecuteJobs ? '1' : '0'); } catch {} }, [autoIntelExecuteJobs]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelAnalyzeEmployer', autoIntelAnalyzeEmployer ? '1' : '0'); } catch {} }, [autoIntelAnalyzeEmployer]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelIntervalMin', String(autoIntelIntervalMin)); } catch {} }, [autoIntelIntervalMin]);
   useEffect(() => {
     const payload = {
       enabled: autoIntelEnabled,
       executeJobs: autoIntelExecuteJobs,
+      analyzeEmployer: autoIntelAnalyzeEmployer,
       intervalSec: Math.max(60, autoIntelIntervalMin * 60),
       projectId: projectId || null,
       model: chatSelectedModel || null,
@@ -1200,7 +1212,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(() => {});
-  }, [autoIntelEnabled, autoIntelExecuteJobs, autoIntelIntervalMin, projectId, chatSelectedModel]);
+  }, [autoIntelEnabled, autoIntelExecuteJobs, autoIntelAnalyzeEmployer, autoIntelIntervalMin, projectId, chatSelectedModel]);
   useEffect(() => {
     try {
       readyNoticeShownRef.current = sessionStorage.getItem(GF_READY_NOTICE_KEY) === '1';
@@ -1705,12 +1717,18 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       // Step 2: refresh God Factory signals
       const signalsRes = await fetch(`${API_BASE}/api/god-factory/signals`, { method: 'GET' }).catch(() => null);
       if (!signalsRes || !signalsRes.ok) throw new Error('signals refresh failed');
+      // Step 2b: optional employer pass (blame -> role stratification refresh)
+      if (autoIntelAnalyzeEmployer) {
+        await fetch(`${API_BASE}/api/employer/analyze`, { method: 'POST' }).catch(() => null);
+      }
       // Step 3: reload queue and jobs
       loadQueue();
       loadSuggestedJobs();
       loadImplementingJobs();
       loadBackgroundStatus();
       loadCodebaseHealth();
+      loadEmployerStatus();
+      loadEmployerSuggestions();
 
       // Step 4: optionally advance pending work through the real autonomous loop
       if (autoIntelExecuteJobs) {
@@ -1764,12 +1782,15 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     }
   }, [
     autoIntelBusy,
+    autoIntelAnalyzeEmployer,
     autoIntelExecuteJobs,
     autoIntelFailCount,
     autoIntelIntervalMin,
     chatSelectedModel,
     loadBackgroundStatus,
     loadCodebaseHealth,
+    loadEmployerStatus,
+    loadEmployerSuggestions,
     loadImplementingJobs,
     loadQueue,
     loadSuggestedJobs,
@@ -2099,6 +2120,15 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   type="checkbox"
                   checked={autoIntelExecuteJobs}
                   onChange={e => setAutoIntelExecuteJobs(e.target.checked)}
+                  className="accent-purple-400"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 rounded bg-ide-bg/30 px-1.5 py-1">
+                <span className="text-ide-text-dim">Analyze employer roles each cycle</span>
+                <input
+                  type="checkbox"
+                  checked={autoIntelAnalyzeEmployer}
+                  onChange={e => setAutoIntelAnalyzeEmployer(e.target.checked)}
                   className="accent-purple-400"
                 />
               </label>

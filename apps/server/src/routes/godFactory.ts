@@ -788,6 +788,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     enabled: boolean;
     intervalSec: number;
     executeJobs: boolean;
+    analyzeEmployer: boolean;
     projectId: string | null;
     model: string | null;
     maxIterations: number;
@@ -799,6 +800,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     enabled: false,
     intervalSec: 15 * 60,
     executeJobs: false,
+    analyzeEmployer: true,
     projectId: null,
     model: null,
     maxIterations: 0,
@@ -815,6 +817,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         enabled: !!parsed.enabled,
         intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(parsed.intervalSec || DEFAULT_AUTO_INTEL_SETTINGS.intervalSec))),
         executeJobs: !!parsed.executeJobs,
+        analyzeEmployer: parsed.analyzeEmployer ?? DEFAULT_AUTO_INTEL_SETTINGS.analyzeEmployer,
         projectId: parsed.projectId ? String(parsed.projectId) : null,
         model: parsed.model ? String(parsed.model) : null,
         maxIterations: Number.isFinite(Number(parsed.maxIterations)) ? Number(parsed.maxIterations) : DEFAULT_AUTO_INTEL_SETTINGS.maxIterations,
@@ -835,6 +838,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       ...patch,
       intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(patch.intervalSec ?? current.intervalSec))),
       executeJobs: patch.executeJobs ?? current.executeJobs,
+      analyzeEmployer: patch.analyzeEmployer ?? current.analyzeEmployer,
       enabled: patch.enabled ?? current.enabled,
       projectId: patch.projectId === undefined ? current.projectId : (patch.projectId ? String(patch.projectId) : null),
       model: patch.model === undefined ? current.model : (patch.model ? String(patch.model) : null),

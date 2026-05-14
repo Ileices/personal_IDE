@@ -12,6 +12,7 @@ type AutoIntelSettings = {
   enabled: boolean;
   intervalSec: number;
   executeJobs: boolean;
+  analyzeEmployer: boolean;
   projectId: string | null;
   model: string | null;
   maxIterations: number;
@@ -23,6 +24,7 @@ const DEFAULT_AUTO_INTEL_SETTINGS: AutoIntelSettings = {
   enabled: false,
   intervalSec: 15 * 60,
   executeJobs: false,
+  analyzeEmployer: true,
   projectId: null,
   model: null,
   maxIterations: 0,
@@ -96,6 +98,7 @@ function loadAutoIntelSettings(db: Database.Database): AutoIntelSettings {
       enabled: !!parsed.enabled,
       intervalSec: Math.max(60, Math.min(7 * 24 * 3600, Number(parsed.intervalSec || DEFAULT_AUTO_INTEL_SETTINGS.intervalSec))),
       executeJobs: !!parsed.executeJobs,
+      analyzeEmployer: parsed.analyzeEmployer ?? DEFAULT_AUTO_INTEL_SETTINGS.analyzeEmployer,
       projectId: parsed.projectId ? String(parsed.projectId) : null,
       model: parsed.model ? String(parsed.model) : null,
       maxIterations: Number.isFinite(Number(parsed.maxIterations)) ? Number(parsed.maxIterations) : DEFAULT_AUTO_INTEL_SETTINGS.maxIterations,
@@ -129,6 +132,10 @@ async function runAutoIntelCycle(db: Database.Database, settings: AutoIntelSetti
   executeSubsystem(db, { subsystem: 'suggested_jobs_crawler', depth: 4 });
   executeSubsystem(db, { subsystem: 'gap_analysis', depth: 4 });
   executeSubsystem(db, { subsystem: 'god_factory_idle_scan', depth: 1 });
+
+  if (settings.analyzeEmployer) {
+    await fetch(`${baseUrl}/api/employer/analyze`, { method: 'POST' }).catch(() => null);
+  }
 
   if (!settings.executeJobs) return;
 

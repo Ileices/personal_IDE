@@ -504,6 +504,8 @@ export const HELP_SECTIONS: HelpSection[] = [
       { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16868952', label: '#20 — Disconnected compute pipelines: signals not enforced as lifecycle gates' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16869759', label: '#20 — Solution: Compute as lifecycle go/no-go gate enforcement' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16869281', label: '#20 — Dev analyze endpoint wired to wrong chat route' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/68', label: 'Discussion #68 — Pass update: disclaimer integrity + employer auto-analysis wiring' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/69', label: 'Discussion #69 — Competitive gap pass: Copilot/Base44/Replit surpass plan' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/18', label: 'Discussion #18 — God Factory Agent Roadmap: Full IDE-Self-Programming Control Plane' },
     ],
   },
