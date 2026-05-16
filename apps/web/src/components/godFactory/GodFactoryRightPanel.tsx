@@ -298,6 +298,7 @@ function mapCategoryToSubsystem(category: string): SubsystemId | null {
   if (!c) return null;
   if (c.includes('gap') || c.includes('debt') || c.includes('regression')) return 'gap_analysis';
   if (c.includes('model')) return 'suggested_jobs_crawler';
+  if (c.includes('brainstorm') || c.includes('external_project') || c.includes('external')) return 'suggested_jobs_crawler';
   if (c.includes('idle')) return 'god_factory_idle_scan';
   if (c.includes('project') || c.includes('state') || c.includes('drift')) return 'project_state_crawler';
   if (c.includes('job') || c.includes('queue')) return 'suggested_jobs_crawler';
