@@ -564,6 +564,8 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
       { url: 'https://github.com/Ileices/personal_IDE/discussions/70', label: 'Discussion #70 — Pass update: external reflection jobs now feed internal IDE improvements' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/71', label: 'Discussion #71 — Pass update: cooldown horizon controls + welcome dedupe' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/72', label: 'Discussion #72 — Pass update: manual rate overrides + blame origin fallback summary' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/78', label: 'Discussion #78 — Pass update: startup dedupe, Intel action resilience, and dev-route guardrails' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/79', label: 'Discussion #79 — Benchmark addendum: God Factory vs Copilot/Base44/Replit convergence status' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/63', label: 'Discussion #63 — Chat /api/chat/send FK constraint report and validation trail' },
       { url: 'https://github.com/Ileices/personal_IDE/issues/64', label: 'Issue #64 — /api/chat/send SQLITE_CONSTRAINT_FOREIGNKEY runtime report' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/18', label: 'Discussion #18 — God Factory Agent Roadmap: Full IDE-Self-Programming Control Plane' },
