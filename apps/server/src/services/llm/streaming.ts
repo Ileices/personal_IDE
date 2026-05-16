@@ -40,6 +40,7 @@ export async function streamChatResponse(
     messageId?: string;
     onContent?: (fullContent: string) => void;
     onDone?: (fullContent: string, usage: any) => void;
+    onBeforeDone?: (fullContent: string, usage: any, emit: (event: Record<string, unknown>) => void) => void;
     signal?: AbortSignal;
     deferStartUntilReady?: boolean;
   }
@@ -109,9 +110,12 @@ export async function streamChatResponse(
 
       // Check for finish
       if (chunk.choices[0]?.finish_reason) {
+        const usage = chunk.usage || (chunk as any).x_groq?.usage;
+        options?.onBeforeDone?.(fullContent, usage, (event) => {
+          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+        });
         sendEvent({ type: 'content_done', fullContent });
 
-        const usage = chunk.usage || (chunk as any).x_groq?.usage;
         sendEvent({
           type: 'done',
           usage: usage ? {

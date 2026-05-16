@@ -295,6 +295,7 @@ const HIST_KEY = 'god_factory_prompt_history';
 const CONV_KEY = 'god_factory_conversation';
 const SESSION_KEY = 'god_factory_session_id';
 const SESSION_BRIEF_KEY_PREFIX = 'god_factory_session_brief_shown:';
+const SESSION_BRIEF_GLOBAL_KEY = 'god_factory_session_brief_shown_global';
 
 const loadHistory  = (): PromptHistoryItem[] => { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; } };
 const saveHistory  = (v: PromptHistoryItem[]) => { try { localStorage.setItem(HIST_KEY, JSON.stringify(v.slice(0, 300))); } catch {} };
@@ -568,7 +569,8 @@ export function TheGodFactory() {
     if (sessionIntroShownRef.current === sessionId) return;
     try {
       const persisted = sessionStorage.getItem(`${SESSION_BRIEF_KEY_PREFIX}${sessionId}`) === '1';
-      if (persisted) {
+      const globalPersisted = sessionStorage.getItem(SESSION_BRIEF_GLOBAL_KEY) === '1';
+      if (persisted || globalPersisted) {
         sessionIntroShownRef.current = sessionId;
         return;
       }
@@ -587,7 +589,14 @@ export function TheGodFactory() {
       const suggestions = suggestionsData?.suggestions || [];
 
       setMessages(prev => {
-        if (prev.some(msg => msg.id === `gf-startup-${sessionId}`)) return prev;
+        // Only inject the startup brief into a fresh thread.
+        // Re-mounting the God Factory tab should not interrupt ongoing conversations.
+        if (prev.length > 0) return prev;
+        const alreadyHasStartupBrief = prev.some(msg =>
+          msg.id.startsWith('gf-startup-')
+          || msg.content.includes('[THE GOD FACTORY STARTUP BRIEF]')
+        );
+        if (alreadyHasStartupBrief) return prev;
         return [...prev, {
           id: `gf-startup-${sessionId}`,
           role: 'assistant',
@@ -604,6 +613,7 @@ export function TheGodFactory() {
     } finally {
       sessionIntroShownRef.current = sessionId;
       try { sessionStorage.setItem(`${SESSION_BRIEF_KEY_PREFIX}${sessionId}`, '1'); } catch {}
+      try { sessionStorage.setItem(SESSION_BRIEF_GLOBAL_KEY, '1'); } catch {}
     }
   }, [appendGodFactorySession, localModel]);
 
@@ -1261,6 +1271,7 @@ export function TheGodFactory() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let fullContent = '';
+    let modelRecommendation = '';
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -1278,6 +1289,14 @@ export function TheGodFactory() {
             setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: fullContent } : m));
           } else if (ev.type === 'content_done') {
             fullContent = ev.fullContent || fullContent;
+          } else if (ev.type === 'model_recommendation') {
+            const recommended = String(ev.recommendedModel || '').trim();
+            if (recommended) {
+              const confidence = Number(ev.confidence || 0);
+              const pct = Number.isFinite(confidence) ? Math.round(confidence * 100) : 0;
+              const taskType = String(ev.taskType || 'general');
+              modelRecommendation = `\n\nRecommendation: Next similar ${taskType} requests should prefer ${recommended}${pct > 0 ? ` (${pct}% confidence)` : ''}.`;
+            }
           } else if (ev.type === 'done') {
             setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', tokenCount: ev.usage?.totalTokens } : m));
           } else if (ev.type === 'error') {
@@ -1286,8 +1305,8 @@ export function TheGodFactory() {
         } catch { /* skip malformed */ }
       }
     }
-    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', content: fullContent || m.content } : m));
-    return { content: fullContent, msgId };
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', content: `${fullContent || m.content}${modelRecommendation}` } : m));
+    return { content: `${fullContent}${modelRecommendation}`, msgId };
   }, [localModel, allModels, conversationId, selectedFiles]);
 
   const takeBackup = async (): Promise<string | null> => {

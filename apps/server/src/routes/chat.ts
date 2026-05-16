@@ -19,6 +19,119 @@ import { resolveModelStrategy } from '../services/modelStrategy.js';
 import { writeBlameRecord } from './blame.js';
 import { observationTrainingHook } from '../services/nano/observationTrainer.js';
 
+function safeParseJsonArray(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function inferTaskTypeFromPrompt(prompt: string, mode: string): string {
+  const p = String(prompt || '').toLowerCase();
+  if (mode === 'plan' || /architect|architecture|system design|design doc|multi[ -]?file/.test(p)) return 'architecture';
+  if (/fix|bug|error|exception|stack trace|regression|debug/.test(p)) return 'debugging';
+  if (/test|coverage|unit test|integration test|vitest|jest/.test(p)) return 'test_generation';
+  if (/readme|documentation|docs|comment|explain/.test(p)) return 'documentation';
+  if (/refactor|cleanup|lint|format|rename|small edit|logging/.test(p)) return 'micro_edit';
+  return mode === 'agent' ? 'feature_implementation' : 'general';
+}
+
+function buildChatModelRecommendation(db: any, prompt: string, mode: string, usedModel: string): {
+  recommendedModel: string;
+  confidence: number;
+  rationale: string;
+  taskType: string;
+} {
+  const taskType = inferTaskTypeFromPrompt(prompt, mode);
+
+  const rows = db.prepare(`
+    SELECT
+      ea.model_id,
+      ea.recommended_role,
+      ea.role_confidence,
+      ea.task_types,
+      ea.avoid_task_types,
+      mr.avg_quality,
+      mr.success_rate
+    FROM employer_analysis ea
+    LEFT JOIN model_registry mr ON mr.model_id = ea.model_id
+    WHERE ea.id IN (
+      SELECT id FROM employer_analysis ea2
+      WHERE ea2.model_id = ea.model_id
+      ORDER BY datetime(ea2.analyzed_at) DESC
+      LIMIT 1
+    )
+      AND COALESCE(ea.retirement_recommended, 0) = 0
+    ORDER BY ea.role_confidence DESC, COALESCE(mr.avg_quality, 0) DESC
+    LIMIT 40
+  `).all() as Array<{
+    model_id: string;
+    recommended_role: string | null;
+    role_confidence: number | null;
+    task_types: string | null;
+    avoid_task_types: string | null;
+    avg_quality: number | null;
+    success_rate: number | null;
+  }>;
+
+  if (!rows.length) {
+    return {
+      recommendedModel: usedModel,
+      confidence: 0.55,
+      rationale: 'No employer-analysis candidates yet; keep current model.',
+      taskType,
+    };
+  }
+
+  let best: { modelId: string; score: number; confidence: number; rationale: string } | null = null;
+
+  for (const row of rows) {
+    const taskTypes = safeParseJsonArray(row.task_types).map((s) => s.toLowerCase());
+    const avoidTypes = safeParseJsonArray(row.avoid_task_types).map((s) => s.toLowerCase());
+    const role = String(row.recommended_role || 'general').toLowerCase();
+    const roleConfidence = Number(row.role_confidence || 0.5);
+    const quality = Number(row.avg_quality || 0.65);
+    const success = Number(row.success_rate || 0.65);
+
+    let score = roleConfidence * 100 + quality * 40 + success * 25;
+    if (taskTypes.includes(taskType)) score += 18;
+    if (avoidTypes.includes(taskType)) score -= 45;
+    if (taskType === 'architecture' && role.includes('architect')) score += 12;
+    if (taskType === 'micro_edit' && role.includes('micro')) score += 10;
+    if (row.model_id === usedModel) score += 3;
+
+    if (!best || score > best.score) {
+      best = {
+        modelId: row.model_id,
+        score,
+        confidence: Math.max(0.4, Math.min(0.98, roleConfidence * 0.7 + quality * 0.2 + success * 0.1)),
+        rationale: `${row.model_id} has role=${role} and matches task=${taskType}`,
+      };
+    }
+  }
+
+  if (!best) {
+    return {
+      recommendedModel: usedModel,
+      confidence: 0.55,
+      rationale: 'No suitable model match found; keep current model.',
+      taskType,
+    };
+  }
+
+  return {
+    recommendedModel: best.modelId,
+    confidence: best.confidence,
+    rationale: best.rationale,
+    taskType,
+  };
+}
+
 /** Get an LLM client for a model ID, returns null if not configured */
 function getClientForModel(db: any, modelId: string): import('openai').default | null {
   const provider = extractProviderFromModelId(modelId) as ProviderType;
@@ -53,6 +166,11 @@ function isFallbackError(err: any): boolean {
 export async function chatRoutes(app: FastifyInstance) {
   const db = (app as any).db;
   const memory = new MemoryService(db);
+
+  const isForeignKeyError = (err: unknown): boolean => {
+    const msg = String((err as any)?.message || err || '').toLowerCase();
+    return msg.includes('foreign key') || msg.includes('sqlite_constraint_foreignkey');
+  };
 
   // --- POST /api/chat/send - Send a message (SSE stream) ---
   app.post('/send', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -176,8 +294,42 @@ export async function chatRoutes(app: FastifyInstance) {
       );
     }
 
-    // Save user message
-    const userMessageId = memory.addMessage(conversationId, 'user', body.message, body.model, body.mode);
+    const ensureConversation = (): string => {
+      const row = db.prepare('SELECT id FROM conversations WHERE id = ? LIMIT 1').get(conversationId) as { id?: string } | undefined;
+      if (row?.id) return row.id;
+      conversationId = memory.createConversation(
+        effectiveProjectId,
+        body.message.slice(0, 50),
+        body.mode,
+        body.model,
+      );
+      return conversationId;
+    };
+
+    const safeAddMessage = (
+      role: 'user' | 'assistant',
+      content: string,
+      model?: string,
+      mode?: string,
+      structuredOutput?: any,
+    ): string => {
+      const convId = ensureConversation();
+      try {
+        return memory.addMessage(convId, role, content, model, mode, structuredOutput);
+      } catch (err: unknown) {
+        if (!isForeignKeyError(err)) throw err;
+        conversationId = memory.createConversation(
+          effectiveProjectId,
+          body.message.slice(0, 50),
+          body.mode,
+          body.model,
+        );
+        return memory.addMessage(conversationId, role, content, model, mode, structuredOutput);
+      }
+    };
+
+    // Save user message (self-healing if conversation reference went stale)
+    const userMessageId = safeAddMessage('user', body.message, body.model, body.mode);
 
     // Build memory context
     let memoryContext = '';
@@ -310,6 +462,15 @@ export async function chatRoutes(app: FastifyInstance) {
           if (fullContent) {
             reply.raw.write(`data: ${JSON.stringify({ type: 'content_delta', delta: fullContent })}\n\n`);
           }
+          const recommendation = buildChatModelRecommendation(db, body.message, body.mode, modelId);
+          reply.raw.write(`data: ${JSON.stringify({
+            type: 'model_recommendation',
+            recommendedModel: recommendation.recommendedModel,
+            confidence: recommendation.confidence,
+            rationale: recommendation.rationale,
+            taskType: recommendation.taskType,
+            currentModel: modelId,
+          })}\n\n`);
           reply.raw.write(`data: ${JSON.stringify({ type: 'content_done', fullContent })}\n\n`);
           reply.raw.write(`data: ${JSON.stringify({
             type: 'done',
@@ -349,7 +510,7 @@ export async function chatRoutes(app: FastifyInstance) {
             tagValidationFailureCodes: structured ? [] : ['unstructured_output'],
           });
 
-          memory.addMessage(conversationId!, 'assistant', fullContent, modelId, body.mode, structured);
+          safeAddMessage('assistant', fullContent, modelId, body.mode, structured);
           if (structured?.summary) {
             memory.addNote(effectiveProjectId, {
               projectId: effectiveProjectId,
@@ -375,6 +536,17 @@ export async function chatRoutes(app: FastifyInstance) {
           deferStartUntilReady: true,
           conversationId,
           messageId: userMessageId,
+          onBeforeDone: (_fullContent, _usage, emit) => {
+            const recommendation = buildChatModelRecommendation(db, body.message, body.mode, modelId);
+            emit({
+              type: 'model_recommendation',
+              recommendedModel: recommendation.recommendedModel,
+              confidence: recommendation.confidence,
+              rationale: recommendation.rationale,
+              taskType: recommendation.taskType,
+              currentModel: modelId,
+            });
+          },
           onDone: (fullContent, usage) => {
             console.log(`[chat-fallback] Model ${modelId} completed successfully`);
             rateLimiter.recordEnd(modelId);
@@ -417,7 +589,7 @@ export async function chatRoutes(app: FastifyInstance) {
             });
 
             // Save assistant message (use actual model used, not body.model)
-            memory.addMessage(conversationId!, 'assistant', fullContent, modelId, body.mode, structured);
+            safeAddMessage('assistant', fullContent, modelId, body.mode, structured);
 
             // Auto-save summary if structured output found
             if (structured?.summary) {

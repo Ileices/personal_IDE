@@ -2508,6 +2508,32 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 116,
+    name: 'employer_allowance_value_fields',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, col: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+
+      if (!hasColumn('employer_analysis', 'allowance_hourly_est')) {
+        db.exec(`ALTER TABLE employer_analysis ADD COLUMN allowance_hourly_est INTEGER NOT NULL DEFAULT 0`);
+      }
+      if (!hasColumn('employer_analysis', 'allowance_window_usage_pct')) {
+        db.exec(`ALTER TABLE employer_analysis ADD COLUMN allowance_window_usage_pct REAL NOT NULL DEFAULT 0`);
+      }
+      if (!hasColumn('employer_analysis', 'allowance_tier')) {
+        db.exec(`ALTER TABLE employer_analysis ADD COLUMN allowance_tier TEXT NOT NULL DEFAULT 'balanced'`);
+      }
+      if (!hasColumn('employer_analysis', 'strategic_value_score')) {
+        db.exec(`ALTER TABLE employer_analysis ADD COLUMN strategic_value_score REAL NOT NULL DEFAULT 0`);
+      }
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_employer_allowance_tier
+          ON employer_analysis(allowance_tier, strategic_value_score, analyzed_at);
+      `);
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────

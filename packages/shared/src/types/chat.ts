@@ -77,6 +77,7 @@ export type ChatStreamEvent =
   | { type: 'structured_output'; data: StructuredAgentOutput }
   | { type: 'error'; error: string }
   | { type: 'model_fallback'; from: string; to: string; reason: string }
+  | { type: 'model_recommendation'; recommendedModel: string; confidence?: number; rationale?: string; taskType?: string; currentModel?: string }
   | { type: 'done'; usage?: TokenUsage };
 
 /** Token usage stats */

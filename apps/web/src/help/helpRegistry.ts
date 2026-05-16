@@ -20,7 +20,48 @@ export interface HelpAnchor {
   tab?: EditorTab;
 }
 
-export const HELP_SECTIONS: HelpSection[] = [
+const DISCUSSION_HOST_REWRITES: Array<[RegExp, string]> = [
+  [/^https:\/\/github\.com\/community\/community\/discussions\//i, 'https://github.com/orgs/community/discussions/'],
+];
+
+function normalizeDiscussionUrl(url: string): string {
+  let normalized = url.trim();
+  normalized = normalized.replace(/[`\r\n]/g, '');
+  normalized = normalized.replace(/%60/gi, '');
+  for (const [pattern, replacement] of DISCUSSION_HOST_REWRITES) {
+    normalized = normalized.replace(pattern, replacement);
+  }
+  return normalized;
+}
+
+function normalizeDiscussionLabel(label: string): string {
+  return label.replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeHelpSections(sections: HelpSection[]): HelpSection[] {
+  return sections.map((section) => {
+    const links = section.discussionLinks;
+    if (!links || links.length === 0) {
+      return section;
+    }
+
+    const deduped = new Set<string>();
+    const normalizedLinks: Array<{ url: string; label: string }> = [];
+
+    for (const link of links) {
+      const url = normalizeDiscussionUrl(link.url);
+      if (!url) continue;
+      const dedupeKey = `${url}::${normalizeDiscussionLabel(link.label)}`;
+      if (deduped.has(dedupeKey)) continue;
+      deduped.add(dedupeKey);
+      normalizedLinks.push({ url, label: normalizeDiscussionLabel(link.label) });
+    }
+
+    return { ...section, discussionLinks: normalizedLinks };
+  });
+}
+
+const RAW_HELP_SECTIONS: HelpSection[] = [
   {
     id: 'overview',
     title: 'Workspace Overview',
@@ -483,6 +524,18 @@ export const HELP_SECTIONS: HelpSection[] = [
       '✅ FIXED (Intel Panel → God Factory pipeline, v114 May 2026): The wiring gap documented in https://github.com/Ileices/personal_IDE/discussions/24 is now closed. flushFlaggedGapReportsToJobs(db) reads gap_reports WHERE flagged_to_god_factory=1 AND acknowledged_at IS NULL, creates job_records entries with priority=critical/high/medium/low mapped from gap severity, source=god_factory_agent, and marks each gap acknowledged_at=datetime(now) (idempotent). The function is called inside refreshGodFactorySignals() and also exposed as POST /api/god-factory/gap-reports/flush-to-jobs. The verify-and-archive cycle (re-run sub-agent after job=implemented, set gap_reports.verified_at) remains OPEN GAP — see https://github.com/Ileices/personal_IDE/discussions/51',
       '✅ FIXED (Intel cooldown horizon + startup spam hardening, v115 May 2026): Auto-intel now persists and uses cooldown profile + cooldown horizon (1h/2h/10h/24h/1w) and forwards those controls into loop-start execution so autonomous passes can stretch rate limits over a target time window. The God Factory ready notification now uses durable storage-backed dedupe, preventing repeated welcome spam when switching back to the screen.',
       '✅ FIXED (Manual rate controls + blame-origin fallback summary, v116 May 2026): Intel Panel rate controls now support configurable cooldown/sleep durations and skip-cycle counts before override injection. A new BLAME endpoint (/api/blame/code-origin-summary) scans for $usersignature[TAG] markers and, when attribution records are absent, explicitly reports fallback mode that treats untagged code as github/copilot-assumed provenance.',
+      '✅ FIXED (Chat recommendation + notification action depth, v117 May 2026): Chat SSE now emits model_recommendation events derived from employer_analysis/model_registry role-fit scoring and prompt task-type inference, and the UI surfaces that recommendation inline at response completion. Notification detail actions now cover additional categories (pattern_watch/model_behavior_alert/debt_warning/regression-like gaps) with direct controls for Create Job, Re-run Employer Analysis, and Apply Intelligent Cycle where relevant.',
+      '✅ FIXED (Server-side auto-intel scheduler + chat FK self-heal, v118 May 2026): God Factory now runs an internal scheduler tick (30s cadence) that respects persisted auto-intel settings, executes gap flush + signal refresh + optional employer analysis + external reflection, and can auto-start the autonomous loop when pending suggested jobs exist. Added /api/god-factory/auto-intel/run-once and /api/god-factory/auto-intel/status for deterministic operator control/visibility. Chat persistence now self-heals stale conversation references to prevent SQLITE_CONSTRAINT_FOREIGNKEY hard-failures on /api/chat/send.',
+      '✅ FIXED (Cloud-budget fallback controls + runtime counters, v119 May 2026): Auto-intel now supports explicit cloud request budget governance (enable/disable, time window, request cap) and deterministic prefer-local fallback when cloud budget is exhausted. Intel panel now exposes runtime counters and latest skip/loop-start error details, so unattended 24/7 behavior is observable without log diving.',
+      '✅ FIXED (Machine-limit-aware local fallback guard, v120 May 2026): Auto-intel now supports configurable local context-window caps so oversized local models can be excluded from autonomous selection instead of repeatedly failing hardware constraints. Intel panel now exposes the local cap toggle/value and a local parallel target planning control; cycle telemetry records blocked-by-machine-limit model candidates and local parallel readiness.',
+      '✅ FIXED (Machine-limit signal to Suggested Jobs pipeline, v121 May 2026): When local candidates are blocked by machine-limit guards, God Factory now creates deduplicated model_tool_enhancement Suggested Jobs (machine_limit_block marker) so blocked model signals become actionable internal hardening work instead of silent telemetry. Auto-intel run summaries now report machine_limit_jobs_created.',
+      '✅ FIXED (Allowance-aware Employer stratification, v122 May 2026): Employer analysis now incorporates estimated per-model rate allowance and rolling usage saturation to preserve scarce/valuable models for higher-complexity work while routing abundant-budget models toward throughput tasks. New analysis fields include allowance_hourly_est, allowance_window_usage_pct, allowance_tier, and strategic_value_score, improving role-fit decisions under real quota pressure.',
+      '✅ FIXED (Priority-aware strategic model selection, v123 May 2026): Auto-intel model selection now consumes Employer strategic_value_score + allowance_tier and pending-job priority profile to avoid wasting scarce models on low-priority throughput while still elevating high-value models for critical/high pending work. Selection telemetry now reports pending_priority_profile and selection_reason for auditability.',
+      '✅ FIXED (Local concurrency planner lane-budget wiring, v124 May 2026): Auto-intel now supports configurable local concurrency planning controls (planner toggle, lane token budget, max lanes) and computes planned/deferred local candidates under a machine-budget envelope before cloud-exhaust fallback selection. When planner capacity cannot satisfy desired local parallel target, God Factory creates a deduplicated concurrency-gap Suggested Job for benchmark/tuning follow-up. Run telemetry now reports local_parallel_deferred_candidates, local_parallel_token_budget, local_parallel_token_used, and local_concurrency_gap_jobs_created.',
+      '✅ FIXED (Scheduler dedupe + candidate-chain hardening, v125 May 2026): Duplicate auto-intel scheduling is now gated so route-owned scheduler execution is authoritative by default, reducing autonomous loop spam risk. Auto-intel now skips loop-start safely when candidate pools collapse after provider/machine-limit filtering, and propagates an explicit candidateChain into loop-start so planned model order is preserved across job execution. Intel panel auto-intel runtime now surfaces last cycle selection details (selected model, selection reason, machine-limit job count, concurrency-gap job count) for direct operator visibility.',
+      '✅ FIXED (GitHub Dev Analyze + canonical community-job injection, v126 May 2026): /api/github/dev/analyze now routes through the real /api/chat/send SSE contract (instead of legacy /api/chat), parses streamed content safely, and stores structured analysis/draft output deterministically. /api/github/dev/drafts/:id/post now writes follow-up work into canonical job_records (schema-aware insertion, optional project_id/description support) rather than legacy suggested_jobs, so community fixes flow directly into the God Factory implementation queue.',
+      '✅ FIXED (Disclaimer utility hardening + tests, v127 May 2026): GitHub outbound disclaimer enforcement is now centralized in a reusable ensurePersonalIdeDisclaimer() service used by report/discussion/comment posting paths, preserving idempotent behavior and stable repo-link formatting. Added automated tests covering append, idempotency, and variant recognition to prevent regression of the "Sent from a Personal_IDE" contract.',
+      '✅ FIXED (Startup-brief dedupe + dev-stream hardening + Intel action resilience, v128 May 2026): God Factory startup briefing now injects only into fresh threads so panel remounts do not interrupt active conversations with repeated welcome content. GitHub dev analyze SSE parsing now safely processes trailing residual events and applies an explicit timeout guard to avoid indefinite hangs under upstream stall. Intel notification cards/details now expose category-aware direct actions (Create Job, Re-run Employer, Add Queue) with subsystem-safe guards and surfaced failure notifications instead of silent no-op behavior.',
       'It is also supposed to consume Blame Crawler output continuously. The Blame Crawler attributes every model output, tracks quality and hallucination rates, proposes tool changes or model-config promotions, and forwards those findings into Suggested Jobs that The God Factory can prioritize or execute.',
       'The right-side Intel and subsystem controls are meant to expose and govern these background services, including crawler status, notifications, codebase health, suggested work, and brainstorm handling. Subsystem toggles are intended to let the user pause or resume background scanners and related meta-layer processes.',
       'The God Factory can launch on-the-fly sub-agents during a live conversation, including file inspectors, devtag resolvers, forensic readers, blame readers, live debt checks, live coverage checks, live pattern queries, and sandbox status readers, provided the scope fits the assigned model tier and context budget.',
@@ -511,6 +564,8 @@ export const HELP_SECTIONS: HelpSection[] = [
       { url: 'https://github.com/Ileices/personal_IDE/discussions/70', label: 'Discussion #70 — Pass update: external reflection jobs now feed internal IDE improvements' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/71', label: 'Discussion #71 — Pass update: cooldown horizon controls + welcome dedupe' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/72', label: 'Discussion #72 — Pass update: manual rate overrides + blame origin fallback summary' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/63', label: 'Discussion #63 — Chat /api/chat/send FK constraint report and validation trail' },
+      { url: 'https://github.com/Ileices/personal_IDE/issues/64', label: 'Issue #64 — /api/chat/send SQLITE_CONSTRAINT_FOREIGNKEY runtime report' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/18', label: 'Discussion #18 — God Factory Agent Roadmap: Full IDE-Self-Programming Control Plane' },
     ],
   },
@@ -803,6 +858,12 @@ export const HELP_SECTIONS: HelpSection[] = [
       '━━━ SEMANTIC ROUTING ━━━',
       'The Semantic Router (used by the Executive agent) routes incoming tasks by complexity. Simple one-shot queries go to smaller faster models. Complex multi-step code generation, reasoning chains, and spec-compliance checks route to the Architect or Coder tier models. Routing decisions are logged in the Task Ledger with model_assignment tags for blame attribution.',
       '⚠ NOTE: Model recommendations come from the Silicon Factory architecture spec. Actual performance depends on your hardware tier and available VRAM. See the Silicon Factory section for tier-by-tier hardware breakdowns and context budget allocations per tier.'
+    ],
+    discussionLinks: [
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/17', label: 'Discussion #17 — Help truth ledger (AI Systems promise tracking)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/20', label: 'Discussion #20 — Forensic teardown (model strategy, rate, lifecycle issues)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/24', label: 'Discussion #24 — Project state and what AI systems actually do today' },
+      { url: 'https://github.com/orgs/community/discussions/195397#discussioncomment-16869689', label: 'Community #195397 — Canonical clustered remediation map (C1-C6)' },
     ]
   },
   {
@@ -818,6 +879,11 @@ export const HELP_SECTIONS: HelpSection[] = [
       'GitHub PAT field allows entering a GitHub Personal Access Token for repo access features.',
       'Failed Models tab lists models that errored out with classification (not_configured, rate_limited, discontinued, etc) and action buttons.',
       'Nano status card shows live Nano Sea connection health from within Provider Settings.'
+    ],
+    discussionLinks: [
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16869279', label: '#20 Addendum A — Auth fallback and owner authority risk' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/68', label: 'Discussion #68 — Route hardening and posting integrity updates' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/17', label: 'Discussion #17 — Help parity for provider/auth controls' },
     ]
   },
   {
@@ -830,6 +896,11 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Strategy Presets: Full-Stack Balanced, Reasoning First, Specialized Boost, Local-Only 24/7, Cloud Burst + Local Sustain.',
       'Cooldown labels show when a model is rate-limited, backing off, or dead.',
       'Persists to /api/model-strategy on save; loaded automatically on panel open.'
+    ],
+    discussionLinks: [
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16869398', label: '#20 O — status/model contract drift finding' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/56', label: 'Discussion #56 — UI-selected model provenance fix pass' },
+      { url: 'https://github.com/orgs/community/discussions/195397#discussioncomment-16869606', label: 'Community C3 — governance, telemetry, and model path correctness' },
     ]
   },
   {
@@ -841,6 +912,11 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Green bars mean capacity available; yellow means <50% remaining; red means <20%.',
       'Dead models count shown in the header badge when any model is in hard cooldown.',
       'Use this panel to identify which providers are getting throttled during heavy agent runs.'
+    ],
+    discussionLinks: [
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/71', label: 'Discussion #71 — cooldown horizon controls and anti-exhaust shaping' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/72', label: 'Discussion #72 — manual override controls (cooldown/skip/sleep)' },
+      { url: 'https://github.com/orgs/community/discussions/195397#discussioncomment-16869840', label: 'Community C8 — poll/cooldown/status integrity hardening' },
     ]
   },
   {
@@ -859,6 +935,12 @@ export const HELP_SECTIONS: HelpSection[] = [
       'Analysis tab: aggregate patterns, worst/best performing models, drift signals.',
       'Run Blame Crawler button triggers a fresh crawl that scores recent outputs.',
       'Auto-Update toggle keeps the panel polling every few seconds while open.'
+    ],
+    discussionLinks: [
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16869413', label: '#20 U — stale/cumulative telemetry and blame observability' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/51', label: 'Discussion #51 — Intel/Blame attribution pass and gap wiring' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/72', label: 'Discussion #72 — blame-origin fallback summary and user signature tags' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/17', label: 'Discussion #17 — Help parity updates for blame and forensic features' },
     ]
   },
   {
@@ -4067,6 +4149,8 @@ export const HELP_ANCHORS: Record<string, HelpAnchor> = {
   'preview.console': { id: 'preview.console', label: 'Preview Console Strip', quickTip: 'Captures console messages posted from localhost previews. Remote-host previews will not stream logs into this strip.', sectionId: 'editor', tab: 'preview', view: 'preview' },
   'preview.refresh': { id: 'preview.refresh', label: 'Preview Refresh Button', quickTip: 'Reloads the preview iframe.', sectionId: 'editor', tab: 'preview', view: 'preview' }
 };
+
+export const HELP_SECTIONS: HelpSection[] = sanitizeHelpSections(RAW_HELP_SECTIONS);
 
 export const HELP_ANCHOR_LIST = Object.values(HELP_ANCHORS);
 

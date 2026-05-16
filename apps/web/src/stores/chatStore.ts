@@ -136,6 +136,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     let fullContent = '';
     let newConvId = conversationId;
+    let modelRecommendation = '';
 
     try {
       await apiStream(
@@ -165,12 +166,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             case 'content_done':
               fullContent = event.fullContent || fullContent;
               break;
+            case 'model_recommendation': {
+              const recommended = String(event.recommendedModel || '').trim();
+              if (recommended) {
+                const confidence = Number(event.confidence || 0);
+                const pct = Number.isFinite(confidence) ? Math.round(confidence * 100) : 0;
+                const taskType = String(event.taskType || 'general');
+                modelRecommendation = `\n\nRecommendation: Next similar ${taskType} requests should prefer ${recommended}${pct > 0 ? ` (${pct}% confidence)` : ''}.`;
+              }
+              break;
+            }
             case 'done': {
               const assistantMsg: ChatMessage = {
                 id: `msg-${Date.now()}`,
                 conversationId: newConvId || '',
                 role: 'assistant',
-                content: fullContent,
+                content: `${fullContent}${modelRecommendation}`,
                 status: 'complete',
                 model: effectiveModel,
                 mode,

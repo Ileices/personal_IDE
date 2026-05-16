@@ -8,6 +8,7 @@ import { JOB_STATUS, RUN_STATUS, STOP_REASON } from '../services/lifecycle/state
 import { resolveModelStrategy } from '../services/modelStrategy.js';
 import { extractProviderFromModelId, type ProviderType } from '@personal-ide/shared';
 import { getClientFromDb as getProviderClient } from '../services/llm/providers.js';
+import { runEmployerAnalysisCycle } from './employer.js';
 
 type Db = import('better-sqlite3').Database;
 
@@ -676,6 +677,105 @@ function reflectExternalProjectsToInternalJobs(db: Db, options?: { projectId?: s
   return created;
 }
 
+/**
+ * When local models are excluded by machine-limit guards, create internal
+ * improvement jobs so this signal feeds back into the autonomous pipeline.
+ */
+function createMachineLimitReflectionJobs(
+  db: Db,
+  blockedModels: string[],
+  options?: { projectId?: string | null },
+): number {
+  if (!blockedModels.length) return 0;
+
+  const scopedProjectId = options?.projectId ? String(options.projectId) : null;
+  let created = 0;
+
+  for (const blocked of blockedModels) {
+    const modelId = String(blocked.split(':')[0] || '').trim();
+    if (!modelId) continue;
+
+    const marker = `machine_limit_block:${modelId}`;
+    const existing = db.prepare(`
+      SELECT job_id
+      FROM job_records
+      WHERE source = 'god_factory_agent'
+        AND job_category = 'model_tool_enhancement'
+        AND implementation_status NOT IN ('rejected', 'archived', 'implemented')
+        AND description LIKE ?
+      LIMIT 1
+    `).get(`%${marker}%`) as { job_id?: string } | undefined;
+
+    if (existing?.job_id) continue;
+
+    const row = db.prepare(`
+      SELECT context_window_tokens, provider, display_name
+      FROM model_registry
+      WHERE model_id = ?
+      LIMIT 1
+    `).get(modelId) as {
+      context_window_tokens?: number | null;
+      provider?: string | null;
+      display_name?: string | null;
+    } | undefined;
+
+    const contextWindow = Number(row?.context_window_tokens || 0);
+    const provider = String(row?.provider || extractProviderFromModelId(modelId));
+    const displayName = String(row?.display_name || modelId);
+
+    const jobId = randomUUID();
+    const title = `Machine-limit reflection: ${displayName}`;
+    const description = [
+      'Auto-intel local fallback excluded a model due to machine-limit guard.',
+      marker,
+      `Model: ${modelId}`,
+      `Provider: ${provider}`,
+      contextWindow > 0 ? `Context window: ${contextWindow}` : null,
+      'Required follow-up: benchmark local concurrency envelope, tune caps/tiers, and add safer fallback routing for this hardware profile.',
+    ].filter(Boolean).join('\n');
+
+    db.prepare(`
+      INSERT INTO job_records
+        (id, job_id, project_id, job_category, source, source_record_ids,
+         priority, title, description, affected_files, affected_devtags,
+         affected_plantags, required_buildtags, blocking_jobs, blocked_by_jobs,
+         hierarchy, atomic_steps, sandbox_spec, implementation_status,
+         created_cycle, last_updated_cycle, timestamp, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+    `).run(
+      randomUUID(),
+      jobId,
+      scopedProjectId,
+      'model_tool_enhancement',
+      'god_factory_agent',
+      JSON.stringify([modelId]),
+      'high',
+      title,
+      description,
+      '[]',
+      JSON.stringify([`devtag:model:${modelId}`]),
+      '[]',
+      '[]',
+      '[]',
+      '[]',
+      JSON.stringify({ phase: 1, milestone: 'machine_limit_reflection', parent_job_id: null, child_job_ids: [] }),
+      JSON.stringify([
+        'Assess machine limit signal and validate local model capability envelope',
+        'Tune model tier/cap/cooldown routing for stable autonomous execution',
+        'Implement and verify fallback behavior with telemetry checks',
+      ]),
+      JSON.stringify({ sandbox_id: null, status: 'not_started', cycle_limit: 50, cycles_used: 0, test_results: [], human_review_required: false, human_review_completed: false }),
+      JOB_STATUS.SUGGESTED,
+      0,
+      0,
+    );
+
+    created += 1;
+  }
+
+  return created;
+}
+
 function refreshGodFactorySignals(db: Db): void {
   // Wire gap reports to jobs — converts flagged gap_reports into job_records entries.
   // This closes the highest-priority wiring gap: gap analysis DOES write flagged records,
@@ -894,6 +994,8 @@ export async function godFactoryRoutes(app: FastifyInstance) {
   const AUTO_INTEL_SETTINGS_KEY = 'god_factory:auto_intel:settings';
   const AUTO_INTEL_LAST_RUN_KEY = 'god_factory:auto_intel:last_run_at';
   const AUTO_INTEL_LAST_ERROR_KEY = 'god_factory:auto_intel:last_error';
+  const AUTO_INTEL_LAST_RESULT_KEY = 'god_factory:auto_intel:last_result';
+  const AUTO_INTEL_COUNTERS_KEY = 'god_factory:auto_intel:counters';
 
   type AutoIntelSettings = {
     enabled: boolean;
@@ -908,6 +1010,28 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     maxIterations: number;
     jobMaxIterations: number;
     autoCooldownProfile: boolean;
+    preferLocalWhenCloudExhausted: boolean;
+    cloudRequestCapEnabled: boolean;
+    cloudRequestCapWindowHours: number;
+    cloudRequestCapRequests: number;
+    localContextWindowCapEnabled: boolean;
+    localContextWindowCapTokens: number;
+    localParallelTarget: number;
+    localBenchmarkPlannerEnabled: boolean;
+    localLaneTokenBudget: number;
+    localMaxParallelLanes: number;
+  };
+
+  type AutoIntelCounters = {
+    cycles_started: number;
+    cycles_completed: number;
+    cycles_failed: number;
+    cycles_skipped: number;
+    loop_start_attempts: number;
+    loop_start_success: number;
+    loop_start_failed: number;
+    last_skip_reason: string | null;
+    last_loop_start_error: string | null;
   };
 
   const DEFAULT_AUTO_INTEL_SETTINGS: AutoIntelSettings = {
@@ -923,6 +1047,28 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     maxIterations: 0,
     jobMaxIterations: 50,
     autoCooldownProfile: true,
+    preferLocalWhenCloudExhausted: true,
+    cloudRequestCapEnabled: false,
+    cloudRequestCapWindowHours: 24,
+    cloudRequestCapRequests: 250,
+    localContextWindowCapEnabled: true,
+    localContextWindowCapTokens: 32000,
+    localParallelTarget: 2,
+    localBenchmarkPlannerEnabled: true,
+    localLaneTokenBudget: 64000,
+    localMaxParallelLanes: 4,
+  };
+
+  const DEFAULT_AUTO_INTEL_COUNTERS: AutoIntelCounters = {
+    cycles_started: 0,
+    cycles_completed: 0,
+    cycles_failed: 0,
+    cycles_skipped: 0,
+    loop_start_attempts: 0,
+    loop_start_success: 0,
+    loop_start_failed: 0,
+    last_skip_reason: null,
+    last_loop_start_error: null,
   };
 
   function loadAutoIntelSettings(): AutoIntelSettings {
@@ -946,6 +1092,28 @@ export async function godFactoryRoutes(app: FastifyInstance) {
           ? Math.max(1, Math.min(5000, Number(parsed.jobMaxIterations)))
           : DEFAULT_AUTO_INTEL_SETTINGS.jobMaxIterations,
         autoCooldownProfile: parsed.autoCooldownProfile ?? DEFAULT_AUTO_INTEL_SETTINGS.autoCooldownProfile,
+        preferLocalWhenCloudExhausted: parsed.preferLocalWhenCloudExhausted ?? DEFAULT_AUTO_INTEL_SETTINGS.preferLocalWhenCloudExhausted,
+        cloudRequestCapEnabled: parsed.cloudRequestCapEnabled ?? DEFAULT_AUTO_INTEL_SETTINGS.cloudRequestCapEnabled,
+        cloudRequestCapWindowHours: Number.isFinite(Number(parsed.cloudRequestCapWindowHours))
+          ? Math.max(1, Math.min(24 * 30, Number(parsed.cloudRequestCapWindowHours)))
+          : DEFAULT_AUTO_INTEL_SETTINGS.cloudRequestCapWindowHours,
+        cloudRequestCapRequests: Number.isFinite(Number(parsed.cloudRequestCapRequests))
+          ? Math.max(1, Math.min(1000000, Number(parsed.cloudRequestCapRequests)))
+          : DEFAULT_AUTO_INTEL_SETTINGS.cloudRequestCapRequests,
+        localContextWindowCapEnabled: parsed.localContextWindowCapEnabled ?? DEFAULT_AUTO_INTEL_SETTINGS.localContextWindowCapEnabled,
+        localContextWindowCapTokens: Number.isFinite(Number(parsed.localContextWindowCapTokens))
+          ? Math.max(1024, Math.min(500000, Number(parsed.localContextWindowCapTokens)))
+          : DEFAULT_AUTO_INTEL_SETTINGS.localContextWindowCapTokens,
+        localParallelTarget: Number.isFinite(Number(parsed.localParallelTarget))
+          ? Math.max(1, Math.min(16, Number(parsed.localParallelTarget)))
+          : DEFAULT_AUTO_INTEL_SETTINGS.localParallelTarget,
+        localBenchmarkPlannerEnabled: parsed.localBenchmarkPlannerEnabled ?? DEFAULT_AUTO_INTEL_SETTINGS.localBenchmarkPlannerEnabled,
+        localLaneTokenBudget: Number.isFinite(Number(parsed.localLaneTokenBudget))
+          ? Math.max(4096, Math.min(2000000, Number(parsed.localLaneTokenBudget)))
+          : DEFAULT_AUTO_INTEL_SETTINGS.localLaneTokenBudget,
+        localMaxParallelLanes: Number.isFinite(Number(parsed.localMaxParallelLanes))
+          ? Math.max(1, Math.min(32, Number(parsed.localMaxParallelLanes)))
+          : DEFAULT_AUTO_INTEL_SETTINGS.localMaxParallelLanes,
       };
     } catch {
       return DEFAULT_AUTO_INTEL_SETTINGS;
@@ -978,9 +1146,727 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         ? Math.max(1, Math.min(5000, Number(patch.jobMaxIterations ?? current.jobMaxIterations)))
         : current.jobMaxIterations,
       autoCooldownProfile: patch.autoCooldownProfile ?? current.autoCooldownProfile,
+      preferLocalWhenCloudExhausted: patch.preferLocalWhenCloudExhausted ?? current.preferLocalWhenCloudExhausted,
+      cloudRequestCapEnabled: patch.cloudRequestCapEnabled ?? current.cloudRequestCapEnabled,
+      cloudRequestCapWindowHours: Number.isFinite(Number(patch.cloudRequestCapWindowHours ?? current.cloudRequestCapWindowHours))
+        ? Math.max(1, Math.min(24 * 30, Number(patch.cloudRequestCapWindowHours ?? current.cloudRequestCapWindowHours)))
+        : current.cloudRequestCapWindowHours,
+      cloudRequestCapRequests: Number.isFinite(Number(patch.cloudRequestCapRequests ?? current.cloudRequestCapRequests))
+        ? Math.max(1, Math.min(1000000, Number(patch.cloudRequestCapRequests ?? current.cloudRequestCapRequests)))
+        : current.cloudRequestCapRequests,
+      localContextWindowCapEnabled: patch.localContextWindowCapEnabled ?? current.localContextWindowCapEnabled,
+      localContextWindowCapTokens: Number.isFinite(Number(patch.localContextWindowCapTokens ?? current.localContextWindowCapTokens))
+        ? Math.max(1024, Math.min(500000, Number(patch.localContextWindowCapTokens ?? current.localContextWindowCapTokens)))
+        : current.localContextWindowCapTokens,
+      localParallelTarget: Number.isFinite(Number(patch.localParallelTarget ?? current.localParallelTarget))
+        ? Math.max(1, Math.min(16, Number(patch.localParallelTarget ?? current.localParallelTarget)))
+        : current.localParallelTarget,
+      localBenchmarkPlannerEnabled: patch.localBenchmarkPlannerEnabled ?? current.localBenchmarkPlannerEnabled,
+      localLaneTokenBudget: Number.isFinite(Number(patch.localLaneTokenBudget ?? current.localLaneTokenBudget))
+        ? Math.max(4096, Math.min(2000000, Number(patch.localLaneTokenBudget ?? current.localLaneTokenBudget)))
+        : current.localLaneTokenBudget,
+      localMaxParallelLanes: Number.isFinite(Number(patch.localMaxParallelLanes ?? current.localMaxParallelLanes))
+        ? Math.max(1, Math.min(32, Number(patch.localMaxParallelLanes ?? current.localMaxParallelLanes)))
+        : current.localMaxParallelLanes,
     };
     setKv(db, AUTO_INTEL_SETTINGS_KEY, JSON.stringify(next));
     return next;
+  }
+
+  function loadAutoIntelCounters(): AutoIntelCounters {
+    const raw = getKv(db, AUTO_INTEL_COUNTERS_KEY);
+    if (!raw) return { ...DEFAULT_AUTO_INTEL_COUNTERS };
+    try {
+      const parsed = JSON.parse(raw) as Partial<AutoIntelCounters>;
+      return {
+        cycles_started: Number(parsed.cycles_started || 0),
+        cycles_completed: Number(parsed.cycles_completed || 0),
+        cycles_failed: Number(parsed.cycles_failed || 0),
+        cycles_skipped: Number(parsed.cycles_skipped || 0),
+        loop_start_attempts: Number(parsed.loop_start_attempts || 0),
+        loop_start_success: Number(parsed.loop_start_success || 0),
+        loop_start_failed: Number(parsed.loop_start_failed || 0),
+        last_skip_reason: parsed.last_skip_reason ? String(parsed.last_skip_reason) : null,
+        last_loop_start_error: parsed.last_loop_start_error ? String(parsed.last_loop_start_error) : null,
+      };
+    } catch {
+      return { ...DEFAULT_AUTO_INTEL_COUNTERS };
+    }
+  }
+
+  function patchAutoIntelCounters(patch: Partial<AutoIntelCounters>): AutoIntelCounters {
+    const next = { ...loadAutoIntelCounters(), ...patch };
+    setKv(db, AUTO_INTEL_COUNTERS_KEY, JSON.stringify(next));
+    return next;
+  }
+
+  function bumpAutoIntelCounter(
+    key: 'cycles_started' | 'cycles_completed' | 'cycles_failed' | 'cycles_skipped' | 'loop_start_attempts' | 'loop_start_success' | 'loop_start_failed',
+    delta = 1,
+  ): void {
+    const counters = loadAutoIntelCounters();
+    patchAutoIntelCounters({ [key]: Math.max(0, Number(counters[key] || 0) + delta) } as Partial<AutoIntelCounters>);
+  }
+
+  function noteAutoIntelSkip(reason: string): void {
+    bumpAutoIntelCounter('cycles_skipped', 1);
+    patchAutoIntelCounters({ last_skip_reason: reason });
+  }
+
+  function parseDateMs(value: string | null | undefined): number {
+    if (!value) return Number.NaN;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : Number.NaN;
+  }
+
+  function isLocalProvider(provider: string): boolean {
+    return provider === 'ollama' || provider === 'lmstudio' || provider === 'nano';
+  }
+
+  function countRecentModelRuns(modelIds: string[], windowHours: number): number {
+    if (!modelIds.length) return 0;
+    const placeholders = modelIds.map(() => '?').join(', ');
+    const windowExpr = `-${Math.max(1, Math.floor(windowHours))} hours`;
+    const row = db.prepare(`
+      SELECT COUNT(*) AS c
+      FROM blame_records
+      WHERE model IN (${placeholders})
+        AND datetime(created_at) >= datetime('now', ?)
+    `).get(...modelIds, windowExpr) as { c?: number } | undefined;
+    return Number(row?.c || 0);
+  }
+
+  function resolveAutoIntelProjectId(settings: AutoIntelSettings): string | null {
+    if (settings.projectId) {
+      const row = db.prepare('SELECT id FROM projects WHERE id = ? LIMIT 1').get(settings.projectId) as { id?: string } | undefined;
+      if (row?.id) return row.id;
+    }
+
+    const lastLoopProjectId = String(getKv(db, 'god_factory:loop:last_project_id') || '').trim();
+    if (lastLoopProjectId) {
+      const row = db.prepare('SELECT id FROM projects WHERE id = ? LIMIT 1').get(lastLoopProjectId) as { id?: string } | undefined;
+      if (row?.id) return row.id;
+    }
+
+    const latest = db.prepare(`
+      SELECT id
+      FROM projects
+      ORDER BY last_accessed_at DESC, created_at DESC
+      LIMIT 1
+    `).get() as { id?: string } | undefined;
+
+    return latest?.id ?? null;
+  }
+
+  function filterLocalModelsByContextWindow(
+    modelIds: string[],
+    contextCapTokens: number,
+  ): { allowed: string[]; blockedByMachineLimit: string[] } {
+    if (!modelIds.length) {
+      return { allowed: [], blockedByMachineLimit: [] };
+    }
+
+    const allowed: string[] = [];
+    const blockedByMachineLimit: string[] = [];
+
+    for (const modelId of modelIds) {
+      const row = db.prepare(`
+        SELECT context_window_tokens
+        FROM model_registry
+        WHERE model_id = ?
+        LIMIT 1
+      `).get(modelId) as { context_window_tokens?: number | null } | undefined;
+
+      const contextWindowTokens = Number(row?.context_window_tokens || 0);
+      // Unknown context windows stay eligible. Only known oversized locals are blocked.
+      if (contextWindowTokens > 0 && contextWindowTokens > contextCapTokens) {
+        blockedByMachineLimit.push(`${modelId}:context_window(${contextWindowTokens})`);
+      } else {
+        allowed.push(modelId);
+      }
+    }
+
+    return { allowed, blockedByMachineLimit };
+  }
+
+  function estimateLocalParallelPlan(
+    modelIds: string[],
+    laneTokenBudget: number,
+    maxLanes: number,
+  ): {
+    plannedCandidates: string[];
+    deferredCandidates: string[];
+    tokenBudget: number;
+    tokenUsed: number;
+    lanesReady: number;
+  } {
+    if (!modelIds.length) {
+      return {
+        plannedCandidates: [],
+        deferredCandidates: [],
+        tokenBudget: laneTokenBudget,
+        tokenUsed: 0,
+        lanesReady: 0,
+      };
+    }
+
+    const ranked = modelIds.map((modelId) => {
+      const row = db.prepare(`
+        SELECT context_window_tokens
+        FROM model_registry
+        WHERE model_id = ?
+        LIMIT 1
+      `).get(modelId) as { context_window_tokens?: number | null } | undefined;
+
+      const contextWindow = Number(row?.context_window_tokens || 0);
+      // Unknown values use conservative default for planning.
+      const tokenCost = contextWindow > 0 ? contextWindow : 8000;
+      return { modelId, tokenCost };
+    });
+
+    ranked.sort((a, b) => a.tokenCost - b.tokenCost);
+
+    const plannedCandidates: string[] = [];
+    const deferredCandidates: string[] = [];
+    let tokenUsed = 0;
+
+    for (const candidate of ranked) {
+      const laneFull = plannedCandidates.length >= maxLanes;
+      const tokenFull = tokenUsed + candidate.tokenCost > laneTokenBudget;
+      if (laneFull || tokenFull) {
+        deferredCandidates.push(candidate.modelId);
+        continue;
+      }
+
+      plannedCandidates.push(candidate.modelId);
+      tokenUsed += candidate.tokenCost;
+    }
+
+    return {
+      plannedCandidates,
+      deferredCandidates,
+      tokenBudget: laneTokenBudget,
+      tokenUsed,
+      lanesReady: plannedCandidates.length,
+    };
+  }
+
+  function createLocalConcurrencyGapJobs(
+    projectId: string | null,
+    gapModelIds: string[],
+    plan: { tokenBudget: number; tokenUsed: number; lanesReady: number },
+  ): number {
+    if (!gapModelIds.length) return 0;
+
+    const marker = `local_concurrency_gap:${(projectId || 'none').toLowerCase()}`;
+    const existing = db.prepare(`
+      SELECT job_id
+      FROM job_records
+      WHERE source = 'god_factory_agent'
+        AND job_category = 'model_tool_enhancement'
+        AND implementation_status NOT IN ('rejected', 'archived', 'implemented')
+        AND description LIKE ?
+      LIMIT 1
+    `).get(`%${marker}%`) as { job_id?: string } | undefined;
+
+    if (existing?.job_id) return 0;
+
+    const jobId = randomUUID();
+    const title = 'Local concurrency planner gap hardening';
+    const description = [
+      'Auto-intel local concurrency planner could not satisfy desired local parallel target.',
+      marker,
+      `Deferred models: ${gapModelIds.join(', ')}`,
+      `Planner token budget: ${plan.tokenBudget}`,
+      `Planner token used: ${plan.tokenUsed}`,
+      `Planner lanes ready: ${plan.lanesReady}`,
+      'Follow-up: benchmark local model combinations, tune lane budget/max lanes, and improve fallback orchestration.',
+    ].join('\n');
+
+    db.prepare(`
+      INSERT INTO job_records
+        (id, job_id, project_id, job_category, source, source_record_ids,
+         priority, title, description, affected_files, affected_devtags,
+         affected_plantags, required_buildtags, blocking_jobs, blocked_by_jobs,
+         hierarchy, atomic_steps, sandbox_spec, implementation_status,
+         created_cycle, last_updated_cycle, timestamp, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+    `).run(
+      randomUUID(),
+      jobId,
+      projectId,
+      'model_tool_enhancement',
+      'god_factory_agent',
+      JSON.stringify(gapModelIds),
+      'high',
+      title,
+      description,
+      '[]',
+      JSON.stringify(gapModelIds.map((m) => `devtag:model:${m}`)),
+      '[]',
+      '[]',
+      '[]',
+      '[]',
+      JSON.stringify({ phase: 1, milestone: 'local_parallel_planner_gap', parent_job_id: null, child_job_ids: [] }),
+      JSON.stringify([
+        'Capture local benchmark traces for deferred model combinations',
+        'Tune planner lane budget and max lanes against observed machine limits',
+        'Implement and verify safer multi-model local orchestration behavior',
+      ]),
+      JSON.stringify({ sandbox_id: null, status: 'not_started', cycle_limit: 50, cycles_used: 0, test_results: [], human_review_required: false, human_review_completed: false }),
+      JOB_STATUS.SUGGESTED,
+      0,
+      0,
+    );
+
+    return 1;
+  }
+
+  type PendingJobPriorityProfile = {
+    highestPriority: 'critical' | 'high' | 'medium' | 'low' | 'none';
+    counts: Record<'critical' | 'high' | 'medium' | 'low', number>;
+    highPriorityPresent: boolean;
+  };
+
+  function resolvePendingJobPriorityProfile(projectId: string): PendingJobPriorityProfile {
+    const rows = db.prepare(`
+      SELECT priority, COUNT(*) AS c
+      FROM job_records
+      WHERE implementation_status = ?
+        AND project_id = ?
+      GROUP BY priority
+    `).all(JOB_STATUS.SUGGESTED, projectId) as Array<{ priority?: string; c?: number }>;
+
+    const counts: Record<'critical' | 'high' | 'medium' | 'low', number> = {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+
+    for (const row of rows) {
+      const p = String(row.priority || '').toLowerCase();
+      if (p === 'critical' || p === 'high' || p === 'medium' || p === 'low') {
+        counts[p] = Number(row.c || 0);
+      }
+    }
+
+    const highestPriority: PendingJobPriorityProfile['highestPriority'] =
+      counts.critical > 0 ? 'critical'
+      : counts.high > 0 ? 'high'
+      : counts.medium > 0 ? 'medium'
+      : counts.low > 0 ? 'low'
+      : 'none';
+
+    return {
+      highestPriority,
+      counts,
+      highPriorityPresent: highestPriority === 'critical' || highestPriority === 'high',
+    };
+  }
+
+  function pickAutoIntelModel(
+    requestedModel: string | null,
+    candidateChain: string[],
+    pendingProfile?: PendingJobPriorityProfile,
+  ): { selectedModel: string; blockedByOverride: string[]; selectedReason: string } {
+    const nowMs = Date.now();
+    const overrides = db.prepare(`
+      SELECT model_id, override_type, cooldown_until, skip_next_cycles, sleep_until
+      FROM model_cooldown_overrides
+      WHERE active = 1
+    `).all() as Array<{
+      model_id: string;
+      override_type: 'cooldown' | 'skip' | 'sleep';
+      cooldown_until: string | null;
+      skip_next_cycles: number;
+      sleep_until: string | null;
+    }>;
+
+    const blockedByOverride: string[] = [];
+
+    const available = candidateChain.filter((modelId) => {
+      const override = overrides.find((row) => row.model_id === modelId);
+      if (!override) return true;
+
+      const cooldownUntilMs = parseDateMs(override.cooldown_until);
+      const sleepUntilMs = parseDateMs(override.sleep_until);
+
+      if (override.override_type === 'sleep' && Number.isFinite(sleepUntilMs) && sleepUntilMs > nowMs) {
+        blockedByOverride.push(`${modelId}:sleep`);
+        return false;
+      }
+
+      if (override.override_type === 'cooldown' && Number.isFinite(cooldownUntilMs) && cooldownUntilMs > nowMs) {
+        blockedByOverride.push(`${modelId}:cooldown`);
+        return false;
+      }
+
+      if (override.override_type === 'skip' && Number(override.skip_next_cycles || 0) > 0) {
+        const nextSkip = Math.max(0, Number(override.skip_next_cycles || 0) - 1);
+        db.prepare(`
+          UPDATE model_cooldown_overrides
+          SET skip_next_cycles = ?, active = CASE WHEN ? > 0 THEN 1 ELSE 0 END, updated_at = datetime('now')
+          WHERE model_id = ?
+        `).run(nextSkip, nextSkip, modelId);
+        blockedByOverride.push(`${modelId}:skip(${nextSkip})`);
+        return false;
+      }
+
+      return true;
+    });
+
+    const ranked = (available.length ? available : candidateChain).map((modelId) => {
+      const row = db.prepare(`
+        SELECT
+          mr.avg_quality,
+          mr.success_rate,
+          mr.provider,
+          ea.recommended_role,
+          ea.role_confidence,
+          ea.allowance_tier,
+          ea.strategic_value_score
+        FROM model_registry mr
+        LEFT JOIN employer_analysis ea
+          ON ea.id = (
+            SELECT id
+            FROM employer_analysis
+            WHERE model_id = mr.model_id
+            ORDER BY datetime(analyzed_at) DESC, datetime(created_at) DESC
+            LIMIT 1
+          )
+        WHERE mr.model_id = ?
+      `).get(modelId) as {
+        avg_quality?: number;
+        success_rate?: number;
+        provider?: string;
+        recommended_role?: string;
+        role_confidence?: number;
+        allowance_tier?: string;
+        strategic_value_score?: number;
+      } | undefined;
+
+      const quality = Number(row?.avg_quality || 60);
+      const successRate = Number(row?.success_rate || 0.6);
+      const roleConfidence = Number(row?.role_confidence || 0.5);
+      const role = String(row?.recommended_role || 'general').toLowerCase();
+      const allowanceTier = String(row?.allowance_tier || 'balanced').toLowerCase();
+      const strategicValueScore = Math.max(0, Math.min(100, Number(row?.strategic_value_score || 0)));
+      const provider = String(row?.provider || extractProviderFromModelId(modelId));
+      const isLocalProvider = provider === 'ollama' || provider === 'lmstudio' || provider === 'nano';
+
+      let score = quality * 0.5 + successRate * 100 * 0.35 + roleConfidence * 100 * 0.15;
+      score += isLocalProvider ? 3 : 8;
+      if (requestedModel && modelId === requestedModel) score += 12;
+      if (role === 'unreliable') score -= 30;
+
+      const highPriority = !!pendingProfile?.highPriorityPresent;
+      if (highPriority) {
+        score += strategicValueScore * 0.18;
+        if (allowanceTier === 'scarce') score += 8;
+      } else {
+        if (allowanceTier === 'scarce') score -= 10 + strategicValueScore * 0.08;
+        if (allowanceTier === 'abundant') score += 12;
+        if (role === 'throughput_worker') score += 8;
+      }
+
+      return { modelId, score };
+    });
+
+    ranked.sort((a, b) => b.score - a.score);
+
+    return {
+      selectedModel: ranked[0]?.modelId || candidateChain[0],
+      blockedByOverride,
+      selectedReason: pendingProfile?.highPriorityPresent
+        ? 'high_priority_pending_jobs'
+        : 'throughput_preservation_for_scarce_models',
+    };
+  }
+
+  let _autoIntelTimer: NodeJS.Timeout | null = null;
+  let _autoIntelTickRunning = false;
+
+  function shouldRunAutoIntelNow(settings: AutoIntelSettings, nowMs: number): boolean {
+    if (!settings.enabled) return false;
+    const lastRunAt = getKv(db, AUTO_INTEL_LAST_RUN_KEY);
+    if (!lastRunAt) return true;
+    const lastMs = Date.parse(lastRunAt);
+    if (!Number.isFinite(lastMs)) return true;
+    return nowMs - lastMs >= Math.max(60, settings.intervalSec) * 1000;
+  }
+
+  async function runAutoIntelCycle(source: 'scheduler' | 'manual' | 'settings_update' = 'scheduler') {
+    if (_autoIntelTickRunning) {
+      noteAutoIntelSkip('tick_already_running');
+      return { ok: true, skipped: true, reason: 'tick_already_running' };
+    }
+
+    const settings = loadAutoIntelSettings();
+    const nowMs = Date.now();
+    if (source === 'scheduler' && !shouldRunAutoIntelNow(settings, nowMs)) {
+      noteAutoIntelSkip('interval_not_elapsed');
+      return { ok: true, skipped: true, reason: 'interval_not_elapsed' };
+    }
+    if (!settings.enabled && source !== 'manual') {
+      noteAutoIntelSkip('auto_intel_disabled');
+      return { ok: true, skipped: true, reason: 'auto_intel_disabled' };
+    }
+
+    _autoIntelTickRunning = true;
+    const startedAt = new Date().toISOString();
+    bumpAutoIntelCounter('cycles_started', 1);
+
+    try {
+      const jobsFromGaps = flushFlaggedGapReportsToJobs(db);
+      refreshGodFactorySignals(db);
+
+      let employerAnalyzed = 0;
+      if (settings.analyzeEmployer) {
+        const analysis = runEmployerAnalysisCycle(db);
+        employerAnalyzed = analysis.analyzed;
+      }
+
+      const resolvedProjectId = resolveAutoIntelProjectId(settings);
+      const reflectedJobs = settings.reflectExternalJobs
+        ? reflectExternalProjectsToInternalJobs(db, { projectId: resolvedProjectId, limit: 50 })
+        : 0;
+
+      let loopStartAttempted = false;
+      let loopStarted = false;
+      let autoModelSelection: Record<string, unknown> | null = null;
+      let machineLimitJobsCreated = 0;
+      let localConcurrencyGapJobsCreated = 0;
+
+      if (settings.autoCooldownProfile) {
+        applyCooldownProfile(
+          settings.cooldownProfile,
+          deriveCooldownCustomFromHorizon(settings.cooldownHorizonHours),
+        );
+      }
+
+      if (settings.executeJobs && resolvedProjectId) {
+        const state = db.prepare('SELECT state FROM god_factory_loop_state WHERE id = ?').get('singleton') as { state?: string } | undefined;
+        const pending = db.prepare(`
+          SELECT COUNT(*) AS c
+          FROM job_records
+          WHERE implementation_status = ?
+            AND project_id = ?
+        `).get(JOB_STATUS.SUGGESTED, resolvedProjectId) as { c?: number } | undefined;
+        const pendingPriorityProfile = resolvePendingJobPriorityProfile(resolvedProjectId);
+
+        const strategyAtStart = resolveModelStrategy(db, settings.model || undefined);
+        const configuredCandidates = [strategyAtStart.primaryModel, ...strategyAtStart.fallbackModels].filter((m) => {
+          const provider = extractProviderFromModelId(m) as ProviderType;
+          return !!getProviderClient(db, provider);
+        });
+
+        if (state?.state !== 'running' && (pending?.c ?? 0) > 0 && configuredCandidates.length > 0) {
+          const localCandidatesRaw = configuredCandidates.filter((modelId) => {
+            const provider = String(extractProviderFromModelId(modelId));
+            return isLocalProvider(provider);
+          });
+          const localFilter = settings.localContextWindowCapEnabled
+            ? filterLocalModelsByContextWindow(localCandidatesRaw, settings.localContextWindowCapTokens)
+            : { allowed: localCandidatesRaw, blockedByMachineLimit: [] as string[] };
+          const localCandidates = localFilter.allowed;
+          const blockedByMachineLimit = localFilter.blockedByMachineLimit;
+          const localParallelPlan = settings.localBenchmarkPlannerEnabled
+            ? estimateLocalParallelPlan(localCandidates, settings.localLaneTokenBudget, settings.localMaxParallelLanes)
+            : {
+              plannedCandidates: localCandidates,
+              deferredCandidates: [] as string[],
+              tokenBudget: settings.localLaneTokenBudget,
+              tokenUsed: 0,
+              lanesReady: localCandidates.length,
+            };
+
+          const cloudCandidates = configuredCandidates.filter((modelId) => {
+            const provider = String(extractProviderFromModelId(modelId));
+            return !isLocalProvider(provider);
+          });
+
+          const configuredFilteredCandidates = configuredCandidates.filter((modelId) => {
+            const provider = String(extractProviderFromModelId(modelId));
+            return !isLocalProvider(provider) || localCandidates.includes(modelId);
+          });
+
+          let cloudUsageCount = 0;
+          let cloudBudgetExhausted = false;
+          if (settings.cloudRequestCapEnabled && cloudCandidates.length > 0) {
+            cloudUsageCount = countRecentModelRuns(cloudCandidates, settings.cloudRequestCapWindowHours);
+            cloudBudgetExhausted = cloudUsageCount >= settings.cloudRequestCapRequests;
+          }
+
+          const activeCandidates = (settings.preferLocalWhenCloudExhausted && cloudBudgetExhausted && localCandidates.length > 0)
+            ? (settings.localBenchmarkPlannerEnabled && localParallelPlan.plannedCandidates.length > 0
+              ? localParallelPlan.plannedCandidates
+              : localCandidates)
+            : configuredFilteredCandidates;
+
+          if (blockedByMachineLimit.length > 0) {
+            machineLimitJobsCreated = createMachineLimitReflectionJobs(db, blockedByMachineLimit, { projectId: resolvedProjectId });
+          }
+
+          if (localParallelPlan.deferredCandidates.length > 0 && localParallelPlan.lanesReady < settings.localParallelTarget) {
+            localConcurrencyGapJobsCreated = createLocalConcurrencyGapJobs(
+              resolvedProjectId,
+              localParallelPlan.deferredCandidates,
+              {
+                tokenBudget: localParallelPlan.tokenBudget,
+                tokenUsed: localParallelPlan.tokenUsed,
+                lanesReady: localParallelPlan.lanesReady,
+              },
+            );
+          }
+
+          if (settings.preferLocalWhenCloudExhausted && cloudBudgetExhausted && localCandidates.length === 0 && localCandidatesRaw.length > 0) {
+            noteAutoIntelSkip('local_models_blocked_by_machine_limit');
+          }
+
+          const selectionPool = activeCandidates.length ? activeCandidates : configuredFilteredCandidates;
+          if (!selectionPool.length) {
+            noteAutoIntelSkip('no_available_candidates');
+            autoModelSelection = {
+              selected_model: null,
+              cloud_usage_count: cloudUsageCount,
+              cloud_budget_exhausted: cloudBudgetExhausted,
+              active_candidate_count: activeCandidates.length,
+              local_candidate_count: localCandidates.length,
+              local_candidate_raw_count: localCandidatesRaw.length,
+              cloud_candidate_count: cloudCandidates.length,
+              blocked_by_machine_limit: blockedByMachineLimit,
+              machine_limit_jobs_created: machineLimitJobsCreated,
+              local_concurrency_gap_jobs_created: localConcurrencyGapJobsCreated,
+              local_parallel_target: settings.localParallelTarget,
+              local_parallel_ready: localParallelPlan.lanesReady,
+              local_parallel_candidates: localParallelPlan.plannedCandidates,
+              local_parallel_deferred_candidates: localParallelPlan.deferredCandidates,
+              local_parallel_token_budget: localParallelPlan.tokenBudget,
+              local_parallel_token_used: localParallelPlan.tokenUsed,
+              pending_priority_profile: pendingPriorityProfile,
+              selection_reason: 'no_available_candidates',
+              blocked_by_override: [],
+            };
+          } else {
+            const selection = pickAutoIntelModel(
+              settings.model,
+              selectionPool,
+              pendingPriorityProfile,
+            );
+            const candidateChain = [selection.selectedModel, ...selectionPool.filter((m) => m !== selection.selectedModel)];
+            loopStartAttempted = true;
+            bumpAutoIntelCounter('loop_start_attempts', 1);
+
+            const startPayload = {
+              projectId: resolvedProjectId,
+              model: selection.selectedModel,
+              candidateChain,
+              maxIterations: settings.maxIterations,
+              jobMaxIterations: settings.jobMaxIterations,
+              autoApproveChanges: false,
+              autoAnswerQuestions: false,
+              checkpointEvery: 5,
+              cooldownProfile: settings.cooldownProfile,
+              autoCooldownProfile: settings.autoCooldownProfile,
+              cooldownHorizonHours: settings.cooldownHorizonHours,
+            };
+
+            // Reuse the authoritative loop start path instead of maintaining a second implementation.
+            const res = await app.inject({
+              method: 'POST',
+              url: '/api/god-factory/loop/start',
+              headers: {
+                'x-gf-internal-scheduler': '1',
+              },
+              payload: startPayload,
+            });
+            loopStarted = res.statusCode >= 200 && res.statusCode < 300;
+
+            const runSummary = {
+              selected_model: selection.selectedModel,
+              candidate_chain: candidateChain,
+              cloud_usage_count: cloudUsageCount,
+              cloud_budget_exhausted: cloudBudgetExhausted,
+              active_candidate_count: activeCandidates.length,
+              local_candidate_count: localCandidates.length,
+              local_candidate_raw_count: localCandidatesRaw.length,
+              cloud_candidate_count: cloudCandidates.length,
+              blocked_by_machine_limit: blockedByMachineLimit,
+              machine_limit_jobs_created: machineLimitJobsCreated,
+              local_concurrency_gap_jobs_created: localConcurrencyGapJobsCreated,
+              local_parallel_target: settings.localParallelTarget,
+              local_parallel_ready: localParallelPlan.lanesReady,
+              local_parallel_candidates: localParallelPlan.plannedCandidates,
+              local_parallel_deferred_candidates: localParallelPlan.deferredCandidates,
+              local_parallel_token_budget: localParallelPlan.tokenBudget,
+              local_parallel_token_used: localParallelPlan.tokenUsed,
+              pending_priority_profile: pendingPriorityProfile,
+              selection_reason: selection.selectedReason,
+              blocked_by_override: selection.blockedByOverride,
+            };
+            autoModelSelection = runSummary;
+
+            if (loopStarted) {
+              bumpAutoIntelCounter('loop_start_success', 1);
+              patchAutoIntelCounters({ last_loop_start_error: null });
+            } else {
+              bumpAutoIntelCounter('loop_start_failed', 1);
+              let errorMessage = `HTTP ${res.statusCode}`;
+              try {
+                const parsed = JSON.parse(String(res.body || '{}')) as { error?: string };
+                if (typeof parsed.error === 'string' && parsed.error.trim()) {
+                  errorMessage = parsed.error;
+                }
+              } catch {
+                // Keep HTTP fallback when payload is empty or not JSON.
+              }
+              patchAutoIntelCounters({ last_loop_start_error: errorMessage });
+            }
+          }
+        }
+      }
+
+      const result = {
+        ok: true,
+        source,
+        started_at: startedAt,
+        jobs_from_gaps: jobsFromGaps,
+        employer_analyzed: employerAnalyzed,
+        reflected_jobs: reflectedJobs,
+        loop_start_attempted: loopStartAttempted,
+        loop_started: loopStarted,
+        resolved_project_id: resolvedProjectId,
+        auto_model_selection: autoModelSelection,
+      };
+
+      setKv(db, AUTO_INTEL_LAST_RUN_KEY, startedAt);
+      setKv(db, AUTO_INTEL_LAST_RESULT_KEY, JSON.stringify(result));
+      setKv(db, AUTO_INTEL_LAST_ERROR_KEY, '');
+      bumpAutoIntelCounter('cycles_completed', 1);
+      return result;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err || 'Unknown auto-intel error');
+      const stamped = `${new Date().toISOString()} ${source}: ${message}`;
+      setKv(db, AUTO_INTEL_LAST_ERROR_KEY, stamped);
+      bumpAutoIntelCounter('cycles_failed', 1);
+      recordLoopError(db, {
+        phase: 'auto_intel_cycle',
+        runId: null,
+        err,
+        fatal: false,
+      });
+      return { ok: false, source, error: message };
+    } finally {
+      _autoIntelTickRunning = false;
+    }
+  }
+
+  function startAutoIntelScheduler(): void {
+    if (_autoIntelTimer) return;
+    _autoIntelTimer = setInterval(() => {
+      void runAutoIntelCycle('scheduler');
+    }, 30_000);
   }
 
   function resolveScopedProjectId(projectId: unknown): string | null {
@@ -1014,6 +1900,14 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     } catch {
       return false;
     }
+  }
+
+  function isInternalSchedulerCall(req: FastifyRequest): boolean {
+    const marker = String(req.headers['x-gf-internal-scheduler'] || '').trim();
+    if (marker !== '1') return false;
+    const ip = String(req.ip || '');
+    if (!ip) return true;
+    return ip === '127.0.0.1' || ip === '::1' || ip.startsWith('::ffff:127.');
   }
 
   function requireControlOwner(reply: FastifyReply): boolean {
@@ -1668,7 +2562,34 @@ export async function godFactoryRoutes(app: FastifyInstance) {
     if (!requireControlOwner(reply)) return;
     const body = (req.body || {}) as Partial<AutoIntelSettings>;
     const settings = saveAutoIntelSettings(body);
+    if (settings.enabled) {
+      void runAutoIntelCycle('settings_update');
+    }
     return reply.send({ ok: true, settings });
+  });
+
+  app.post('/auto-intel/run-once', async (_req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireControlOwner(reply)) return;
+    const result = await runAutoIntelCycle('manual');
+    return reply.send(result);
+  });
+
+  app.get('/auto-intel/status', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const lastRunAt = getKv(db, AUTO_INTEL_LAST_RUN_KEY);
+    const lastError = getKv(db, AUTO_INTEL_LAST_ERROR_KEY);
+    const lastResult = parseJson<Record<string, unknown> | null>(getKv(db, AUTO_INTEL_LAST_RESULT_KEY), null);
+    const counters = loadAutoIntelCounters();
+    return reply.send({
+      settings: loadAutoIntelSettings(),
+      runtime: {
+        scheduler_active: !!_autoIntelTimer,
+        tick_running: _autoIntelTickRunning,
+        last_run_at: lastRunAt || null,
+        last_error: lastError || null,
+        last_result: lastResult,
+        counters,
+      },
+    });
   });
 
   app.post('/actions', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -2023,11 +2944,20 @@ export async function godFactoryRoutes(app: FastifyInstance) {
 
   _ensureGfLoopState(db);
   _recoverCrashedGfRuns(db);
+  startAutoIntelScheduler();
+
+  app.addHook('onClose', async () => {
+    if (_autoIntelTimer) {
+      clearInterval(_autoIntelTimer);
+      _autoIntelTimer = null;
+    }
+  });
 
   // POST /api/god-factory/loop/start
-  // Body: { projectId, model?, maxIterations?, jobMaxIterations?, autoApproveChanges?, autoAnswerQuestions?, checkpointEvery?, cooldownProfile?, autoCooldownProfile?, cooldownHorizonHours? }
+  // Body: { projectId, model?, candidateChain?, maxIterations?, jobMaxIterations?, autoApproveChanges?, autoAnswerQuestions?, checkpointEvery?, cooldownProfile?, autoCooldownProfile?, cooldownHorizonHours? }
   app.post('/loop/start', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!requireControlOwner(reply)) return;
+    const internalSchedulerCall = isInternalSchedulerCall(req);
+    if (!internalSchedulerCall && !requireControlOwner(reply)) return;
 
     _ensureGfLoopState(db);
     const state = db.prepare('SELECT state FROM god_factory_loop_state WHERE id = \'singleton\'').get() as { state: string } | undefined;
@@ -2035,9 +2965,10 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: 'God Factory loop is already running' });
     }
 
-    const { projectId, model, maxIterations = 50, jobMaxIterations, autoApproveChanges, autoAnswerQuestions, checkpointEvery, cooldownProfile, autoCooldownProfile, cooldownHorizonHours } = req.body as {
+    const { projectId, model, candidateChain, maxIterations = 50, jobMaxIterations, autoApproveChanges, autoAnswerQuestions, checkpointEvery, cooldownProfile, autoCooldownProfile, cooldownHorizonHours } = req.body as {
       projectId?: string;
       model?: string;
+      candidateChain?: string[];
       maxIterations?: number;
       jobMaxIterations?: number;
       autoApproveChanges?: boolean;
@@ -2089,16 +3020,30 @@ export async function godFactoryRoutes(app: FastifyInstance) {
       ? Math.max(1, Math.min(7 * 24, Number(cooldownHorizonHours)))
       : Number(getKv(db, 'god_factory:loop:last_cooldown_horizon_hours') || '24') || 24;
 
+    const requestedCandidateChain = Array.isArray(candidateChain)
+      ? candidateChain
+        .map((value) => String(value || '').trim())
+        .filter((value) => value.includes('/'))
+      : [];
+
     const preferredModel = requestedModel && requestedModel.includes('/') ? requestedModel : undefined;
     const strategyAtStart = resolveModelStrategy(db, preferredModel);
-    const configuredCandidates = [strategyAtStart.primaryModel, ...strategyAtStart.fallbackModels].filter((m) => {
+    const strategyCandidates = [strategyAtStart.primaryModel, ...strategyAtStart.fallbackModels].filter((m) => {
       const provider = extractProviderFromModelId(m) as ProviderType;
       return !!getProviderClient(db, provider);
     });
+
+    const configuredCandidates = (requestedCandidateChain.length > 0 ? requestedCandidateChain : strategyCandidates).filter((m, index, arr) => {
+      if (arr.indexOf(m) !== index) return false;
+      const provider = extractProviderFromModelId(m) as ProviderType;
+      return !!getProviderClient(db, provider);
+    });
+
     if (configuredCandidates.length === 0) {
       return reply.status(400).send({ error: 'No configured models available in the current strategy chain.' });
     }
     const normalizedModel = configuredCandidates[0];
+    const runCandidateChain = configuredCandidates;
 
     const normalizedAutoApproveChanges = autoApproveChanges ?? false;
     const normalizedAutoAnswerQuestions = autoAnswerQuestions ?? false;
@@ -2145,6 +3090,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
 
     const runId = randomUUID();
     setKv(db, 'god_factory:loop:last_model', normalizedModel);
+    setKv(db, 'god_factory:loop:last_candidate_chain', JSON.stringify(runCandidateChain));
     setKv(db, 'god_factory:loop:last_project_id', normalizedProjectId);
     setKv(db, 'god_factory:loop:last_max_iterations', String(isUnlimitedIterations ? 0 : parsedMaxIterations));
     setKv(db, 'god_factory:loop:last_auto_approve_changes', normalizedAutoApproveChanges ? '1' : '0');
@@ -2296,8 +3242,7 @@ export async function godFactoryRoutes(app: FastifyInstance) {
         const { appConfig } = await import('../config.js');
         const { getModel, extractProviderFromModelId } = await import('@personal-ide/shared');
 
-        const strategy = resolveModelStrategy(db, normalizedModel);
-        const chain = [strategy.primaryModel, ...strategy.fallbackModels];
+        const chain = runCandidateChain;
         const chosenModel = chain.find((modelId) => {
           const canUse = getProviderClient(db, extractProviderFromModelId(modelId) as ProviderType);
           if (!canUse) return false;

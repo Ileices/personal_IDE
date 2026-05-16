@@ -456,7 +456,19 @@ The server auto-detects Python. It tries `python`, `python3`, and `py -3` (Windo
 Make sure Python 3.10+ is on your PATH.
 
 ### Port already in use
-Kill the process on port 3001 or 5173, or change `SERVER_PORT` in `.env`.
+Kill the process on port 3001, 5173, or 5174, or change `SERVER_PORT` in `.env`.
+
+Windows PowerShell:
+```powershell
+Get-NetTCPConnection -LocalPort 3001,5173,5174 -ErrorAction SilentlyContinue |
+	Select-Object -ExpandProperty OwningProcess -Unique |
+	ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+```
+
+Linux/macOS:
+```bash
+lsof -ti :3001 -ti :5173 -ti :5174 | xargs -r kill -9
+```
 
 ---
 

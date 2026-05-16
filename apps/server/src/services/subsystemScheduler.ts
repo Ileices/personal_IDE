@@ -7,6 +7,7 @@ const PROJECT_ROTATION_KEY = 'subsystems:project_rotation_index';
 const AUTO_INTEL_SETTINGS_KEY = 'god_factory:auto_intel:settings';
 const AUTO_INTEL_LAST_RUN_KEY = 'god_factory:auto_intel:last_run_at';
 const AUTO_INTEL_LAST_ERROR_KEY = 'god_factory:auto_intel:last_error';
+const AUTO_INTEL_MANAGED_BY_ROUTE_KEY = 'god_factory:auto_intel:managed_by_route';
 
 type AutoIntelSettings = {
   enabled: boolean;
@@ -130,6 +131,12 @@ function loadAutoIntelSettings(db: Database.Database): AutoIntelSettings {
   } catch {
     return DEFAULT_AUTO_INTEL_SETTINGS;
   }
+}
+
+function isAutoIntelManagedByRoute(db: Database.Database): boolean {
+  const raw = String(getKv(db, AUTO_INTEL_MANAGED_BY_ROUTE_KEY) || '').trim().toLowerCase();
+  if (!raw) return true;
+  return raw !== '0' && raw !== 'false' && raw !== 'no';
 }
 
 function shouldRunAutoIntelNow(db: Database.Database, settings: AutoIntelSettings): boolean {
@@ -293,7 +300,7 @@ async function tick(db: Database.Database): Promise<void> {
       executeSubsystem(db, { subsystem: 'god_factory_idle_scan', depth: settings.god_factory_idle_scan.maxDepth });
     }
 
-    if (shouldRunAutoIntelNow(db, autoIntelSettings)) {
+    if (!isAutoIntelManagedByRoute(db) && shouldRunAutoIntelNow(db, autoIntelSettings)) {
       try {
         await runAutoIntelCycle(db, autoIntelSettings);
         setKv(db, AUTO_INTEL_LAST_RUN_KEY, new Date().toISOString());

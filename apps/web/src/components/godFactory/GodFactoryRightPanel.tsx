@@ -181,6 +181,18 @@ interface GodFactoryActionRecord {
   timestamp: string;
 }
 
+interface AutoIntelRuntimeCounters {
+  cycles_started?: number;
+  cycles_completed?: number;
+  cycles_failed?: number;
+  cycles_skipped?: number;
+  loop_start_attempts?: number;
+  loop_start_success?: number;
+  loop_start_failed?: number;
+  last_skip_reason?: string | null;
+  last_loop_start_error?: string | null;
+}
+
 interface AutoIntelSettingsResponse {
   settings: {
     enabled: boolean;
@@ -195,10 +207,24 @@ interface AutoIntelSettingsResponse {
     maxIterations: number;
     jobMaxIterations: number;
     autoCooldownProfile: boolean;
+    preferLocalWhenCloudExhausted: boolean;
+    cloudRequestCapEnabled: boolean;
+    cloudRequestCapWindowHours: number;
+    cloudRequestCapRequests: number;
+    localContextWindowCapEnabled: boolean;
+    localContextWindowCapTokens: number;
+    localParallelTarget: number;
+    localBenchmarkPlannerEnabled: boolean;
+    localLaneTokenBudget: number;
+    localMaxParallelLanes: number;
   };
   runtime?: {
+    scheduler_active?: boolean;
+    tick_running?: boolean;
     last_run_at?: string | null;
     last_error?: string | null;
+    last_result?: Record<string, unknown> | null;
+    counters?: AutoIntelRuntimeCounters;
   };
 }
 
@@ -818,8 +844,86 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [autoIntelIntervalMin, setAutoIntelIntervalMin] = useState(() => {
     try { return parseInt(localStorage.getItem('gf_autoIntelIntervalMin') || '15', 10); } catch { return 15; }
   });
+  const [autoIntelPreferLocalFallback, setAutoIntelPreferLocalFallback] = useState(() => {
+    try {
+      const raw = localStorage.getItem('gf_autoIntelPreferLocalFallback');
+      return raw === null ? true : raw === '1';
+    } catch {
+      return true;
+    }
+  });
+  const [autoIntelCloudCapEnabled, setAutoIntelCloudCapEnabled] = useState(() => {
+    try { return localStorage.getItem('gf_autoIntelCloudCapEnabled') === '1'; } catch { return false; }
+  });
+  const [autoIntelCloudCapWindowHours, setAutoIntelCloudCapWindowHours] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem('gf_autoIntelCloudCapWindowHours') || '24');
+      return Math.max(1, Math.min(720, Number.isFinite(raw) ? raw : 24));
+    } catch {
+      return 24;
+    }
+  });
+  const [autoIntelCloudCapRequests, setAutoIntelCloudCapRequests] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem('gf_autoIntelCloudCapRequests') || '250');
+      return Math.max(1, Math.min(1000000, Number.isFinite(raw) ? raw : 250));
+    } catch {
+      return 250;
+    }
+  });
+  const [autoIntelLocalContextCapEnabled, setAutoIntelLocalContextCapEnabled] = useState(() => {
+    try {
+      const raw = localStorage.getItem('gf_autoIntelLocalContextCapEnabled');
+      return raw === null ? true : raw === '1';
+    } catch {
+      return true;
+    }
+  });
+  const [autoIntelLocalContextCapTokens, setAutoIntelLocalContextCapTokens] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem('gf_autoIntelLocalContextCapTokens') || '32000');
+      return Math.max(1024, Math.min(500000, Number.isFinite(raw) ? raw : 32000));
+    } catch {
+      return 32000;
+    }
+  });
+  const [autoIntelLocalParallelTarget, setAutoIntelLocalParallelTarget] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem('gf_autoIntelLocalParallelTarget') || '2');
+      return Math.max(1, Math.min(16, Number.isFinite(raw) ? raw : 2));
+    } catch {
+      return 2;
+    }
+  });
+  const [autoIntelLocalPlannerEnabled, setAutoIntelLocalPlannerEnabled] = useState(() => {
+    try {
+      const raw = localStorage.getItem('gf_autoIntelLocalPlannerEnabled');
+      return raw === null ? true : raw === '1';
+    } catch {
+      return true;
+    }
+  });
+  const [autoIntelLocalLaneTokenBudget, setAutoIntelLocalLaneTokenBudget] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem('gf_autoIntelLocalLaneTokenBudget') || '64000');
+      return Math.max(4096, Math.min(2000000, Number.isFinite(raw) ? raw : 64000));
+    } catch {
+      return 64000;
+    }
+  });
+  const [autoIntelLocalMaxParallelLanes, setAutoIntelLocalMaxParallelLanes] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem('gf_autoIntelLocalMaxParallelLanes') || '4');
+      return Math.max(1, Math.min(32, Number.isFinite(raw) ? raw : 4));
+    } catch {
+      return 4;
+    }
+  });
   const [autoIntelCountdown, setAutoIntelCountdown] = useState(0);
   const [autoIntelBusy, setAutoIntelBusy] = useState(false);
+  const [autoIntelTickRunning, setAutoIntelTickRunning] = useState(false);
+  const [autoIntelRuntimeCounters, setAutoIntelRuntimeCounters] = useState<AutoIntelRuntimeCounters | null>(null);
+  const [autoIntelLastResult, setAutoIntelLastResult] = useState<Record<string, unknown> | null>(null);
   const [autoIntelLastRun, setAutoIntelLastRun] = useState<string | null>(null);
   const [autoIntelError, setAutoIntelError] = useState<string | null>(null);
   const [autoIntelFailCount, setAutoIntelFailCount] = useState(0);
@@ -852,6 +956,31 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [notifActionBusy, setNotifActionBusy] = useState<string | null>(null);
   const readyNoticeShownRef = useRef(readReadyNoticeSeen());
   const chatSelectedModel = useChatStore((s) => s.selectedModel);
+
+  const pushTransientNotification = useCallback((
+    type: IntelNotification['type'],
+    message: string,
+    source = 'intel panel',
+  ) => {
+    setNotifications(prev => [{
+      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type,
+      message,
+      timestamp: new Date().toISOString(),
+      source,
+    }, ...prev].slice(0, 20));
+  }, []);
+
+  const readErrorMessage = useCallback(async (res: Response, fallback: string) => {
+    try {
+      const body = await res.json() as { error?: string; message?: string };
+      if (body?.error) return body.error;
+      if (body?.message) return body.message;
+    } catch {
+      // no-op
+    }
+    return `${fallback} (HTTP ${res.status})`;
+  }, []);
 
   const loadQueue = useCallback(() => {
     fetch(`${API_BASE}/api/god-factory/queue?limit=20`)
@@ -1103,13 +1232,20 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const runEmployerAnalysis = useCallback(async () => {
     setEmployerAnalyzing(true);
     try {
-      await fetch(`${API_BASE}/api/employer/analyze`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/employer/analyze`, { method: 'POST' });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, 'Employer analysis failed'));
+      }
       loadEmployerStatus();
       loadEmployerSuggestions();
+      pushTransientNotification('success', 'Employer analysis completed.', 'employer crawler');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Employer analysis failed';
+      pushTransientNotification('error', msg, 'employer crawler');
     } finally {
       setEmployerAnalyzing(false);
     }
-  }, [loadEmployerStatus, loadEmployerSuggestions]);
+  }, [loadEmployerStatus, loadEmployerSuggestions, pushTransientNotification, readErrorMessage]);
 
   const injectCooldown = useCallback(async (modelId: string, type: 'cooldown' | 'skip' | 'sleep' | 'clear', durationSec?: number, skipCycles?: number) => {
     setCooldownBusy(modelId);
@@ -1174,7 +1310,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   }, [projectId]);
 
   const loadAutoIntelSettings = useCallback(() => {
-    fetch(`${API_BASE}/api/god-factory/auto-intel/settings`)
+    fetch(`${API_BASE}/api/god-factory/auto-intel/status`)
       .then(r => r.ok ? r.json() : null)
       .then((d: AutoIntelSettingsResponse | null) => {
         if (!d?.settings) return;
@@ -1186,7 +1322,20 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         setAutoIntelCooldownHorizonHours(Math.max(1, Math.min(168, Number(d.settings.cooldownHorizonHours || 24))));
         setAutoIntelAutoCooldownProfile(d.settings.autoCooldownProfile ?? true);
         setAutoIntelIntervalMin(Math.max(1, Math.round(Number(d.settings.intervalSec || 900) / 60)));
+        setAutoIntelPreferLocalFallback(d.settings.preferLocalWhenCloudExhausted ?? true);
+        setAutoIntelCloudCapEnabled(d.settings.cloudRequestCapEnabled ?? false);
+        setAutoIntelCloudCapWindowHours(Math.max(1, Math.min(720, Number(d.settings.cloudRequestCapWindowHours || 24))));
+        setAutoIntelCloudCapRequests(Math.max(1, Math.min(1000000, Number(d.settings.cloudRequestCapRequests || 250))));
+        setAutoIntelLocalContextCapEnabled(d.settings.localContextWindowCapEnabled ?? true);
+        setAutoIntelLocalContextCapTokens(Math.max(1024, Math.min(500000, Number(d.settings.localContextWindowCapTokens || 32000))));
+        setAutoIntelLocalParallelTarget(Math.max(1, Math.min(16, Number(d.settings.localParallelTarget || 2))));
+        setAutoIntelLocalPlannerEnabled(d.settings.localBenchmarkPlannerEnabled ?? true);
+        setAutoIntelLocalLaneTokenBudget(Math.max(4096, Math.min(2000000, Number(d.settings.localLaneTokenBudget || 64000))));
+        setAutoIntelLocalMaxParallelLanes(Math.max(1, Math.min(32, Number(d.settings.localMaxParallelLanes || 4))));
         if (d.runtime?.last_run_at) setAutoIntelLastRun(d.runtime.last_run_at);
+        setAutoIntelTickRunning(!!d.runtime?.tick_running);
+        setAutoIntelLastResult(d.runtime?.last_result || null);
+        setAutoIntelRuntimeCounters(d.runtime?.counters || null);
         if (d.runtime?.last_error) setAutoIntelError(d.runtime.last_error);
         setAutoIntelServerSynced(true);
       })
@@ -1276,18 +1425,6 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       }, 15000);
     })();
 
-    if (codebaseReady && !readyNoticeShownRef.current) {
-      readyNoticeShownRef.current = true;
-      markReadyNoticeSeen();
-      setNotifications(prev => [{
-        id: `codebase-${Date.now()}`,
-        type: 'success' as const,
-        source: 'interactive state',
-        message: 'Codebase snapshot loaded and God Factory interactive state is active.',
-        timestamp: new Date().toISOString(),
-      }, ...prev].slice(0, 20));
-    }
-
     return () => {
       cancelled = true;
       if (refreshTimer) window.clearInterval(refreshTimer);
@@ -1295,6 +1432,33 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (gfTimer) window.clearInterval(gfTimer);
     };
   }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions, loadBlameRegistry, loadCodeOriginSummary, loadAutoIntelSettings]);
+
+  // ── Separate effect for codebase ready notification (only run once per session) ──
+  useEffect(() => {
+    if (!codebaseReady) return;
+    // Check if we've already shown this notification in this session
+    if (readyNoticeShownRef.current) return;
+    // Also check persistent storage as backup (in case component remounts)
+    if (readReadyNoticeSeen()) {
+      readyNoticeShownRef.current = true;
+      return;
+    }
+    
+    // Add notification and mark as seen
+    readyNoticeShownRef.current = true;
+    markReadyNoticeSeen();
+    setNotifications(prev => {
+      // Don't add if it already exists in current notifications
+      if (prev.some(n => n.id.startsWith('codebase-'))) return prev;
+      return [{
+        id: `codebase-${Date.now()}`,
+        type: 'success' as const,
+        source: 'interactive state',
+        message: 'Codebase snapshot loaded and God Factory interactive state is active.',
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 20);
+    });
+  }, [codebaseReady]);
 
   // ── Persist auto-intel settings to localStorage ──
   useEffect(() => { try { localStorage.setItem('gf_autoIntelEnabled', autoIntelEnabled ? '1' : '0'); } catch {} }, [autoIntelEnabled]);
@@ -1308,6 +1472,16 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   useEffect(() => { try { localStorage.setItem('gf_autoIntelCooldownHorizonHours', String(autoIntelCooldownHorizonHours)); } catch {} }, [autoIntelCooldownHorizonHours]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelAutoCooldownProfile', autoIntelAutoCooldownProfile ? '1' : '0'); } catch {} }, [autoIntelAutoCooldownProfile]);
   useEffect(() => { try { localStorage.setItem('gf_autoIntelIntervalMin', String(autoIntelIntervalMin)); } catch {} }, [autoIntelIntervalMin]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelPreferLocalFallback', autoIntelPreferLocalFallback ? '1' : '0'); } catch {} }, [autoIntelPreferLocalFallback]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelCloudCapEnabled', autoIntelCloudCapEnabled ? '1' : '0'); } catch {} }, [autoIntelCloudCapEnabled]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelCloudCapWindowHours', String(autoIntelCloudCapWindowHours)); } catch {} }, [autoIntelCloudCapWindowHours]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelCloudCapRequests', String(autoIntelCloudCapRequests)); } catch {} }, [autoIntelCloudCapRequests]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelLocalContextCapEnabled', autoIntelLocalContextCapEnabled ? '1' : '0'); } catch {} }, [autoIntelLocalContextCapEnabled]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelLocalContextCapTokens', String(autoIntelLocalContextCapTokens)); } catch {} }, [autoIntelLocalContextCapTokens]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelLocalParallelTarget', String(autoIntelLocalParallelTarget)); } catch {} }, [autoIntelLocalParallelTarget]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelLocalPlannerEnabled', autoIntelLocalPlannerEnabled ? '1' : '0'); } catch {} }, [autoIntelLocalPlannerEnabled]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelLocalLaneTokenBudget', String(autoIntelLocalLaneTokenBudget)); } catch {} }, [autoIntelLocalLaneTokenBudget]);
+  useEffect(() => { try { localStorage.setItem('gf_autoIntelLocalMaxParallelLanes', String(autoIntelLocalMaxParallelLanes)); } catch {} }, [autoIntelLocalMaxParallelLanes]);
   useEffect(() => {
     const payload = {
       enabled: autoIntelEnabled,
@@ -1322,13 +1496,44 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       maxIterations: 0,
       jobMaxIterations: 50,
       autoCooldownProfile: autoIntelAutoCooldownProfile,
+      preferLocalWhenCloudExhausted: autoIntelPreferLocalFallback,
+      cloudRequestCapEnabled: autoIntelCloudCapEnabled,
+      cloudRequestCapWindowHours: autoIntelCloudCapWindowHours,
+      cloudRequestCapRequests: autoIntelCloudCapRequests,
+      localContextWindowCapEnabled: autoIntelLocalContextCapEnabled,
+      localContextWindowCapTokens: autoIntelLocalContextCapTokens,
+      localParallelTarget: autoIntelLocalParallelTarget,
+      localBenchmarkPlannerEnabled: autoIntelLocalPlannerEnabled,
+      localLaneTokenBudget: autoIntelLocalLaneTokenBudget,
+      localMaxParallelLanes: autoIntelLocalMaxParallelLanes,
     };
     fetch(`${API_BASE}/api/god-factory/auto-intel/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(() => {});
-  }, [autoIntelEnabled, autoIntelExecuteJobs, autoIntelAnalyzeEmployer, autoIntelReflectExternal, autoIntelCooldownProfile, autoIntelCooldownHorizonHours, autoIntelAutoCooldownProfile, autoIntelIntervalMin, projectId, chatSelectedModel]);
+  }, [
+    autoIntelEnabled,
+    autoIntelExecuteJobs,
+    autoIntelAnalyzeEmployer,
+    autoIntelReflectExternal,
+    autoIntelCooldownProfile,
+    autoIntelCooldownHorizonHours,
+    autoIntelAutoCooldownProfile,
+    autoIntelIntervalMin,
+    autoIntelPreferLocalFallback,
+    autoIntelCloudCapEnabled,
+    autoIntelCloudCapWindowHours,
+    autoIntelCloudCapRequests,
+    autoIntelLocalContextCapEnabled,
+    autoIntelLocalContextCapTokens,
+    autoIntelLocalParallelTarget,
+    autoIntelLocalPlannerEnabled,
+    autoIntelLocalLaneTokenBudget,
+    autoIntelLocalMaxParallelLanes,
+    projectId,
+    chatSelectedModel,
+  ]);
 
   const toggleSection = (key: keyof typeof sections) =>
     setSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1814,32 +2019,46 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     setNotifications(prev => prev.filter(x => x.id !== id));
   };
 
-  // ── Auto-intelligence pipeline trigger ──
+  const refreshAutoIntelStatus = useCallback(() => {
+    fetch(`${API_BASE}/api/god-factory/auto-intel/status`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: AutoIntelSettingsResponse | null) => {
+        if (!d?.runtime) return;
+        setAutoIntelTickRunning(!!d.runtime.tick_running);
+        setAutoIntelServerSynced(true);
+        setAutoIntelLastRun(d.runtime.last_run_at || null);
+        setAutoIntelLastResult(d.runtime.last_result || null);
+        setAutoIntelRuntimeCounters(d.runtime.counters || null);
+        if (d.runtime.last_error) {
+          setAutoIntelError(d.runtime.last_error);
+        } else {
+          setAutoIntelError(null);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── Auto-intelligence trigger ──
   const runAutoIntelPipeline = useCallback(async () => {
     if (autoIntelBusy) return;
     setAutoIntelBusy(true);
     setAutoIntelError(null);
     try {
-      // Step 1: flush flagged gap reports to jobs
-      const flushRes = await fetch(`${API_BASE}/api/god-factory/gap-reports/flush-to-jobs`, { method: 'POST' }).catch(() => null);
-      if (!flushRes || !flushRes.ok) throw new Error('flush-to-jobs failed');
-      // Step 2: refresh God Factory signals
-      const signalsRes = await fetch(`${API_BASE}/api/god-factory/signals`, { method: 'GET' }).catch(() => null);
-      if (!signalsRes || !signalsRes.ok) throw new Error('signals refresh failed');
-      // Step 2b: optional employer pass (blame -> role stratification refresh)
-      if (autoIntelAnalyzeEmployer) {
-        await fetch(`${API_BASE}/api/employer/analyze`, { method: 'POST' }).catch(() => null);
+      const runRes = await fetch(`${API_BASE}/api/god-factory/auto-intel/run-once`, {
+        method: 'POST',
+      });
+
+      if (!runRes.ok) {
+        const runData = await runRes.json().catch(() => null) as { error?: string } | null;
+        throw new Error(runData?.error || 'Failed to run auto-intelligence cycle.');
       }
-      // Step 2c: reflect external project outcomes into internal IDE-improvement jobs
-      if (autoIntelReflectExternal) {
-        const reflectRes = await fetch(`${API_BASE}/api/god-factory/external-jobs/reflect`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: projectId || null }),
-        }).catch(() => null);
-        if (!reflectRes || !reflectRes.ok) throw new Error('external reflection failed');
+
+      const runData = await runRes.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+      if (runData && runData.ok === false) {
+        throw new Error(runData.error || 'Auto-intelligence cycle reported failure.');
       }
-      // Step 3: reload queue and jobs
+
+      // Refresh client panels after a server-driven pass.
       loadQueue();
       loadSuggestedJobs();
       loadExternalJobs();
@@ -1849,70 +2068,18 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       loadEmployerStatus();
       loadEmployerSuggestions();
 
-      // Step 4: optionally advance pending work through the real autonomous loop
-      if (autoIntelExecuteJobs) {
-        if (!projectId) {
-          throw new Error('Auto-run queued jobs requires an active project selection.');
-        }
-
-        const loopStatusRes = await fetch(`${API_BASE}/api/god-factory/loop/status`);
-        const loopStatus = loopStatusRes.ok
-          ? await loopStatusRes.json() as { isRunning?: boolean; pendingJobs?: number }
-          : null;
-
-        if (loopStatus && !loopStatus.isRunning && (loopStatus.pendingJobs || 0) > 0) {
-          const startRes = await fetch(`${API_BASE}/api/god-factory/loop/start`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              projectId,
-              model: chatSelectedModel,
-              maxIterations: 0,
-              jobMaxIterations: 50,
-              autoApproveChanges: false,
-              autoAnswerQuestions: false,
-              checkpointEvery: 5,
-              cooldownProfile: autoIntelCooldownProfile,
-              autoCooldownProfile: autoIntelAutoCooldownProfile,
-              cooldownHorizonHours: autoIntelCooldownHorizonHours,
-            }),
-          });
-
-          if (!startRes.ok) {
-            const startData = await startRes.json().catch(() => null) as { error?: string } | null;
-            throw new Error(startData?.error || 'Failed to start the God Factory loop.');
-          }
-
-          loadImplementingJobs();
-          loadBackgroundStatus();
-        }
-      }
-
-      setAutoIntelLastRun(new Date().toISOString());
+      refreshAutoIntelStatus();
       setAutoIntelFailCount(0);
-      setAutoIntelCountdown(autoIntelIntervalMin * 60);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'pipeline error';
       setAutoIntelError(msg);
+      pushTransientNotification('error', `Auto-intelligence pipeline failed: ${msg}`, 'auto-intelligence');
       setAutoIntelFailCount(prev => prev + 1);
-      if (autoIntelFailCount + 1 >= 3) {
-        setAutoIntelEnabled(false);
-        setAutoIntelError(`Auto-intelligence disabled after 3 consecutive failures. Last error: ${msg}`);
-      }
     } finally {
       setAutoIntelBusy(false);
     }
   }, [
     autoIntelBusy,
-    autoIntelAnalyzeEmployer,
-    autoIntelReflectExternal,
-    autoIntelCooldownProfile,
-    autoIntelAutoCooldownProfile,
-    autoIntelCooldownHorizonHours,
-    autoIntelExecuteJobs,
-    autoIntelFailCount,
-    autoIntelIntervalMin,
-    chatSelectedModel,
     loadBackgroundStatus,
     loadCodebaseHealth,
     loadEmployerStatus,
@@ -1921,34 +2088,50 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     loadImplementingJobs,
     loadQueue,
     loadSuggestedJobs,
-    projectId,
+    pushTransientNotification,
+    refreshAutoIntelStatus,
   ]);
 
-  // ── Auto-intelligence interval effect ──
+  useEffect(() => {
+    refreshAutoIntelStatus();
+    const statusId = window.setInterval(refreshAutoIntelStatus, 5_000);
+    return () => window.clearInterval(statusId);
+  }, [refreshAutoIntelStatus]);
+
+  // ── Auto-intelligence countdown effect (server-owned schedule) ──
   useEffect(() => {
     if (!autoIntelEnabled) { setAutoIntelCountdown(0); return; }
-    setAutoIntelCountdown(autoIntelIntervalMin * 60);
-    const countdownId = window.setInterval(() => {
-      setAutoIntelCountdown(prev => {
-        if (prev <= 1) return autoIntelIntervalMin * 60;
-        return prev - 1;
-      });
-    }, 1000);
-    const pipelineId = window.setInterval(() => {
-      void runAutoIntelPipeline();
-    }, autoIntelIntervalMin * 60 * 1000);
-    return () => { window.clearInterval(countdownId); window.clearInterval(pipelineId); };
-  }, [autoIntelEnabled, autoIntelIntervalMin, runAutoIntelPipeline]);
+    const intervalSeconds = Math.max(60, autoIntelIntervalMin * 60);
+    const recompute = () => {
+      if (!autoIntelLastRun) {
+        setAutoIntelCountdown(intervalSeconds);
+        return;
+      }
+      const nextRunAt = new Date(autoIntelLastRun).getTime() + intervalSeconds * 1000;
+      const remaining = Math.max(0, Math.ceil((nextRunAt - Date.now()) / 1000));
+      setAutoIntelCountdown(remaining);
+    };
+    recompute();
+    const countdownId = window.setInterval(recompute, 1_000);
+    return () => window.clearInterval(countdownId);
+  }, [autoIntelEnabled, autoIntelIntervalMin, autoIntelLastRun]);
 
   // ── Notification action handlers ──
   const notifFlushToJob = async (notifId: string) => {
     setNotifActionBusy('flush');
     try {
-      await fetch(`${API_BASE}/api/god-factory/gap-reports/flush-to-jobs`, { method: 'POST' });
+      const flushRes = await fetch(`${API_BASE}/api/god-factory/gap-reports/flush-to-jobs`, { method: 'POST' });
+      if (!flushRes.ok) {
+        throw new Error(await readErrorMessage(flushRes, 'Failed to create Suggested Job'));
+      }
       await acknowledgeNotification(notifId);
       loadSuggestedJobs();
       loadQueue();
-    } catch { /* no-op */ }
+      pushTransientNotification('success', 'Queued a Suggested Job from this notification.', 'notifications');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to create Suggested Job';
+      pushTransientNotification('error', msg, 'notifications');
+    }
     finally { setNotifActionBusy(null); setSelectedNotification(null); }
   };
 
@@ -1960,25 +2143,41 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const notifAddToQueue = async (notifId: string) => {
     setNotifActionBusy('queue');
     try {
-      await fetch(`${API_BASE}/api/god-factory/gap-reports/flush-to-jobs`, { method: 'POST' });
+      const flushRes = await fetch(`${API_BASE}/api/god-factory/gap-reports/flush-to-jobs`, { method: 'POST' });
+      if (!flushRes.ok) {
+        throw new Error(await readErrorMessage(flushRes, 'Failed to add notification work to queue'));
+      }
       await acknowledgeNotification(notifId);
       loadSuggestedJobs();
-    } catch { /* no-op */ }
+      pushTransientNotification('success', 'Added notification work to queue.', 'notifications');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to add to queue';
+      pushTransientNotification('error', msg, 'notifications');
+    }
     finally { setNotifActionBusy(null); setSelectedNotification(null); }
   };
 
   const respondIdleSuggestion = async (suggestionId: string, response: 'accepted' | 'rejected' | 'deferred') => {
     const actionMap: Record<string, string> = { accepted: 'accept', rejected: 'reject', deferred: 'defer' };
-    await fetch(`${API_BASE}/api/god-factory/idle-suggestions/${suggestionId}/action`, {
+    const res = await fetch(`${API_BASE}/api/god-factory/idle-suggestions/${suggestionId}/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: actionMap[response] ?? response }),
-    }).catch(() => {});
+    }).catch(() => null);
+
+    if (!res || !res.ok) {
+      const msg = res
+        ? await readErrorMessage(res, 'Failed to apply idle suggestion action')
+        : 'Failed to apply idle suggestion action';
+      pushTransientNotification('error', msg, 'idle suggestions');
+      return;
+    }
 
     setIdleSuggestions(prev => prev.filter(s => s.suggestion_id !== suggestionId));
     if (response === 'accepted') {
       loadSuggestedJobs();
       loadQueue();
+      pushTransientNotification('success', 'Idle suggestion accepted and queued as job.', 'idle suggestions');
     }
   };
 
@@ -1998,16 +2197,21 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     const busyKey = subsystemId ? `${control}:${subsystemId}` : control;
     setControlBusy(busyKey);
     try {
-      await fetch(`${API_BASE}/api/god-factory/controls/background`, {
+      const res = await fetch(`${API_BASE}/api/god-factory/controls/background`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ control, subsystem_id: subsystemId, reason: 'god_factory_gui' }),
       });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, `Control action failed: ${control}`));
+      }
       loadBackgroundStatus();
       loadRecentActions();
       loadQueue();
-    } catch {
-      // noop
+      pushTransientNotification('success', `Control action applied: ${control.replace(/_/g, ' ')}`, 'background control');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `Control action failed: ${control}`;
+      pushTransientNotification('error', msg, 'background control');
     } finally {
       setControlBusy(null);
     }
@@ -2101,12 +2305,14 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                       const id = selectedNotification.notification.notification_id;
                       const mappedSubsystem = mapCategoryToSubsystem(cat);
                       const isGapCategory = cat === 'gap_report' || cat === 'code_health' || cat === 'drift' || cat === 'regression_trend';
+                      const isPatternCategory = cat === 'pattern_watch';
                       const isModelAlert = cat === 'model_behavior_alert' || cat === 'model_performance';
                       const isDebt = cat === 'debt_warning';
                       const isCritical = selectedNotification.notification.severity === 'critical' || selectedNotification.notification.severity === 'fatal';
+                      const subsystemCfg = mappedSubsystem ? subsystems[mappedSubsystem] : null;
                       return (
                         <>
-                          {mappedSubsystem && (
+                          {mappedSubsystem && subsystemCfg && (
                             <>
                               <button
                                 onClick={() => void runSubsystem(mappedSubsystem)}
@@ -2117,16 +2323,16 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                                 Run Crawler
                               </button>
                               <button
-                                onClick={() => void runControl(subsystems[mappedSubsystem].enabled ? 'pause_subsystem' : 'resume_subsystem', mappedSubsystem)}
+                                onClick={() => void runControl(subsystemCfg.enabled ? 'pause_subsystem' : 'resume_subsystem', mappedSubsystem)}
                                 disabled={controlBusy === `pause_subsystem:${mappedSubsystem}` || controlBusy === `resume_subsystem:${mappedSubsystem}`}
                                 className="text-[9px] px-1.5 py-0.5 rounded bg-ide-border/25 text-ide-text-dim border border-ide-border/40 hover:bg-ide-border/50 disabled:opacity-40 flex items-center gap-1"
                               >
                                 <SlidersHorizontal className="w-2 h-2" />
-                                {subsystems[mappedSubsystem].enabled ? 'Pause Crawler' : 'Resume Crawler'}
+                                {subsystemCfg.enabled ? 'Pause Crawler' : 'Resume Crawler'}
                               </button>
                             </>
                           )}
-                          {(isGapCategory || isCritical) && (
+                          {(isGapCategory || isPatternCategory || isCritical) && (
                             <button
                               onClick={() => void notifFlushToJob(id)}
                               disabled={notifActionBusy === 'flush'}
@@ -2136,13 +2342,32 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                               Create Job
                             </button>
                           )}
-                          {isModelAlert && (
+                          {(isModelAlert || isPatternCategory || isDebt) && (
                             <button
-                              onClick={notifViewModelHealth}
-                              className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 flex items-center gap-1"
+                              onClick={() => void runEmployerAnalysis()}
+                              disabled={employerAnalyzing}
+                              className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-300 border border-green-500/30 hover:bg-green-500/25 flex items-center gap-1"
                             >
-                              <Shield className="w-2 h-2" /> View Model Health
+                              {employerAnalyzing ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Sparkles className="w-2 h-2" />} Re-run Employer Analysis
                             </button>
+                          )}
+                          {isModelAlert && (
+                            <>
+                              <button
+                                onClick={notifViewModelHealth}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 flex items-center gap-1"
+                              >
+                                <Shield className="w-2 h-2" /> View Model Health
+                              </button>
+                              <button
+                                onClick={() => void applyIntelligentCycle()}
+                                disabled={strategyBusy === 'apply'}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 disabled:opacity-40 flex items-center gap-1"
+                              >
+                                {strategyBusy === 'apply' ? <RefreshCw className="w-2 h-2 animate-spin" /> : <SlidersHorizontal className="w-2 h-2" />}
+                                Apply Intelligent Cycle
+                              </button>
+                            </>
                           )}
                           {isDebt && (
                             <button
@@ -2277,6 +2502,127 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                   className="accent-purple-400"
                 />
               </label>
+              <label className="flex items-center justify-between gap-2 rounded bg-ide-bg/30 px-1.5 py-1">
+                <span className="text-ide-text-dim">Prefer local fallback when cloud budget is exhausted</span>
+                <input
+                  type="checkbox"
+                  checked={autoIntelPreferLocalFallback}
+                  onChange={e => setAutoIntelPreferLocalFallback(e.target.checked)}
+                  className="accent-purple-400"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 rounded bg-ide-bg/30 px-1.5 py-1">
+                <span className="text-ide-text-dim">Cloud request budget cap</span>
+                <input
+                  type="checkbox"
+                  checked={autoIntelCloudCapEnabled}
+                  onChange={e => setAutoIntelCloudCapEnabled(e.target.checked)}
+                  className="accent-purple-400"
+                />
+              </label>
+              {autoIntelCloudCapEnabled && (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ide-text-dim">Cloud cap window</span>
+                    <select
+                      value={autoIntelCloudCapWindowHours}
+                      onChange={e => setAutoIntelCloudCapWindowHours(Math.max(1, Math.min(720, Number(e.target.value) || 24)))}
+                      className="bg-ide-bg border border-ide-border/40 rounded px-1 text-ide-text text-[9px]"
+                    >
+                      <option value={1}>1 hour</option>
+                      <option value={2}>2 hours</option>
+                      <option value={10}>10 hours</option>
+                      <option value={24}>24 hours</option>
+                      <option value={168}>1 week</option>
+                      <option value={720}>30 days</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ide-text-dim">Cloud cap requests</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000000}
+                      step={10}
+                      value={autoIntelCloudCapRequests}
+                      onChange={e => setAutoIntelCloudCapRequests(Math.max(1, Math.min(1000000, Number(e.target.value) || 250)))}
+                      className="w-24 bg-ide-bg border border-ide-border/40 rounded px-1 text-ide-text text-[9px]"
+                    />
+                  </div>
+                </>
+              )}
+              <label className="flex items-center justify-between gap-2 rounded bg-ide-bg/30 px-1.5 py-1">
+                <span className="text-ide-text-dim">Block oversized local models (context window cap)</span>
+                <input
+                  type="checkbox"
+                  checked={autoIntelLocalContextCapEnabled}
+                  onChange={e => setAutoIntelLocalContextCapEnabled(e.target.checked)}
+                  className="accent-purple-400"
+                />
+              </label>
+              {autoIntelLocalContextCapEnabled && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-ide-text-dim">Local context cap tokens</span>
+                  <input
+                    type="number"
+                    min={1024}
+                    max={500000}
+                    step={1024}
+                    value={autoIntelLocalContextCapTokens}
+                    onChange={e => setAutoIntelLocalContextCapTokens(Math.max(1024, Math.min(500000, Number(e.target.value) || 32000)))}
+                    className="w-24 bg-ide-bg border border-ide-border/40 rounded px-1 text-ide-text text-[9px]"
+                  />
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-ide-text-dim">Local parallel target (candidate planning)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={16}
+                  step={1}
+                  value={autoIntelLocalParallelTarget}
+                  onChange={e => setAutoIntelLocalParallelTarget(Math.max(1, Math.min(16, Number(e.target.value) || 2)))}
+                  className="w-20 bg-ide-bg border border-ide-border/40 rounded px-1 text-ide-text text-[9px]"
+                />
+              </div>
+              <label className="flex items-center justify-between gap-2 rounded bg-ide-bg/30 px-1.5 py-1">
+                <span className="text-ide-text-dim">Enable local concurrency planner</span>
+                <input
+                  type="checkbox"
+                  checked={autoIntelLocalPlannerEnabled}
+                  onChange={e => setAutoIntelLocalPlannerEnabled(e.target.checked)}
+                  className="accent-purple-400"
+                />
+              </label>
+              {autoIntelLocalPlannerEnabled && (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ide-text-dim">Local lane token budget</span>
+                    <input
+                      type="number"
+                      min={4096}
+                      max={2000000}
+                      step={1024}
+                      value={autoIntelLocalLaneTokenBudget}
+                      onChange={e => setAutoIntelLocalLaneTokenBudget(Math.max(4096, Math.min(2000000, Number(e.target.value) || 64000)))}
+                      className="w-24 bg-ide-bg border border-ide-border/40 rounded px-1 text-ide-text text-[9px]"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ide-text-dim">Local max parallel lanes</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={32}
+                      step={1}
+                      value={autoIntelLocalMaxParallelLanes}
+                      onChange={e => setAutoIntelLocalMaxParallelLanes(Math.max(1, Math.min(32, Number(e.target.value) || 4)))}
+                      className="w-20 bg-ide-bg border border-ide-border/40 rounded px-1 text-ide-text text-[9px]"
+                    />
+                  </div>
+                </>
+              )}
               <div className="flex items-center justify-between gap-2">
                 <span className="text-ide-text-dim">Cooldown profile</span>
                 <select
@@ -2330,16 +2676,46 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
               <div className="text-ide-text-dim">
                 Server 24/7: {autoIntelServerSynced ? 'synced' : 'local fallback'}
               </div>
+              {autoIntelRuntimeCounters && (
+                <div className="rounded border border-ide-border/40 bg-ide-bg/20 px-1.5 py-1 text-ide-text-dim space-y-0.5">
+                  <div>Cycles: {Number(autoIntelRuntimeCounters.cycles_completed || 0)} ok / {Number(autoIntelRuntimeCounters.cycles_failed || 0)} failed / {Number(autoIntelRuntimeCounters.cycles_skipped || 0)} skipped</div>
+                  <div>Loop starts: {Number(autoIntelRuntimeCounters.loop_start_success || 0)} ok / {Number(autoIntelRuntimeCounters.loop_start_failed || 0)} failed</div>
+                  {autoIntelRuntimeCounters.last_skip_reason && <div>Last skip: {autoIntelRuntimeCounters.last_skip_reason}</div>}
+                  {autoIntelRuntimeCounters.last_loop_start_error && <div>Last loop error: {autoIntelRuntimeCounters.last_loop_start_error}</div>}
+                </div>
+              )}
+              {autoIntelLastResult && (
+                <div className="rounded border border-ide-border/40 bg-ide-bg/20 px-1.5 py-1 text-ide-text-dim space-y-0.5">
+                  <div>Last cycle source: {String(autoIntelLastResult.source || 'unknown')}</div>
+                  {autoIntelLastResult.resolved_project_id != null && <div>Project: {String(autoIntelLastResult.resolved_project_id)}</div>}
+                  {(() => {
+                    const sel = (autoIntelLastResult.auto_model_selection || null) as Record<string, unknown> | null;
+                    if (!sel) return null;
+                    const selectedModel = sel.selected_model ? String(sel.selected_model) : 'none';
+                    const reason = sel.selection_reason ? String(sel.selection_reason) : null;
+                    const machineLimitJobs = Number(sel.machine_limit_jobs_created || 0);
+                    const concurrencyGapJobs = Number(sel.local_concurrency_gap_jobs_created || 0);
+                    return (
+                      <>
+                        <div>Selected model: {selectedModel}</div>
+                        {reason && <div>Selection reason: {reason}</div>}
+                        <div>Machine-limit jobs: {machineLimitJobs}</div>
+                        <div>Concurrency-gap jobs: {concurrencyGapJobs}</div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
               {autoIntelExecuteJobs && !projectId && (
                 <div className="text-yellow-400 leading-snug">Select an active project before auto-executing Suggested Jobs.</div>
               )}
               <button
                 onClick={() => void runAutoIntelPipeline()}
-                disabled={autoIntelBusy}
+                disabled={autoIntelBusy || autoIntelTickRunning}
                 className="w-full py-1 text-[9px] rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 disabled:opacity-40 flex items-center justify-center gap-1"
               >
-                {autoIntelBusy ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Zap className="w-2.5 h-2.5" />}
-                Run Now
+                {(autoIntelBusy || autoIntelTickRunning) ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Zap className="w-2.5 h-2.5" />}
+                {(autoIntelBusy || autoIntelTickRunning) ? 'Cycle Running' : 'Run Now'}
               </button>
             </div>
           )}
@@ -2379,25 +2755,66 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                       </div>
                     </button>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {n.subsystem && (
-                        <>
-                          <button
-                            onClick={() => void runSubsystem(n.subsystem as SubsystemId)}
-                            disabled={runningSubsystem === n.subsystem}
-                            className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 disabled:opacity-40 flex items-center gap-1"
-                          >
-                            {runningSubsystem === n.subsystem ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Play className="w-2 h-2" />}
-                            Run
-                          </button>
-                          <button
-                            onClick={() => void runControl(subsystems[n.subsystem as SubsystemId].enabled ? 'pause_subsystem' : 'resume_subsystem', n.subsystem as SubsystemId)}
-                            disabled={controlBusy === `pause_subsystem:${n.subsystem}` || controlBusy === `resume_subsystem:${n.subsystem}`}
-                            className="text-[9px] px-1.5 py-0.5 rounded bg-ide-border/25 text-ide-text-dim border border-ide-border/40 hover:bg-ide-border/50 disabled:opacity-40"
-                          >
-                            {subsystems[n.subsystem as SubsystemId].enabled ? 'Pause' : 'Resume'}
-                          </button>
-                        </>
-                      )}
+                      {(() => {
+                        const cat = String(n.category || '');
+                        const isGapCategory = cat === 'gap_report' || cat === 'code_health' || cat === 'drift' || cat === 'regression_trend';
+                        const isPatternCategory = cat === 'pattern_watch';
+                        const isModelAlert = cat === 'model_behavior_alert' || cat === 'model_performance';
+                        const isDebt = cat === 'debt_warning';
+                        const isCritical = n.type === 'critical' || n.type === 'fatal';
+                        const mappedSubsystem = n.subsystem as SubsystemId | undefined;
+                        const subsystemCfg = mappedSubsystem ? subsystems[mappedSubsystem] : null;
+                        return (
+                          <>
+                            {mappedSubsystem && subsystemCfg && (
+                              <>
+                                <button
+                                  onClick={() => void runSubsystem(mappedSubsystem)}
+                                  disabled={runningSubsystem === mappedSubsystem}
+                                  className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 disabled:opacity-40 flex items-center gap-1"
+                                >
+                                  {runningSubsystem === mappedSubsystem ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Play className="w-2 h-2" />}
+                                  Run
+                                </button>
+                                <button
+                                  onClick={() => void runControl(subsystemCfg.enabled ? 'pause_subsystem' : 'resume_subsystem', mappedSubsystem)}
+                                  disabled={controlBusy === `pause_subsystem:${mappedSubsystem}` || controlBusy === `resume_subsystem:${mappedSubsystem}`}
+                                  className="text-[9px] px-1.5 py-0.5 rounded bg-ide-border/25 text-ide-text-dim border border-ide-border/40 hover:bg-ide-border/50 disabled:opacity-40"
+                                >
+                                  {subsystemCfg.enabled ? 'Pause' : 'Resume'}
+                                </button>
+                              </>
+                            )}
+                            {(isGapCategory || isPatternCategory || isCritical) && (
+                              <button
+                                onClick={() => void notifFlushToJob(n.id)}
+                                disabled={notifActionBusy === 'flush'}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300 border border-yellow-500/30 hover:bg-yellow-500/25 disabled:opacity-40"
+                              >
+                                Create Job
+                              </button>
+                            )}
+                            {(isModelAlert || isPatternCategory || isDebt) && (
+                              <button
+                                onClick={() => void runEmployerAnalysis()}
+                                disabled={employerAnalyzing}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-300 border border-green-500/30 hover:bg-green-500/25 disabled:opacity-40"
+                              >
+                                Re-run Employer
+                              </button>
+                            )}
+                            {isDebt && (
+                              <button
+                                onClick={() => void notifAddToQueue(n.id)}
+                                disabled={notifActionBusy === 'queue'}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30 hover:bg-orange-500/25 disabled:opacity-40"
+                              >
+                                Add Queue
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                   <button

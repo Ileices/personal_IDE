@@ -87,6 +87,31 @@ function insertMalformedSuggestedJob(projectId: string) {
   return jobId;
 }
 
+function insertExternalProjectJob(projectId: string) {
+  const jobId = `gf-external-${randomUUID()}`;
+
+  withDb((db) => {
+    db.prepare(`
+      INSERT INTO job_records (
+        id, job_id, project_id, job_category, source, source_record_ids, priority, title,
+        description, affected_files, affected_devtags, affected_plantags, required_buildtags,
+        blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
+        implementation_status, created_cycle, last_updated_cycle, timestamp, created_at
+      ) VALUES (?, ?, ?, 'external_project', 'god_factory_agent', '[]', 'high', ?,
+                ?, '[]', '[]', '[]', '[]', '[]', '[]', '{}', '[]', '{}',
+                'suggested', 0, 0, datetime('now'), datetime('now'))
+    `).run(
+      randomUUID(),
+      jobId,
+      projectId,
+      'External project failure signal',
+      'External build pipeline failed during validation and should trigger internal reflection.',
+    );
+  });
+
+  return jobId;
+}
+
 async function waitFor(condition: () => Promise<boolean>, timeoutMs = 5_000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -197,7 +222,7 @@ describe('God Factory Loop Contract', () => {
       autoApproveChanges: false,
       autoAnswerQuestions: false,
       checkpointEvery: 4,
-      jobMaxIterations: 10,
+      jobMaxIterations: 5,
       mode: 'safe',
     });
   });
@@ -242,6 +267,51 @@ describe('God Factory Loop Contract', () => {
     // Keep malformed payloads isolated: one bad record may be rejected, but it must not strand the loop in implementing/running forever.
     expect(dbState.job?.implementation_status).toBe('rejected');
     expect(dbState.run?.status).toBe('stopped');
-    expect(dbState.run?.stop_reason).toBe('manual_stop');
+    expect(dbState.run?.stop_reason).toBe('manual');
+  });
+
+  it('persists explicit candidate chain ordering when loop starts', async () => {
+    const start = await post('/api/god-factory/loop/start', {
+      projectId,
+      model: 'openai/gpt-4.1',
+      candidateChain: ['openai/gpt-4.1', 'openai/gpt-4o'],
+      maxIterations: 1,
+    });
+
+    expect(start.status).toBe(200);
+    expect(start.json.ok).toBe(true);
+
+    const kv = withDb((db) => db.prepare('SELECT value FROM app_kv WHERE key = ?').get('god_factory:loop:last_candidate_chain') as { value?: string } | undefined);
+    expect(kv?.value).toBeTruthy();
+    const parsed = JSON.parse(String(kv?.value || '[]')) as string[];
+    expect(parsed[0]).toBe('openai/gpt-4.1');
+    expect(parsed.includes('openai/gpt-4o')).toBe(true);
+  });
+
+  it('creates internal reflection jobs from external project signals', async () => {
+    const externalJobId = insertExternalProjectJob(projectId);
+
+    const reflect = await post('/api/god-factory/external-jobs/reflect', {
+      projectId,
+      limit: 20,
+    });
+
+    expect(reflect.status).toBe(200);
+    expect(reflect.json.jobs_created).toBeGreaterThanOrEqual(1);
+
+    const reflected = withDb((db) => db.prepare(`
+      SELECT job_id, source, job_category, description
+      FROM job_records
+      WHERE source = 'god_factory_agent'
+        AND job_category = 'god_factory_scan'
+        AND implementation_status = 'suggested'
+        AND description LIKE ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(`%reflection_from_external_job:${externalJobId}%`) as { job_id?: string; source?: string; job_category?: string; description?: string } | undefined);
+
+    expect(reflected?.job_id).toBeTruthy();
+    expect(reflected?.source).toBe('god_factory_agent');
+    expect(reflected?.job_category).toBe('god_factory_scan');
   });
 });

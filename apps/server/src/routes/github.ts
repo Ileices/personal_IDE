@@ -5,6 +5,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { randomUUID } from 'crypto';
 import { getGitHubService, CATEGORY_IDS, OWNER_LOGIN, type DiscussionCategory } from '../services/github/githubService.js';
+import { resolveModelStrategy } from '../services/modelStrategy.js';
+import { ensurePersonalIdeDisclaimer } from '../services/github/disclaimer.js';
 
 // ── Fastify plugin ─────────────────────────────
 export async function githubRoutes(app: FastifyInstance) {
@@ -72,15 +74,228 @@ export async function githubRoutes(app: FastifyInstance) {
     return 'open';
   }
 
-  // ── Helper: append app disclaimer to outgoing GitHub posts ──
-  // Keep this idempotent: if operators copy/paste previously posted text, avoid duplicate footers.
-  const APP_DISCLAIMER = '\n\n---\n*Sent from a [Personal_IDE](https://github.com/Ileices/personal_IDE)*';
-  const APP_DISCLAIMER_RE = /sent\s+from\s+a\s+\[?personal(?:_|\\_)?ide\]?\s*\(https:\/\/github\.com\/Ileices\/personal_IDE\)/i;
+  function hasColumn(table: string, column: string): boolean {
+    const info = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name?: string }>;
+    return info.some((row) => row.name === column);
+  }
 
-  function withDisclaimer(body: string): string {
-    const text = typeof body === 'string' ? body : String(body ?? '');
-    if (APP_DISCLAIMER_RE.test(text)) return text;
-    return text + APP_DISCLAIMER;
+  function resolveLatestProjectId(): string | null {
+    const row = db.prepare(`
+      SELECT id
+      FROM projects
+      ORDER BY last_accessed_at DESC, created_at DESC
+      LIMIT 1
+    `).get() as { id?: string } | undefined;
+    return row?.id ?? null;
+  }
+
+  function resolvePrimaryChatModel(): string | null {
+    const strategy = resolveModelStrategy(db, undefined, undefined);
+    const candidates = [strategy.primaryModel, ...strategy.fallbackModels].filter(Boolean);
+    for (const modelId of candidates) {
+      const row = db.prepare('SELECT 1 FROM model_registry WHERE model_id = ? LIMIT 1').get(modelId) as { 1?: number } | undefined;
+      if (row) return modelId;
+    }
+    const first = db.prepare(`
+      SELECT model_id
+      FROM model_registry
+      WHERE disabled = 0
+      ORDER BY updated_at DESC, created_at DESC
+      LIMIT 1
+    `).get() as { model_id?: string } | undefined;
+    return first?.model_id ?? null;
+  }
+
+  async function parseChatSseResponse(response: Response): Promise<string> {
+    if (!response.body) {
+      throw new Error('Chat stream did not return a body.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let content = '';
+
+    const processRawEvent = (rawEvent: string) => {
+      const dataLines = rawEvent
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trim())
+        .filter(Boolean);
+
+      for (const payload of dataLines) {
+        try {
+          const event = JSON.parse(payload) as { type?: string; delta?: string; fullContent?: string; error?: string };
+          if (event.type === 'content_delta' && typeof event.delta === 'string') {
+            content += event.delta;
+          } else if (event.type === 'content_done' && typeof event.fullContent === 'string') {
+            content = event.fullContent;
+          } else if (event.type === 'error') {
+            throw new Error(event.error || 'Chat stream returned an error event.');
+          }
+        } catch (err) {
+          throw err instanceof Error ? err : new Error(String(err));
+        }
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop() || '';
+
+      for (const rawEvent of chunks) {
+        processRawEvent(rawEvent);
+      }
+    }
+
+    // Some providers terminate the stream without a trailing blank line.
+    // Process any residual buffered event so the final response is not dropped.
+    if (buffer.trim()) {
+      processRawEvent(buffer);
+    }
+
+    return content.trim();
+  }
+
+  async function runDevAnalyzeViaChatSend(analysisPrompt: string): Promise<string> {
+    const model = resolvePrimaryChatModel();
+    const projectId = resolveLatestProjectId();
+
+    if (!model || !projectId) {
+      throw new Error('Cannot run dev analyze via chat/send: missing active model or project context.');
+    }
+
+    const serverPort = Number(process.env['SERVER_PORT'] || 3001);
+    const timeoutMs = 90_000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    let res: Response;
+    try {
+      res = await fetch(`http://127.0.0.1:${serverPort}/api/chat/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          message: analysisPrompt,
+          model,
+          mode: 'ask',
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new Error(`chat/send timed out after ${timeoutMs}ms`);
+      }
+      throw err instanceof Error ? err : new Error(String(err));
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!res.ok) {
+      const msg = await res.text().catch(() => '');
+      throw new Error(`chat/send failed with HTTP ${res.status}${msg ? `: ${msg.slice(0, 300)}` : ''}`);
+    }
+
+    return parseChatSseResponse(res);
+  }
+
+  function createCanonicalJobFromDevDraft(draft: any, commentUrl: string): string {
+    const canonicalJobId = randomUUID();
+    const rowId = randomUUID();
+    const nowIso = new Date().toISOString();
+    const latestProjectId = hasColumn('job_records', 'project_id') ? resolveLatestProjectId() : null;
+
+    let rootCause = '';
+    let solution = '';
+    try {
+      const parsed = JSON.parse(draft.analysis?.match(/\{[\s\S]+\}/)?.[0] || '{}');
+      rootCause = parsed.root_cause || '';
+      solution = parsed.solution || '';
+    } catch {
+      // leave extracted fields empty when analysis isn't valid JSON
+    }
+
+    const title = `Community Fix: #${draft.discussion_number} ${draft.discussion_title || ''}`.slice(0, 200);
+    const description = [
+      rootCause ? `Root Cause: ${rootCause}` : '',
+      solution ? `Solution: ${solution}` : '',
+      `Discussion: ${draft.discussion_number}`,
+      `Posted Fix: ${commentUrl}`,
+      draft.draft_response ? `\n---\n${String(draft.draft_response).slice(0, 1000)}` : '',
+    ].filter(Boolean).join('\n').trim();
+
+    const columns = [
+      'id',
+      'job_id',
+      'job_category',
+      'source',
+      'source_record_ids',
+      'priority',
+      'title',
+      'affected_files',
+      'affected_devtags',
+      'affected_plantags',
+      'required_buildtags',
+      'blocking_jobs',
+      'blocked_by_jobs',
+      'hierarchy',
+      'atomic_steps',
+      'sandbox_spec',
+      'implementation_status',
+      'created_cycle',
+      'last_updated_cycle',
+      'timestamp',
+      'created_at',
+    ];
+
+    const values: unknown[] = [
+      rowId,
+      canonicalJobId,
+      'user_requested',
+      'god_factory_agent',
+      JSON.stringify([String(draft.discussion_id || ''), String(draft.discussion_number || '')]),
+      'high',
+      title,
+      '[]',
+      '[]',
+      '[]',
+      '[]',
+      '[]',
+      '[]',
+      JSON.stringify({ phase: 1, milestone: 'community_fix', parent_job_id: null, child_job_ids: [] }),
+      JSON.stringify([
+        'Review discussion context and draft analysis evidence',
+        'Implement and validate the proposed fix in codebase',
+        'Post verification update back to linked discussion threads',
+      ]),
+      JSON.stringify({ sandbox_id: null, status: 'not_started', cycle_limit: 50, cycles_used: 0, test_results: [], human_review_required: false, human_review_completed: false }),
+      'suggested',
+      0,
+      0,
+      nowIso,
+      nowIso,
+    ];
+
+    if (hasColumn('job_records', 'project_id')) {
+      columns.splice(2, 0, 'project_id');
+      values.splice(2, 0, latestProjectId);
+    }
+
+    if (hasColumn('job_records', 'description')) {
+      const titleIdx = columns.indexOf('title');
+      columns.splice(titleIdx + 1, 0, 'description');
+      values.splice(titleIdx + 1, 0, description || 'Community fix posted from GitHub Dev tools.');
+    }
+
+    const placeholders = columns.map(() => '?').join(', ');
+    db.prepare(`INSERT INTO job_records (${columns.join(', ')}) VALUES (${placeholders})`).run(...values);
+
+    return canonicalJobId;
   }
 
   // ── Helper: require GitHub token ───────────────
@@ -279,7 +494,7 @@ export async function githubRoutes(app: FastifyInstance) {
     if (!bodyText.trim()) return reply.code(400).send({ error: 'Comment body is required.' });
 
     try {
-      const comment = await gh().addDiscussionComment({ discussionId: id, body: withDisclaimer(bodyText), replyToId });
+      const comment = await gh().addDiscussionComment({ discussionId: id, body: ensurePersonalIdeDisclaimer(bodyText), replyToId });
       reply.send({ comment });
     } catch (err: any) {
       reply.code(500).send({
@@ -455,14 +670,14 @@ export async function githubRoutes(app: FastifyInstance) {
 
     try {
       // Create the Discussion
-      const discussion = await gh().createDiscussion({ categoryId, title, body: withDisclaimer(body) });
+      const discussion = await gh().createDiscussion({ categoryId, title, body: ensurePersonalIdeDisclaimer(body) });
 
       // Bug reports also create a GitHub Issue for tracked resolution
       let issue: { number: number; html_url: string } | null = null;
       if (reportType === 'bug' || crossPostIssue) {
         issue = await gh().createIssue({
           title,
-          body: withDisclaimer(`${body}\n\n---\n_Originally reported via [Discussion #${discussion.number}](${discussion.url})_`),
+          body: ensurePersonalIdeDisclaimer(`${body}\n\n---\n_Originally reported via [Discussion #${discussion.number}](${discussion.url})_`),
           labels: labels || ['bug'],
         });
       }
@@ -834,35 +1049,20 @@ Format your response as JSON with these fields:
   "draft_comment": "..."
 }`;
 
-    // Call the app's own chat/agent endpoint
+    // Call the app's chat/send SSE endpoint and parse structured output.
+    // This avoids the stale /api/chat fallback path and keeps analysis contract aligned.
     try {
-      const agentRes = await fetch(`http://127.0.0.1:${process.env['SERVER_PORT'] || 3001}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: analysisPrompt,
-          model: null, // use default
-          stream: false,
-        }),
-      });
-
       let analysis = '';
       let draftResponse = '';
 
-      if (agentRes.ok) {
-        const agentData = await agentRes.json() as any;
-        const content = agentData.message || agentData.content || '';
-        try {
-          const parsed = JSON.parse(content.match(/\{[\s\S]+\}/)?.[0] || '{}');
-          analysis = parsed.root_cause || parsed.solution || content;
-          draftResponse = parsed.draft_comment || '';
-        } catch {
-          analysis = content;
-          draftResponse = content;
-        }
-      } else {
-        analysis = `(Agent unavailable — draft manually)\n\nDiscussion: ${discussionTitle}`;
-        draftResponse = '';
+      const content = await runDevAnalyzeViaChatSend(analysisPrompt);
+      try {
+        const parsed = JSON.parse(content.match(/\{[\s\S]+\}/)?.[0] || '{}');
+        analysis = parsed.root_cause || parsed.solution || content;
+        draftResponse = parsed.draft_comment || '';
+      } catch {
+        analysis = content;
+        draftResponse = content;
       }
 
       // Store the dev draft
@@ -917,56 +1117,16 @@ Format your response as JSON with these fields:
     try {
       const comment = await gh().addDiscussionComment({
         discussionId: draft.discussion_id,
-        body: withDisclaimer(draft.draft_response),
+        body: ensurePersonalIdeDisclaimer(draft.draft_response),
       });
 
       db.prepare(`
         UPDATE github_dev_drafts SET status = 'posted', posted_url = ? WHERE id = ? AND github_user_id = ?
       `).run(comment.url || '', id, githubUserId);
 
-      // ── Inject a Suggested Job so the fix flows into the God Factory pipeline ──
-      // Parse the analysis JSON for root_cause + solution if available
-      let rootCause = '';
-      let solution = '';
-      try {
-        const parsed = JSON.parse(draft.analysis?.match(/\{[\s\S]+\}/)?.[0] || '{}');
-        rootCause = parsed.root_cause || '';
-        solution = parsed.solution || '';
-      } catch { /* analysis is raw text */ }
-
-      const jobId = randomUUID();
-      const jobTitle = `Community Fix: #${draft.discussion_number} ${draft.discussion_title || ''}`.slice(0, 200);
-      const jobDescription = [
-        rootCause ? `Root Cause: ${rootCause}` : '',
-        solution  ? `Solution: ${solution}` : '',
-        `Discussion: ${draft.discussion_number}`,
-        `Posted Fix: ${comment.url || ''}`,
-        draft.draft_response ? `\n---\n${draft.draft_response.slice(0, 1000)}` : '',
-      ].filter(Boolean).join('\n').trim();
-
-      db.prepare(`
-        INSERT OR IGNORE INTO suggested_jobs
-          (id, category, source, title, description, priority, status, payload)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        jobId,
-        'user_requested',
-        'github_community',
-        jobTitle,
-        jobDescription || 'Fix posted from Dev Tools.',
-        'high',
-        'pending',
-        JSON.stringify({
-          discussion_id:     draft.discussion_id,
-          discussion_number: draft.discussion_number,
-          dev_draft_id:      id,
-          posted_comment_url: comment.url || '',
-          root_cause: rootCause,
-          solution,
-        }),
-      );
-
-      reply.send({ ok: true, url: comment.url, jobId });
+      // Inject canonical job_records work so community fixes flow directly into God Factory queue.
+      const canonicalJobId = createCanonicalJobFromDevDraft(draft, comment.url || '');
+      reply.send({ ok: true, url: comment.url, jobId: canonicalJobId });
     } catch (err: any) {
       reply.code(500).send({ error: err.message || 'Failed to post draft.' });
     }
