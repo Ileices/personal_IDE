@@ -552,6 +552,7 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
     ],
     discussionLinks: [
       { url: 'https://github.com/Ileices/personal_IDE/discussions/20', label: 'Discussion #20 — Forensic teardown: why The God Factory is failing as a GitHub Copilot replacement' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16939398', label: 'Discussion #20 comment — cross-link update for God Factory remediation' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16868950', label: '#20 — Code silos: 5 control planes with no shared lifecycle contract' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16869757', label: '#20 — Solution: LifecycleStateMachine unification (CLUSTER 6)' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16868951', label: '#20 — Duplicate status vocabularies causing false-positive completion' },
@@ -566,6 +567,7 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
       { url: 'https://github.com/Ileices/personal_IDE/discussions/72', label: 'Discussion #72 — Pass update: manual rate overrides + blame origin fallback summary' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/78', label: 'Discussion #78 — Pass update: startup dedupe, Intel action resilience, and dev-route guardrails' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/79', label: 'Discussion #79 — Benchmark addendum: God Factory vs Copilot/Base44/Replit convergence status' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/80', label: 'Discussion #80 — Pass addendum: help truth ledger links and disclaimer contract verified' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/63', label: 'Discussion #63 — Chat /api/chat/send FK constraint report and validation trail' },
       { url: 'https://github.com/Ileices/personal_IDE/issues/64', label: 'Issue #64 — /api/chat/send SQLITE_CONSTRAINT_FOREIGNKEY runtime report' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/18', label: 'Discussion #18 — God Factory Agent Roadmap: Full IDE-Self-Programming Control Plane' },
@@ -863,8 +865,13 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
     ],
     discussionLinks: [
       { url: 'https://github.com/Ileices/personal_IDE/discussions/17', label: 'Discussion #17 — Help truth ledger (AI Systems promise tracking)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/17#discussioncomment-16939404', label: 'Discussion #17 comment — latest help-truth cross-link update' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/20', label: 'Discussion #20 — Forensic teardown (model strategy, rate, lifecycle issues)' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/20#discussioncomment-16939398', label: 'Discussion #20 comment — latest pass evidence and cross-links' },
       { url: 'https://github.com/Ileices/personal_IDE/discussions/24', label: 'Discussion #24 — Project state and what AI systems actually do today' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/24#discussioncomment-16939399', label: 'Discussion #24 comment — Intel pipeline closure evidence' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/80', label: 'Discussion #80 — Pass addendum: help truth ledger links and disclaimer contract verified' },
+      { url: 'https://github.com/Ileices/personal_IDE/discussions/80#discussioncomment-16939416', label: 'Discussion #80 comment — help truth ledger follow-up' },
       { url: 'https://github.com/orgs/community/discussions/195397#discussioncomment-16869689', label: 'Community #195397 — Canonical clustered remediation map (C1-C6)' },
     ]
   },
