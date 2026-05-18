@@ -26,7 +26,7 @@
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.19.19",
     "@types/uuid": "^10.0.0",
-    "tsx": "^4.19.0",
+    "tsx": "^4.22.2",
     "typescript": "^5.7.0"
   }
 }

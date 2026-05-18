@@ -13,7 +13,7 @@
     "@types/node": "^22.19.19",
     "@vitest/ui": "^4.1.6",
     "picomatch": "^4.0.4",
-    "tsx": "^4.19.0",
+    "tsx": "^4.22.2",
     "typescript": "^5.7.0",
     "vitest": "^4.1.6"
   }
