@@ -32,6 +32,13 @@ export function normalizePath(p: string): string {
   return p.split(sep).join(posix.sep);
 }
 
+function shouldSkipEntry(entry: { name: string; isDirectory(): boolean }): boolean {
+  if (IGNORED_FILES.has(entry.name)) return true;
+  if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) return true;
+  if (entry.name.startsWith('.') && entry.name !== '.env.example') return true;
+  return false;
+}
+
 /** Get file language from extension */
 export function getLanguage(filePath: string): string {
   return EXT_TO_LANG[extname(filePath).toLowerCase()] || 'plaintext';
@@ -56,9 +63,7 @@ export function listFileTree(rootPath: string, maxDepth: number = 5): FileNode {
       const entries = readdirSync(dirPath, { withFileTypes: true });
 
       for (const entry of entries) {
-        if (IGNORED_DIRS.has(entry.name) && entry.isDirectory()) continue;
-        if (IGNORED_FILES.has(entry.name)) continue;
-        if (entry.name.startsWith('.') && entry.name !== '.env.example') continue;
+        if (shouldSkipEntry(entry)) continue;
 
         const entryPath = join(dirPath, entry.name);
 
@@ -269,8 +274,7 @@ export function searchFiles(
 
       for (const entry of entries) {
         if (results.length >= maxResults) return;
-        if (IGNORED_DIRS.has(entry.name) && entry.isDirectory()) continue;
-        if (IGNORED_FILES.has(entry.name)) continue;
+        if (shouldSkipEntry(entry)) continue;
 
         const fullPath = join(dirPath, entry.name);
 
@@ -339,8 +343,7 @@ export function listAllFiles(
       const entries = readdirSync(dirPath, { withFileTypes: true });
       for (const entry of entries) {
         if (shouldStop()) break;
-        if (IGNORED_DIRS.has(entry.name) && entry.isDirectory()) continue;
-        if (IGNORED_FILES.has(entry.name)) continue;
+        if (shouldSkipEntry(entry)) continue;
         const fullPath = join(dirPath, entry.name);
         if (entry.isDirectory()) {
           walk(fullPath);

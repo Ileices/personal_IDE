@@ -13,6 +13,9 @@ import { API_BASE } from '../../config.js';
 import { useChatStore } from '../../stores/chatStore';
 
 const GF_READY_NOTICE_KEY = 'gf_ready_notice_seen';
+const GF_LOOP_PREFS_KEY = 'god_factory_loop_panel_prefs';
+const GF_LOOP_AUTO_APPROVE_KEY = 'god_factory_auto_approve_changes';
+const GF_LOOP_GOVERNANCE_EVENT = 'god-factory-governance-change';
 
 type CooldownProfileId = 'safe-exhaustive' | 'aggressive' | 'paced' | 'slow' | 'crawl';
 
@@ -277,6 +280,8 @@ interface SubsystemConfig {
   idleIntervalSec: number;
   maxDepth: number;
   manualOnly: boolean;
+  includeHiddenDirs?: boolean;
+  includeBackupDirs?: boolean;
 }
 
 interface SubsystemRuntime {
@@ -291,6 +296,60 @@ interface SchedulerStatus {
   running: boolean;
   tickMs: number;
   lastTickAt?: string | null;
+}
+
+interface PipelineCheckpointPayload {
+  tickStartedAt?: string;
+  recordedAt?: string;
+  projectState?: {
+    totalDevtags?: number;
+    driftEvents?: number;
+    snapshotId?: string;
+  } | null;
+  suggested?: {
+    mode?: string;
+    generated?: number;
+    protocol?: string | number;
+  } | null;
+  gap?: {
+    totalReports?: number;
+    flaggedToGodFactory?: number;
+    sessionId?: string;
+  } | null;
+  idleScanRan?: boolean;
+  pipelineHealth?: {
+    pendingFlaggedGapReports?: number;
+    pendingSuggestedJobs?: number;
+    latestSnapshotId?: string | null;
+    anomaliesDetected?: boolean;
+  } | null;
+}
+
+interface PipelineRunProgress {
+  currentStep: number;
+  totalSteps: number;
+  completedSteps: number;
+  failedSteps: number;
+  currentSubsystem: SubsystemId | null;
+  lastSummary: string;
+  finished: boolean;
+}
+
+interface SubsystemCoverageResult {
+  inputPath: string;
+  relativePath: string;
+  coveredByCurrentSettings: boolean;
+  reasons: string[];
+  requiredSettings: string[];
+}
+
+interface SubsystemCoverageResponse {
+  subsystem: string;
+  settings?: {
+    includeHiddenDirs: boolean;
+    includeBackupDirs: boolean;
+  };
+  results: SubsystemCoverageResult[];
 }
 
 function mapCategoryToSubsystem(category: string): SubsystemId | null {
@@ -422,6 +481,14 @@ const SUBSYSTEM_META: Record<SubsystemId, { label: string; description: string; 
   },
 };
 
+const SUBSYSTEM_PIPELINE_ORDER: SubsystemId[] = [
+  'ide_codebase_crawler',
+  'project_state_crawler',
+  'suggested_jobs_crawler',
+  'gap_analysis',
+  'god_factory_idle_scan',
+];
+
 // ─── God Factory Autonomous Loop Panel ────────────────────────────────────────
 
 interface GfLoopStatus {
@@ -462,6 +529,8 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<GfLoopStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loopError, setLoopError] = useState<string | null>(null);
+  const [loopNotice, setLoopNotice] = useState<string | null>(null);
   const [maxIterations, setMaxIterations] = useState(50);
   const [jobMaxIterations, setJobMaxIterations] = useState(50);
   const [autoApproveChanges, setAutoApproveChanges] = useState(false);
@@ -471,14 +540,109 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
   const [autoCooldownProfile, setAutoCooldownProfile] = useState(true);
   const [cooldownHorizonHours, setCooldownHorizonHours] = useState(24);
   const [hydratedFromStatus, setHydratedFromStatus] = useState(false);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const selectedModel = useChatStore((s) => s.selectedModel);
+
+  const readApiError = useCallback(async (res: Response): Promise<string> => {
+    try {
+      const payload = await res.json() as Record<string, unknown>;
+      if (typeof payload.error === 'string' && payload.error.trim()) return payload.error;
+      if (typeof payload.message === 'string' && payload.message.trim()) return payload.message;
+    } catch {
+      // no-op
+    }
+    return `Request failed (${res.status})`;
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(GF_LOOP_PREFS_KEY);
+      if (raw) {
+        const prefs = JSON.parse(raw) as Record<string, unknown>;
+        if (typeof prefs.maxIterations === 'number') {
+          const n = Math.trunc(prefs.maxIterations);
+          setMaxIterations(n <= 0 ? 0 : Math.min(100000, Math.max(1, n)));
+        }
+        if (typeof prefs.jobMaxIterations === 'number') {
+          setJobMaxIterations(Math.min(5000, Math.max(1, Math.trunc(prefs.jobMaxIterations))));
+        }
+        if (typeof prefs.autoApproveChanges === 'boolean') setAutoApproveChanges(prefs.autoApproveChanges);
+        if (typeof prefs.autoAnswerQuestions === 'boolean') setAutoAnswerQuestions(prefs.autoAnswerQuestions);
+        if (typeof prefs.checkpointEvery === 'number') {
+          setCheckpointEvery(Math.min(10, Math.max(1, Math.trunc(prefs.checkpointEvery))));
+        }
+        if (typeof prefs.cooldownProfile === 'string') {
+          setCooldownProfile(prefs.cooldownProfile as CooldownProfileId);
+        }
+        if (typeof prefs.autoCooldownProfile === 'boolean') setAutoCooldownProfile(prefs.autoCooldownProfile);
+        if (typeof prefs.cooldownHorizonHours === 'number') {
+          setCooldownHorizonHours(Math.max(1, Math.min(168, Math.trunc(prefs.cooldownHorizonHours))));
+        }
+      }
+    } catch {
+      // ignore malformed localStorage data
+    } finally {
+      setPrefsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    try {
+      localStorage.setItem(GF_LOOP_PREFS_KEY, JSON.stringify({
+        maxIterations,
+        jobMaxIterations,
+        autoApproveChanges,
+        autoAnswerQuestions,
+        checkpointEvery,
+        cooldownProfile,
+        autoCooldownProfile,
+        cooldownHorizonHours,
+      }));
+    } catch {
+      // best-effort persistence
+    }
+  }, [
+    prefsLoaded,
+    maxIterations,
+    jobMaxIterations,
+    autoApproveChanges,
+    autoAnswerQuestions,
+    checkpointEvery,
+    cooldownProfile,
+    autoCooldownProfile,
+    cooldownHorizonHours,
+  ]);
+
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    try {
+      localStorage.setItem(GF_LOOP_AUTO_APPROVE_KEY, autoApproveChanges ? '1' : '0');
+    } catch {
+      // no-op
+    }
+    try {
+      window.dispatchEvent(new CustomEvent(GF_LOOP_GOVERNANCE_EVENT, {
+        detail: { autoApproveChanges },
+      }));
+    } catch {
+      // no-op
+    }
+  }, [prefsLoaded, autoApproveChanges]);
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/god-factory/loop/status`);
-      if (res.ok) setStatus(await res.json());
-    } catch { /* best-effort */ }
-  }, []);
+      if (!res.ok) {
+        setLoopError(await readApiError(res));
+        return;
+      }
+      setStatus(await res.json());
+      setLoopError(null);
+    } catch (err) {
+      setLoopError(err instanceof Error ? err.message : 'Unable to load loop status.');
+    }
+  }, [readApiError]);
 
   useEffect(() => {
     if (!open) return;
@@ -512,9 +676,11 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
     const boundedIterations = normalizedIterations <= 0 ? 0 : Math.min(100000, Math.max(1, normalizedIterations));
     const boundedJobIterations = Math.min(5000, Math.max(1, Math.trunc(jobMaxIterations || 0)));
     const boundedCheckpointEvery = Math.min(10, Math.max(1, Math.trunc(checkpointEvery || 0)));
+    setLoopError(null);
+    setLoopNotice(null);
     setBusy(true);
     try {
-      await fetch(`${API_BASE}/api/god-factory/loop/start`, {
+      const res = await fetch(`${API_BASE}/api/god-factory/loop/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -530,17 +696,33 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
           cooldownHorizonHours,
         }),
       });
+      if (!res.ok) {
+        setLoopError(await readApiError(res));
+        return;
+      }
+      setLoopNotice('Loop started with the selected governance settings.');
       await fetchStatus();
-    } catch { /* best-effort */ }
+    } catch (err) {
+      setLoopError(err instanceof Error ? err.message : 'Failed to start loop.');
+    }
     finally { setBusy(false); }
   };
 
   const stop = async () => {
+    setLoopError(null);
+    setLoopNotice(null);
     setBusy(true);
     try {
-      await fetch(`${API_BASE}/api/god-factory/loop/stop`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/god-factory/loop/stop`, { method: 'POST' });
+      if (!res.ok) {
+        setLoopError(await readApiError(res));
+        return;
+      }
+      setLoopNotice('Loop stopped.');
       await fetchStatus();
-    } catch { /* best-effort */ }
+    } catch (err) {
+      setLoopError(err instanceof Error ? err.message : 'Failed to stop loop.');
+    }
     finally { setBusy(false); }
   };
 
@@ -739,6 +921,16 @@ function GodFactoryLoopPanel({ projectId }: { projectId?: string }) {
               </button>
             )}
           </div>
+          {loopError && (
+            <div className="text-[9px] text-red-200 bg-red-500/10 border border-red-500/30 rounded px-2 py-1">
+              {loopError}
+            </div>
+          )}
+          {!loopError && loopNotice && (
+            <div className="text-[9px] text-emerald-200 bg-emerald-500/10 border border-emerald-500/30 rounded px-2 py-1">
+              {loopNotice}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -780,7 +972,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const [lastCycleSummary, setLastCycleSummary] = useState<string>('Not applied yet');
   const [subsystems, setSubsystems] = useState<Record<SubsystemId, SubsystemConfig>>({
     ide_codebase_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 60, maxDepth: 5, manualOnly: false },
-    project_state_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 90, maxDepth: 5, manualOnly: false },
+    project_state_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 90, maxDepth: 5, manualOnly: false, includeHiddenDirs: false, includeBackupDirs: false },
     suggested_jobs_crawler: { enabled: true, idleEnabled: true, idleIntervalSec: 120, maxDepth: 4, manualOnly: false },
     gap_analysis: { enabled: true, idleEnabled: true, idleIntervalSec: 180, maxDepth: 4, manualOnly: false },
     god_factory_idle_scan: { enabled: true, idleEnabled: true, idleIntervalSec: 600, maxDepth: 1, manualOnly: false },
@@ -793,7 +985,14 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     god_factory_idle_scan: {},
   });
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
+  const [pipelineCheckpoint, setPipelineCheckpoint] = useState<PipelineCheckpointPayload | null>(null);
   const [runningSubsystem, setRunningSubsystem] = useState<SubsystemId | null>(null);
+  const [pipelineRunBusy, setPipelineRunBusy] = useState(false);
+  const [pipelineProgress, setPipelineProgress] = useState<PipelineRunProgress | null>(null);
+  const [coveragePathInput, setCoveragePathInput] = useState('');
+  const [coverageBusy, setCoverageBusy] = useState(false);
+  const [coverageResults, setCoverageResults] = useState<SubsystemCoverageResult[]>([]);
+  const [coverageSettings, setCoverageSettings] = useState<SubsystemCoverageResponse['settings'] | null>(null);
 
   // ── Auto-intelligence toggle state (localStorage-persisted) ──
   const [autoIntelEnabled, setAutoIntelEnabled] = useState(() => {
@@ -982,6 +1181,15 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     }
     return `${fallback} (HTTP ${res.status})`;
   }, []);
+
+  const reportActionError = useCallback((
+    source: string,
+    action: string,
+    err: unknown,
+  ) => {
+    const detail = err instanceof Error ? err.message : String(err || 'Unknown error');
+    pushTransientNotification('warning', `${action} failed: ${detail}`, source);
+  }, [pushTransientNotification]);
 
   const loadQueue = useCallback(() => {
     fetch(`${API_BASE}/api/god-factory/queue?limit=20`)
@@ -1343,6 +1551,97 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       .catch(() => {});
   }, []);
 
+  const refreshSubsystemSettings = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/subsystems/settings`);
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (data?.settings) setSubsystems(data.settings);
+      if (data?.status) setSubsystemStatus(data.status);
+      if (data?.scheduler) setSchedulerStatus(data.scheduler);
+      setPipelineCheckpoint(data?.pipelineCheckpoint || null);
+      return data;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const buildSubsystemRunPayload = useCallback((id: SubsystemId): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      subsystem: id,
+      depth: subsystems[id].maxDepth,
+    };
+    if (id === 'project_state_crawler') {
+      if (projectRoot) payload.projectRoot = projectRoot;
+      if (projectId) payload.projectId = projectId;
+      if (projectName) payload.projectName = projectName;
+      payload.includeHiddenDirs = subsystems.project_state_crawler.includeHiddenDirs === true;
+      payload.includeBackupDirs = subsystems.project_state_crawler.includeBackupDirs === true;
+    }
+    return payload;
+  }, [subsystems, projectRoot, projectId, projectName]);
+
+  const executeManualSubsystemRun = useCallback(async (id: SubsystemId) => {
+    const response = await fetch(`${API_BASE}/api/subsystems/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildSubsystemRunPayload(id)),
+    });
+
+    const data = await response.json().catch(() => null);
+    const ok = response.ok && data?.success !== false;
+    const summary = data?.result?.summary || data?.error || (ok ? 'Run complete' : 'Run failed');
+    return { ok, summary, data };
+  }, [buildSubsystemRunPayload]);
+
+  const inspectProjectCrawlerCoverage = useCallback(async () => {
+    const filePaths = Array.from(new Set(
+      coveragePathInput
+        .split(/\r?\n|,/)
+        .map((value) => value.trim())
+        .filter(Boolean),
+    )).slice(0, 200);
+
+    if (filePaths.length === 0) {
+      pushTransientNotification('warning', 'Add at least one path before running coverage check.', 'project state crawler');
+      return;
+    }
+
+    setCoverageBusy(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/subsystems/coverage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePaths,
+          projectRoot: projectRoot || undefined,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Coverage inspection failed'));
+      }
+
+      const data = await response.json() as SubsystemCoverageResponse;
+      const nextResults = Array.isArray(data.results) ? data.results : [];
+      const uncoveredCount = nextResults.filter((item) => !item.coveredByCurrentSettings).length;
+
+      setCoverageResults(nextResults);
+      setCoverageSettings(data.settings || null);
+
+      pushTransientNotification(
+        uncoveredCount > 0 ? 'warning' : 'success',
+        uncoveredCount > 0
+          ? `Coverage check: ${uncoveredCount}/${nextResults.length} path(s) need expanded crawler settings.`
+          : `Coverage check: ${nextResults.length} path(s) covered by current crawler settings.`,
+        'project state crawler',
+      );
+    } catch (err) {
+      reportActionError('project state crawler', 'Coverage inspection', err);
+    } finally {
+      setCoverageBusy(false);
+    }
+  }, [coveragePathInput, projectRoot, pushTransientNotification, readErrorMessage, reportActionError]);
+
   useEffect(() => {
     let cancelled = false;
     let jobsTimer: number | undefined;
@@ -1362,15 +1661,6 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       }
       return false;
     };
-
-    const loadSubsystemSettings = () => fetch(`${API_BASE}/api/subsystems/settings`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d?.settings) setSubsystems(d.settings);
-        if (d?.status) setSubsystemStatus(d.status);
-        if (d?.scheduler) setSchedulerStatus(d.scheduler);
-      })
-      .catch(() => {});
 
     (async () => {
       const ready = await waitForApiReady();
@@ -1420,9 +1710,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         loadCodeOriginSummary();
       }, 20_000);
 
-      void loadSubsystemSettings();
+      void refreshSubsystemSettings();
       refreshTimer = window.setInterval(() => {
-        void loadSubsystemSettings();
+        void refreshSubsystemSettings();
       }, 15000);
     })();
 
@@ -1432,7 +1722,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (jobsTimer) window.clearInterval(jobsTimer);
       if (gfTimer) window.clearInterval(gfTimer);
     };
-  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions, loadBlameRegistry, loadCodeOriginSummary, loadAutoIntelSettings]);
+  }, [codebaseReady, loadSuggestedJobs, loadExternalJobs, loadImplementingJobs, loadQueue, loadIdleSuggestions, loadModelHealth, loadModelStrategy, loadCodebaseHealth, loadBackgroundStatus, loadRecentActions, loadSiliconDashboard, loadRateUsage, loadEmployerStatus, loadEmployerSuggestions, loadBlameRegistry, loadCodeOriginSummary, loadAutoIntelSettings, refreshSubsystemSettings]);
 
   // ── Separate effect for codebase ready notification (only run once per session) ──
   useEffect(() => {
@@ -1547,52 +1837,30 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [id]: next[id] }),
     })
-      .then(() => fetch(`${API_BASE}/api/subsystems/settings`))
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d?.status) setSubsystemStatus(d.status);
-        if (d?.scheduler) setSchedulerStatus(d.scheduler);
-      })
-      .catch(() => {});
+      .then(() => refreshSubsystemSettings())
+      .catch((err) => {
+        reportActionError('subsystems', `Update ${id} settings`, err);
+      });
   };
 
   const runSubsystem = async (id: SubsystemId) => {
+    if (pipelineRunBusy) return;
     setRunningSubsystem(id);
     try {
-      const runPayload: Record<string, any> = {
-        subsystem: id,
-        depth: subsystems[id].maxDepth,
-      };
-      if (id === 'project_state_crawler') {
-        if (projectRoot) runPayload.projectRoot = projectRoot;
-        if (projectId) runPayload.projectId = projectId;
-        if (projectName) runPayload.projectName = projectName;
-      }
-
-      const res = await fetch(`${API_BASE}/api/subsystems/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(runPayload),
-      });
-      const data = await res.json();
-      const summary = data?.result?.summary || data?.error || 'Run complete';
+      const { ok, summary } = await executeManualSubsystemRun(id);
       setNotifications(prev => [{
         id: `${Date.now()}`,
-        type: (data.success ? 'info' : 'error') as IntelNotification['type'],
+        type: (ok ? 'info' : 'error') as IntelNotification['type'],
         source: id,
         message: summary,
         timestamp: new Date().toISOString(),
       }, ...prev].slice(0, 12));
 
-      if (id === 'suggested_jobs_crawler' && data?.result?.suggestedJobs?.length) {
-        const incoming = data.result.suggestedJobs as SuggestedJob[];
-        setJobs(prev => [...incoming, ...prev].slice(0, 30));
+      if (id === 'suggested_jobs_crawler') {
+        loadSuggestedJobs();
       }
 
-      const settingsRes = await fetch(`${API_BASE}/api/subsystems/settings`);
-      const settingsData = settingsRes.ok ? await settingsRes.json() : null;
-      if (settingsData?.status) setSubsystemStatus(settingsData.status);
-      if (settingsData?.scheduler) setSchedulerStatus(settingsData.scheduler);
+      await refreshSubsystemSettings();
     } catch (err: any) {
       setNotifications(prev => [{
         id: `${Date.now()}`,
@@ -1606,17 +1874,134 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     }
   };
 
+  const runSubsystemPipeline = async () => {
+    if (pipelineRunBusy || runningSubsystem !== null) return;
+    const failures: string[] = [];
+    const firstSubsystem = SUBSYSTEM_PIPELINE_ORDER[0] ?? 'ide_codebase_crawler';
+
+    setPipelineRunBusy(true);
+    setPipelineProgress({
+      currentStep: 1,
+      totalSteps: SUBSYSTEM_PIPELINE_ORDER.length,
+      completedSteps: 0,
+      failedSteps: 0,
+      currentSubsystem: firstSubsystem,
+      lastSummary: `Starting ${SUBSYSTEM_META[firstSubsystem].label}...`,
+      finished: false,
+    });
+    try {
+      for (let index = 0; index < SUBSYSTEM_PIPELINE_ORDER.length; index += 1) {
+        const subsystem = SUBSYSTEM_PIPELINE_ORDER[index];
+        const label = SUBSYSTEM_META[subsystem].label;
+        setRunningSubsystem(subsystem);
+        setPipelineProgress((prev) => prev
+          ? {
+              ...prev,
+              currentStep: index + 1,
+              currentSubsystem: subsystem,
+              lastSummary: `Running ${label}...`,
+            }
+          : prev);
+        try {
+          const { ok, summary } = await executeManualSubsystemRun(subsystem);
+          if (!ok) failures.push(`${subsystem}: ${summary}`);
+          setPipelineProgress((prev) => prev
+            ? {
+                ...prev,
+                completedSteps: index + 1,
+                failedSteps: failures.length,
+                lastSummary: ok ? `${label} completed.` : `${label} reported an issue: ${summary}`,
+              }
+            : prev);
+        } catch (error: any) {
+          const errorMessage = error?.message || 'run failed';
+          failures.push(`${subsystem}: ${errorMessage}`);
+          setPipelineProgress((prev) => prev
+            ? {
+                ...prev,
+                completedSteps: index + 1,
+                failedSteps: failures.length,
+                lastSummary: `${label} failed: ${errorMessage}`,
+              }
+            : prev);
+        }
+      }
+
+      await refreshSubsystemSettings();
+      loadSuggestedJobs();
+      loadIdleSuggestions();
+      loadQueue();
+
+      const failurePreview = failures.slice(0, 2).join(' | ');
+      const message = failures.length === 0
+        ? 'Manual full pipeline run completed.'
+        : `Manual pipeline completed with ${failures.length} issue(s). ${failurePreview}`;
+
+      setPipelineProgress((prev) => prev
+        ? {
+            ...prev,
+            currentStep: SUBSYSTEM_PIPELINE_ORDER.length,
+            completedSteps: SUBSYSTEM_PIPELINE_ORDER.length,
+            failedSteps: failures.length,
+            currentSubsystem: null,
+            lastSummary: message,
+            finished: true,
+          }
+        : prev);
+
+      setNotifications(prev => [{
+        id: `${Date.now()}`,
+        type: (failures.length === 0 ? 'success' : 'warning') as IntelNotification['type'],
+        source: 'subsystems',
+        message,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 12));
+    } catch (error: any) {
+      const message = `Manual pipeline failed: ${error?.message || 'unexpected error'}`;
+      setPipelineProgress((prev) => prev
+        ? {
+            ...prev,
+            currentSubsystem: null,
+            failedSteps: Math.max(1, prev.failedSteps),
+            lastSummary: message,
+            finished: true,
+          }
+        : {
+            currentStep: 0,
+            totalSteps: SUBSYSTEM_PIPELINE_ORDER.length,
+            completedSteps: 0,
+            failedSteps: 1,
+            currentSubsystem: null,
+            lastSummary: message,
+            finished: true,
+          });
+      setNotifications(prev => [{
+        id: `${Date.now()}`,
+        type: 'error' as IntelNotification['type'],
+        source: 'subsystems',
+        message,
+        timestamp: new Date().toISOString(),
+      }, ...prev].slice(0, 12));
+    } finally {
+      setRunningSubsystem(null);
+      setPipelineRunBusy(false);
+    }
+  };
+
   const runSiliconControl = async (action: 'pause' | 'resume') => {
     setSiliconBusy(action);
     try {
-      await fetch(`${API_BASE}/api/silicon-factory/control`, {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, `Could not ${action} silicon loop`));
+      }
       loadSiliconDashboard();
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', `Silicon ${action}`, err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1645,8 +2030,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         setSiliconTaskInput('');
       }
       loadSiliconDashboard();
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Enqueue silicon task', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1655,12 +2040,15 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const runSiliconColdBoot = async () => {
     setSiliconBusy('resume');
     try {
-      await fetch(`${API_BASE}/api/silicon-factory/cold-boot-resume`, {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/cold-boot-resume`, {
         method: 'POST',
       });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, 'Could not cold-boot silicon loop'));
+      }
       loadSiliconDashboard();
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Cold boot silicon loop', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1669,14 +2057,17 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const runSiliconSnapshot = async () => {
     setSiliconBusy('snapshot');
     try {
-      await fetch(`${API_BASE}/api/silicon-factory/snapshots`, {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/snapshots`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: 'manual_gui_snapshot' }),
       });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, 'Could not create silicon snapshot'));
+      }
       loadSiliconDashboard();
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Create silicon snapshot', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1690,14 +2081,17 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       const body = action === 'acquire'
         ? { lock_key: siliconLockKey.trim(), owner_agent: 'god_factory_ui', ttl_seconds: 180 }
         : { lock_key: siliconLockKey.trim(), owner_agent: 'god_factory_ui' };
-      await fetch(`${API_BASE}/api/silicon-factory/locks/${endpoint}`, {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/locks/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, `Could not ${action} silicon lock`));
+      }
       loadSiliconDashboard();
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', `Lock ${action}`, err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1721,8 +2115,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         message: data?.pass ? 'Spec contract check passed for current draft.' : `Spec contract violations: ${(data?.violated_requirements || []).join(', ') || 'unknown'}`,
         timestamp: new Date().toISOString(),
       }, ...prev].slice(0, 20));
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Validate requirements', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1731,7 +2125,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const runSiliconIapPing = async () => {
     setSiliconBusy('iap');
     try {
-      await fetch(`${API_BASE}/api/silicon-factory/iap/messages`, {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/iap/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1741,9 +2135,12 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           payload: { issued_at: new Date().toISOString(), note: 'ui_ping' },
         }),
       });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, 'IAP ping failed'));
+      }
       loadSiliconDashboard();
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Send IAP ping', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1752,7 +2149,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
   const syncSiliconProjectContext = async () => {
     setSiliconBusy('project_context');
     try {
-      await fetch(`${API_BASE}/api/silicon-factory/project-context`, {
+      const res = await fetch(`${API_BASE}/api/silicon-factory/project-context`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1760,6 +2157,9 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           project_root: projectRoot,
         }),
       });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, 'Project context sync failed'));
+      }
       loadSiliconDashboard();
       setNotifications(prev => [{
         id: `${Date.now()}-silicon-project-context`,
@@ -1768,8 +2168,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         message: 'Silicon active project context synced from current workspace.',
         timestamp: new Date().toISOString(),
       }, ...prev].slice(0, 20));
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Sync project context', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1808,8 +2208,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
       if (results.length) {
         onSendToBrainstorm(`Silicon semantic results for "${query}":\n\n${JSON.stringify(results, null, 2)}`);
       }
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Run semantic find', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1835,8 +2235,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         return;
       }
       onSendToBrainstorm(`Silicon symbol read (${readType}) for ${symbol}:\n\n${JSON.stringify(data, null, 2)}`);
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', `Read symbol (${readType})`, err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1875,8 +2275,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         message: `Built task context for ${latestTaskId} using ${data.used_tokens || 0}/${data.budget_tokens || 0} tokens.`,
         timestamp: new Date().toISOString(),
       }, ...prev].slice(0, 20));
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Build task context', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1913,8 +2313,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         message: `Found ${count} test(s) for ${siliconTestMode} "${target}".`,
         timestamp: new Date().toISOString(),
       }, ...prev].slice(0, 20));
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Run test discovery', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1946,8 +2346,8 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         message: `Test index rebuilt: ${data.indexed ?? 0} entries from ${data.test_files_found ?? 0} test files.`,
         timestamp: new Date().toISOString(),
       }, ...prev].slice(0, 20));
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Reindex tests', err);
     } finally {
       setSiliconBusy(null);
     }
@@ -1979,27 +2379,41 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
         message: `Symbol embeddings rebuilt: ${data.updated ?? 0} symbols indexed.`,
         timestamp: new Date().toISOString(),
       }, ...prev].slice(0, 20));
-    } catch {
-      // no-op
+    } catch (err) {
+      reportActionError('silicon factory', 'Reindex embeddings', err);
     } finally {
       setSiliconBusy(null);
     }
   };
 
   const archiveJob = async (jobId: string) => {
-    await fetch(`${API_BASE}/api/suggested-jobs/jobs/${jobId}/archive`, { method: 'POST' }).catch(() => {});
-    setJobs(prev => prev.filter(j => j.job_id !== jobId));
-    setTotalJobs(prev => Math.max(0, prev - 1));
+    try {
+      const res = await fetch(`${API_BASE}/api/suggested-jobs/jobs/${jobId}/archive`, { method: 'POST' });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, `Could not archive job ${jobId}`));
+      }
+      setJobs(prev => prev.filter(j => j.job_id !== jobId));
+      setTotalJobs(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      reportActionError('suggested jobs', 'Archive job', err);
+    }
   };
 
   const implementJob = async (job: SuggestedJob) => {
     onSendToBrainstorm(`Implement this suggested job:\n\n**${job.title}**\n\nCategory: ${job.category}\nAffected devtags: ${job.affected_devtags.join(', ') || 'none'}\nAffected files: ${job.affected_files.join(', ') || 'none'}\nAtomic steps: ${job.atomic_steps.length}\n\nJob ID: ${job.job_id}`);
-    await fetch(`${API_BASE}/api/suggested-jobs/jobs/${job.job_id}/implement`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ override_sandbox: true }),
-    }).catch(() => {});
-    loadSuggestedJobs();
+    try {
+      const res = await fetch(`${API_BASE}/api/suggested-jobs/jobs/${job.job_id}/implement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ override_sandbox: true }),
+      });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, `Could not trigger implementation for ${job.job_id}`));
+      }
+      loadSuggestedJobs();
+    } catch (err) {
+      reportActionError('suggested jobs', 'Start implementation', err);
+    }
   };
 
   const priorityColor = (p: SuggestedJob['priority']) =>
@@ -2218,6 +2632,45 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
     }
   };
 
+  const pipelineHealth = pipelineCheckpoint?.pipelineHealth;
+  const pipelineAnomalyDelta = Math.max(
+    0,
+    (pipelineHealth?.pendingFlaggedGapReports || 0) - (pipelineHealth?.pendingSuggestedJobs || 0),
+  );
+  const pipelineHasAnomalies =
+    pipelineHealth?.anomaliesDetected === true || pipelineAnomalyDelta > 0;
+  const pipelineSequenceLabel = SUBSYSTEM_PIPELINE_ORDER
+    .map((subsystemId) => SUBSYSTEM_META[subsystemId].label)
+    .join(' -> ');
+  const pipelineProgressPercent = pipelineProgress
+    ? Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round((
+            (
+              pipelineProgress.finished
+                ? pipelineProgress.completedSteps
+                : Math.max(pipelineProgress.completedSteps, pipelineProgress.currentStep - 0.5)
+            )
+            / Math.max(1, pipelineProgress.totalSteps)
+          ) * 100),
+        ),
+      )
+    : 0;
+  const pipelineProgressSubsystemLabel = pipelineProgress?.currentSubsystem
+    ? SUBSYSTEM_META[pipelineProgress.currentSubsystem].label
+    : null;
+  const pipelineSuggestedMode = pipelineCheckpoint?.suggested?.mode || 'unknown';
+  const pipelineSuggestedGenerated = pipelineCheckpoint?.suggested?.generated ?? 0;
+  const pipelineSuggestedProtocolRaw = pipelineCheckpoint?.suggested?.protocol;
+  const pipelineSuggestedProtocolLabel = pipelineSuggestedProtocolRaw == null
+    ? 'N/A'
+    : String(pipelineSuggestedProtocolRaw);
+  const pipelineSuggestedProtocolNumber = Number(pipelineSuggestedProtocolRaw);
+  const pipelineHasBackupReconciliationProtocol =
+    Number.isFinite(pipelineSuggestedProtocolNumber) && pipelineSuggestedProtocolNumber === 11;
+
   if (collapsed) {
     return (
       <div className="w-8 flex-shrink-0 bg-ide-panel border-l border-ide-border flex flex-col items-center pt-3">
@@ -2317,7 +2770,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                             <>
                               <button
                                 onClick={() => void runSubsystem(mappedSubsystem)}
-                                disabled={runningSubsystem === mappedSubsystem}
+                                disabled={runningSubsystem === mappedSubsystem || pipelineRunBusy}
                                 className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 disabled:opacity-40 flex items-center gap-1"
                               >
                                 {runningSubsystem === mappedSubsystem ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Play className="w-2 h-2" />}
@@ -2771,7 +3224,7 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                               <>
                                 <button
                                   onClick={() => void runSubsystem(mappedSubsystem)}
-                                  disabled={runningSubsystem === mappedSubsystem}
+                                  disabled={runningSubsystem === mappedSubsystem || pipelineRunBusy}
                                   className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 disabled:opacity-40 flex items-center gap-1"
                                 >
                                   {runningSubsystem === mappedSubsystem ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Play className="w-2 h-2" />}
@@ -2779,7 +3232,11 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                                 </button>
                                 <button
                                   onClick={() => void runControl(subsystemCfg.enabled ? 'pause_subsystem' : 'resume_subsystem', mappedSubsystem)}
-                                  disabled={controlBusy === `pause_subsystem:${mappedSubsystem}` || controlBusy === `resume_subsystem:${mappedSubsystem}`}
+                                  disabled={
+                                    pipelineRunBusy
+                                    || controlBusy === `pause_subsystem:${mappedSubsystem}`
+                                    || controlBusy === `resume_subsystem:${mappedSubsystem}`
+                                  }
                                   className="text-[9px] px-1.5 py-0.5 rounded bg-ide-border/25 text-ide-text-dim border border-ide-border/40 hover:bg-ide-border/50 disabled:opacity-40"
                                 >
                                   {subsystemCfg.enabled ? 'Pause' : 'Resume'}
@@ -3572,6 +4029,53 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
           </button>
           {sections.subsystems && (
             <div className="px-2 pb-2 space-y-1.5">
+              <div className="rounded border border-ide-border/30 bg-ide-panel/50 px-2 py-1.5 text-[9px] text-ide-text-dim">
+                <div className="flex items-center justify-between gap-2">
+                  <span>Manual pipeline</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => void refreshSubsystemSettings()}
+                      className="px-1.5 py-0.5 rounded border border-ide-border/40 text-ide-text-dim hover:text-ide-text"
+                    >
+                      Sync
+                    </button>
+                    <button
+                      onClick={() => void runSubsystemPipeline()}
+                      disabled={pipelineRunBusy || runningSubsystem !== null}
+                      className="px-1.5 py-0.5 rounded border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-40 flex items-center gap-1"
+                    >
+                      {(pipelineRunBusy || runningSubsystem !== null) ? <RefreshCw className="w-2 h-2 animate-spin" /> : <PlayCircle className="w-2 h-2" />}
+                      {pipelineRunBusy ? 'Running' : 'Run full'}
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-1 leading-snug">Sequence: {pipelineSequenceLabel}.</div>
+                {pipelineProgress && (
+                  <div className="mt-1 rounded border border-ide-border/25 bg-ide-bg/20 px-1.5 py-1 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span>
+                        {pipelineProgress.finished
+                          ? 'Last manual run'
+                          : `Step ${pipelineProgress.currentStep}/${pipelineProgress.totalSteps}`}
+                      </span>
+                      <span className={pipelineProgress.failedSteps > 0 ? 'text-yellow-300' : 'text-cyan-300'}>
+                        {pipelineProgress.finished
+                          ? pipelineProgress.failedSteps > 0
+                            ? `${pipelineProgress.failedSteps} issue(s)`
+                            : 'Complete'
+                          : (pipelineProgressSubsystemLabel || 'Running')}
+                      </span>
+                    </div>
+                    <div className="h-1 rounded bg-ide-border/40 overflow-hidden">
+                      <div
+                        className={`h-full ${pipelineProgress.failedSteps > 0 ? 'bg-yellow-400/80' : 'bg-cyan-400/80'}`}
+                        style={{ width: `${pipelineProgressPercent}%` }}
+                      />
+                    </div>
+                    <div className="text-[8px] leading-snug text-ide-text-dim">{pipelineProgress.lastSummary}</div>
+                  </div>
+                )}
+              </div>
               {schedulerStatus && (
                 <div className="rounded border border-ide-border/30 bg-ide-panel/50 px-2 py-1.5 text-[9px] text-ide-text-dim">
                   <div className="flex items-center justify-between gap-2">
@@ -3588,6 +4092,56 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                     <span>Last tick</span>
                     <span className="text-ide-text">{schedulerStatus.lastTickAt ? new Date(schedulerStatus.lastTickAt).toLocaleTimeString() : 'Never'}</span>
                   </div>
+                </div>
+              )}
+              {pipelineCheckpoint && (
+                <div className="rounded border border-ide-border/30 bg-ide-panel/50 px-2 py-1.5 text-[9px] text-ide-text-dim">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Pipeline checkpoint</span>
+                    <span className={pipelineHasAnomalies ? 'text-yellow-300' : 'text-green-400'}>
+                      {pipelineHasAnomalies ? 'Attention' : 'Healthy'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <span>Recorded</span>
+                    <span className="text-ide-text">{pipelineCheckpoint.recordedAt ? new Date(pipelineCheckpoint.recordedAt).toLocaleTimeString() : 'Never'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <span>Snapshot</span>
+                    <span className="text-ide-text truncate max-w-[12rem]" title={pipelineCheckpoint.pipelineHealth?.latestSnapshotId || undefined}>
+                      {pipelineCheckpoint.pipelineHealth?.latestSnapshotId || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1">
+                    <span>Drift events</span>
+                    <span className="text-ide-text text-right">{pipelineCheckpoint.projectState?.driftEvents ?? 0}</span>
+                    <span>Gap reports</span>
+                    <span className="text-ide-text text-right">{pipelineCheckpoint.gap?.totalReports ?? 0}</span>
+                    <span>Flagged to GF</span>
+                    <span className="text-ide-text text-right">{pipelineCheckpoint.gap?.flaggedToGodFactory ?? 0}</span>
+                    <span>Jobs generated</span>
+                    <span className="text-ide-text text-right">{pipelineSuggestedGenerated}</span>
+                    <span>Suggested mode</span>
+                    <span className="text-ide-text text-right">{pipelineSuggestedMode}</span>
+                    <span>Protocol</span>
+                    <span className="text-ide-text text-right">{pipelineSuggestedProtocolLabel}</span>
+                    <span>Pending flagged</span>
+                    <span className="text-ide-text text-right">{pipelineHealth?.pendingFlaggedGapReports ?? 0}</span>
+                    <span>Pending jobs</span>
+                    <span className="text-ide-text text-right">{pipelineHealth?.pendingSuggestedJobs ?? 0}</span>
+                  </div>
+                  {pipelineHasBackupReconciliationProtocol && (
+                    <div className="mt-1 text-cyan-300">
+                      Protocol 11 active: backup reconciliation heuristics are part of the suggested-jobs pass.
+                    </div>
+                  )}
+                  {pipelineHasAnomalies && (
+                    <div className="mt-1 text-yellow-300">
+                      {pipelineAnomalyDelta > 0
+                        ? `Checkpoint anomaly: flagged gap reports exceed pending suggested jobs by ${pipelineAnomalyDelta}.`
+                        : 'Checkpoint anomaly detected in scheduler health data.'}
+                    </div>
+                  )}
                 </div>
               )}
               {(['ide_codebase_crawler', 'project_state_crawler', 'suggested_jobs_crawler', 'gap_analysis', 'god_factory_idle_scan'] as SubsystemId[]).map(id => {
@@ -3611,11 +4165,11 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                       </div>
                       <button
                         onClick={() => runSubsystem(id)}
-                        disabled={runningSubsystem !== null}
+                        disabled={runningSubsystem !== null || pipelineRunBusy}
                         className="text-[9px] px-1.5 py-0.5 bg-cyan-500/15 text-cyan-300 rounded hover:bg-cyan-500/25 disabled:opacity-40 flex items-center gap-1"
                       >
-                        <Play className="w-2 h-2" />
-                        {runningSubsystem === id ? 'Running' : 'Run now'}
+                        {runningSubsystem === id ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Play className="w-2 h-2" />}
+                        {runningSubsystem === id ? 'Running' : pipelineRunBusy ? 'Queued' : 'Run now'}
                       </button>
                     </div>
                     <div className="text-[9px] leading-snug text-ide-text-dim">{meta.description}</div>
@@ -3691,6 +4245,144 @@ export function GodFactoryRightPanel({ codebaseReady, codebaseTree, projectRoot,
                         />
                       </label>
                     </div>
+                    {id === 'project_state_crawler' && (
+                      <div className="space-y-1">
+                        <div className="rounded border border-ide-border/30 bg-ide-panel/40 px-1.5 py-1 text-[9px] text-ide-text-dim">
+                          <div className="flex items-center justify-between gap-2">
+                            <span>Archive and forensic lane</span>
+                            <span className={(cfg.includeHiddenDirs || cfg.includeBackupDirs) ? 'text-cyan-300' : 'text-ide-text-dim'}>
+                              {(cfg.includeHiddenDirs || cfg.includeBackupDirs) ? 'Enabled' : 'Off'}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-1 text-[8px]">
+                            <button
+                              onClick={() => {
+                                const nextHidden = !cfg.includeHiddenDirs;
+                                updateSubsystem(id, {
+                                  includeHiddenDirs: nextHidden,
+                                  includeBackupDirs: nextHidden ? cfg.includeBackupDirs : false,
+                                });
+                              }}
+                              className={`px-1.5 py-0.5 rounded border ${cfg.includeHiddenDirs ? 'border-cyan-500/40 text-cyan-300 bg-cyan-500/10' : 'border-ide-border text-ide-text-dim'}`}
+                            >
+                              Hidden dirs {cfg.includeHiddenDirs ? 'ON' : 'OFF'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                const nextBackup = !cfg.includeBackupDirs;
+                                updateSubsystem(id, {
+                                  includeBackupDirs: nextBackup,
+                                  includeHiddenDirs: nextBackup ? true : cfg.includeHiddenDirs,
+                                });
+                              }}
+                              className={`px-1.5 py-0.5 rounded border ${cfg.includeBackupDirs ? 'border-cyan-500/40 text-cyan-300 bg-cyan-500/10' : 'border-ide-border text-ide-text-dim'}`}
+                            >
+                              Backup dirs {cfg.includeBackupDirs ? 'ON' : 'OFF'}
+                            </button>
+                          </div>
+                          <div className="mt-1 text-[8px] leading-snug">Backup dir scanning auto-enables hidden-dir scanning because many backup folders are dot-prefixed.</div>
+                        </div>
+
+                        <div className="rounded border border-ide-border/30 bg-ide-panel/40 px-1.5 py-1 text-[9px] text-ide-text-dim">
+                          <div className="flex items-center justify-between gap-2">
+                            <span>Suggested-jobs telemetry</span>
+                            <span className={pipelineHasBackupReconciliationProtocol ? 'text-cyan-300' : 'text-ide-text-dim'}>
+                              protocol {pipelineSuggestedProtocolLabel}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mt-1 text-[8px]">
+                            <span>Mode</span>
+                            <span className="text-ide-text text-right">{pipelineSuggestedMode}</span>
+                            <span>Generated</span>
+                            <span className="text-ide-text text-right">{pipelineSuggestedGenerated}</span>
+                          </div>
+                          {pipelineHasBackupReconciliationProtocol && (
+                            <div className="mt-1 text-[8px] leading-snug text-cyan-300">
+                              Protocol 11 confirms backup reconciliation is active for this suggested-jobs cycle.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="rounded border border-ide-border/30 bg-ide-panel/40 px-1.5 py-1 text-[9px] text-ide-text-dim">
+                          <div className="flex items-center justify-between gap-2">
+                            <span>Coverage inspector</span>
+                            <span className="text-[8px] text-ide-text-dim">{coverageResults.length > 0 ? `${coverageResults.length} checked` : 'path list'}</span>
+                          </div>
+                          <textarea
+                            rows={3}
+                            value={coveragePathInput}
+                            onChange={(event) => setCoveragePathInput(event.target.value)}
+                            placeholder={"src/components/App.tsx\n.backups/session-2026-01-21/README.md"}
+                            className="mt-1 w-full resize-none rounded border border-ide-border/40 bg-ide-bg/30 px-1.5 py-1 text-[8px] text-ide-text placeholder:text-ide-text-dim/60 focus:outline-none focus:border-cyan-400/40"
+                          />
+                          <div className="mt-1 flex items-center gap-1 text-[8px]">
+                            <button
+                              onClick={() => void inspectProjectCrawlerCoverage()}
+                              disabled={coverageBusy}
+                              className="px-1.5 py-0.5 rounded border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-40 flex items-center gap-1"
+                            >
+                              {coverageBusy ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Shield className="w-2 h-2" />}
+                              {coverageBusy ? 'Checking' : 'Check coverage'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setCoveragePathInput('');
+                                setCoverageResults([]);
+                                setCoverageSettings(null);
+                              }}
+                              disabled={coverageBusy && coverageResults.length === 0}
+                              className="px-1.5 py-0.5 rounded border border-ide-border/40 text-ide-text-dim hover:text-ide-text disabled:opacity-40"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                          {coverageSettings && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1 text-[8px] text-ide-text-dim">
+                              <span>Current settings:</span>
+                              <span className={`px-1 py-0.5 rounded border ${coverageSettings.includeHiddenDirs ? 'border-cyan-500/40 text-cyan-300 bg-cyan-500/10' : 'border-ide-border/40'}`}>
+                                hidden {coverageSettings.includeHiddenDirs ? 'ON' : 'OFF'}
+                              </span>
+                              <span className={`px-1 py-0.5 rounded border ${coverageSettings.includeBackupDirs ? 'border-cyan-500/40 text-cyan-300 bg-cyan-500/10' : 'border-ide-border/40'}`}>
+                                backups {coverageSettings.includeBackupDirs ? 'ON' : 'OFF'}
+                              </span>
+                            </div>
+                          )}
+                          {coverageResults.length > 0 && (
+                            <div className="mt-1 max-h-28 overflow-y-auto space-y-1 pr-0.5">
+                              {coverageResults.slice(0, 12).map((result, index) => (
+                                <div key={`${result.relativePath}-${index}`} className="rounded border border-ide-border/25 bg-ide-bg/20 px-1 py-0.5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="truncate" title={result.inputPath || result.relativePath}>
+                                      {result.relativePath || result.inputPath}
+                                    </span>
+                                    <span className={result.coveredByCurrentSettings ? 'text-green-400' : 'text-yellow-300'}>
+                                      {result.coveredByCurrentSettings ? 'covered' : 'blocked'}
+                                    </span>
+                                  </div>
+                                  {!result.coveredByCurrentSettings && (
+                                    <div className="mt-0.5 text-[8px] leading-snug">
+                                      <div className="text-yellow-200">{result.reasons[0] || 'Traversal prevented by crawler settings.'}</div>
+                                      {result.requiredSettings.length > 0 && (
+                                        <div className="mt-0.5 flex flex-wrap gap-1">
+                                          {result.requiredSettings.map((setting) => (
+                                            <span key={`${result.relativePath}-${setting}`} className="px-1 py-0.5 rounded border border-yellow-500/30 bg-yellow-500/10 text-yellow-300">
+                                              {setting}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                              {coverageResults.length > 12 && (
+                                <div className="text-[8px] text-ide-text-dim">Showing first 12 paths.</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

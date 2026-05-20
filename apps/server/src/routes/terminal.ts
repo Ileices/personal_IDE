@@ -89,12 +89,26 @@ export async function terminalRoutes(app: FastifyInstance) {
   });
 
   /** POST /api/terminal/resize — resize terminal dimensions */
-  app.post('/resize', async (req: FastifyRequest) => {
+  app.post('/resize', async (req: FastifyRequest, reply: FastifyReply) => {
     const { sessionId, cols, rows } = req.body as {
       sessionId: string; cols: number; rows: number;
     };
-    termService.resizeSession(sessionId, cols, rows);
-    return { ok: true };
+    if (!sessionId) {
+      return reply.status(400).send({ error: 'sessionId required' });
+    }
+
+    const result = termService.resizeSession(sessionId, cols, rows);
+    if (result.status === 'session-not-found') {
+      return reply.status(404).send(result);
+    }
+    if (result.status === 'invalid-size') {
+      return reply.status(400).send(result);
+    }
+    if (result.status === 'unsupported') {
+      return reply.status(501).send(result);
+    }
+
+    return result;
   });
 
   // ── SSE Stream — real-time output without WebSocket plugin ──

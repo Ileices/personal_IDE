@@ -2,6 +2,7 @@
 // System Prompts for each mode
 // ============================================
 import { STRUCTURED_OUTPUT_SCHEMA, OUTPUT_MARKERS } from '@personal-ide/shared';
+import type { StructuredAgentOutput } from '@personal-ide/shared';
 
 const STRUCTURED_OUTPUT_INSTRUCTIONS = `
 CRITICAL: You MUST end every response with a structured JSON output block.
@@ -97,7 +98,7 @@ ${STRUCTURED_OUTPUT_INSTRUCTIONS}`,
 };
 
 /** Parse structured output from LLM response */
-export function parseStructuredOutput(content: string): any | null {
+export function parseStructuredOutput(content: string): StructuredAgentOutput | null {
   // Try primary markers
   let startIdx = content.indexOf(OUTPUT_MARKERS.start);
   if (startIdx !== -1) {

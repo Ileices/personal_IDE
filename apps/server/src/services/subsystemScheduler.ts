@@ -1,5 +1,10 @@
+import { randomUUID } from 'crypto';
 import type Database from 'better-sqlite3';
 import { MemoryService } from './memory/index.js';
+import { runProjectStateCrawler } from './projectStateCrawler/index.js';
+import { GapAnalysisAgent } from './gapAnalysis/index.js';
+import { runSuggestedJobsCrawlerTick } from './suggestedJobsCrawler/index.js';
+import { runGodFactoryIdleScanner } from './godFactory/idleScanner.js';
 import { executeSubsystem, getKv, loadSettings, setKv, type SubsystemConfig, type SubsystemId } from '../routes/subsystems.js';
 
 const SCHEDULER_TICK_MS = 15_000;
@@ -64,6 +69,32 @@ type ParsedRunPayload = {
   };
 };
 
+type SchedulerProjectTarget = {
+  id: string;
+  name: string;
+  rootPath: string;
+};
+
+type PipelineCheckpointInput = {
+  tickStartedAt: string;
+  projectState?: {
+    totalDevtags: number;
+    driftEvents: number;
+    snapshotId: string;
+  };
+  gap?: {
+    totalReports: number;
+    flaggedToGodFactory: number;
+    sessionId: string;
+  };
+  suggested?: {
+    mode: string;
+    generated: number;
+    protocol?: number;
+  };
+  idleScanRan: boolean;
+};
+
 let schedulerTimer: ReturnType<typeof setInterval> | null = null;
 let schedulerRunning = false;
 let lastTickAt: string | null = null;
@@ -102,6 +133,305 @@ function pickRotatingProject(db: Database.Database, memory: MemoryService) {
   const project = projects[index];
   setKv(db, PROJECT_ROTATION_KEY, String((index + 1) % projects.length));
   return project;
+}
+
+function getMostRecentProject(db: Database.Database): SchedulerProjectTarget | null {
+  const row = db.prepare(`
+    SELECT id, name, root_path
+    FROM projects
+    ORDER BY datetime(last_accessed_at) DESC, datetime(created_at) DESC
+    LIMIT 1
+  `).get() as { id: string; name: string; root_path: string } | undefined;
+
+  if (!row?.root_path) return null;
+  return { id: row.id, name: row.name, rootPath: row.root_path };
+}
+
+function getProjectById(db: Database.Database, projectId: string): SchedulerProjectTarget | null {
+  const row = db.prepare('SELECT id, name, root_path FROM projects WHERE id = ? LIMIT 1')
+    .get(projectId) as { id: string; name: string; root_path: string } | undefined;
+
+  if (!row?.root_path) return null;
+  return { id: row.id, name: row.name, rootPath: row.root_path };
+}
+
+function persistSubsystemRun(
+  db: Database.Database,
+  payload: {
+    subsystem: SubsystemId;
+    startedAt: string;
+    completedAt: string;
+    projectId?: string | null;
+    projectName?: string | null;
+    projectRoot?: string | null;
+    result: Record<string, unknown>;
+  },
+): void {
+  setKv(
+    db,
+    `subsystems:last_run:${payload.subsystem}`,
+    JSON.stringify({
+      subsystem: payload.subsystem,
+      startedAt: payload.startedAt,
+      completedAt: payload.completedAt,
+      projectId: payload.projectId ?? undefined,
+      projectName: payload.projectName ?? undefined,
+      projectRoot: payload.projectRoot ?? undefined,
+      result: payload.result,
+    }),
+  );
+}
+
+async function runProjectStateCrawlerSubsystem(
+  db: Database.Database,
+  cfg: SubsystemConfig,
+  target: SchedulerProjectTarget,
+  trigger: 'scheduler' | 'auto_intel',
+) {
+  const startedAt = new Date().toISOString();
+  try {
+    const crawl = await runProjectStateCrawler(db, {
+      projectRoot: target.rootPath,
+      triggeredBy: trigger,
+      includeHiddenDirs: cfg.includeHiddenDirs === true,
+      includeBackupDirs: cfg.includeBackupDirs === true,
+    });
+
+    persistSubsystemRun(db, {
+      subsystem: 'project_state_crawler',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      projectId: target.id,
+      projectName: target.name,
+      projectRoot: target.rootPath,
+      result: {
+        root: target.rootPath,
+        snapshotId: crawl.snapshotId,
+        cycleId: crawl.cycleId,
+        totalFiles: crawl.totalFiles,
+        parsedFiles: crawl.parsedFiles,
+        skippedFiles: crawl.skippedFiles,
+        totalDevtags: crawl.totalDevtags,
+        driftEvents: crawl.driftEvents,
+        registrySurplus: crawl.registrySurplus,
+        registryDeficit: crawl.registryDeficit,
+        contentDrift: crawl.contentDrift,
+        locationDrift: crawl.locationDrift,
+        systemicDrift: crawl.systemicDrift,
+        parseDurationMs: crawl.parseDurationMs,
+        errors: crawl.errors,
+        summary: `Full PSC run parsed ${crawl.parsedFiles}/${crawl.totalFiles} files and found ${crawl.driftEvents} drift event(s).`,
+      },
+    });
+
+    return crawl;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    persistSubsystemRun(db, {
+      subsystem: 'project_state_crawler',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      projectId: target.id,
+      projectName: target.name,
+      projectRoot: target.rootPath,
+      result: {
+        root: target.rootPath,
+        error: message,
+        summary: `Full PSC run failed: ${message}`,
+      },
+    });
+    throw error;
+  }
+}
+
+async function runGapAnalysisSubsystem(
+  db: Database.Database,
+  target: SchedulerProjectTarget | null,
+  trigger: 'scheduler' | 'auto_intel',
+) {
+  const startedAt = new Date().toISOString();
+  const sessionId = `${trigger}_gap_${Date.now()}`;
+  try {
+    const agent = new GapAnalysisAgent(db);
+    const result = await agent.runFullAnalysis({
+      session_id: sessionId,
+      cycle_range: [0, Date.now()],
+      project_root: target?.rootPath,
+    });
+
+    persistSubsystemRun(db, {
+      subsystem: 'gap_analysis',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      projectId: target?.id,
+      projectName: target?.name,
+      projectRoot: target?.rootPath,
+      result: {
+        sessionId,
+        totalReports: result.total_reports,
+        flaggedToGodFactory: result.flagged_to_god_factory,
+        coverage: result.coverage_summary,
+        summary: `Full gap analysis generated ${result.total_reports} report(s), ${result.flagged_to_god_factory} flagged for God Factory.`,
+      },
+    });
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    persistSubsystemRun(db, {
+      subsystem: 'gap_analysis',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      projectId: target?.id,
+      projectName: target?.name,
+      projectRoot: target?.rootPath,
+      result: {
+        sessionId,
+        error: message,
+        summary: `Full gap analysis failed: ${message}`,
+      },
+    });
+    throw error;
+  }
+}
+
+function runSuggestedJobsSubsystem(db: Database.Database, trigger: 'scheduler' | 'auto_intel') {
+  const startedAt = new Date().toISOString();
+  try {
+    const result = runSuggestedJobsCrawlerTick(db);
+    persistSubsystemRun(db, {
+      subsystem: 'suggested_jobs_crawler',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      result: {
+        trigger,
+        ...result,
+        summary: `Suggested Jobs crawler ran in ${result.mode} mode and generated ${result.generated} job(s).`,
+      },
+    });
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    persistSubsystemRun(db, {
+      subsystem: 'suggested_jobs_crawler',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      result: {
+        trigger,
+        error: message,
+        summary: `Suggested Jobs crawler failed: ${message}`,
+      },
+    });
+    throw error;
+  }
+}
+
+async function runIdleScanSubsystem(db: Database.Database, trigger: 'scheduler' | 'auto_intel'): Promise<void> {
+  const startedAt = new Date().toISOString();
+  try {
+    await runGodFactoryIdleScanner(db);
+    persistSubsystemRun(db, {
+      subsystem: 'god_factory_idle_scan',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      result: {
+        trigger,
+        maxFilesPerTick: 1,
+        summary: 'God Factory idle scanner completed one tick.',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    persistSubsystemRun(db, {
+      subsystem: 'god_factory_idle_scan',
+      startedAt,
+      completedAt: new Date().toISOString(),
+      result: {
+        trigger,
+        error: message,
+        summary: `God Factory idle scanner failed: ${message}`,
+      },
+    });
+    throw error;
+  }
+}
+
+function recordPipelineCheckpoint(db: Database.Database, input: PipelineCheckpointInput): void {
+  const latestSnapshot = db.prepare(`
+    SELECT snapshot_id, total_devtags, created_at
+    FROM ground_truth_snapshots
+    ORDER BY datetime(created_at) DESC
+    LIMIT 1
+  `).get() as { snapshot_id?: string; total_devtags?: number; created_at?: string } | undefined;
+
+  const pendingFlagged = (db.prepare(`
+    SELECT COUNT(*) AS c
+    FROM gap_reports
+    WHERE flagged_to_god_factory = 1
+      AND (acknowledged_at IS NULL OR acknowledged_at = '')
+  `).get() as { c?: number } | undefined)?.c || 0;
+
+  const pendingSuggested = (db.prepare(`
+    SELECT COUNT(*) AS c
+    FROM job_records
+    WHERE implementation_status = 'suggested'
+  `).get() as { c?: number } | undefined)?.c || 0;
+
+  const checkpoint = {
+    tickStartedAt: input.tickStartedAt,
+    recordedAt: new Date().toISOString(),
+    projectState: input.projectState ?? null,
+    gap: input.gap ?? null,
+    suggested: input.suggested ?? null,
+    idleScanRan: input.idleScanRan,
+    pipelineHealth: {
+      latestSnapshotId: latestSnapshot?.snapshot_id || null,
+      latestSnapshotDevtags: latestSnapshot?.total_devtags ?? 0,
+      pendingFlaggedGapReports: pendingFlagged,
+      pendingSuggestedJobs: pendingSuggested,
+    },
+  };
+
+  setKv(db, 'subsystems:pipeline_checkpoint:last', JSON.stringify(checkpoint));
+
+  const anomalies: string[] = [];
+  if (input.projectState && input.projectState.totalDevtags <= 0) {
+    anomalies.push('Project State Crawler produced zero devtags.');
+  }
+  if (input.gap && input.gap.totalReports <= 0) {
+    anomalies.push('Gap analysis produced zero reports.');
+  }
+  if (pendingFlagged > 0 && pendingSuggested <= 0) {
+    anomalies.push('Flagged gap reports exist but suggested job queue is empty.');
+  }
+
+  if (anomalies.length === 0) return;
+
+  const summary = `Pipeline checkpoint warning: ${anomalies.join(' ')}`;
+  const recent = db.prepare(`
+    SELECT notification_id
+    FROM notification_queue
+    WHERE category = 'pipeline_checkpoint'
+      AND natural_language_summary = ?
+      AND datetime(timestamp) >= datetime('now', '-30 minutes')
+    LIMIT 1
+  `).get(summary) as { notification_id?: string } | undefined;
+
+  if (recent?.notification_id) return;
+
+  db.prepare(`
+    INSERT INTO notification_queue
+      (notification_id, category, source_forensic_id, severity, summary_tags, natural_language_summary, cycle_id, presented_to_user, user_acknowledged, timestamp)
+    VALUES (?,?,?,?,?,?,?,0,0,datetime('now'))
+  `).run(
+    randomUUID(),
+    'pipeline_checkpoint',
+    latestSnapshot?.snapshot_id || null,
+    'warning',
+    JSON.stringify(['pipeline', 'checkpoint']),
+    summary,
+    null,
+  );
 }
 
 function loadAutoIntelSettings(db: Database.Database): AutoIntelSettings {
@@ -156,9 +486,22 @@ async function runAutoIntelCycle(db: Database.Database, settings: AutoIntelSetti
   }
 
   // Keep crawlers moving even when the browser UI is closed.
-  executeSubsystem(db, { subsystem: 'suggested_jobs_crawler', depth: 4 });
-  executeSubsystem(db, { subsystem: 'gap_analysis', depth: 4 });
-  executeSubsystem(db, { subsystem: 'god_factory_idle_scan', depth: 1 });
+  const subsystemSettings = loadSettings(db);
+  const scopedProject = settings.projectId
+    ? getProjectById(db, settings.projectId)
+    : getMostRecentProject(db);
+
+  if (
+    scopedProject &&
+    subsystemSettings.project_state_crawler.enabled &&
+    !subsystemSettings.project_state_crawler.manualOnly
+  ) {
+    await runProjectStateCrawlerSubsystem(db, subsystemSettings.project_state_crawler, scopedProject, 'auto_intel');
+  }
+
+  runSuggestedJobsSubsystem(db, 'auto_intel');
+  await runGapAnalysisSubsystem(db, scopedProject, 'auto_intel');
+  await runIdleScanSubsystem(db, 'auto_intel');
 
   if (settings.analyzeEmployer) {
     await fetch(`${baseUrl}/api/employer/analyze`, { method: 'POST' }).catch(() => null);
@@ -230,6 +573,16 @@ export function getSubsystemSchedulerStatus(): SchedulerStatus {
   };
 }
 
+export function getPipelineCheckpoint(db: Database.Database): Record<string, unknown> | null {
+  const raw = getKv(db, 'subsystems:pipeline_checkpoint:last');
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export function getSubsystemRuntimeStatus(db: Database.Database) {
   const settings = loadSettings(db);
   const scheduler = getSubsystemSchedulerStatus();
@@ -272,32 +625,73 @@ async function tick(db: Database.Database): Promise<void> {
     const settings = loadSettings(db);
     const autoIntelSettings = loadAutoIntelSettings(db);
     const memory = new MemoryService(db);
+    const checkpointInput: PipelineCheckpointInput = {
+      tickStartedAt: lastTickAt || new Date().toISOString(),
+      idleScanRan: false,
+    };
 
     if (shouldRunNow(db, 'ide_codebase_crawler', settings.ide_codebase_crawler)) {
-      executeSubsystem(db, { subsystem: 'ide_codebase_crawler', depth: settings.ide_codebase_crawler.maxDepth });
+      try {
+        await executeSubsystem(db, { subsystem: 'ide_codebase_crawler', depth: settings.ide_codebase_crawler.maxDepth });
+      } catch (error) {
+        console.error('ide_codebase_crawler scheduler execution failed:', error);
+      }
     }
 
-    const rotatingProject = pickRotatingProject(db, memory);
-    if (rotatingProject && shouldRunNow(db, 'project_state_crawler', settings.project_state_crawler)) {
-      executeSubsystem(db, {
-        subsystem: 'project_state_crawler',
-        projectRoot: rotatingProject.rootPath,
-        depth: settings.project_state_crawler.maxDepth,
-        projectId: rotatingProject.id,
-        projectName: rotatingProject.name,
-      });
+    const rotatingProject = (pickRotatingProject(db, memory) as SchedulerProjectTarget | null) ?? null;
+    const fallbackProject = getMostRecentProject(db);
+    const targetProject = rotatingProject ?? fallbackProject;
+
+    if (targetProject && shouldRunNow(db, 'project_state_crawler', settings.project_state_crawler)) {
+      try {
+        const crawl = await runProjectStateCrawlerSubsystem(db, settings.project_state_crawler, targetProject, 'scheduler');
+        checkpointInput.projectState = {
+          totalDevtags: crawl.totalDevtags,
+          driftEvents: crawl.driftEvents,
+          snapshotId: crawl.snapshotId,
+        };
+      } catch (error) {
+        console.error('project_state_crawler scheduler execution failed:', error);
+      }
     }
 
     if (shouldRunNow(db, 'suggested_jobs_crawler', settings.suggested_jobs_crawler)) {
-      executeSubsystem(db, { subsystem: 'suggested_jobs_crawler', depth: settings.suggested_jobs_crawler.maxDepth });
+      try {
+        const suggested = runSuggestedJobsSubsystem(db, 'scheduler');
+        checkpointInput.suggested = {
+          mode: suggested.mode,
+          generated: suggested.generated,
+          protocol: suggested.protocol,
+        };
+      } catch (error) {
+        console.error('suggested_jobs_crawler scheduler execution failed:', error);
+      }
     }
 
     if (shouldRunNow(db, 'gap_analysis', settings.gap_analysis)) {
-      executeSubsystem(db, { subsystem: 'gap_analysis', depth: settings.gap_analysis.maxDepth });
+      try {
+        const gap = await runGapAnalysisSubsystem(db, targetProject, 'scheduler');
+        checkpointInput.gap = {
+          totalReports: gap.total_reports,
+          flaggedToGodFactory: gap.flagged_to_god_factory,
+          sessionId: gap.session_id,
+        };
+      } catch (error) {
+        console.error('gap_analysis scheduler execution failed:', error);
+      }
     }
 
     if (shouldRunNow(db, 'god_factory_idle_scan', settings.god_factory_idle_scan)) {
-      executeSubsystem(db, { subsystem: 'god_factory_idle_scan', depth: settings.god_factory_idle_scan.maxDepth });
+      try {
+        await runIdleScanSubsystem(db, 'scheduler');
+        checkpointInput.idleScanRan = true;
+      } catch (error) {
+        console.error('god_factory_idle_scan scheduler execution failed:', error);
+      }
+    }
+
+    if (checkpointInput.projectState || checkpointInput.gap || checkpointInput.suggested || checkpointInput.idleScanRan) {
+      recordPipelineCheckpoint(db, checkpointInput);
     }
 
     if (!isAutoIntelManagedByRoute(db) && shouldRunAutoIntelNow(db, autoIntelSettings)) {

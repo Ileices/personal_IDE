@@ -25,10 +25,19 @@ export interface TerminalOutput {
   timestamp: string;
 }
 
+export interface TerminalResizeResult {
+  ok: boolean;
+  applied: boolean;
+  status: 'applied' | 'unsupported' | 'invalid-size' | 'session-not-found';
+  message: string;
+}
+
 interface ManagedSession extends TerminalSession {
   process: ChildProcess | null;
   buffer: string[];          // rolling output buffer (capped)
   emitter: EventEmitter;
+  cols?: number;
+  rows?: number;
 }
 
 const MAX_BUFFER_LINES = 2000;
@@ -84,6 +93,8 @@ export class TerminalService {
       process: null,
       buffer: [],
       emitter: new EventEmitter(),
+      cols: 120,
+      rows: 30,
     };
 
     // Spawn shell process
@@ -194,10 +205,57 @@ export class TerminalService {
     return [...this.sessions.values()].map(s => this.toPublic(s));
   }
 
-  /** Resize terminal (placeholder for xterm integration) */
-  resizeSession(sessionId: string, cols: number, rows: number): void {
-    // When using node-pty, this would call pty.resize(cols, rows)
-    // With child_process, this is a no-op but preserves the interface
+  /** Resize terminal dimensions when backend supports PTY resizing */
+  resizeSession(sessionId: string, cols: number, rows: number): TerminalResizeResult {
+    const session = this.sessions.get(sessionId);
+    if (!session || !session.alive) {
+      return {
+        ok: false,
+        applied: false,
+        status: 'session-not-found',
+        message: 'Session not found or no longer alive.',
+      };
+    }
+
+    if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 20 || rows < 5) {
+      return {
+        ok: false,
+        applied: false,
+        status: 'invalid-size',
+        message: 'Invalid terminal size. Minimum is 20 columns by 5 rows.',
+      };
+    }
+
+    session.cols = Math.floor(cols);
+    session.rows = Math.floor(rows);
+
+    // child_process does not expose PTY resize, but many shells support resize commands.
+    // Send a best-effort command so frontend resize requests can still be applied in practice.
+    if (!session.process?.stdin?.writable) {
+      return {
+        ok: false,
+        applied: false,
+        status: 'unsupported',
+        message: 'Session stdin is not writable; cannot apply resize command.',
+      };
+    }
+
+    const isWindows = platform() === 'win32';
+    const isPowerShell = /powershell/i.test(session.shell);
+    const resizeCmd = isWindows
+      ? (isPowerShell
+        ? `$Host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(${Math.max(session.cols, 120)}, 3000); $Host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(${session.cols}, ${session.rows})`
+        : `mode con: cols=${session.cols} lines=${session.rows}`)
+      : `printf '\\e[8;${session.rows};${session.cols}t'`;
+
+    session.process.stdin.write(`${resizeCmd}\n`);
+
+    return {
+      ok: true,
+      applied: true,
+      status: 'applied',
+      message: `Resize command sent (${session.cols}x${session.rows}). Effect depends on host shell support.`,
+    };
   }
 
   /** Destroy a session */

@@ -16,6 +16,9 @@ import type { ConversationIndexer } from '../../analysis/conversationIndexer.js'
 import type { LoopDetector } from '../loopDetector.js';
 import type { LogWriter } from '../logWriter.js';
 import { appConfig } from '../../../config.js';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'fs';
+import { dirname, join, relative, resolve } from 'path';
+import { tmpdir } from 'os';
 import { emitIterationMilestones, writeQualitySnapshot, inferQualityFromContext } from './milestoneEmitter.js';
 
 type EmitFn = (event: any) => void;
@@ -55,6 +58,163 @@ export interface ResponseResult {
   lastErrorContext: string;
   lastTestContext: string;
   conversationIndexContext: string;
+}
+
+interface SandboxVerificationResult {
+  executed: boolean;
+  success: boolean;
+  summary: string;
+  buildContext: string;
+  lintContext: string;
+  testContext: string;
+}
+
+const SANDBOX_CORE_ENTRIES = [
+  'apps',
+  'packages',
+  'scripts',
+  'testing',
+  'documentation',
+  'prototypes',
+  'package.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'tsconfig.json',
+  'README.md',
+  'setup.ps1',
+  'setup.sh',
+];
+
+const SANDBOX_SKIP_SEGMENTS = new Set([
+  '.git',
+  'node_modules',
+  '.backups',
+  '.ide-logs',
+  'build_runs',
+  'dist',
+  'build',
+  'coverage',
+  '.turbo',
+  '.next',
+  '.cache',
+  'checkpoints',
+  'nanos',
+  'nano_data',
+  'nano_corpus',
+]);
+
+const SANDBOX_SKIP_SUFFIXES = ['.db', '.sqlite', '.sqlite3', '.zip', '.7z', '.tar', '.gz'];
+
+function normalizeRelPath(pathValue: string): string {
+  return pathValue.replace(/\\/g, '/').replace(/^\.\//, '').trim();
+}
+
+function shouldSkipSandboxPath(relPath: string): boolean {
+  const normalized = normalizeRelPath(relPath).toLowerCase();
+  if (!normalized) return false;
+  const segments = normalized.split('/').filter(Boolean);
+  if (segments.some((segment) => SANDBOX_SKIP_SEGMENTS.has(segment))) return true;
+  return SANDBOX_SKIP_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
+}
+
+function copyEntryToSandbox(projectRoot: string, sandboxRoot: string, entry: string): void {
+  const srcPath = resolve(projectRoot, entry);
+  if (!existsSync(srcPath)) return;
+  const dstPath = resolve(sandboxRoot, entry);
+  cpSync(srcPath, dstPath, {
+    recursive: true,
+    force: true,
+    errorOnExist: false,
+    filter: (sourcePath: string) => {
+      const rel = normalizeRelPath(relative(projectRoot, sourcePath));
+      if (!rel) return true;
+      return !shouldSkipSandboxPath(rel);
+    },
+  });
+}
+
+function runSandboxVerification(
+  projectRoot: string,
+  runId: string,
+  currentIteration: number,
+  fileChanges: Array<{ path: string; content: string }>,
+): SandboxVerificationResult {
+  let sandboxRoot: string | null = null;
+
+  try {
+    const sandboxBase = join(tmpdir(), 'personal-ide-sandboxes');
+    mkdirSync(sandboxBase, { recursive: true });
+    const runPrefix = `${runId.slice(0, 8)}-iter${currentIteration}-`;
+    sandboxRoot = mkdtempSync(join(sandboxBase, runPrefix));
+
+    for (const entry of SANDBOX_CORE_ENTRIES) {
+      copyEntryToSandbox(projectRoot, sandboxRoot, entry);
+    }
+
+    for (const change of fileChanges) {
+      const relPath = normalizeRelPath(change.path);
+      if (!relPath) continue;
+      const sourcePath = resolve(projectRoot, relPath);
+      if (!existsSync(sourcePath)) continue;
+      const targetPath = resolve(sandboxRoot, relPath);
+      mkdirSync(dirname(targetPath), { recursive: true });
+      cpSync(sourcePath, targetPath, {
+        recursive: true,
+        force: true,
+        errorOnExist: false,
+      });
+    }
+
+    const sourceNodeModules = resolve(projectRoot, 'node_modules');
+    const sandboxNodeModules = resolve(sandboxRoot, 'node_modules');
+    if (existsSync(sourceNodeModules) && !existsSync(sandboxNodeModules)) {
+      symlinkSync(sourceNodeModules, sandboxNodeModules, process.platform === 'win32' ? 'junction' : 'dir');
+    }
+
+    const buildResult = runBuild(sandboxRoot);
+    const buildContext = formatBuildForLLM(buildResult);
+
+    const lintErrors = runAllLintChecks(sandboxRoot);
+    const lintContext = lintErrors.length > 0
+      ? formatErrorsForLLM(lintErrors)
+      : '✅ No lint errors detected in sandbox.';
+
+    const testResult = runTests(sandboxRoot);
+    const testContext = testResult.total > 0
+      ? formatTestsForLLM(testResult)
+      : 'No tests detected in sandbox.';
+
+    const lintErrorCount = lintErrors.filter((error) => error.severity === 'error').length;
+    const testsFailed = testResult.total > 0 ? testResult.failed : 0;
+    const success = buildResult.success && lintErrorCount === 0 && testsFailed === 0;
+    const summary = `Sandbox gate ${success ? 'PASS' : 'FAIL'}: build=${buildResult.success ? 'ok' : 'fail'} lintErrors=${lintErrorCount} testsFailed=${testsFailed}`;
+
+    return {
+      executed: true,
+      success,
+      summary,
+      buildContext,
+      lintContext,
+      testContext,
+    };
+  } catch (err: any) {
+    return {
+      executed: false,
+      success: false,
+      summary: `Sandbox setup failed: ${err?.message || 'unknown error'}`,
+      buildContext: '',
+      lintContext: '',
+      testContext: '',
+    };
+  } finally {
+    if (sandboxRoot) {
+      try {
+        rmSync(sandboxRoot, { recursive: true, force: true });
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  }
 }
 
 /**
@@ -160,20 +320,26 @@ export function processResponse(
 
   // Apply file changes
   let fileChangesCount = 0;
+  let preWriteCheckpointId: string | null = null;
+  let sandboxValidationRan = false;
+  const newlyCreatedPaths: string[] = [];
   // ── Smart Checkpoint: pre_write — snapshot BEFORE any file changes ──────────
   // This gives us a clean rollback point regardless of the checkpointEvery cadence.
   if (fileChanges.length > 0) {
     try {
       const preWriteLabel = `pre_write: ${fileChanges.map(f => f.path).join(', ').slice(0, 120)}`;
-      services.checkpoint.createCheckpoint(
+      const preWriteCheckpoint = services.checkpoint.createCheckpoint(
         ctx.config.projectRoot, ctx.projectId, ctx.runId,
         ctx.currentIteration, preWriteLabel, 'auto:pre_write',
       );
+      preWriteCheckpointId = preWriteCheckpoint?.id || null;
       emit({ type: 'checkpoint_created', iteration: ctx.currentIteration, trigger: 'pre_write', description: preWriteLabel });
     } catch { /* non-critical */ }
   }
   for (const change of fileChanges) {
     try {
+      const absPath = resolve(ctx.config.projectRoot, change.path);
+      if (!existsSync(absPath)) newlyCreatedPaths.push(absPath);
       writeFile(ctx.config.projectRoot, change.path, change.content, true);
       fileChangesCount++;
       emit({ type: 'file_changed', change: { path: change.path, action: 'modified', summary: 'Updated by agent' } });
@@ -205,8 +371,75 @@ export function processResponse(
     }
   }
 
+  // Mandatory sandbox gate for any write/patch operation.
+  // If sandbox validation fails, we roll back to pre-write state.
+  if (fileChangesCount > 0) {
+    const sandboxResult = runSandboxVerification(
+      ctx.config.projectRoot,
+      ctx.runId,
+      ctx.currentIteration,
+      fileChanges,
+    );
+
+    if (sandboxResult.executed) {
+      sandboxValidationRan = true;
+      lastBuildContext = sandboxResult.buildContext;
+      lastTestContext = sandboxResult.testContext;
+      if (sandboxResult.lintContext && !sandboxResult.lintContext.startsWith('✅')) {
+        lastErrorContext = sandboxResult.lintContext;
+      }
+
+      emit({
+        type: 'runtime_check',
+        stage: 'sandbox_gate',
+        success: sandboxResult.success,
+        summary: sandboxResult.summary,
+      });
+
+      if (!sandboxResult.success) {
+        let rollbackSucceeded = false;
+        if (preWriteCheckpointId) {
+          try {
+            rollbackSucceeded = services.checkpoint.rollback(ctx.config.projectRoot, preWriteCheckpointId);
+          } catch {
+            rollbackSucceeded = false;
+          }
+        }
+
+        if (rollbackSucceeded) {
+          for (const createdPath of newlyCreatedPaths) {
+            try {
+              rmSync(createdPath, { recursive: true, force: true });
+            } catch {
+              // best-effort cleanup
+            }
+          }
+        }
+
+        const rollbackStatus = rollbackSucceeded
+          ? 'Rolled back to pre-write checkpoint.'
+          : preWriteCheckpointId
+            ? 'Rollback to pre-write checkpoint failed.'
+            : 'No pre-write checkpoint available for rollback.';
+
+        lastErrorContext = [
+          'SANDBOX VERIFICATION FAILED. Fix these issues before attempting to apply changes again.',
+          sandboxResult.summary,
+          sandboxResult.buildContext,
+          sandboxResult.lintContext,
+          sandboxResult.testContext,
+          rollbackStatus,
+        ].filter(Boolean).join('\n\n');
+
+        fileChangesCount = 0;
+      }
+    } else {
+      emit({ type: 'info', message: `${sandboxResult.summary}. Falling back to in-place verification.` });
+    }
+  }
+
   // Auto Build Verification
-  if ((ctx.config.autoFixErrors || ctx.config.autoRunTests) && fileChangesCount > 0) {
+  if ((ctx.config.autoFixErrors || ctx.config.autoRunTests) && fileChangesCount > 0 && !sandboxValidationRan) {
     try {
       const buildResult = runBuild(ctx.config.projectRoot);
       lastBuildContext = formatBuildForLLM(buildResult);
@@ -231,7 +464,7 @@ export function processResponse(
   }
 
   // Auto Error Detection
-  if (ctx.config.autoFixErrors && fileChangesCount > 0) {
+  if (ctx.config.autoFixErrors && fileChangesCount > 0 && !sandboxValidationRan) {
     try {
       const errors = runAllLintChecks(ctx.config.projectRoot);
       if (errors.length > 0) {
@@ -249,7 +482,7 @@ export function processResponse(
   }
 
   // Auto Test Running
-  if (ctx.config.autoRunTests && fileChangesCount > 0) {
+  if (ctx.config.autoRunTests && fileChangesCount > 0 && !sandboxValidationRan) {
     try {
       const testResult = runTests(ctx.config.projectRoot);
       if (testResult.total > 0) {

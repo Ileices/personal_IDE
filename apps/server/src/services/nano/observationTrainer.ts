@@ -6,9 +6,6 @@
 // ============================================
 import { appConfig } from '../../config.js';
 
-const NANO_PORT = process.env.NANO_PORT ?? '5100';
-const NANO_BASE = `http://127.0.0.1:${NANO_PORT}`;
-
 export interface ObservationPayload {
   prompt: string;
   response: string;
@@ -41,7 +38,7 @@ export function observationTrainingHook(payload: ObservationPayload): void {
     metadata: payload.metadata ?? {},
   });
 
-  fetch(`${NANO_BASE}/v1/training/observe`, {
+  fetch(`${appConfig.services.nanoSeaUrl}/v1/training/observe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,

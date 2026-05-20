@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:e2e": "vitest run",
+    "test:subsystems": "vitest run e2e/subsystems.test.ts",
     "test:e2e:watch": "vitest",
     "test:e2e:ui": "vitest --ui",
     "typecheck": "tsc --noEmit"

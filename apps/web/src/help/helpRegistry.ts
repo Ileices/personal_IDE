@@ -2328,12 +2328,12 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
 
   {
     id: 'god-factory-interactive-state',
-    title: 'God Factory: Interactive State — Conversational Operations (COMING SOON)',
+    title: 'God Factory: Interactive State — Conversational Operations',
     summary: 'Every type of user input and how the God Factory Agent routes it to a codebase action, on-the-fly sub-agent, or implementation pipeline.',
-    tags: ['coming-soon', 'god-factory', 'interactive', 'routing', 'sub-agents', 'on-the-fly'],
-    status: 'coming_soon',
+    tags: ['god-factory', 'interactive', 'routing', 'sub-agents', 'on-the-fly'],
+    status: 'active',
     details: [
-      'COMING SOON: Full God Factory conversational interface with on-the-fly sub-agent results displayed inline in chat.',
+      'Current UI status: God Factory chat is live with file attachment, prompt history, and pipeline-oriented routing behavior; remaining behavior is controlled by backend subsystem availability.',
       'Feature Request Routing: God Factory checks Suggested Jobs first. If job exists → reports sandbox status and asks whether to proceed or review. If no job exists → spawns Suggested Jobs Crawler in blame-driven mode and builds atomic step breakdown in real time.',
       'Question Routing: God Factory spawns Memory Crawler sub-agent + Project State Crawler targeted at relevant files → returns answer decoded from tags. Does NOT fabricate. If crawl yields nothing → says so and offers deeper crawl.',
       'Problem Report Routing: God Factory reads forensic database for recent entries matching the described problem → summarizes in natural language → asks whether to generate a Suggested Job, trigger Skeptic Agent, or investigate further.',
@@ -2353,12 +2353,12 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
   },
   {
     id: 'god-factory-background-scan',
-    title: 'God Factory: Background Scan State — Always-On Monitors (COMING SOON)',
+    title: 'God Factory: Background Scan State — Always-On Monitors',
     summary: 'Six sub-agents run continuously in parallel watching registry, debt, model quality, gap reports, patterns, and idle codebase state.',
-    tags: ['coming-soon', 'god-factory', 'background-scan', 'monitors', 'continuous', 'notifications'],
-    status: 'coming_soon',
+    tags: ['god-factory', 'background-scan', 'monitors', 'continuous', 'notifications'],
+    status: 'active',
     details: [
-      'COMING SOON: Background Scan Status panel on God Factory screen showing each sub-agent\'s last run cycle and current state.',
+      'Current UI status: Background scan data is surfaced in the Intel panel when the loop/subsystems are running; dedicated per-monitor visualization is still evolving.',
       'Background Scan is not a periodic job — it is an always-on indexed crawl system running regardless of whether the user is in conversation.',
       'Sub-Agent 1 — Continuous Registry Monitor: Runs every cycle. Reads forensic database for new critical/fatal entries. Fatal entries in active build cycle → God Factory immediately invokes veto authority and halts cycle.',
       'Sub-Agent 2 — Idle Codebase Scanner: Activates when IDE has been idle >3 cycles with no build activity. Scans one file per idle cycle via Project State Crawler single-file mode. Maintains scan position across idle periods to eventually cover entire codebase.',
@@ -2372,12 +2372,12 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
   },
   {
     id: 'god-factory-idle-suggestions',
-    title: 'God Factory: Idle Suggestions — Proactive Codebase Observations (COMING SOON)',
+    title: 'God Factory: Idle Suggestions — Proactive Codebase Observations',
     summary: 'Six idle suggestion categories produced by the Idle Codebase Scanner and surfaced at the start of every interactive session.',
-    tags: ['coming-soon', 'god-factory', 'idle-suggestions', 'proactive', 'codebase-health'],
-    status: 'coming_soon',
+    tags: ['god-factory', 'idle-suggestions', 'proactive', 'codebase-health'],
+    status: 'active',
     details: [
-      'COMING SOON: Idle Suggestions panel on God Factory screen with accept/defer/reject per suggestion, and one-click job creation.',
+      'Current UI status: Idle suggestions are available through God Factory APIs/Intel panel pathways; richer review controls continue to be expanded.',
       'trivial_enhancement: Small improvement achievable in 1-2 atomic steps. God Factory estimates time and offers to add to Suggested Jobs list immediately.',
       'feature_bridge: Two components exist that could be connected to enable a new capability. God Factory identifies both by devtag and describes what the bridge would do and what new plantag it would satisfy.',
       'performance_opportunity: A devtag:hot_path or devtag:perf_critical component has a structure that could be optimized based on its current devtag relationship graph.',
@@ -2392,12 +2392,12 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
   },
   {
     id: 'god-factory-authority-boundaries',
-    title: 'God Factory: Authority Boundaries — May and May Not (COMING SOON)',
+    title: 'God Factory: Authority Boundaries — May and May Not',
     summary: 'Complete list of what the God Factory Agent is and is not permitted to do — including absolute authorities, veto power, and immutable constraints.',
-    tags: ['coming-soon', 'god-factory', 'authority', 'safety', 'policy', 'constraints'],
-    status: 'coming_soon',
+    tags: ['god-factory', 'authority', 'safety', 'policy', 'constraints'],
+    status: 'active',
     details: [
-      'COMING SOON: Authority audit log in forensic god_factory_actions table showing every authority action with justification tags.',
+      'Authority actions are governed by backend enforcement and persisted forensic records; UI audit visualizations can vary by build/profile.',
       'MAY: Invoke veto authority over any vote in the system at any time.',
       'MAY: Instruct implementation pipeline to begin for any Suggested Job.',
       'MAY: Override any model tier assignment in the Model Size Constraint Chart for a specific operation (logged).',
@@ -2424,12 +2424,12 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
   },
   {
     id: 'god-factory-screen-layout',
-    title: 'God Factory Screen: All Eight Panels (COMING SOON)',
+    title: 'God Factory Screen: Core Panels and Data Surfaces',
     summary: 'The full screen layout of the God Factory interface: chat, notifications, idle suggestions, suggested jobs, model health, codebase health, background scan status, and brainstorm.',
-    tags: ['coming-soon', 'god-factory', 'ui', 'panels', 'layout', 'screen'],
-    status: 'coming_soon',
+    tags: ['god-factory', 'ui', 'panels', 'layout', 'screen'],
+    status: 'active',
     details: [
-      'COMING SOON: Full God Factory screen with all eight panels. Currently the God Factory panel has chat input, prompt history, and a partial right panel (Intel Panel).',
+      'Current state: God Factory includes chat input, prompt history, file selector, and Intel panel controls. Additional panel density can change with loop/backend readiness.',
       '1. Chat Interface: Primary conversational input — the God Factory Agent reads user intent and routes to the appropriate sub-agent or pipeline. Not constrained to structured commands.',
       '2. Notification Queue: All queued notifications from Background Scan State in reverse chronological order. Each has a source label, severity badge, and one-line summary. Click to expand with full forensic-decoded detail.',
       '3. Idle Suggestions Panel: Unacknowledged idle suggestions with accept/defer/reject per suggestion. Accepting creates a Suggested Job immediately.',
@@ -2438,7 +2438,7 @@ const RAW_HELP_SECTIONS: HelpSection[] = [
       '6. Codebase Health Panel: Debt heatmap for full IDE codebase. Files above debt ceiling highlighted. Shows total registered devtag count, registry surplus count, registry deficit count, and systemic drift flag status.',
       '7. Background Scan Status Panel: Current scan position of Idle Codebase Scanner, last cycle each Background Scan Sub-Agent ran, and whether any sub-agent is currently active.',
       '8. Brainstorm Input: Separate input area distinct from main chat. Each brainstorm entry stored as user_requested job source and immediately handed to Suggested Jobs Crawler for processing into a job record.',
-      'Current State: The active UI has a partial implementation with chat, prompt history, file selector, and the Intel Panel (subsystem toggles, notifications stub). Panels 2-8 are partially wired; the notification and suggestion data sources require the background loop to be running.',
+      'Current State: The active UI has chat, prompt history, file selector, and Intel panel controls for subsystem toggles, notifications, and suggestions. Deeper data requires the background loop and crawlers to be running.',
       'Related: God Factory Interactive State, Background Scan, Idle Suggestions, Suggested Jobs, Blame Crawler, Model Registry.'
     ]
   },
@@ -4031,7 +4031,7 @@ export const HELP_ANCHORS: Record<string, HelpAnchor> = {
   'agent.stop': { id: 'agent.stop', label: 'Stop Agent Button', quickTip: 'Stops the currently running loop at the end of the current iteration.', sectionId: 'agent', tab: 'agent', view: 'agent' },
   'agent.pause': { id: 'agent.pause', label: 'Pause Agent Button', quickTip: 'Pauses the loop after the current step completes.', sectionId: 'agent', tab: 'agent', view: 'agent' },
   'agent.strategy-picker': { id: 'agent.strategy-picker', label: 'Strategy Picker', quickTip: 'Select the loop strategy template: 5 presets plus custom.', sectionId: 'agent', tab: 'agent', view: 'agent' },
-  'agent.fleet-mode': { id: 'agent.fleet-mode', label: 'Fleet Mode Toggle', quickTip: 'Enables multi-agent parallel execution. ⚠ Fleet messaging stubs not yet wired.', sectionId: 'agent', tab: 'agent', view: 'agent' },
+  'agent.fleet-mode': { id: 'agent.fleet-mode', label: 'Fleet Mode Toggle', quickTip: 'Enables multi-agent parallel execution. Advanced inter-agent messaging behavior depends on active fleet backend services.', sectionId: 'agent', tab: 'agent', view: 'agent' },
   'agent.wizard': { id: 'agent.wizard', label: 'Project Factory Wizard', quickTip: '5-step guided setup: mode → template → details → prompt → review.', sectionId: 'agent', tab: 'agent', view: 'agent' },
   'agent.mega-prompts': { id: 'agent.mega-prompts', label: 'Mega Prompts Panel', quickTip: 'Curated preset prompts + your custom prompts (stored in localStorage).', sectionId: 'agent', tab: 'agent', view: 'agent' },
   'agent.milestones': { id: 'agent.milestones', label: 'Milestone Panel', quickTip: 'Structured work items extracted from the running loop iteration.', sectionId: 'agent', tab: 'agent', view: 'agent' },

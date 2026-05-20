@@ -3,7 +3,7 @@
 //
 // Two operating modes:
 //   blame_driven : processes blame/criticism records → job records
-//   independent  : 10 codebase review protocols → job records
+//   independent  : 11 codebase review protocols → job records
 //
 // The crawler is started by the subsystem scheduler and runs
 // continuously while the IDE is active.
@@ -158,10 +158,19 @@ function updateCrawlerState(
     status_message: string;
   }>,
 ) {
+  const allowedModes = new Set(['idle', 'blame_driven', 'independent', 'paused']);
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
   for (const [k, v] of Object.entries(patch)) {
-    if (v !== undefined) { sets.push(`${k} = ?`); vals.push(v as string | number | null); }
+    if (v !== undefined) {
+      sets.push(`${k} = ?`);
+      if (k === 'mode') {
+        const mode = String(v);
+        vals.push(allowedModes.has(mode) ? mode : 'paused');
+      } else {
+        vals.push(v as string | number | null);
+      }
+    }
   }
   if (sets.length === 0) return;
   sets.push(`updated_at = datetime('now')`);
@@ -253,18 +262,30 @@ function recordStabilitySnapshot(
 }
 
 // ── BLAME-DRIVEN MODE ──────────────────────────
-// Reads unprocessed blame records (tool_criticisms + model_performance)
+// Reads blame records (tool criticism + tag mismatches)
 // and generates job records for each.
 function processBlameDrivenMode(db: Database.Database, cycleCount: number): number {
   let generated = 0;
 
-  // Try tool_criticisms table
-  let criticisms: Array<{ id?: string; entry_id?: string; devtag?: string; issue_type?: string; severity?: string; file_path?: string; agent_id?: string }> = [];
+  // Try tool_criticism_records table
+  let criticisms: Array<{ entry_id?: string; devtag?: string; issue_type?: string; severity?: string; file_path?: string; agent_id?: string }> = [];
   try {
     criticisms = db.prepare(`
-      SELECT entry_id, devtag, issue_type, severity, file_path, agent_id
-      FROM tool_criticisms
-      WHERE sj_processed IS NULL OR sj_processed = 0
+      SELECT
+        COALESCE(criticism_id, id) AS entry_id,
+        tool_name AS devtag,
+        failure_type AS issue_type,
+        severity,
+        '' AS file_path,
+        agent_run_id AS agent_id
+      FROM tool_criticism_records t
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM job_records jr
+        WHERE jr.source = 'blame_crawler'
+          AND jr.implementation_status NOT IN ('rejected','archived','implemented')
+          AND jr.source_record_ids LIKE '%' || COALESCE(t.criticism_id, t.id) || '%'
+      )
       LIMIT 20
     `).all() as typeof criticisms;
   } catch { /* table may not exist yet */ }
@@ -284,7 +305,7 @@ function processBlameDrivenMode(db: Database.Database, cycleCount: number): numb
         : 'model_tool_enhancement',
       source: 'blame_crawler',
       source_record_ids: [c.entry_id || ''],
-      evidence_summary: `tool_criticisms row ${c.entry_id}: agent=${c.agent_id || 'unknown'}, issue_type=${issueType}, severity=${severity}, file=${file || 'n/a'}`,
+      evidence_summary: `tool_criticism_records row ${c.entry_id}: agent=${c.agent_id || 'unknown'}, issue_type=${issueType}, severity=${severity}, file=${file || 'n/a'}`,
       priority: priorityFromSeverity(severity),
       title: `[Blame] ${issueType} on ${devtag}`,
       affected_files: file ? [file] : [],
@@ -301,14 +322,7 @@ function processBlameDrivenMode(db: Database.Database, cycleCount: number): numb
       implementation_status: 'suggested',
       created_cycle: cycleCount,
     });
-
-    if (inserted) {
-      generated++;
-      // Mark as processed
-      try {
-        db.prepare(`UPDATE tool_criticisms SET sj_processed = 1 WHERE entry_id = ?`).run(c.entry_id);
-      } catch { /* ignore */ }
-    }
+    if (inserted) generated++;
   }
 
   // Try tag_mismatches
@@ -317,7 +331,13 @@ function processBlameDrivenMode(db: Database.Database, cycleCount: number): numb
     mismatches = db.prepare(`
       SELECT entry_id, devtag, mismatch_type, severity, file
       FROM tag_mismatches
-      WHERE escalated = 0 AND (sj_processed IS NULL OR sj_processed = 0)
+      WHERE escalated = 0
+        AND NOT EXISTS (
+          SELECT 1
+          FROM job_records jr
+          WHERE jr.implementation_status NOT IN ('rejected','archived','implemented')
+            AND jr.source_record_ids LIKE '%' || tag_mismatches.entry_id || '%'
+        )
       LIMIT 20
     `).all() as typeof mismatches;
   } catch { /* ignore */ }
@@ -345,12 +365,7 @@ function processBlameDrivenMode(db: Database.Database, cycleCount: number): numb
       implementation_status: 'suggested',
       created_cycle: cycleCount,
     });
-    if (inserted) {
-      generated++;
-      try {
-        db.prepare(`UPDATE tag_mismatches SET sj_processed = 1 WHERE entry_id = ?`).run(m.entry_id);
-      } catch { /* ignore */ }
-    }
+    if (inserted) generated++;
   }
 
   return generated;
@@ -426,7 +441,7 @@ function protocol2DeadCode(db: Database.Database, cycleCount: number): number {
   let dead: Array<{ entry_id: string; devtag: string; file_path?: string }> = [];
   try {
     dead = db.prepare(`
-      SELECT entry_id, devtag, file_path FROM dead_tag_records
+      SELECT entry_id, devtag, last_known_file AS file_path FROM dead_tags
       WHERE resolved = 0 LIMIT 50
     `).all() as typeof dead;
   } catch { return 0; }
@@ -438,7 +453,7 @@ function protocol2DeadCode(db: Database.Database, cycleCount: number): number {
       job_category: 'dead_code_removal',
       source: 'suggested_jobs_crawler',
       source_record_ids: ['protocol:2:dead_code', d.entry_id],
-      evidence_summary: `Protocol 2 (dead_code): dead_tag_records row ${d.entry_id} — devtag '${d.devtag}' has no live references (file=${d.file_path || 'n/a'})`,
+      evidence_summary: `Protocol 2 (dead_code): dead_tags row ${d.entry_id} — devtag '${d.devtag}' has no live references (file=${d.file_path || 'n/a'})`,
       priority: 'low',
       title: `Remove dead code: ${d.devtag}`,  
       affected_files: d.file_path ? [d.file_path] : [],
@@ -508,7 +523,7 @@ function protocol4RegressionClusters(db: Database.Database, cycleCount: number):
   let clusters: Array<{ devtag: string; cnt: number; file_path?: string }> = [];
   try {
     clusters = db.prepare(`
-      SELECT devtag, COUNT(*) as cnt, MAX(file_path) as file_path
+      SELECT devtag, COUNT(*) as cnt, MAX(file) as file_path
       FROM regression_history GROUP BY devtag HAVING cnt >= 3
       LIMIT 30
     `).all() as typeof clusters;
@@ -544,12 +559,24 @@ function protocol4RegressionClusters(db: Database.Database, cycleCount: number):
 // Protocol 5 — Integration Failures
 function protocol5IntegrationFailures(db: Database.Database, cycleCount: number): number {
   let generated = 0;
-  let failures: Array<{ entry_id: string; component: string; failure_type: string; file_path?: string; cycle_id?: string }> = [];
+  let failures: Array<{ entry_id: string; component: string; failure_type: string; file_path?: string; cycle_id?: string; severity?: string }> = [];
   try {
     failures = db.prepare(`
-      SELECT entry_id, component, failure_type, file_path, cycle_id
-      FROM integration_failures
-      WHERE resolved = 0 AND created_at < datetime('now', '-1 hour')
+      SELECT
+        entry_id,
+        new_devtag AS component,
+        relationship_type AS failure_type,
+        file AS file_path,
+        cycle_id,
+        severity
+      FROM integration_failures i
+      WHERE created_at < datetime('now', '-1 hour')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM job_records jr
+          WHERE jr.implementation_status NOT IN ('rejected','archived','implemented')
+            AND jr.source_record_ids LIKE '%' || i.entry_id || '%'
+        )
       LIMIT 20
     `).all() as typeof failures;
   } catch { return 0; }
@@ -562,7 +589,7 @@ function protocol5IntegrationFailures(db: Database.Database, cycleCount: number)
       source: 'suggested_jobs_crawler',
       source_record_ids: ['protocol:5:integration_failure', f.entry_id],
       evidence_summary: `Protocol 5 (integration_failure): integration_failures row ${f.entry_id} — component=${f.component}, type=${f.failure_type}, cycle=${f.cycle_id || 'unknown'}, file=${f.file_path || 'n/a'}`,
-      priority: 'high',
+      priority: priorityFromSeverity(f.severity || 'warning'),
       title: `Integration repair: ${f.failure_type} in ${f.component}`,
       affected_files: f.file_path ? [f.file_path] : [],
       affected_devtags: [f.component],
@@ -587,14 +614,19 @@ function protocol6AntiPatterns(db: Database.Database, cycleCount: number): numbe
   let patterns: Array<{ entry_id: string; pattern_type: string; description?: string; file_path?: string; severity?: string }> = [];
   try {
     patterns = db.prepare(`
-      SELECT p.entry_id, p.pattern_type, p.description, p.file_path, p.severity
+      SELECT
+        p.pattern_id AS entry_id,
+        COALESCE(NULLIF(p.anti_pattern_type, ''), p.failure_type) AS pattern_type,
+        '' AS description,
+        '' AS file_path,
+        p.severity
       FROM patterns p
-      WHERE p.systemic = 1
+      WHERE (p.is_anti_pattern = 1 OR p.flagged_to_god_factory = 1)
         AND NOT EXISTS (
           SELECT 1 FROM job_records jr
           WHERE jr.job_category = 'anti_pattern_mitigation'
             AND jr.implementation_status NOT IN ('rejected','archived','implemented')
-            AND json_extract(jr.source_record_ids, '$[1]') = p.entry_id
+            AND jr.source_record_ids LIKE '%' || p.pattern_id || '%'
         )
       LIMIT 20
     `).all() as typeof patterns;
@@ -819,6 +851,174 @@ function protocol10NanoCoverage(db: Database.Database, cycleCount: number): numb
   return generated;
 }
 
+function backupToActivePath(filePath: string): string | null {
+  const marker = 'apps/web/src/';
+  const idx = filePath.lastIndexOf(marker);
+  if (idx < 0) return null;
+  return filePath.slice(idx).replace(/^\/+/, '');
+}
+
+// Protocol 11 — Backup Drift Reconciliation
+// Compares historical UI modules under .backups against active apps/web/src files.
+// Feeds God Factory with concrete merge/reconcile jobs when backup snapshots contain
+// structures that are missing from active files.
+function protocol11BackupReconciliation(db: Database.Database, cycleCount: number): number {
+  let generated = 0;
+
+  const latestSnapshot = db.prepare(`
+    SELECT snapshot_id
+    FROM ground_truth_snapshots
+    WHERE status = 'complete'
+    ORDER BY datetime(created_at) DESC
+    LIMIT 1
+  `).get() as { snapshot_id?: string } | undefined;
+
+  if (!latestSnapshot?.snapshot_id) return 0;
+
+  let rows: Array<{ file_path: string; devtag_type: string; devtag_name: string }> = [];
+  try {
+    rows = db.prepare(`
+      SELECT file_path, devtag_type, devtag_name
+      FROM snapshot_devtags
+      WHERE snapshot_id = ?
+        AND devtag_type NOT IN ('file', 'import')
+        AND (
+          file_path LIKE '.backups/%/apps/web/src/%'
+          OR file_path LIKE 'apps/web/src/%'
+        )
+    `).all(latestSnapshot.snapshot_id) as typeof rows;
+  } catch {
+    return 0;
+  }
+
+  const activeTagsByFile = new Map<string, Set<string>>();
+  const backupTagsByCanonical = new Map<string, Map<string, Set<string>>>();
+
+  for (const row of rows) {
+    const tagKey = `${row.devtag_type}:${row.devtag_name}`;
+    if (row.file_path.startsWith('apps/web/src/')) {
+      const set = activeTagsByFile.get(row.file_path) || new Set<string>();
+      set.add(tagKey);
+      activeTagsByFile.set(row.file_path, set);
+      continue;
+    }
+
+    if (!row.file_path.startsWith('.backups/')) continue;
+    const canonicalPath = backupToActivePath(row.file_path);
+    if (!canonicalPath) continue;
+
+    const byBackupPath = backupTagsByCanonical.get(canonicalPath) || new Map<string, Set<string>>();
+    const backupSet = byBackupPath.get(row.file_path) || new Set<string>();
+    backupSet.add(tagKey);
+    byBackupPath.set(row.file_path, backupSet);
+    backupTagsByCanonical.set(canonicalPath, byBackupPath);
+  }
+
+  if (backupTagsByCanonical.size === 0) return 0;
+
+  const candidates: Array<{
+    canonicalPath: string;
+    backupPath: string;
+    backupTags: Set<string>;
+    activeTags: Set<string>;
+    missingTags: string[];
+    activeExists: boolean;
+  }> = [];
+
+  for (const [canonicalPath, backupVariants] of backupTagsByCanonical.entries()) {
+    let selectedBackupPath = '';
+    let selectedBackupTags = new Set<string>();
+    for (const [backupPath, tags] of backupVariants.entries()) {
+      if (tags.size > selectedBackupTags.size) {
+        selectedBackupPath = backupPath;
+        selectedBackupTags = tags;
+      }
+    }
+    if (!selectedBackupPath || selectedBackupTags.size === 0) continue;
+
+    const activeTags = activeTagsByFile.get(canonicalPath) || new Set<string>();
+    const activeExists = activeTagsByFile.has(canonicalPath);
+    const missingTags = Array.from(selectedBackupTags).filter(tag => !activeTags.has(tag));
+
+    if (activeExists && missingTags.length < 3) continue;
+
+    candidates.push({
+      canonicalPath,
+      backupPath: selectedBackupPath,
+      backupTags: selectedBackupTags,
+      activeTags,
+      missingTags,
+      activeExists,
+    });
+  }
+
+  const ranked = candidates
+    .sort((a, b) => {
+      const aScore = (a.activeExists ? 0 : 1000) + a.missingTags.length;
+      const bScore = (b.activeExists ? 0 : 1000) + b.missingTags.length;
+      return bScore - aScore;
+    })
+    .slice(0, 20);
+
+  for (const candidate of ranked) {
+    const markerTag = `backup_sync:${candidate.canonicalPath}`;
+    const missingSample = candidate.missingTags
+      .slice(0, 4)
+      .map(tag => tag.includes(':') ? tag.slice(tag.indexOf(':') + 1) : tag);
+    const jobId = randomUUID();
+
+    const inserted = insertJobRecord(db, {
+      job_id: jobId,
+      job_category: 'backup_reconciliation',
+      source: 'suggested_jobs_crawler',
+      source_record_ids: [
+        'protocol:11:backup_reconciliation',
+        `snapshot:${latestSnapshot.snapshot_id}`,
+        `backup:${candidate.backupPath}`,
+      ],
+      evidence_summary: `Protocol 11 (backup_reconciliation): backup ${candidate.backupPath} has ${candidate.backupTags.size} unique devtags; active ${candidate.canonicalPath} has ${candidate.activeTags.size}; missing_in_active=${candidate.missingTags.length}`,
+      priority: !candidate.activeExists
+        ? 'high'
+        : candidate.missingTags.length >= 8
+        ? 'high'
+        : 'medium',
+      title: candidate.activeExists
+        ? `Reconcile active UI file with backup drift: ${candidate.canonicalPath}`
+        : `Create active UI file from backup lineage: ${candidate.canonicalPath}`,
+      affected_files: [candidate.canonicalPath, candidate.backupPath],
+      affected_devtags: [markerTag, ...missingSample].slice(0, 5),
+      affected_plantags: [],
+      required_buildtags: [],
+      blocking_jobs: [],
+      blocked_by_jobs: [],
+      hierarchy: defaultHierarchy(2, 'backup_reconciliation'),
+      atomic_steps: [
+        makeAtomicStep(
+          `Compare ${candidate.canonicalPath} against backup baseline ${candidate.backupPath}`,
+          [markerTag],
+          [`${markerTag}:compared`],
+          360,
+          2,
+        ),
+        makeAtomicStep(
+          `Port missing UI behavior and add a regression safety test for ${candidate.canonicalPath}`,
+          [markerTag],
+          [`${markerTag}:reconciled`],
+          420,
+          2,
+        ),
+      ],
+      sandbox_spec: defaultSandboxSpec(jobId),
+      implementation_status: 'suggested',
+      created_cycle: cycleCount,
+    });
+
+    if (inserted) generated++;
+  }
+
+  return generated;
+}
+
 // ── Main crawler tick ──────────────────────────
 // Called by the subsystem scheduler on each tick.
 export function runSuggestedJobsCrawlerTick(db: Database.Database): {
@@ -842,8 +1042,28 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
   // Check blame queue depth
   let blameQueueDepth = 0;
   try {
-    const bq1 = db.prepare(`SELECT COUNT(*) as cnt FROM tool_criticisms WHERE sj_processed IS NULL OR sj_processed = 0`).get() as { cnt: number };
-    const bq2 = db.prepare(`SELECT COUNT(*) as cnt FROM tag_mismatches WHERE escalated = 0 AND (sj_processed IS NULL OR sj_processed = 0)`).get() as { cnt: number };
+    const bq1 = db.prepare(`
+      SELECT COUNT(*) as cnt
+      FROM tool_criticism_records t
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM job_records jr
+        WHERE jr.source = 'blame_crawler'
+          AND jr.implementation_status NOT IN ('rejected','archived','implemented')
+          AND jr.source_record_ids LIKE '%' || COALESCE(t.criticism_id, t.id) || '%'
+      )
+    `).get() as { cnt: number };
+    const bq2 = db.prepare(`
+      SELECT COUNT(*) as cnt
+      FROM tag_mismatches tm
+      WHERE tm.escalated = 0
+        AND NOT EXISTS (
+          SELECT 1
+          FROM job_records jr
+          WHERE jr.implementation_status NOT IN ('rejected','archived','implemented')
+            AND jr.source_record_ids LIKE '%' || tm.entry_id || '%'
+        )
+    `).get() as { cnt: number };
     blameQueueDepth = (bq1?.cnt || 0) + (bq2?.cnt || 0);
   } catch { /* ignore */ }
 
@@ -863,8 +1083,8 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       status_message: `Processed blame records — generated ${generated} jobs`,
     });
   } else {
-    // INDEPENDENT MODE — round-robin through protocols 1-10
-    const currentProtocol = ((state as unknown as { current_protocol?: number }).current_protocol || 0) % 10 + 1;
+    // INDEPENDENT MODE — round-robin through protocols 1-11
+    const currentProtocol = ((state as unknown as { current_protocol?: number }).current_protocol || 0) % 11 + 1;
     mode = 'independent';
     updateCrawlerState(db, { mode: 'independent', current_protocol: currentProtocol, status_message: `Running protocol ${currentProtocol}` });
 
@@ -879,6 +1099,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       protocol8PerfGaps,
       protocol9SecurityGaps,
       protocol10NanoCoverage,
+      protocol11BackupReconciliation,
     ];
 
     generated = protocolFns[currentProtocol - 1]?.(db, cycleCount) || 0;

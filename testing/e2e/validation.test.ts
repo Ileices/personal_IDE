@@ -6,6 +6,12 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { post, put, del, get, waitForServer } from './helpers';
 
+const API = {
+  filesWrite: '/api/files/write',
+  filesRename: '/api/files/rename',
+  terminalWrite: '/api/terminal/write',
+};
+
 describe('Zod Validation', () => {
   beforeAll(async () => {
     const up = await waitForServer();
@@ -14,20 +20,20 @@ describe('Zod Validation', () => {
 
   describe('Files routes', () => {
     it('POST /api/files/write rejects missing root', async () => {
-      const { status, json } = await post('/api/files/write', { path: 'test.txt', content: 'hi' });
+      const { status, json } = await post(API.filesWrite, { path: 'test.txt', content: 'hi' });
       expect(status).toBe(400);
       expect(json.error).toBe('Validation Error');
     });
 
     it('POST /api/files/rename rejects missing newPath', async () => {
-      const { status } = await post('/api/files/rename', { root: '/tmp', oldPath: 'a.txt' });
+      const { status } = await post(API.filesRename, { root: '/tmp', oldPath: 'a.txt' });
       expect(status).toBe(400);
     });
   });
 
   describe('Terminal routes', () => {
     it('POST /api/terminal/write rejects missing sessionId', async () => {
-      const { status, json } = await post('/api/terminal/write', { input: 'ls' });
+      const { status, json } = await post(API.terminalWrite, { input: 'ls' });
       expect(status).toBe(400);
       expect(json.error).toBe('Validation Error');
     });

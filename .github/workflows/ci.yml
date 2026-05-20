@@ -29,42 +29,36 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Type-check server
-        run: pnpm --filter server exec tsc --noEmit
+        run: pnpm --filter @personal-ide/server exec tsc --noEmit
 
       - name: Type-check web
-        run: pnpm --filter web exec tsc --noEmit
+        run: pnpm --filter @personal-ide/web exec tsc --noEmit
 
       - name: Build web (Vite)
-        run: pnpm --filter web build
+        run: pnpm --filter @personal-ide/web build
 
   # ─────────────────────────────────────────
-  # Job 2: E2E Tests (unit-style, no server)
+  # Job 2: Cross-platform subsystem contracts
   # ─────────────────────────────────────────
   tests:
-    name: Vitest E2E Tests
-    runs-on: ubuntu-latest
+    name: Subsystem Contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     needs: typecheck-and-build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -72,26 +66,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Note: E2E tests require a running server.
-      # In CI we do a dry-run compile check. Full E2E runs in staging.
-      - name: Compile test files
-        run: pnpm --filter testing exec tsc --noEmit || true
+      - name: Run portable subsystem contract suite
+        run: pnpm run test:subsystems:e2e
 
   # ─────────────────────────────────────────
   # Job 3: Python NANO tests

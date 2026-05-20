@@ -224,12 +224,21 @@ export async function projectStateCrawlerRoutes(app: FastifyInstance) {
   // ── POST /run (SSE) ──────────────────────────
   // Run full project crawl with SSE progress stream
   app.post('/run', async (
-    req: FastifyRequest<{ Body: { project_root?: string; triggered_by?: string } }>,
+    req: FastifyRequest<{
+      Body: {
+        project_root?: string;
+        triggered_by?: string;
+        include_hidden_dirs?: boolean;
+        include_backup_dirs?: boolean;
+      }
+    }>,
     reply: FastifyReply,
   ) => {
     const db = getDb(app);
     const projectRoot = req.body?.project_root || process.cwd();
     const triggeredBy = req.body?.triggered_by || 'manual';
+    const includeHiddenDirs = req.body?.include_hidden_dirs === true;
+    const includeBackupDirs = req.body?.include_backup_dirs === true;
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -246,6 +255,8 @@ export async function projectStateCrawlerRoutes(app: FastifyInstance) {
       await runProjectStateCrawler(db, {
         projectRoot,
         triggeredBy,
+        includeHiddenDirs,
+        includeBackupDirs,
         onProgress: (ev) => send(ev),
       });
     } catch (err: unknown) {

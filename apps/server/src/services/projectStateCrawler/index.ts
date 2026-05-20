@@ -15,7 +15,7 @@ import { parseFile, type DevTagRecord } from './parser.js';
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', 'target', 'vendor',
   '__pycache__', '.venv', 'venv', '.next', '.nuxt', 'coverage',
-  '.cache', '.turbo', '.svelte-kit', '.parcel-cache',
+  '.cache', '.turbo', '.svelte-kit', '.parcel-cache', '.backups',
 ]);
 
 // ── File extensions to parse ────────────────
@@ -44,6 +44,8 @@ export interface CrawlProgressEvent {
 export interface CrawlOptions {
   projectRoot: string;
   triggeredBy?: string;
+  includeHiddenDirs?: boolean;
+  includeBackupDirs?: boolean;
   onProgress?: (event: CrawlProgressEvent) => void;
 }
 
@@ -70,7 +72,12 @@ interface SubCrawlResult {
   skipped: Array<{ filePath: string; reason: string; sizeBytes?: number }>;
 }
 
-function walkDirectory(dir: string, projectRoot: string): string[] {
+type WalkOptions = {
+  includeHiddenDirs: boolean;
+  includeBackupDirs: boolean;
+};
+
+function walkDirectory(dir: string, projectRoot: string, options: WalkOptions): string[] {
   const files: string[] = [];
   let entries: string[];
   try {
@@ -80,9 +87,6 @@ function walkDirectory(dir: string, projectRoot: string): string[] {
   }
 
   for (const entry of entries) {
-    if (entry.startsWith('.') && entry !== '.') {
-      // Allow dot files but skip dot dirs handled below
-    }
     const fullPath = join(dir, entry);
     let stat;
     try {
@@ -92,8 +96,18 @@ function walkDirectory(dir: string, projectRoot: string): string[] {
     }
 
     if (stat.isDirectory()) {
-      if (SKIP_DIRS.has(entry)) continue;
-      files.push(...walkDirectory(fullPath, projectRoot));
+      const isHiddenDir = entry.startsWith('.');
+      const isBackupDir = entry === '.backups';
+
+      if (isHiddenDir && !options.includeHiddenDirs && !(options.includeBackupDirs && isBackupDir)) {
+        continue;
+      }
+
+      if (SKIP_DIRS.has(entry) && !(options.includeBackupDirs && isBackupDir)) {
+        continue;
+      }
+
+      files.push(...walkDirectory(fullPath, projectRoot, options));
     } else if (stat.isFile()) {
       const ext = extname(entry).toLowerCase();
       if (PARSE_EXTENSIONS.has(ext)) {
@@ -108,9 +122,10 @@ function spawnSubCrawler(
   dir: string,
   projectRoot: string,
   whitelist: Set<string>,
+  walkOptions: WalkOptions,
   onDirProgress?: (dirPath: string, fileCount: number, devtagCount: number) => void,
 ): SubCrawlResult {
-  const allFiles = walkDirectory(dir, projectRoot);
+  const allFiles = walkDirectory(dir, projectRoot, walkOptions);
   const result: SubCrawlResult = { files: [], skipped: [] };
 
   // Track per-directory stats
@@ -314,7 +329,13 @@ export async function runProjectStateCrawler(
   db: Database.Database,
   options: CrawlOptions,
 ): Promise<CrawlResult> {
-  const { projectRoot, triggeredBy = 'manual', onProgress } = options;
+  const {
+    projectRoot,
+    triggeredBy = 'manual',
+    includeHiddenDirs = false,
+    includeBackupDirs = false,
+    onProgress,
+  } = options;
   const snapshotId = randomUUID();
   const cycleId = randomUUID();
   const startTime = Date.now();
@@ -345,10 +366,16 @@ export async function runProjectStateCrawler(
   // Walk project tree with per-dir progress
   emit({ type: 'progress', message: `Scanning directory tree: ${projectRoot}` });
   const dirProgressLog: Array<{ dirPath: string; fileCount: number; devtagCount: number }> = [];
-  const crawlResult = spawnSubCrawler(projectRoot, projectRoot, whitelist, (dirPath, fileCount, devtagCount) => {
+  const crawlResult = spawnSubCrawler(
+    projectRoot,
+    projectRoot,
+    whitelist,
+    { includeHiddenDirs, includeBackupDirs },
+    (dirPath, fileCount, devtagCount) => {
     dirProgressLog.push({ dirPath, fileCount, devtagCount });
     emit({ type: 'progress', message: `dir: ${dirPath} → ${devtagCount} devtags (${fileCount} files)` });
-  });
+    },
+  );
 
   const totalFiles = crawlResult.files.length + crawlResult.skipped.length;
   emit({

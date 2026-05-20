@@ -95,7 +95,7 @@ export const IGNORED_DIRS = new Set([
   'coverage', '.tox', '.mypy_cache', '.pytest_cache',
   'venv', '.venv', 'env', '.env',
   'target', '.idea', '.vs', '.vscode', '.ide-logs',
-  '.turbo', '.output', 'vendor', 'bin', 'obj',
+  '.turbo', '.output', '.backups', 'vendor', 'bin', 'obj',
 ]);
 
 /**

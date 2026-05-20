@@ -71,6 +71,31 @@ This starts:
 
 Open `http://localhost:5173` in your browser.
 
+### Portable Contract Test (Auto Server Lifecycle)
+
+Run the subsystem contract suite with one command:
+
+```bash
+npm run test:subsystems:e2e
+```
+
+This command is cross-platform and will:
+- reuse an already-running server if available, or start one automatically
+- wait for `/api/health`
+- run `testing/e2e/subsystems.test.ts`
+- stop the server process it started
+
+If you need faster bootstrap and want to skip full build/typecheck verification during setup, run:
+
+```bash
+SKIP_SETUP_VERIFY=1 node scripts/setup.js
+```
+
+```powershell
+$env:SKIP_SETUP_VERIFY = '1'
+node scripts/setup.js
+```
+
 ---
 
 ## Help System and Feature Discovery

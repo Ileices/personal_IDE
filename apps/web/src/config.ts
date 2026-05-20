@@ -21,3 +21,8 @@ export const API_BASE: string =
  * Most fetch calls should use this.
  */
 export const API = `${API_BASE}/api`;
+
+/**
+ * Base URL for file-related API calls.
+ */
+export const API_FILES = `${API}/files`;

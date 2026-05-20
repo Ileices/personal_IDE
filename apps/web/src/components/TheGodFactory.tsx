@@ -90,7 +90,7 @@ interface GodFactoryIdleSuggestion {
 
 // ─── Tool constants ───────────────────────────────────────────────────────────
 
-const MAX_TOOL_ITERATIONS = 10;
+const MAX_TOOL_ITERATIONS = 100000;
 
 const TOOL_DEFINITIONS_PROMPT = `
 ## THE GOD FACTORY Codebase Tools
@@ -294,6 +294,8 @@ function buildSessionBriefing(notifications: GodFactoryQueueItem[], suggestions:
 const HIST_KEY = 'god_factory_prompt_history';
 const CONV_KEY = 'god_factory_conversation';
 const SESSION_KEY = 'god_factory_session_id';
+const GF_AUTO_APPROVE_KEY = 'god_factory_auto_approve_changes';
+const GF_GOVERNANCE_EVENT = 'god-factory-governance-change';
 const SESSION_BRIEF_KEY_PREFIX = 'god_factory_session_brief_shown:';
 const SESSION_BRIEF_GLOBAL_KEY = 'god_factory_session_brief_shown_global';
 
@@ -301,6 +303,14 @@ const loadHistory  = (): PromptHistoryItem[] => { try { return JSON.parse(localS
 const saveHistory  = (v: PromptHistoryItem[]) => { try { localStorage.setItem(HIST_KEY, JSON.stringify(v.slice(0, 300))); } catch {} };
 const loadConv     = (): GodMessage[] => { try { return JSON.parse(localStorage.getItem(CONV_KEY) || '[]'); } catch { return []; } };
 const saveConv     = (v: GodMessage[]) => { try { localStorage.setItem(CONV_KEY, JSON.stringify(v.slice(-150))); } catch {} };
+const readAutoApproveChanges = (): boolean => {
+  try {
+    const raw = localStorage.getItem(GF_AUTO_APPROVE_KEY);
+    return raw === '1' || raw === 'true';
+  } catch {
+    return false;
+  }
+};
 
 // ─── Social Links Bar ─────────────────────────────────────────────────────────
 
@@ -380,6 +390,7 @@ export function TheGodFactory() {
   const [toolsEnabled, setToolsEnabled]           = useState(true);
   const [toolIterationCount, setToolIterationCount] = useState(0);
   const [pendingApproval, setPendingApproval]     = useState<ApprovalDetails | null>(null);
+  const [autoApproveChanges, setAutoApproveChanges] = useState<boolean>(() => readAutoApproveChanges());
   const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
   const [autonomousMode, setAutonomousMode]       = useState(false);
 
@@ -413,6 +424,13 @@ export function TheGodFactory() {
   useEffect(() => { godFactorySessionIdRef.current = godFactorySessionId; }, [godFactorySessionId]);
   useEffect(() => {
     try {
+      localStorage.setItem(GF_AUTO_APPROVE_KEY, autoApproveChanges ? '1' : '0');
+    } catch {
+      // no-op
+    }
+  }, [autoApproveChanges]);
+  useEffect(() => {
+    try {
       if (godFactorySessionId) localStorage.setItem(SESSION_KEY, godFactorySessionId);
       else localStorage.removeItem(SESSION_KEY);
     } catch {
@@ -420,6 +438,54 @@ export function TheGodFactory() {
     }
   }, [godFactorySessionId]);
   useEffect(() => { autonomousModeRef.current = autonomousMode; }, [autonomousMode]);
+
+  useEffect(() => {
+    let active = true;
+
+    const applyAutoApprove = (value: unknown) => {
+      if (typeof value !== 'boolean') return;
+      setAutoApproveChanges(value);
+    };
+
+    const syncFromLoopStatus = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/god-factory/loop/status`);
+        if (!res.ok) return;
+        const payload = await res.json() as {
+          activeRun?: { auto_approve_changes?: number } | null;
+          config?: { governance?: { autoApproveChanges?: boolean } };
+        };
+        if (!active) return;
+        if (typeof payload?.activeRun?.auto_approve_changes === 'number') {
+          setAutoApproveChanges(payload.activeRun.auto_approve_changes === 1);
+          return;
+        }
+        applyAutoApprove(payload?.config?.governance?.autoApproveChanges);
+      } catch {
+        // best-effort status hydration
+      }
+    };
+
+    const onGovernanceChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ autoApproveChanges?: boolean }>).detail;
+      applyAutoApprove(detail?.autoApproveChanges);
+    };
+
+    const onStorageChange = (event: StorageEvent) => {
+      if (event.key !== GF_AUTO_APPROVE_KEY) return;
+      setAutoApproveChanges(event.newValue === '1' || event.newValue === 'true');
+    };
+
+    window.addEventListener(GF_GOVERNANCE_EVENT, onGovernanceChange as EventListener);
+    window.addEventListener('storage', onStorageChange);
+    void syncFromLoopStatus();
+
+    return () => {
+      active = false;
+      window.removeEventListener(GF_GOVERNANCE_EVENT, onGovernanceChange as EventListener);
+      window.removeEventListener('storage', onStorageChange);
+    };
+  }, []);
 
   // ── Load codebase tree on mount ───────────────────────────────────────────
   useEffect(() => {
@@ -542,7 +608,8 @@ export function TheGodFactory() {
       setGodFactorySessionId(data.session_id);
       godFactorySessionIdRef.current = data.session_id;
       return data.session_id;
-    } catch {
+    } catch (err) {
+      console.warn('Failed to create God Factory session:', err);
       return null;
     }
   }, []);
@@ -560,8 +627,8 @@ export function TheGodFactory() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-    } catch {
-      // noop
+    } catch (err) {
+      console.warn('Failed to append God Factory session payload:', err);
     }
   }, [ensureGodFactorySession]);
 
@@ -628,11 +695,14 @@ export function TheGodFactory() {
 
   // ── Approval helper (promise-based modal) ─────────────────────────────────
   const requestApproval = useCallback((details: ApprovalDetails): Promise<boolean> => {
+    if (autoApproveChanges) {
+      return Promise.resolve(true);
+    }
     return new Promise((resolve) => {
       approvalResolveRef.current = resolve;
       setPendingApproval(details);
     });
-  }, []);
+  }, [autoApproveChanges]);
 
   const handleApprovalDecision = (approved: boolean) => {
     approvalResolveRef.current?.(approved);
@@ -1596,6 +1666,9 @@ export function TheGodFactory() {
                 <Archive className="w-2.5 h-2.5" /> {backupStatus}
               </span>
             )}
+            <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${autoApproveChanges ? 'text-red-300 bg-red-500/10' : 'text-emerald-300 bg-emerald-500/10'}`}>
+              <Shield className="w-2.5 h-2.5" /> {autoApproveChanges ? 'Approvals AUTO' : 'Approvals REQUIRED'}
+            </span>
             {/* Tools toggle */}
             <button
               onClick={() => setToolsEnabled(v => !v)}
@@ -1702,7 +1775,9 @@ export function TheGodFactory() {
           {toolsEnabled && (
             <div className="flex items-center gap-2 mb-2 text-[10px] text-purple-400/70">
               <Wrench className="w-3 h-3" />
-              <span>Agent mode: reads, searches, edits files and runs commands — writes/execs require your approval</span>
+              <span>
+                Agent mode: reads, searches, edits files and runs commands — {autoApproveChanges ? 'writes/execs auto-approved by loop governance' : 'writes/execs require your approval'}
+              </span>
               {autonomousMode && (
                 <span className="text-purple-300 font-semibold animate-pulse">∞ Autonomous ON</span>
               )}

@@ -214,6 +214,25 @@ if (existsSync(envPath)) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// Step 8: Verify workspace build readiness
+// ═══════════════════════════════════════════════════════════
+if (pnpmVersion) {
+  header('Step 8: Workspace verification');
+  if (process.env.SKIP_SETUP_VERIFY === '1') {
+    warn('Skipping verify:workspace (SKIP_SETUP_VERIFY=1)');
+  } else {
+    info('Running verify:workspace to confirm shared/server/web/testing are ready...');
+    try {
+      run('pnpm run verify:workspace', { timeout: 600_000 });
+      ok('Workspace verification passed');
+    } catch {
+      fail('Workspace verification failed. Setup completed, but build/typecheck errors must be fixed.');
+      errors++;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // Summary
 // ═══════════════════════════════════════════════════════════
 log('');
@@ -229,7 +248,8 @@ log('');
 log(`${C.bold}Next steps:${C.reset}`);
 log(`  1. Edit ${C.cyan}.env${C.reset} and add your ${C.yellow}GITHUB_PAT${C.reset}`);
 log(`  2. Run ${C.green}npm run dev${C.reset} to start the IDE`);
-log(`  3. Open ${C.cyan}http://localhost:5173${C.reset} in your browser`);
+log(`  3. Run ${C.green}npm run test:subsystems:e2e${C.reset} for portable subsystem contract checks`);
+log(`  4. Open ${C.cyan}http://localhost:5173${C.reset} in your browser`);
 log('');
 log(`${C.dim}Optional: Start the Nano Sea backend from the Waves button in the IDE toolbar.${C.reset}`);
 log('');

@@ -1510,7 +1510,7 @@ const MIGRATIONS: Migration[] = [
             'test_missing','dead_code_removal','debt_reduction','regression_hardening',
             'integration_repair','anti_pattern_mitigation','tag_schema_extension',
             'performance_test_missing','security_gap','nano_coverage_gap',
-            'model_tool_enhancement','model_config_promotion','external_project',
+            'backup_reconciliation','model_tool_enhancement','model_config_promotion','external_project',
             'user_requested','god_factory_scan'
           )),
           source TEXT NOT NULL CHECK (source IN (
@@ -2531,6 +2531,152 @@ const MIGRATIONS: Migration[] = [
       db.exec(`
         CREATE INDEX IF NOT EXISTS idx_employer_allowance_tier
           ON employer_analysis(allowance_tier, strategic_value_score, analyzed_at);
+      `);
+    },
+  },
+  {
+    version: 117,
+    name: 'analysis_and_corpus_tables',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS codebase_chunks (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          path TEXT NOT NULL,
+          chunk_index INTEGER NOT NULL DEFAULT 0,
+          total_chunks INTEGER NOT NULL DEFAULT 1,
+          summary TEXT NOT NULL DEFAULT '',
+          language TEXT DEFAULT '',
+          symbols TEXT DEFAULT '[]',
+          dependencies TEXT DEFAULT '[]',
+          token_count INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_chunks_project ON codebase_chunks(project_id);
+
+        CREATE TABLE IF NOT EXISTS codebase_overviews (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL UNIQUE,
+          total_files INTEGER DEFAULT 0,
+          total_lines INTEGER DEFAULT 0,
+          languages TEXT DEFAULT '{}',
+          entry_points TEXT DEFAULT '[]',
+          dependencies TEXT DEFAULT '[]',
+          architecture TEXT DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_codebase_overviews_project ON codebase_overviews(project_id);
+
+        CREATE TABLE IF NOT EXISTS task_tracker (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          agent_run_id TEXT,
+          title TEXT NOT NULL,
+          total_subtasks INTEGER DEFAULT 0,
+          completed_subtasks INTEGER DEFAULT 0,
+          current_subtask_index INTEGER DEFAULT 0,
+          subtasks TEXT DEFAULT '[]',
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_tasks_project ON task_tracker(project_id);
+
+        CREATE TABLE IF NOT EXISTS project_corpus (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          manifesto TEXT,
+          file_count INTEGER DEFAULT 0,
+          total_tokens INTEGER DEFAULT 0,
+          ingest_path TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_project_corpus_project ON project_corpus(project_id);
+      `);
+    },
+  },
+  {
+    version: 118,
+    name: 'job_records_backup_reconciliation_category',
+    up(db: Database.Database) {
+      const tableSql = db.prepare(`
+        SELECT sql
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'job_records'
+      `).get() as { sql?: string } | undefined;
+
+      if (tableSql?.sql?.includes('backup_reconciliation')) {
+        return;
+      }
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS job_records_new (
+          id TEXT PRIMARY KEY,
+          job_id TEXT NOT NULL UNIQUE,
+          job_category TEXT NOT NULL CHECK (job_category IN (
+            'test_missing','dead_code_removal','debt_reduction','regression_hardening',
+            'integration_repair','anti_pattern_mitigation','tag_schema_extension',
+            'performance_test_missing','security_gap','nano_coverage_gap',
+            'backup_reconciliation','model_tool_enhancement','model_config_promotion','external_project',
+            'user_requested','god_factory_scan'
+          )),
+          source TEXT NOT NULL CHECK (source IN (
+            'blame_crawler','suggested_jobs_crawler','user','god_factory_agent'
+          )),
+          source_report_id TEXT,
+          source_record_ids TEXT NOT NULL DEFAULT '[]',
+          evidence_summary TEXT NOT NULL DEFAULT '',
+          priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('critical','high','medium','low')),
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          affected_files TEXT NOT NULL DEFAULT '[]',
+          affected_devtags TEXT NOT NULL DEFAULT '[]',
+          affected_plantags TEXT NOT NULL DEFAULT '[]',
+          required_buildtags TEXT NOT NULL DEFAULT '[]',
+          blocking_jobs TEXT NOT NULL DEFAULT '[]',
+          blocked_by_jobs TEXT NOT NULL DEFAULT '[]',
+          hierarchy TEXT NOT NULL DEFAULT '{}',
+          atomic_steps TEXT NOT NULL DEFAULT '[]',
+          sandbox_spec TEXT NOT NULL DEFAULT '{}',
+          implementation_status TEXT NOT NULL DEFAULT 'suggested' CHECK (implementation_status IN (
+            'suggested','sandbox_ready','implementing','implemented','rejected','archived'
+          )),
+          created_cycle INTEGER NOT NULL DEFAULT 0,
+          last_updated_cycle INTEGER NOT NULL DEFAULT 0,
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          project_id TEXT REFERENCES projects(id) ON DELETE SET NULL
+        );
+
+        INSERT INTO job_records_new (
+          id, job_id, job_category, source, source_report_id, source_record_ids, evidence_summary, priority, title,
+          description,
+          affected_files, affected_devtags, affected_plantags, required_buildtags,
+          blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
+          implementation_status, created_cycle, last_updated_cycle, timestamp, created_at, project_id
+        )
+        SELECT
+          id, job_id, job_category, source,
+          source_report_id,
+          source_record_ids,
+          COALESCE(evidence_summary, ''), priority, title,
+          COALESCE(description, ''),
+          affected_files, affected_devtags, affected_plantags, required_buildtags,
+          blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
+          implementation_status, created_cycle, last_updated_cycle, timestamp, created_at, project_id
+        FROM job_records;
+
+        DROP TABLE job_records;
+        ALTER TABLE job_records_new RENAME TO job_records;
+
+        CREATE INDEX IF NOT EXISTS idx_job_records_status ON job_records(implementation_status);
+        CREATE INDEX IF NOT EXISTS idx_job_records_priority ON job_records(priority, created_cycle);
+        CREATE INDEX IF NOT EXISTS idx_job_records_category ON job_records(job_category);
+        CREATE INDEX IF NOT EXISTS idx_job_records_source ON job_records(source);
+        CREATE INDEX IF NOT EXISTS idx_job_records_project ON job_records(project_id);
+        CREATE INDEX IF NOT EXISTS idx_job_records_project_status_created ON job_records(project_id, implementation_status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_job_records_source_report ON job_records(source_report_id);
       `);
     },
   },

@@ -113,17 +113,24 @@ export const useOpenClawStore = create<OpenClawState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skillId, input }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || `Skill execution failed (${res.status})`);
+      }
+      const success = typeof data?.success === 'boolean'
+        ? data.success
+        : !(typeof data?.error === 'string' && data.error.trim().length > 0);
       const exec: SkillExecution = {
         skillId,
         output: data.output,
-        success: data.success ?? true,
+        success,
         durationMs: data.durationMs ?? 0,
         timestamp: new Date().toISOString(),
       };
       set(s => ({
         executionLog: [exec, ...s.executionLog].slice(0, 100),
         loading: false,
+        error: success ? null : (data?.error || 'Skill reported failure'),
       }));
       return exec;
     } catch (err: any) {

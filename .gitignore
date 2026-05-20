@@ -7,6 +7,8 @@ dist/
 *.db-shm
 *.db-wal
 *.bak
+*.backup
+.backups/
 # Runtime/generated data directories (NOT source-code data files like apps/web/src/data/)
 apps/data/
 NANO_train/data/

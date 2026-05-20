@@ -24,9 +24,13 @@ export async function openclawRoutes(app: FastifyInstance) {
   // --- POST /api/openclaw/skills/install ---
   app.post('/skills/install', async (req: FastifyRequest, reply: FastifyReply) => {
     const { source } = req.body as { source: string };
-    if (!source) return reply.status(400).send({ error: 'source required' });
-    const skill = await clawService.installSkill(source);
-    return { skill };
+    if (!source || !source.trim()) return reply.status(400).send({ error: 'source required' });
+    try {
+      const skill = await clawService.installSkill(source);
+      return { skill };
+    } catch (err: any) {
+      return reply.status(501).send({ error: err?.message || 'Skill install not available' });
+    }
   });
 
   // --- POST /api/openclaw/skills/execute ---
