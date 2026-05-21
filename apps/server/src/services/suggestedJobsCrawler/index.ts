@@ -131,6 +131,122 @@ function recommendProtocolFromIntelligence(db: Database.Database): {
   return null;
 }
 
+function normalizePriority(priority: string): 'low' | 'medium' | 'high' | 'critical' {
+  const normalized = String(priority || '').toLowerCase();
+  if (normalized === 'low' || normalized === 'medium' || normalized === 'high' || normalized === 'critical') {
+    return normalized;
+  }
+  return 'medium';
+}
+
+function shiftPriority(
+  base: 'low' | 'medium' | 'high' | 'critical',
+  delta: number,
+): 'low' | 'medium' | 'high' | 'critical' {
+  const order: Array<'low' | 'medium' | 'high' | 'critical'> = ['low', 'medium', 'high', 'critical'];
+  const idx = order.indexOf(base);
+  if (idx < 0) return 'medium';
+  const target = Math.max(0, Math.min(order.length - 1, idx + delta));
+  return order[target];
+}
+
+function applyIntelligencePriorityOverride(
+  db: Database.Database,
+  job: {
+    job_category: string;
+    priority: string;
+    affected_files: string[];
+  },
+): { priority: 'low' | 'medium' | 'high' | 'critical'; reason?: string } {
+  const basePriority = normalizePriority(job.priority);
+  const projectId = getMostRecentProjectId(db);
+  if (!projectId) return { priority: basePriority };
+
+  const overview = db.prepare(`
+    SELECT metrics_json
+    FROM codebase_intelligence
+    WHERE project_id = ?
+      AND facet = 'overview'
+    ORDER BY datetime(indexed_at) DESC, score DESC
+    LIMIT 1
+  `).get(projectId) as { metrics_json?: string } | undefined;
+
+  let driftEvents = 0;
+  let conflicts = 0;
+  let symbols = 0;
+  let semanticSymbols = 0;
+  if (overview?.metrics_json) {
+    try {
+      const metrics = JSON.parse(String(overview.metrics_json || '{}')) as Record<string, unknown>;
+      driftEvents = Number(metrics.driftEvents || 0);
+      conflicts = Number(metrics.conflicts || 0);
+      symbols = Number(metrics.symbols || 0);
+      semanticSymbols = Number(metrics.semanticSymbols || 0);
+    } catch {
+      // Keep zero defaults when malformed metrics are encountered.
+    }
+  }
+
+  let boost = 0;
+  const reasons: string[] = [];
+
+  if (driftEvents >= 30 || conflicts >= 20) {
+    boost += 1;
+    reasons.push(`high-system-risk(drift=${driftEvents},conflicts=${conflicts})`);
+  }
+
+  if (job.job_category === 'nano_coverage_gap' && symbols >= 300 && semanticSymbols < Math.max(60, Math.floor(symbols * 0.08))) {
+    boost += 1;
+    reasons.push(`low-semantic-coverage(semantic=${semanticSymbols},symbols=${symbols})`);
+  }
+
+  const fileRows = db.prepare(`
+    SELECT score, metrics_json
+    FROM codebase_intelligence
+    WHERE project_id = ?
+      AND facet = 'file'
+      AND file_path = ?
+    ORDER BY datetime(indexed_at) DESC, score DESC
+    LIMIT 1
+  `);
+
+  for (const rawPath of (job.affected_files || []).slice(0, 6)) {
+    const normalizedPath = String(rawPath || '').replace(/\\/g, '/');
+    if (!normalizedPath) continue;
+    const fileRow = fileRows.get(projectId, normalizedPath) as { score?: number; metrics_json?: string } | undefined;
+    if (!fileRow) continue;
+
+    const fileScore = Number(fileRow.score || 0);
+    let symbolCount = 0;
+    let relationshipCount = 0;
+    if (fileRow.metrics_json) {
+      try {
+        const parsed = JSON.parse(String(fileRow.metrics_json || '{}')) as Record<string, unknown>;
+        symbolCount = Number(parsed.symbolCount || 0);
+        relationshipCount = Number(parsed.relationshipCount || 0);
+      } catch {
+        // Ignore malformed per-file metrics.
+      }
+    }
+
+    if (fileScore >= 0.75 || symbolCount >= 100 || relationshipCount >= 120) {
+      boost += 1;
+      reasons.push(`hot-file(${normalizedPath})`);
+      break;
+    }
+  }
+
+  const adjusted = shiftPriority(basePriority, Math.min(boost, 2));
+  if (adjusted === basePriority || reasons.length === 0) {
+    return { priority: basePriority };
+  }
+
+  return {
+    priority: adjusted,
+    reason: `priority_upshift:${basePriority}->${adjusted} via ${reasons.join('|')}`,
+  };
+}
+
 // ── Atomic step factory (minimal viable step) ─
 function makeAtomicStep(
   description: string,
@@ -178,14 +294,25 @@ function insertJobRecord(
     created_cycle: number;
   },
 ): boolean {
+  const priorityOverride = applyIntelligencePriorityOverride(db, job);
+  const effectivePriority = priorityOverride.priority;
+  const effectiveEvidenceSummary = [job.evidence_summary ?? '', priorityOverride.reason || '']
+    .filter((part) => part.length > 0)
+    .join(' | ');
+
   // Check for duplicate (same category + primary affected tag/file)
-  const existingKey = `${job.job_category}::${job.affected_devtags[0] || job.affected_files[0] || ''}`;
+  const primaryTag = job.affected_devtags[0] || '';
+  const primaryFile = job.affected_files[0] || '';
   const duplicate = db.prepare(`
     SELECT job_id FROM job_records
-    WHERE job_category = ? AND json_extract(affected_devtags, '$[0]') = ?
+    WHERE job_category = ?
+      AND (
+        json_extract(affected_devtags, '$[0]') = ?
+        OR json_extract(affected_files, '$[0]') = ?
+      )
       AND implementation_status NOT IN ('rejected','archived','implemented')
     LIMIT 1
-  `).get(job.job_category, job.affected_devtags[0] || '') as { job_id: string } | undefined;
+  `).get(job.job_category, primaryTag, primaryFile) as { job_id: string } | undefined;
 
   if (duplicate) return false;
 
@@ -203,8 +330,8 @@ function insertJobRecord(
     job.job_category,
     job.source,
     JSON.stringify(job.source_record_ids),
-    job.evidence_summary ?? '',
-    job.priority,
+    effectiveEvidenceSummary,
+    effectivePriority,
     job.title,
     JSON.stringify(job.affected_files),
     JSON.stringify(job.affected_devtags),
