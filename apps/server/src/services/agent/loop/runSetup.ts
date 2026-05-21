@@ -13,13 +13,13 @@ import { CodebaseAnalyzer } from '../../analysis/codebase.js';
 import { RelationshipIndexService } from '../../analysis/relationshipIndex.js';
 import { LogBloatManager } from '../../analysis/logManager.js';
 import { ProjectTierEngine } from '../../analysis/projectTierEngine.js';
-import { listAllFiles } from '../../filesystem/index.js';
 import { CodeIndexer } from '../codeIndexer.js';
 import { detectPlatform, detectPlatformQuick, formatPlatformForLLM, type PlatformInfo } from '../platformDetector.js';
 import { buildDepGraph, type DepGraph } from '../../analysis/depGraph.js';
 import { clusterModules, type ClusterResult, type ModuleInfo } from '../../analysis/clustering/moduleClustering.js';
 import { HierarchicalCodeIndex, type IndexStats } from '../indexer/hierarchicalIndex.js';
 import { appConfig } from '../../../config.js';
+import { readCodebaseIntelligence, runCrawlerCoordinatorTick } from '../../crawlerCoordinator/index.js';
 
 export interface RunSetupResult {
   projectLanguages: string[];
@@ -294,19 +294,29 @@ export async function initializeRun(
   // ── Knowledge Graph ──
   const projectId = config.projectRoot;
   try {
-    emit({ type: 'info', message: 'Building code relationship index...' });
-    const files = listAllFiles(config.projectRoot);
-    const scanResult = services.relationshipIndex.scanProject(projectId, config.projectRoot, files);
+    emit({ type: 'info', message: 'Running CrawlerCoordinator (PSC + HCI + RIS)...' });
+    const coordinated = runCrawlerCoordinatorTick(db, {
+      projectId,
+      projectRoot: config.projectRoot,
+      maxFiles: 10000,
+    });
+
     result.relationshipContext = services.relationshipIndex.formatForLLM(
       projectId,
       Math.floor(contextWindow * 0.08),
     );
+
+    const overview = readCodebaseIntelligence(db, projectId, 'overview', 1)[0];
+    if (overview?.summary) {
+      result.relationshipContext = `${result.relationshipContext}\n\n### Unified Intelligence\n${overview.summary}`;
+    }
+
     emit({
       type: 'info',
-      message: `Knowledge graph: ${scanResult.symbolCount} symbols, ${scanResult.relationshipCount} relationships, ${scanResult.conflictCount} conflicts`,
+      message: `CrawlerCoordinator: ${coordinated.symbols} symbols, ${coordinated.relationships} relationships, ${coordinated.conflicts} conflicts, semantic coverage ${coordinated.semanticSymbols}`,
     });
   } catch (err: any) {
-    emit({ type: 'info', message: 'Relationship index: ' + err.message });
+    emit({ type: 'info', message: 'CrawlerCoordinator: ' + err.message });
   }
 
   // ── Tier Detection ──

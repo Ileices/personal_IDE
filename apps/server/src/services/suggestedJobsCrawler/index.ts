@@ -53,6 +53,84 @@ function getDefaultProjectId(db: Database.Database): string | null {
   return projects.length === 1 ? projects[0].id : null;
 }
 
+function getMostRecentProjectId(db: Database.Database): string | null {
+  const row = db.prepare(`
+    SELECT id
+    FROM projects
+    ORDER BY datetime(last_accessed_at) DESC, datetime(created_at) DESC
+    LIMIT 1
+  `).get() as { id?: string } | undefined;
+  return row?.id ? String(row.id) : null;
+}
+
+function recommendProtocolFromIntelligence(db: Database.Database): {
+  protocol: number;
+  reason: string;
+  projectId: string;
+} | null {
+  const projectId = getMostRecentProjectId(db);
+  if (!projectId) return null;
+
+  const row = db.prepare(`
+    SELECT summary, metrics_json
+    FROM codebase_intelligence
+    WHERE project_id = ?
+      AND facet = 'overview'
+    ORDER BY datetime(indexed_at) DESC, score DESC
+    LIMIT 1
+  `).get(projectId) as { summary?: string; metrics_json?: string } | undefined;
+
+  if (!row) return null;
+
+  let metrics: Record<string, unknown> = {};
+  try {
+    metrics = JSON.parse(String(row.metrics_json || '{}'));
+  } catch {
+    metrics = {};
+  }
+
+  const symbols = Number(metrics.symbols || 0);
+  const relationships = Number(metrics.relationships || 0);
+  const conflicts = Number(metrics.conflicts || 0);
+  const driftEvents = Number(metrics.driftEvents || 0);
+  const semanticSymbols = Number(metrics.semanticSymbols || 0);
+
+  if (driftEvents >= 20 || conflicts >= 15) {
+    return {
+      protocol: 4,
+      reason: `intelligence signal: high drift/conflicts (drift=${driftEvents}, conflicts=${conflicts})`,
+      projectId,
+    };
+  }
+
+  if (symbols >= 300 && semanticSymbols < Math.max(50, Math.floor(symbols * 0.08))) {
+    return {
+      protocol: 10,
+      reason: `intelligence signal: low semantic coverage (semantic=${semanticSymbols}, symbols=${symbols})`,
+      projectId,
+    };
+  }
+
+  if (symbols >= 250 && relationships <= Math.floor(symbols * 0.12)) {
+    return {
+      protocol: 5,
+      reason: `intelligence signal: sparse relationship graph (relationships=${relationships}, symbols=${symbols})`,
+      projectId,
+    };
+  }
+
+  const summary = String(row.summary || '').toLowerCase();
+  if (summary.includes('drift') && summary.includes('no psc snapshot')) {
+    return {
+      protocol: 4,
+      reason: 'intelligence signal: missing fresh PSC snapshot data',
+      projectId,
+    };
+  }
+
+  return null;
+}
+
 // ── Atomic step factory (minimal viable step) ─
 function makeAtomicStep(
   description: string,
@@ -1104,6 +1182,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
     // INDEPENDENT MODE — round-robin through protocols 1-11
     const currentProtocol = ((state as unknown as { current_protocol?: number }).current_protocol || 0) % 11 + 1;
     mode = 'independent';
+    const intelligenceRecommendation = recommendProtocolFromIntelligence(db);
 
     // ── Degraded-system override ───────────────────────────────────────────
     // When recent health events indicate system instability:
@@ -1117,12 +1196,18 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
     let effectiveProtocol = currentProtocol;
     if (isSystemDegraded && SUPPRESSED_WHEN_DEGRADED.has(currentProtocol)) {
       effectiveProtocol = REGRESSION_HARDENING_PROTOCOL; // force regression focus
+    } else if (!isSystemDegraded && intelligenceRecommendation) {
+      effectiveProtocol = intelligenceRecommendation.protocol;
     }
 
     updateCrawlerState(db, {
       mode: 'independent',
       current_protocol: effectiveProtocol,
-      status_message: `Running protocol ${effectiveProtocol}${isSystemDegraded ? ' [degraded-system mode]' : ''}`,
+      status_message: `Running protocol ${effectiveProtocol}${isSystemDegraded ? ' [degraded-system mode]' : ''}${
+        !isSystemDegraded && intelligenceRecommendation
+          ? ` [${intelligenceRecommendation.reason}]`
+          : ''
+      }`,
     });
 
     const protocolFns = [

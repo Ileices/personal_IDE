@@ -12,6 +12,7 @@ import { runGodFactoryIdleScanner } from '../services/godFactory/idleScanner.js'
 import { runProjectStateCrawler } from '../services/projectStateCrawler/index.js';
 import { runSuggestedJobsCrawlerTick } from '../services/suggestedJobsCrawler/index.js';
 import { GapAnalysisAgent } from '../services/gapAnalysis/index.js';
+import { readCodebaseIntelligence, runCrawlerCoordinatorTick } from '../services/crawlerCoordinator/index.js';
 
 export type SubsystemId = 'ide_codebase_crawler' | 'project_state_crawler' | 'suggested_jobs_crawler' | 'gap_analysis' | 'god_factory_idle_scan';
 
@@ -331,6 +332,28 @@ export async function subsystemsRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: err.message });
     }
   });
+
+  app.get('/intelligence/:projectId', async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const params = req.params as { projectId?: string };
+      const query = req.query as { facet?: 'overview' | 'file' | 'relationship' | 'drift' | 'semantic'; limit?: string };
+      const projectId = String(params?.projectId || '').trim();
+      if (!projectId) {
+        return reply.status(400).send({ error: 'projectId is required' });
+      }
+
+      const parsedLimit = Number(query.limit || 200);
+      const rows = readCodebaseIntelligence(db, projectId, query.facet, parsedLimit);
+      return reply.send({
+        projectId,
+        facet: query.facet || null,
+        count: rows.length,
+        rows,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
 }
 
 export async function executeSubsystem(db: any, request: SubsystemRunRequest): Promise<{ subsystem: SubsystemId; startedAt: string; completedAt: string; projectId?: string; projectName?: string; projectRoot?: string; result: any }> {
@@ -341,16 +364,36 @@ export async function executeSubsystem(db: any, request: SubsystemRunRequest): P
   let result: any = {};
 
   if (request.subsystem === 'ide_codebase_crawler') {
-    const root = IDE_ROOT;
-    const stats = countTree(root, depth);
+    const target = resolveProjectTarget(db, request);
+    const root = safeScanRoot(target.rootPath);
+    const coordination = runCrawlerCoordinatorTick(db, {
+      projectId: target.id || 'default',
+      projectRoot: root,
+      maxFiles: 10000,
+    });
+    const latestOverview = readCodebaseIntelligence(db, target.id || 'default', 'overview', 1)[0] || null;
+
     result = {
       root,
+      projectId: target.id,
+      projectName: target.name,
       depth,
-      files: stats.files,
-      dirs: stats.dirs,
-      topExtensions: topExtensions(stats.byExt),
-      summary: `Scanned IDE app codebase: ${stats.files} files across ${stats.dirs} directories (depth ${depth})`,
+      filesIndexed: coordination.filesIndexed,
+      totalNodes: coordination.totalNodes,
+      symbols: coordination.symbols,
+      relationships: coordination.relationships,
+      conflicts: coordination.conflicts,
+      driftEvents: coordination.driftEvents,
+      semanticSymbols: coordination.semanticSymbols,
+      hotPaths: coordination.hotPaths.slice(0, 20),
+      topFiles: coordination.topFiles.slice(0, 20),
+      overview: latestOverview,
+      summary: `CrawlerCoordinator merged PSC+HCI+RIS for ${target.name || root}: ${coordination.filesIndexed} files, ${coordination.symbols} symbols, ${coordination.relationships} relationships.`,
     };
+
+    request.projectId = request.projectId ?? target.id;
+    request.projectName = request.projectName ?? target.name;
+    request.projectRoot = request.projectRoot ?? target.rootPath;
   }
 
   if (request.subsystem === 'project_state_crawler') {

@@ -2681,12 +2681,12 @@ const MIGRATIONS: Migration[] = [
     },
   },
   // ──────────────────────────────────────────────────────────────────────────
-  // Migration v117: system_health_events
+  // Migration v119: system_health_events
   // Records every StabilityMonitor rollback trigger so SuggestedJobsCrawler
   // and other services can inspect recent instability without reading logs.
   // ──────────────────────────────────────────────────────────────────────────
   {
-    version: 117,
+    version: 119,
     name: 'system_health_events',
     up(db: Database.Database) {
       db.exec(`
@@ -2708,12 +2708,12 @@ const MIGRATIONS: Migration[] = [
     },
   },
   // ──────────────────────────────────────────────────────────────────────────
-  // Migration v118: memory_notes importance_score
+  // Migration v120: memory_notes importance_score
   // Adds importance_score column to memory_notes for priority-based context
   // packing (high-importance memories get a higher priority slot in context).
   // ──────────────────────────────────────────────────────────────────────────
   {
-    version: 118,
+    version: 120,
     name: 'memory_notes_importance_score',
     up(db: Database.Database) {
       const hasColumn = (table: string, col: string) =>
@@ -2726,6 +2726,42 @@ const MIGRATIONS: Migration[] = [
             ON memory_notes(project_id, importance_score DESC, extracted_at);
         `);
       }
+    },
+  },
+  // ──────────────────────────────────────────────────────────────────────────
+  // Migration v121: codebase_intelligence
+  // Unified read model for ProjectStateCrawler + HierarchicalCodeIndex +
+  // RelationshipIndexService so downstream systems can consume one source.
+  // ──────────────────────────────────────────────────────────────────────────
+  {
+    version: 121,
+    name: 'codebase_intelligence',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS codebase_intelligence (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          project_root TEXT NOT NULL,
+          facet TEXT NOT NULL CHECK (facet IN ('overview','file','relationship','drift','semantic')),
+          entity_key TEXT NOT NULL,
+          file_path TEXT,
+          summary TEXT NOT NULL DEFAULT '',
+          score REAL NOT NULL DEFAULT 0,
+          metrics_json TEXT NOT NULL DEFAULT '{}',
+          source_snapshot_id TEXT,
+          indexed_at TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(project_id, facet, entity_key)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_codebase_intelligence_project
+          ON codebase_intelligence(project_id, indexed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_codebase_intelligence_facet_score
+          ON codebase_intelligence(project_id, facet, score DESC);
+        CREATE INDEX IF NOT EXISTS idx_codebase_intelligence_file
+          ON codebase_intelligence(project_id, file_path);
+      `);
     },
   },
 ];
