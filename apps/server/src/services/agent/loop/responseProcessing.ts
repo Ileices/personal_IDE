@@ -7,6 +7,7 @@ import { estimateTokens } from '../../llm/providers.js';
 import { parseStructuredOutput, parseFileChanges } from '../../modes/prompts.js';
 import { writeFile } from '../../filesystem/index.js';
 import { runAllLintChecks, runTests, runBuild, formatBuildForLLM, formatErrorsForLLM, formatTestsForLLM } from '../../errors/detector.js';
+import { validateSpecContract } from '../../siliconFactory/index.js';
 import type { StructuredAgentOutput } from '@personal-ide/shared';
 import type Database from 'better-sqlite3';
 import type { MemoryService } from '../../memory/index.js';
@@ -22,6 +23,13 @@ import { tmpdir } from 'os';
 import { emitIterationMilestones, writeQualitySnapshot, inferQualityFromContext } from './milestoneEmitter.js';
 
 type EmitFn = (event: any) => void;
+
+// ── Spec-contract violation tracker ───────────────────────────────────────────
+// Tracks consecutive spec violations per file path across agent iterations.
+// After 3 consecutive violations on the same file, escalate to buildtag rejection.
+const specViolationStreak = new Map<string, number>();
+
+const SPEC_VIOLATION_ESCALATION_THRESHOLD = 3;
 
 export interface ResponseContext {
   db: Database.Database;
@@ -366,6 +374,40 @@ export function processResponse(
           keySymbols,
         });
       } catch { /* non-critical — file summaries are best-effort */ }
+
+      // ── Spec-contract validation (soft warning, never blocks writes) ─────────
+      // Accumulates consecutive violation streaks per file; after 3 escalates to
+      // buildtag rejection so the agent knows it's repeatedly breaking contracts.
+      try {
+        const specResult = validateSpecContract(ctx.db, {
+          code: change.content,
+          task_id: ctx.config.taskId,
+          fail_task_on_violation: false, // soft-warn only
+        });
+
+        if (!specResult.pass && specResult.violated_requirements.length > 0) {
+          const streak = (specViolationStreak.get(change.path) ?? 0) + 1;
+          specViolationStreak.set(change.path, streak);
+
+          const warningMsg = `[spec-contract] ${change.path}: violations [${specResult.violated_requirements.join(', ')}] — streak ${streak}/${SPEC_VIOLATION_ESCALATION_THRESHOLD}`;
+
+          if (streak >= SPEC_VIOLATION_ESCALATION_THRESHOLD) {
+            // Escalate: update silicon task to FAILED/ESCALATED if one exists
+            validateSpecContract(ctx.db, {
+              code: change.content,
+              task_id: ctx.config.taskId,
+              fail_task_on_violation: true, // hard-fail now
+            });
+            specViolationStreak.delete(change.path); // reset after escalation
+            emit({ type: 'spec_contract_escalated', path: change.path, violations: specResult.violated_requirements, streak });
+          } else {
+            emit({ type: 'spec_contract_warning', path: change.path, violations: specResult.violated_requirements, streak, message: warningMsg });
+          }
+        } else {
+          // Clean write — reset streak for this file
+          specViolationStreak.delete(change.path);
+        }
+      } catch { /* non-critical — spec validation is advisory */ }
     } catch (err: any) {
       emit({ type: 'error', error: 'Failed to write ' + change.path + ': ' + err.message });
     }

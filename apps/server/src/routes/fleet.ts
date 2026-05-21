@@ -8,7 +8,7 @@ import type { ProviderType } from '@personal-ide/shared';
 import { getModel, extractProviderFromModelId, PROVIDERS } from '@personal-ide/shared';
 import { appConfig } from '../config.js';
 import { MemoryService } from '../services/memory/index.js';
-import { resolveModelStrategy } from '../services/modelStrategy.js';
+import { resolveModelStrategy, inferTaskTypeFromText } from '../services/modelStrategy.js';
 import { reindexSiliconTests, rebuildSymbolEmbeddings } from '../services/siliconFactory/index.js';
 import { listAllFiles } from '../services/filesystem/index.js';
 
@@ -147,7 +147,7 @@ export async function fleetRoutes(app: FastifyInstance) {
     const strictQualityGate = body.strictQualityGate ?? savedSettings.strictQualityGate;
 
     const modelStr = body.model || 'openai/gpt-4.1';
-    const strategy = resolveModelStrategy(db, modelStr, body.fallbackModels);
+    const strategy = resolveModelStrategy(db, modelStr, body.fallbackModels, inferTaskTypeFromText(body.task || ''));
     // Detect provider from model
     const provider: ProviderType = body.provider || (extractProviderFromModelId(strategy.primaryModel) as ProviderType);
     const localModelPool = normalizeModelPool(body.localModelPool);

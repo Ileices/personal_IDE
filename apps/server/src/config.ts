@@ -2,7 +2,7 @@
 // Environment Config - loads .env and exposes typed config
 // ============================================
 import { config as loadEnv } from 'dotenv';
-import { resolve, dirname } from 'path';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
 import { readFileSync, writeFileSync, existsSync } from 'fs';

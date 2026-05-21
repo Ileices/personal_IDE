@@ -19,6 +19,44 @@ const DEFAULT_SETTINGS: ModelStrategySettings = {
   cleanupFailedModels: true,
 };
 
+// ── Task type inference ──────────────────────────────────────
+// Maps free-text task descriptions to the employer_analysis task_types vocabulary.
+// These keywords correspond to the MidwifeTaskType values used in employer analysis.
+const TASK_TYPE_KEYWORDS: Array<{ type: string; keywords: string[] }> = [
+  { type: 'debugging',         keywords: ['fix', 'bug', 'error', 'broken', 'crash', 'debug', 'issue', 'fail'] },
+  { type: 'test_generation',   keywords: ['test', 'spec', 'unit test', 'coverage', 'assert'] },
+  { type: 'documentation',     keywords: ['document', 'docs', 'readme', 'comment', 'explain', 'jsdoc', 'docstring'] },
+  { type: 'refactoring',       keywords: ['refactor', 'clean', 'extract', 'simplify', 'rename', 'reorganize'] },
+  { type: 'security_review',   keywords: ['security', 'auth', 'inject', 'vuln', 'xss', 'csrf', 'owasp', 'exploit'] },
+  { type: 'architecture',      keywords: ['architect', 'design', 'structure', 'plan', 'schema', 'model', 'system'] },
+  { type: 'code_generation',   keywords: ['implement', 'create', 'add', 'build', 'write', 'generate', 'scaffold'] },
+];
+
+/**
+ * Infer the MidwifeTaskType from a free-text task description.
+ * Used to route model selection through employer_analysis preferences.
+ * Returns the best-matching type or undefined if no match.
+ */
+export function inferTaskTypeFromText(task: string): string | undefined {
+  if (!task) return undefined;
+  const lower = task.toLowerCase();
+  let bestType: string | undefined;
+  let bestScore = 0;
+
+  for (const { type, keywords } of TASK_TYPE_KEYWORDS) {
+    let score = 0;
+    for (const kw of keywords) {
+      if (lower.includes(kw)) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestType = type;
+    }
+  }
+
+  return bestScore > 0 ? bestType : undefined;
+}
+
 function getKv(db: any, key: string): string | null {
   const row = db.prepare('SELECT value FROM app_kv WHERE key = ?').get(key) as { value?: string } | undefined;
   return row?.value ?? null;
@@ -200,10 +238,109 @@ export function cleanupFailedStrategyModels(db: any): { settings: ModelStrategyS
   return { settings, removedModelIds: failedModels };
 }
 
+// ── Employer analysis row (subset of columns we need) ───────
+interface EmployerAnalysisRow {
+  model_id: string;
+  recommended_role: string;
+  role_confidence: number;
+  task_types: string;        // JSON array
+  avoid_task_types: string;  // JSON array
+  retirement_recommended: number;
+  avg_quality: number;
+  success_rate: number;
+}
+
+/**
+ * Load the most recent employer_analysis record for a given model.
+ * Returns null if no record exists or if the employer_analysis table does not yet exist.
+ */
+function getEmployerAnalysis(db: any, modelId: string): EmployerAnalysisRow | null {
+  try {
+    const row = db.prepare(`
+      SELECT model_id, recommended_role, role_confidence, task_types, avoid_task_types,
+             retirement_recommended, avg_quality, success_rate
+      FROM employer_analysis
+      WHERE model_id = ?
+      ORDER BY analyzed_at DESC
+      LIMIT 1
+    `).get(modelId) as EmployerAnalysisRow | undefined;
+    return row ?? null;
+  } catch {
+    // Table may not exist yet (pre-migration); degrade gracefully
+    return null;
+  }
+}
+
+/**
+ * Re-order candidates using employer_analysis data for the given task type.
+ *
+ * Strategy (no manual override is overridden — only unset preferences are adjusted):
+ *   1. Remove retirement-recommended models unless they are the ONLY option.
+ *   2. Models whose avoid_task_types includes taskType go to the END of the list.
+ *   3. Models whose task_types includes taskType are moved toward the FRONT.
+ *   4. Relative order within each bucket is preserved from the input.
+ */
+function applyEmployerPreferences(db: any, candidates: string[], taskType?: string): string[] {
+  if (!candidates.length) return candidates;
+
+  const analyses = new Map<string, EmployerAnalysisRow>();
+  for (const m of candidates) {
+    const ea = getEmployerAnalysis(db, m);
+    if (ea) analyses.set(m, ea);
+  }
+
+  if (!analyses.size) return candidates;  // No analysis data yet — pass through unchanged
+
+  // Separate retired models (soft block — moved to very end, not removed entirely)
+  const retired: string[] = [];
+  const active: string[] = [];
+  for (const m of candidates) {
+    const ea = analyses.get(m);
+    if (ea && ea.retirement_recommended) {
+      retired.push(m);
+    } else {
+      active.push(m);
+    }
+  }
+
+  // If all candidates are retired, use them anyway (degraded mode)
+  const working = active.length ? active : candidates;
+
+  if (!taskType) {
+    return [...working, ...retired];
+  }
+
+  // Bucket by task-type fit
+  const boosted: string[] = [];    // task_types includes taskType
+  const neutral: string[] = [];    // no opinion
+  const avoided: string[] = [];    // avoid_task_types includes taskType
+
+  for (const m of working) {
+    const ea = analyses.get(m);
+    if (!ea) { neutral.push(m); continue; }
+
+    let taskTypes: string[] = [];
+    let avoidTypes: string[] = [];
+    try { taskTypes = JSON.parse(ea.task_types) as string[]; } catch {}
+    try { avoidTypes = JSON.parse(ea.avoid_task_types) as string[]; } catch {}
+
+    if (avoidTypes.includes(taskType)) {
+      avoided.push(m);
+    } else if (taskTypes.includes(taskType)) {
+      boosted.push(m);
+    } else {
+      neutral.push(m);
+    }
+  }
+
+  return [...boosted, ...neutral, ...avoided, ...retired];
+}
+
 export function resolveModelStrategy(
   db: any,
   preferredModel?: string,
   explicitFallbacks?: string[],
+  taskType?: string,
 ): { settings: ModelStrategySettings; primaryModel: string; fallbackModels: string[] } {
   const settings = loadModelStrategy(db);
   const requestedPrimary = (preferredModel || settings.primaryModel || DEFAULT_SETTINGS.primaryModel).trim();
@@ -218,8 +355,12 @@ export function resolveModelStrategy(
 
   const orderedCandidates = dedupeModels([requestedPrimary, ...fallbackModels]);
   const cooledCandidates = applyCooldownOverrides(db, orderedCandidates);
-  const primaryModel = cooledCandidates[0] || requestedPrimary;
-  const cooledFallbackModels = cooledCandidates.filter((model) => model !== primaryModel);
+
+  // Apply employer intelligence: re-order by task-type fit from employer_analysis
+  const employerOrdered = applyEmployerPreferences(db, cooledCandidates, taskType);
+
+  const primaryModel = employerOrdered[0] || requestedPrimary;
+  const cooledFallbackModels = employerOrdered.filter((model) => model !== primaryModel);
 
   return { settings, primaryModel, fallbackModels: cooledFallbackModels };
 }

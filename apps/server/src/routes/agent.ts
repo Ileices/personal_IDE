@@ -7,7 +7,7 @@ import type { AgentConfig, ProviderType } from '@personal-ide/shared';
 import { getModel, extractProviderFromModelId } from '@personal-ide/shared';
 import { appConfig } from '../config.js';
 import { MemoryService } from '../services/memory/index.js';
-import { resolveModelStrategy } from '../services/modelStrategy.js';
+import { resolveModelStrategy, inferTaskTypeFromText } from '../services/modelStrategy.js';
 import { rebuildSymbolEmbeddings, reindexSiliconTests } from '../services/siliconFactory/index.js';
 import { listAllFiles } from '../services/filesystem/index.js';
 import { rateLimiter } from '../services/llm/rateLimiter.js';
@@ -225,7 +225,9 @@ export async function agentRoutes(app: FastifyInstance) {
     });
 
     const modelStr = body.model || 'openai/gpt-4.1';
-    const strategy = resolveModelStrategy(db, modelStr, body.fallbackModels);
+    // Infer task type from task description for employer-aware model selection
+    const inferredTaskType = inferTaskTypeFromText(body.task);
+    const strategy = resolveModelStrategy(db, modelStr, body.fallbackModels, inferredTaskType);
     // Detect provider from model string (e.g. "nano/nano-sea" -> "nano")
     const provider: ProviderType = body.provider || (extractProviderFromModelId(strategy.primaryModel) as ProviderType);
 

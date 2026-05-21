@@ -188,6 +188,16 @@ export class StabilityMonitor {
         JSON.stringify([`rollback:${reason}`, `cycle:${cycle}`]),
       );
 
+      // ── Persist health event so SuggestedJobsCrawler can react ────────────
+      // Insert into system_health_events — this is the canonical way for other
+      // services to observe stability failures without parsing notification_queue.
+      try {
+        this.db.prepare(`
+          INSERT INTO system_health_events (event_type, severity, triggered_at, reason)
+          VALUES (?, 'critical', datetime('now'), ?)
+        `).run(`rollback:${reason}`, `Cycle ${cycle}: ${reason}`);
+      } catch { /* table may not exist until migration v117 runs */ }
+
       // Insert a diagnostic suggested job
       const jobId = randomUUID();
       this.db.prepare(`

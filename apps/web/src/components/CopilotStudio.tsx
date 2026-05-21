@@ -353,7 +353,18 @@ export function CopilotStudio() {
   ]);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden flex-col">
+      {/* ── Deprecation Banner ──────────────────────────────── */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-yellow-900/40 border-b border-yellow-600/60 text-xs">
+        <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+        <span className="text-yellow-200">
+          <strong>Legacy Panel</strong> — CopilotStudio is the old interface. Use{' '}
+          <strong>The God Factory</strong> for the full-featured agent workspace.
+          This panel is read-only and will be removed in a future release.
+        </span>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
       {/* ── Prompt History Sidebar ──────────────────────────── */}
       {showHistory && (
         <div className="w-72 flex-shrink-0 bg-ide-panel border-r border-ide-border flex flex-col">
@@ -556,8 +567,11 @@ export function CopilotStudio() {
           <div ref={bottomRef} />
         </div>
 
-        {/* Input area */}
-        <div className="flex-shrink-0 border-t border-ide-border p-3">
+        {/* Input area — disabled in legacy panel */}
+        <div className="flex-shrink-0 border-t border-ide-border p-3 opacity-50 pointer-events-none select-none">
+          <div className="text-xs text-yellow-400 text-center mb-2">
+            ⚠ Input disabled — use The God Factory to send messages.
+          </div>
           <div className="flex gap-2 items-end">
             <div className="flex-1 relative">
               <textarea
@@ -565,12 +579,13 @@ export function CopilotStudio() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask THE GOD FACTORY agent to build features, fix bugs, explain code, or enhance the IDE...  (Enter to send, Shift+Enter for newline)"
+                placeholder="Use The God Factory panel to interact with the agent (this legacy panel is read-only)"
                 className="w-full bg-ide-bg border border-ide-border rounded-lg px-3 py-2.5 text-sm text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-ide-accent transition-colors min-h-[60px] max-h-[200px]"
                 rows={2}
+                readOnly
               />
               <div className="absolute bottom-2 right-2 text-[10px] text-ide-text-dim">
-                Shift+Enter ↵ · Enter ⇒
+                read-only
               </div>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -579,13 +594,14 @@ export function CopilotStudio() {
                   onClick={stopStreaming}
                   className="w-9 h-9 flex items-center justify-center bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
                   title="Stop"
+                  disabled
                 >
                   <Square className="w-4 h-4" />
                 </button>
               ) : (
                 <button
                   onClick={() => sendMessage(input)}
-                  disabled={!input.trim()}
+                  disabled
                   className="w-9 h-9 flex items-center justify-center bg-ide-accent text-ide-panel rounded-lg hover:bg-ide-accent/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   title="Send (Enter)"
                 >
@@ -608,6 +624,7 @@ export function CopilotStudio() {
           )}
         </div>
       </div>
+      </div>  {/* end flex-1 overflow-hidden inner wrapper */}
     </div>
   );
 }

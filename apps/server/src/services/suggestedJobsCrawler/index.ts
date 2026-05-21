@@ -1036,6 +1036,24 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
     return { mode: 'rollback_halt', generated: 0 };
   }
 
+  // ── Health-event awareness ─────────────────────────────────────────────────
+  // If StabilityMonitor triggered any rollbacks in the last 4 hours, we are
+  // in a degraded system state:
+  //   1. Boost regression_hardening jobs (run the protocol 3× in this tick)
+  //   2. Suppress performance_test_missing and documentation_gap protocols
+  //      to avoid noise while the system is recovering
+  let recentHealthEventCount = 0;
+  try {
+    const healthRow = db.prepare(`
+      SELECT COUNT(*) AS cnt
+      FROM system_health_events
+      WHERE triggered_at >= datetime('now', '-4 hours')
+    `).get() as { cnt: number };
+    recentHealthEventCount = healthRow?.cnt || 0;
+  } catch { /* migration v117 not yet applied — treat as 0 */ }
+
+  const isSystemDegraded = recentHealthEventCount > 0;
+
   const cycleCount = (state.cycle_count || 0) + 1;
   updateCrawlerState(db, { cycle_count: cycleCount });
 
@@ -1086,7 +1104,26 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
     // INDEPENDENT MODE — round-robin through protocols 1-11
     const currentProtocol = ((state as unknown as { current_protocol?: number }).current_protocol || 0) % 11 + 1;
     mode = 'independent';
-    updateCrawlerState(db, { mode: 'independent', current_protocol: currentProtocol, status_message: `Running protocol ${currentProtocol}` });
+
+    // ── Degraded-system override ───────────────────────────────────────────
+    // When recent health events indicate system instability:
+    //  - Protocol 4 (RegressionClusters) is boosted 3x (run it on this tick
+    //    regardless of round-robin position, then twice more via extra passes)
+    //  - Protocols 7 (VocabGaps) and 8 (PerfGaps) are suppressed (too noisy
+    //    during recovery; these are performance/documentation concerns)
+    const SUPPRESSED_WHEN_DEGRADED = new Set([7, 8]); // performance_test_missing, documentation_gap
+    const REGRESSION_HARDENING_PROTOCOL = 4;
+
+    let effectiveProtocol = currentProtocol;
+    if (isSystemDegraded && SUPPRESSED_WHEN_DEGRADED.has(currentProtocol)) {
+      effectiveProtocol = REGRESSION_HARDENING_PROTOCOL; // force regression focus
+    }
+
+    updateCrawlerState(db, {
+      mode: 'independent',
+      current_protocol: effectiveProtocol,
+      status_message: `Running protocol ${effectiveProtocol}${isSystemDegraded ? ' [degraded-system mode]' : ''}`,
+    });
 
     const protocolFns = [
       protocol1MissingTests,
@@ -1102,11 +1139,20 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       protocol11BackupReconciliation,
     ];
 
-    generated = protocolFns[currentProtocol - 1]?.(db, cycleCount) || 0;
+    generated = protocolFns[effectiveProtocol - 1]?.(db, cycleCount) || 0;
+
+    // Regression hardening boost: run protocol 4 two more times when degraded
+    if (isSystemDegraded && effectiveProtocol !== REGRESSION_HARDENING_PROTOCOL) {
+      generated += protocol4RegressionClusters(db, cycleCount);
+      generated += protocol4RegressionClusters(db, cycleCount);
+    } else if (isSystemDegraded && effectiveProtocol === REGRESSION_HARDENING_PROTOCOL) {
+      generated += protocol4RegressionClusters(db, cycleCount);
+      generated += protocol4RegressionClusters(db, cycleCount);
+    }
     updateCrawlerState(db, {
       last_independent_run_at: new Date().toISOString(),
       jobs_generated_total: (state.jobs_generated_total || 0) + generated,
-      status_message: `Protocol ${currentProtocol} complete — generated ${generated} jobs`,
+      status_message: `Protocol ${effectiveProtocol} complete — generated ${generated} jobs`,
     });
 
     const stability = recordStabilitySnapshot(db, cycleCount, false);
@@ -1118,7 +1164,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       return { mode: 'rollback_halt', generated: 0, protocol: currentProtocol };
     }
 
-    return { mode, generated, protocol: currentProtocol };
+    return { mode, generated, protocol: effectiveProtocol };
   }
 
   const stability = recordStabilitySnapshot(db, cycleCount, false);

@@ -1,18 +1,20 @@
-// ─── NanoTraining — training status, sessions, registered nanos, compute ───
 import React from 'react';
-import { Activity } from 'lucide-react';
-import { Badge, Section } from '../ui/widgets';
+import { Activity, Pause, Play, Square } from 'lucide-react';
+import { Badge, Section, Button } from '../ui/widgets';
 
 interface Props {
   trainingStatus: any;
   computeStatus: any;
+  onPause?: () => void;
+  onResume?: () => void;
+  onStop?: () => void;
 }
 
-export function NanoTraining({ trainingStatus, computeStatus }: Props) {
+export function NanoTraining({ trainingStatus, computeStatus, onPause, onResume, onStop }: Props) {
   const fmtNum = (n: any, digits = 4) => (typeof n === 'number' ? n.toFixed(digits) : '—');
 
   return (
-    <Section title="Training & Models" icon={Activity} badge={
+    <Section title="Training & Models" icon={Activity} badge=
       trainingStatus?.running
         ? <Badge color="green">Training</Badge>
         : <Badge color="gray">Idle</Badge>
@@ -73,6 +75,37 @@ export function NanoTraining({ trainingStatus, computeStatus }: Props) {
           </div>
         </div>
 
+        {/* NEW: Training Controls */}
+        <div className="mt-3 flex gap-2">
+          {trainingStatus?.running ? (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={onPause}
+              className="flex items-center gap-1 text-xs"
+            >
+              <Pause size={12} /> Pause
+            </Button>
+          ) : (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={onResume}
+              className="flex items-center gap-1 text-xs"
+            >
+              <Play size={12} /> Resume
+            </Button>
+          )}
+          <Button
+            size="xs"
+            variant="destructive"
+            onClick={onStop}
+            className="flex items-center gap-1 text-xs"
+          >
+            <Square size={12} /> Stop
+          </Button>
+        </div>
+
         {(typeof trainingStatus?.gpu_hit_rate === 'number' || typeof trainingStatus?.cpu_hit_rate === 'number') && (
           <div className="mt-2">
             <div className="text-[10px] text-ide-text-dim mb-1">Memory Paging (Phase 4)</div>
@@ -97,7 +130,7 @@ export function NanoTraining({ trainingStatus, computeStatus }: Props) {
           </div>
         )}
 
-        {/* Recent training sessions */}
+        {/* Recent training sessions (unchanged) */}
         {trainingStatus?.recent_sessions?.length > 0 && (
           <div className="mt-2">
             <div className="text-[10px] text-ide-text-dim mb-1">Recent Sessions</div>
@@ -107,64 +140,9 @@ export function NanoTraining({ trainingStatus, computeStatus }: Props) {
                   <span className="text-ide-text-dim">{s.id}</span>
                   <span>{s.steps} steps</span>
                   <span className="text-ide-accent">{s.avg_loss != null ? `loss: ${s.avg_loss.toFixed(4)}` : '—'}</span>
-                  <span className="text-ide-text-dim">{s.nanos_trained?.length ?? 0} nanos</span>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Registered nanos */}
-        {trainingStatus?.registered_nanos?.length > 0 && (
-          <div className="mt-2">
-            <div className="text-[10px] text-ide-text-dim mb-1">Nanos Being Trained</div>
-            <div className="flex flex-wrap gap-1">
-              {trainingStatus.registered_nanos.map((n: string) => (
-                <Badge key={n} color="cyan">{n}</Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* GPU/Compute info */}
-        {computeStatus && !computeStatus.error && (
-          <div className="mt-2">
-            <div className="text-[10px] text-ide-text-dim mb-1">Compute Backend</div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-              <div className="flex justify-between">
-                <span className="text-ide-text-dim">Backend</span>
-                <Badge color={computeStatus.backend === 'cuda' ? 'green' : computeStatus.backend === 'cpu' ? 'yellow' : 'blue'}>
-                  {computeStatus.backend}
-                </Badge>
-              </div>
-              {computeStatus.vram_gb > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-ide-text-dim">VRAM</span>
-                  <span className="font-mono">{computeStatus.vram_gb} GB</span>
-                </div>
-              )}
-            </div>
-            {computeStatus.all_gpus?.length > 0 && (
-              <div className="mt-1 space-y-0.5">
-                {computeStatus.all_gpus.map((g: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between text-[10px] bg-ide-bg/30 px-2 py-0.5 rounded">
-                    <span>{g.name}</span>
-                    <Badge color={g.backend === 'cuda' ? 'green' : 'blue'}>{g.backend}</Badge>
-                    <span className="text-ide-text-dim">{g.vram_gb}GB</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Checkpoint directory */}
-        {trainingStatus?.checkpoint_dir && (
-          <div className="mt-1 text-[10px] text-ide-text-dim">
-            📁 {trainingStatus.checkpoint_dir}
-            {trainingStatus.checkpoints?.total_size_bytes > 0 && (
-              <span className="ml-2">({(trainingStatus.checkpoints.total_size_bytes / 1024).toFixed(1)} KB)</span>
-            )}
           </div>
         )}
       </div>

@@ -5,7 +5,7 @@ import { assessToolPolicy, getToolPolicySnapshot } from '../services/godFactory/
 import { getSubsystemRuntimeStatus, startSubsystemScheduler, stopSubsystemScheduler } from '../services/subsystemScheduler.js';
 import { getKv, loadSettings, setKv, type SubsystemId } from './subsystems.js';
 import { JOB_STATUS, RUN_STATUS, STOP_REASON } from '../services/lifecycle/stateMachine.js';
-import { resolveModelStrategy } from '../services/modelStrategy.js';
+import { resolveModelStrategy, inferTaskTypeFromText } from '../services/modelStrategy.js';
 import { extractProviderFromModelId, type ProviderType } from '@personal-ide/shared';
 import { getClientFromDb as getProviderClient } from '../services/llm/providers.js';
 import { runEmployerAnalysisCycle } from './employer.js';

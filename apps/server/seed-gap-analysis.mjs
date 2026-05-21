@@ -4,7 +4,7 @@
 // Run: node seed-gap-analysis.mjs
 
 import Database from 'better-sqlite3';
-import { resolve, dirname } from 'path';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 

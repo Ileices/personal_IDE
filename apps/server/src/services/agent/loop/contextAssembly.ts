@@ -153,6 +153,7 @@ export function assembleContext(
     const shaped = services.contextWindowManager.fitPrioritySlots({
       system_prompt: config.codebaseOverview || '',
       task_buildtags: [taskTrackerContext, checkpointInfo].filter(Boolean).join('\n\n'),
+      high_importance_memory: services.contextWindowManager.loadHighImportanceMemory(config.projectId),
       devtags: [relationshipContext, tierContext, logHealthContext].filter(Boolean).join('\n\n'),
       history: [conversationIndexContext, platformContext, explorationContext || ''].filter(Boolean).join('\n\n'),
       memory: memoryContext,

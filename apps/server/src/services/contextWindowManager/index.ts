@@ -8,14 +8,17 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 
 // ── Priority ordering (lower number = higher priority) ──────
+// high_importance_memory (score > 0.7) is promoted above devtags so that
+// critical saved knowledge is never squeezed out by verbose devtag listings.
 
 const PRIORITY_LEVELS = {
-  system_prompt:   1,
-  task_buildtags:  2,
-  devtags:         3,
-  history:         4,
-  memory:          5,
-  code_content:    6,
+  system_prompt:          1,
+  task_buildtags:         2,
+  high_importance_memory: 3,  // memory_notes with importance_score > 0.7
+  devtags:                4,
+  history:                5,
+  code_content:           6,
+  memory:                 7,  // standard memory (importance_score <= 0.7)
 } as const;
 
 type PriorityLevel = keyof typeof PRIORITY_LEVELS;
@@ -65,6 +68,8 @@ export interface ContextWindowResult {
 export interface PrioritySlots {
   system_prompt: string;
   task_buildtags: string;
+  /** High-importance memory notes (importance_score > 0.7). Pass empty string if not used. */
+  high_importance_memory: string;
   devtags: string;
   history: string;
   memory: string;
@@ -188,12 +193,13 @@ export class ContextWindowManager {
     agentId: string,
   ): FitSlotsResult {
     const ordered: ContextSlot[] = [
-      { key: 'system_prompt', content: slots.system_prompt },
-      { key: 'task_buildtags', content: slots.task_buildtags },
-      { key: 'devtags', content: slots.devtags },
-      { key: 'history', content: slots.history },
-      { key: 'memory', content: slots.memory },
-      { key: 'code_content', content: slots.code_content },
+      { key: 'system_prompt',          content: slots.system_prompt },
+      { key: 'task_buildtags',         content: slots.task_buildtags },
+      { key: 'high_importance_memory', content: slots.high_importance_memory ?? '' },
+      { key: 'devtags',                content: slots.devtags },
+      { key: 'history',                content: slots.history },
+      { key: 'code_content',           content: slots.code_content },
+      { key: 'memory',                 content: slots.memory },
     ];
 
     const ceiling = TIER_CEILINGS[tier] ?? TIER_CEILINGS[4];
@@ -206,6 +212,7 @@ export class ContextWindowManager {
     const out: PrioritySlots = {
       system_prompt: '',
       task_buildtags: '',
+      high_importance_memory: '',
       devtags: '',
       history: '',
       memory: '',
@@ -226,6 +233,11 @@ export class ContextWindowManager {
         content = this._summarizeMemory(content);
       } else if ((strategy === 'truncate_code' || strategy === 'aggressive') && slot.key === 'code_content') {
         content = this._truncateCode(content, strategy === 'aggressive' ? 10 : 20);
+      } else if (strategy === 'aggressive' && slot.key === 'high_importance_memory') {
+        content = content.slice(0, 2000);
+      } else if (strategy === 'aggressive' && slot.key === 'high_importance_memory') {
+        // Even in aggressive mode, preserve the first 500 chars of high-importance memory
+        content = content.slice(0, 2000);
       }
 
       const est = this._estimateTokens(content);
@@ -327,5 +339,34 @@ export class ContextWindowManager {
         ]),
       );
     } catch { /* non-critical */ }
+  }
+
+  /**
+   * Load high-importance memory notes (importance_score > 0.7) from the DB
+   * for a given project.  Returns formatted text suitable for the
+   * `high_importance_memory` PrioritySlots field.
+   *
+   * Falls back gracefully if the importance_score column doesn't exist yet
+   * (migration v118 not yet applied).
+   */
+  loadHighImportanceMemory(projectId: string, maxNotes = 20): string {
+    try {
+      const rows = this.db.prepare(`
+        SELECT content, category, source
+        FROM memory_notes
+        WHERE project_id = ? AND importance_score > 0.7
+        ORDER BY importance_score DESC, extracted_at DESC
+        LIMIT ?
+      `).all(projectId, maxNotes) as Array<{ content: string; category: string; source: string }>;
+
+      if (rows.length === 0) return '';
+
+      return rows
+        .map(r => `[${r.category}/${r.source}] ${r.content}`)
+        .join('\n');
+    } catch {
+      // importance_score column not yet added (migration v118 pending) — skip
+      return '';
+    }
   }
 }

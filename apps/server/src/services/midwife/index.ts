@@ -188,6 +188,7 @@ export class MidwifeService {
   private abortController: AbortController | null = null;
   private db: any;
   private sessionSkippedModels = new Set<string>();
+  private datasetWatcher: ReturnType<typeof import('fs').watch> | null = null;
 
   constructor(db: any) {
     this.db = db;
@@ -235,9 +236,112 @@ export class MidwifeService {
     }
   }
 
+  /**
+   * Watch the DatasetBuilder output directory for new JSONL training files.
+   * When a new .jsonl file appears, parse and ingest each training pair directly
+   * into the NANO Sea trainer — closing the DatasetBuilder → Midwife → NANO pipeline.
+   *
+   * Directory watched: NANO_train/nano_data/training/agent_dataset/
+   * Files processed:   *.jsonl  (renamed to *.jsonl.processed after ingestion)
+   */
+  startDatasetWatcher(): void {
+    import('fs').then(({ watch, existsSync, mkdirSync, readFileSync, renameSync }) => {
+      import('path').then(({ join, resolve }) => {
+        const watchDir = resolve(process.cwd(), '..', 'NANO_train', 'nano_data', 'training', 'agent_dataset');
+
+        try {
+          mkdirSync(watchDir, { recursive: true });
+        } catch {
+          // dir may already exist
+        }
+
+        if (!existsSync(watchDir)) {
+          console.log('[Midwife] Dataset watch dir not found — skipping watcher:', watchDir);
+          return;
+        }
+
+        this.datasetWatcher = watch(watchDir, { persistent: false }, async (eventType, filename) => {
+          if (!filename || !filename.endsWith('.jsonl')) return;
+          if (filename.endsWith('.processed')) return;
+
+          const filePath = join(watchDir, filename);
+          if (!existsSync(filePath)) return;
+
+          try {
+            const lines = readFileSync(filePath, 'utf8')
+              .split('\n')
+              .filter(l => l.trim().length > 0);
+
+            let ingestedCount = 0;
+            const nanoUrl = appConfig.services.nanoSeaUrl;
+
+            for (const line of lines) {
+              try {
+                const pair = JSON.parse(line) as {
+                  query?: string;
+                  response?: string;
+                  quality_score?: number;
+                  taskType?: string;
+                  success?: boolean;
+                };
+
+                if (!pair.query || !pair.response) continue;
+
+                // Feed to NANO Sea via HTTP (non-blocking, best-effort)
+                fetch(`${nanoUrl}/v1/training/observe`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    query: pair.query.slice(0, 4000),
+                    response: pair.response.slice(0, 8000),
+                    source: 'agent_dataset',
+                    quality: pair.quality_score ?? 0.7,
+                    taskType: pair.taskType ?? 'code_generation',
+                    success: pair.success ?? true,
+                  }),
+                  signal: AbortSignal.timeout(5000),
+                }).then(res => {
+                  if (res.ok) ingestedCount++;
+                }).catch(() => { /* nano not running — fail silently */ });
+              } catch { /* malformed line */ }
+            }
+
+            // Rename to .processed to prevent re-ingestion
+            try {
+              renameSync(filePath, filePath + '.processed');
+            } catch { /* rename non-critical */ }
+
+            if (ingestedCount > 0) {
+              console.log(`[Midwife] Dataset watcher: ingested ${ingestedCount} pairs from ${filename}`);
+              if (this.session) {
+                this.session.totalPairsFed += ingestedCount;
+              }
+            }
+          } catch (err: any) {
+            console.log('[Midwife] Dataset watcher error reading', filename, ':', err.message);
+          }
+        });
+
+        console.log('[Midwife] Dataset watcher active on:', watchDir);
+      });
+    });
+  }
+
+  stopDatasetWatcher(): void {
+    if (this.datasetWatcher) {
+      try { this.datasetWatcher.close(); } catch {}
+      this.datasetWatcher = null;
+      console.log('[Midwife] Dataset watcher stopped');
+    }
+  }
+
   /** Auto-start feeding after a delay (called from server bootstrap) */
   autoStart(delayMs: number = 30000): void {
     if (!this.config.enabled) return;
+
+    // Start dataset watcher immediately (independent of NANO Sea health)
+    this.startDatasetWatcher();
+
     setTimeout(async () => {
       try {
         // Check if Nano Sea is reachable before starting

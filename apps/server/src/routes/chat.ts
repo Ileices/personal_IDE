@@ -15,7 +15,7 @@ import { MemoryService } from '../services/memory/index.js';
 import { SYSTEM_PROMPTS, parseStructuredOutput } from '../services/modes/prompts.js';
 import { readFile } from '../services/filesystem/index.js';
 import { appConfig } from '../config.js';
-import { resolveModelStrategy } from '../services/modelStrategy.js';
+import { resolveModelStrategy, inferTaskTypeFromText } from '../services/modelStrategy.js';
 import { writeBlameRecord } from './blame.js';
 import { observationTrainingHook } from '../services/nano/observationTrainer.js';
 
@@ -187,7 +187,7 @@ export async function chatRoutes(app: FastifyInstance) {
 
     console.log(`[chat] Request received: model=${body.model}, mode=${body.mode}, projectId=${body.projectId}, fallbackCount=${body.fallbackModels?.length || 0}`);
 
-    const strategy = resolveModelStrategy(db, body.model, body.fallbackModels);
+    const strategy = resolveModelStrategy(db, body.model, body.fallbackModels, inferTaskTypeFromText(body.message || ''));
     console.log(`[chat] Strategy resolved: primaryModel=${strategy.primaryModel}, fallbackCount=${strategy.fallbackModels.length}`);
     body.model = strategy.primaryModel;
 

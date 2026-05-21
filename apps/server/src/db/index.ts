@@ -2680,6 +2680,54 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  // ──────────────────────────────────────────────────────────────────────────
+  // Migration v117: system_health_events
+  // Records every StabilityMonitor rollback trigger so SuggestedJobsCrawler
+  // and other services can inspect recent instability without reading logs.
+  // ──────────────────────────────────────────────────────────────────────────
+  {
+    version: 117,
+    name: 'system_health_events',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS system_health_events (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_type  TEXT    NOT NULL,
+          severity    TEXT    NOT NULL DEFAULT 'warning' CHECK (severity IN ('info','warning','error','critical')),
+          triggered_at TEXT   NOT NULL DEFAULT (datetime('now')),
+          reason      TEXT    NOT NULL DEFAULT '',
+          project_id  TEXT    REFERENCES projects(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_system_health_events_time
+          ON system_health_events(triggered_at);
+        CREATE INDEX IF NOT EXISTS idx_system_health_events_type_time
+          ON system_health_events(event_type, triggered_at);
+        CREATE INDEX IF NOT EXISTS idx_system_health_events_project_time
+          ON system_health_events(project_id, triggered_at);
+      `);
+    },
+  },
+  // ──────────────────────────────────────────────────────────────────────────
+  // Migration v118: memory_notes importance_score
+  // Adds importance_score column to memory_notes for priority-based context
+  // packing (high-importance memories get a higher priority slot in context).
+  // ──────────────────────────────────────────────────────────────────────────
+  {
+    version: 118,
+    name: 'memory_notes_importance_score',
+    up(db: Database.Database) {
+      const hasColumn = (table: string, col: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
+
+      if (!hasColumn('memory_notes', 'importance_score')) {
+        db.exec(`ALTER TABLE memory_notes ADD COLUMN importance_score REAL NOT NULL DEFAULT 0.5`);
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_memory_notes_importance
+            ON memory_notes(project_id, importance_score DESC, extracted_at);
+        `);
+      }
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────
