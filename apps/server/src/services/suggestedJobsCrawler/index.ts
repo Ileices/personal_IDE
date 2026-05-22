@@ -67,6 +67,7 @@ function recommendProtocolFromIntelligence(db: Database.Database): {
   protocol: number;
   reason: string;
   projectId: string;
+  additionalPasses: number;
 } | null {
   const projectId = getMostRecentProjectId(db);
   if (!projectId) return null;
@@ -100,6 +101,7 @@ function recommendProtocolFromIntelligence(db: Database.Database): {
       protocol: 4,
       reason: `intelligence signal: high drift/conflicts (drift=${driftEvents}, conflicts=${conflicts})`,
       projectId,
+      additionalPasses: 2,
     };
   }
 
@@ -108,6 +110,7 @@ function recommendProtocolFromIntelligence(db: Database.Database): {
       protocol: 10,
       reason: `intelligence signal: low semantic coverage (semantic=${semanticSymbols}, symbols=${symbols})`,
       projectId,
+      additionalPasses: 1,
     };
   }
 
@@ -116,6 +119,7 @@ function recommendProtocolFromIntelligence(db: Database.Database): {
       protocol: 5,
       reason: `intelligence signal: sparse relationship graph (relationships=${relationships}, symbols=${symbols})`,
       projectId,
+      additionalPasses: 1,
     };
   }
 
@@ -125,6 +129,7 @@ function recommendProtocolFromIntelligence(db: Database.Database): {
       protocol: 4,
       reason: 'intelligence signal: missing fresh PSC snapshot data',
       projectId,
+      additionalPasses: 1,
     };
   }
 
@@ -1332,7 +1337,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       current_protocol: effectiveProtocol,
       status_message: `Running protocol ${effectiveProtocol}${isSystemDegraded ? ' [degraded-system mode]' : ''}${
         !isSystemDegraded && intelligenceRecommendation
-          ? ` [${intelligenceRecommendation.reason}]`
+          ? ` [${intelligenceRecommendation.reason}; passes=${1 + Math.max(0, Number(intelligenceRecommendation.additionalPasses || 0))}]`
           : ''
       }`,
     });
@@ -1351,7 +1356,15 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       protocol11BackupReconciliation,
     ];
 
-    generated = protocolFns[effectiveProtocol - 1]?.(db, cycleCount) || 0;
+    const runSelectedProtocol = protocolFns[effectiveProtocol - 1];
+    const intelligencePasses = !isSystemDegraded && intelligenceRecommendation && intelligenceRecommendation.protocol === effectiveProtocol
+      ? Math.max(0, Math.min(3, Number(intelligenceRecommendation.additionalPasses || 0)))
+      : 0;
+
+    generated = 0;
+    for (let pass = 0; pass < 1 + intelligencePasses; pass += 1) {
+      generated += runSelectedProtocol?.(db, cycleCount) || 0;
+    }
 
     // Regression hardening boost: run protocol 4 two more times when degraded
     if (isSystemDegraded && effectiveProtocol !== REGRESSION_HARDENING_PROTOCOL) {
