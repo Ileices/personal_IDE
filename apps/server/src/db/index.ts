@@ -2764,6 +2764,32 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  // ──────────────────────────────────────────────────────────────────────────
+  // Migration v122: suggested jobs per-protocol cooldown windows
+  // Adds durable cooldown tracking so independent protocols can be throttled
+  // individually under queue pressure without pausing the full crawler.
+  // ──────────────────────────────────────────────────────────────────────────
+  {
+    version: 122,
+    name: 'sj_protocol_cooldowns',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sj_protocol_cooldowns (
+          protocol_id INTEGER PRIMARY KEY CHECK (protocol_id BETWEEN 1 AND 11),
+          cooldown_until TEXT,
+          last_started_at TEXT,
+          last_finished_at TEXT,
+          last_generated_count INTEGER NOT NULL DEFAULT 0,
+          consecutive_noop INTEGER NOT NULL DEFAULT 0,
+          reason TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sj_protocol_cooldowns_until
+          ON sj_protocol_cooldowns(cooldown_until);
+      `);
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────

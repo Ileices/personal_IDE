@@ -218,6 +218,138 @@ function getSuggestedQueueBackpressure(db: Database.Database): {
   };
 }
 
+type QueueBackpressure = ReturnType<typeof getSuggestedQueueBackpressure>;
+
+function getProtocolCooldownRemainingSeconds(db: Database.Database, protocolId: number): number {
+  try {
+    const row = db.prepare(`
+      SELECT cooldown_until
+      FROM sj_protocol_cooldowns
+      WHERE protocol_id = ?
+      LIMIT 1
+    `).get(protocolId) as { cooldown_until?: string | null } | undefined;
+
+    if (!row?.cooldown_until) return 0;
+    const remainingMs = new Date(String(row.cooldown_until)).getTime() - Date.now();
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) return 0;
+    return Math.ceil(remainingMs / 1000);
+  } catch {
+    return 0;
+  }
+}
+
+function computeProtocolCooldownSeconds(input: {
+  protocolId: number;
+  generated: number;
+  backpressure: QueueBackpressure;
+  isSystemDegraded: boolean;
+  intelligenceAligned: boolean;
+}): number {
+  const { protocolId, generated, backpressure, isSystemDegraded, intelligenceAligned } = input;
+
+  let seconds = generated > 0 ? 45 : 120;
+
+  if (backpressure.suggestedCount >= 1200) {
+    seconds += 180;
+  } else if (backpressure.suggestedCount >= 700) {
+    seconds += 90;
+  } else if (backpressure.suggestedCount >= 350) {
+    seconds += 30;
+  }
+
+  if (generated === 0) {
+    seconds += 45;
+  }
+
+  if (isSystemDegraded && protocolId === 4) {
+    seconds = Math.max(20, seconds - 25);
+  }
+
+  if (intelligenceAligned && generated > 0) {
+    seconds = Math.max(20, seconds - 15);
+  }
+
+  return Math.max(20, Math.min(600, seconds));
+}
+
+function saveProtocolCooldown(db: Database.Database, input: {
+  protocolId: number;
+  generated: number;
+  cooldownSeconds: number;
+  reason: string;
+}): void {
+  try {
+    const existing = db.prepare(`
+      SELECT consecutive_noop
+      FROM sj_protocol_cooldowns
+      WHERE protocol_id = ?
+      LIMIT 1
+    `).get(input.protocolId) as { consecutive_noop?: number } | undefined;
+
+    const nextNoop = input.generated > 0 ? 0 : Number(existing?.consecutive_noop || 0) + 1;
+    db.prepare(`
+      INSERT INTO sj_protocol_cooldowns (
+        protocol_id,
+        cooldown_until,
+        last_started_at,
+        last_finished_at,
+        last_generated_count,
+        consecutive_noop,
+        reason,
+        updated_at
+      ) VALUES (
+        ?,
+        datetime('now', '+' || ? || ' seconds'),
+        datetime('now'),
+        datetime('now'),
+        ?,
+        ?,
+        ?,
+        datetime('now')
+      )
+      ON CONFLICT(protocol_id) DO UPDATE SET
+        cooldown_until = excluded.cooldown_until,
+        last_started_at = excluded.last_started_at,
+        last_finished_at = excluded.last_finished_at,
+        last_generated_count = excluded.last_generated_count,
+        consecutive_noop = excluded.consecutive_noop,
+        reason = excluded.reason,
+        updated_at = datetime('now')
+    `).run(
+      input.protocolId,
+      input.cooldownSeconds,
+      input.generated,
+      nextNoop,
+      input.reason.slice(0, 300),
+    );
+  } catch {
+    // If migration is not yet applied for a long-running process, continue safely.
+  }
+}
+
+function pickRunnableProtocol(db: Database.Database, input: {
+  preferredProtocol: number;
+  isSystemDegraded: boolean;
+  suppressedWhenDegraded: Set<number>;
+}): { protocol: number | null; skipped: Array<{ protocol: number; remainingSec: number }> } {
+  const skipped: Array<{ protocol: number; remainingSec: number }> = [];
+
+  for (let offset = 0; offset < 11; offset += 1) {
+    const candidate = ((input.preferredProtocol - 1 + offset) % 11) + 1;
+    if (input.isSystemDegraded && input.suppressedWhenDegraded.has(candidate)) {
+      continue;
+    }
+    const remainingSec = getProtocolCooldownRemainingSeconds(db, candidate);
+    if (remainingSec > 0) {
+      skipped.push({ protocol: candidate, remainingSec });
+      continue;
+    }
+    return { protocol: candidate, skipped };
+  }
+
+  return { protocol: null, skipped };
+}
+
 function normalizePriority(priority: string): 'low' | 'medium' | 'high' | 'critical' {
   const normalized = String(priority || '').toLowerCase();
   if (normalized === 'low' || normalized === 'medium' || normalized === 'high' || normalized === 'critical') {
@@ -450,7 +582,7 @@ function updateCrawlerState(
     status_message: string;
   }>,
 ) {
-  const allowedModes = new Set(['idle', 'blame_driven', 'independent', 'paused']);
+  const allowedModes = new Set(['idle', 'blame_driven', 'independent', 'paused', 'rollback_halt']);
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
   for (const [k, v] of Object.entries(patch)) {
@@ -1419,6 +1551,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       ? Math.max(0, Math.min(3, Number(intelligenceRecommendation.additionalPasses || 0)))
       : 0;
     const intelligencePasses = Math.min(rawIntelligencePasses, backpressure.maxAdditionalPasses);
+    const intelligenceAligned = rawIntelligencePasses > 0;
     const totalPlannedPasses = 1 + intelligencePasses;
 
     if (!isSystemDegraded && backpressure.pauseIndependent && effectiveProtocol !== REGRESSION_HARDENING_PROTOCOL) {
@@ -1428,6 +1561,24 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
         status_message: `Skipping protocol ${effectiveProtocol} due to backpressure [${backpressure.reason}; high_critical=${backpressure.highCriticalSuggestedCount}]`,
       });
       return { mode, generated: 0, protocol: effectiveProtocol };
+    }
+
+    const runnable = pickRunnableProtocol(db, {
+      preferredProtocol: effectiveProtocol,
+      isSystemDegraded,
+      suppressedWhenDegraded: SUPPRESSED_WHEN_DEGRADED,
+    });
+    if (!runnable.protocol) {
+      const skippedSummary = runnable.skipped.slice(0, 3).map((s) => `${s.protocol}:${s.remainingSec}s`).join(', ');
+      updateCrawlerState(db, {
+        mode: 'independent',
+        current_protocol: effectiveProtocol,
+        status_message: `All protocols cooling down, deferring tick [${backpressure.reason}]${skippedSummary ? ` [sample=${skippedSummary}]` : ''}`,
+      });
+      return { mode, generated: 0, protocol: effectiveProtocol };
+    }
+    if (runnable.protocol !== effectiveProtocol) {
+      effectiveProtocol = runnable.protocol;
     }
 
     updateCrawlerState(db, {
@@ -1469,10 +1620,25 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       generated += protocol4RegressionClusters(db, cycleCount);
       generated += protocol4RegressionClusters(db, cycleCount);
     }
+
+    const cooldownSeconds = computeProtocolCooldownSeconds({
+      protocolId: effectiveProtocol,
+      generated,
+      backpressure,
+      isSystemDegraded,
+      intelligenceAligned,
+    });
+    saveProtocolCooldown(db, {
+      protocolId: effectiveProtocol,
+      generated,
+      cooldownSeconds,
+      reason: `queue=${backpressure.suggestedCount}; high_critical=${backpressure.highCriticalSuggestedCount}; protocol=${effectiveProtocol}`,
+    });
+
     updateCrawlerState(db, {
       last_independent_run_at: new Date().toISOString(),
       jobs_generated_total: (state.jobs_generated_total || 0) + generated,
-      status_message: `Protocol ${effectiveProtocol} complete — generated ${generated} jobs`,
+      status_message: `Protocol ${effectiveProtocol} complete — generated ${generated} jobs [cooldown=${cooldownSeconds}s]`,
     });
 
     const stability = recordStabilitySnapshot(db, cycleCount, false);
