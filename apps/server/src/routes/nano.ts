@@ -20,13 +20,157 @@ import {
   isAlive,
   spawnNano,
 } from '../services/nano/processManager.js';
+import { appConfig } from '../config.js';
+
+type MeshSafetyPolicy = {
+  enabled: boolean;
+  killSwitch: boolean;
+  minTrustScore: number;
+  requiredAuthToken: string | null;
+};
+
+const MESH_SAFETY_KEY = 'nano:mesh:safety';
+const DEFAULT_MESH_SAFETY_POLICY: MeshSafetyPolicy = {
+  enabled: true,
+  killSwitch: false,
+  minTrustScore: 0.6,
+  requiredAuthToken: null,
+};
+
+function parseAuthToken(headers: Record<string, unknown>): string {
+  const meshHeader = headers['x-mesh-auth-token'];
+  if (typeof meshHeader === 'string' && meshHeader.trim()) return meshHeader.trim();
+
+  const authHeader = headers['authorization'];
+  if (typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+  return '';
+}
+
+function clampTrust(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return DEFAULT_MESH_SAFETY_POLICY.minTrustScore;
+  return Math.max(0, Math.min(1, num));
+}
 
 // ═════════════════════════════════════════════════════════════
 // Routes
 // ═════════════════════════════════════════════════════════════
 export async function nanoRoutes(app: FastifyInstance) {
+  const db = (app as any).db;
+
+  const loadMeshSafetyPolicy = (): MeshSafetyPolicy => {
+    let parsed: Partial<MeshSafetyPolicy> = {};
+    try {
+      const row = db.prepare('SELECT value FROM app_kv WHERE key = ?').get(MESH_SAFETY_KEY) as { value?: string } | undefined;
+      parsed = row?.value ? JSON.parse(row.value) as Partial<MeshSafetyPolicy> : {};
+    } catch {
+      parsed = {};
+    }
+
+    const envToken = String(process.env.MESH_EXEC_AUTH_TOKEN || '').trim();
+    const token = typeof parsed.requiredAuthToken === 'string' && parsed.requiredAuthToken.trim().length > 0
+      ? parsed.requiredAuthToken.trim()
+      : (envToken || null);
+
+    return {
+      enabled: parsed.enabled ?? DEFAULT_MESH_SAFETY_POLICY.enabled,
+      killSwitch: parsed.killSwitch ?? DEFAULT_MESH_SAFETY_POLICY.killSwitch,
+      minTrustScore: clampTrust(parsed.minTrustScore),
+      requiredAuthToken: token,
+    };
+  };
+
+  const saveMeshSafetyPolicy = (patch: Partial<MeshSafetyPolicy>): MeshSafetyPolicy => {
+    const current = loadMeshSafetyPolicy();
+    const next: MeshSafetyPolicy = {
+      enabled: patch.enabled ?? current.enabled,
+      killSwitch: patch.killSwitch ?? current.killSwitch,
+      minTrustScore: patch.minTrustScore === undefined ? current.minTrustScore : clampTrust(patch.minTrustScore),
+      requiredAuthToken: patch.requiredAuthToken === undefined
+        ? current.requiredAuthToken
+        : (String(patch.requiredAuthToken || '').trim() || null),
+    };
+
+    db.prepare(
+      `INSERT INTO app_kv (key, value, updated_at) VALUES (?, ?, datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
+    ).run(MESH_SAFETY_KEY, JSON.stringify(next));
+    return next;
+  };
+
+  const enforceMeshSafety = (headers: Record<string, unknown>, body: unknown) => {
+    const policy = loadMeshSafetyPolicy();
+
+    if (!appConfig.features.meshEnabled || !policy.enabled) {
+      return {
+        allowed: false,
+        statusCode: 403,
+        error: 'mesh execution is disabled by policy',
+      };
+    }
+
+    if (policy.killSwitch) {
+      return {
+        allowed: false,
+        statusCode: 423,
+        error: 'mesh execution halted by kill-switch',
+      };
+    }
+
+    if (policy.requiredAuthToken) {
+      const token = parseAuthToken(headers);
+      if (!token || token !== policy.requiredAuthToken) {
+        return {
+          allowed: false,
+          statusCode: 401,
+          error: 'mesh auth token missing or invalid',
+        };
+      }
+    }
+
+    const payload = body && typeof body === 'object' ? body as Record<string, unknown> : null;
+    const trustSignal = payload?.peerTrustScore ?? payload?.trustScore ?? payload?.trust;
+    if (trustSignal !== undefined) {
+      const score = Number(trustSignal);
+      if (!Number.isFinite(score) || score < policy.minTrustScore) {
+        return {
+          allowed: false,
+          statusCode: 403,
+          error: `peer trust score below threshold (${policy.minTrustScore})`,
+        };
+      }
+    }
+
+    return { allowed: true, statusCode: 200, error: '', policy };
+  };
+
   // Detect Python on startup
   detectPython();
+
+  app.get('/mesh/safety', async () => {
+    const policy = loadMeshSafetyPolicy();
+    return {
+      ...policy,
+      hasAuthToken: !!policy.requiredAuthToken,
+      requiredAuthToken: policy.requiredAuthToken ? '***' : null,
+      meshFeatureEnabled: appConfig.features.meshEnabled,
+    };
+  });
+
+  app.put('/mesh/safety', async (req) => {
+    const body = (req.body || {}) as Partial<MeshSafetyPolicy>;
+    const next = saveMeshSafetyPolicy(body);
+    return {
+      success: true,
+      policy: {
+        ...next,
+        hasAuthToken: !!next.requiredAuthToken,
+        requiredAuthToken: next.requiredAuthToken ? '***' : null,
+      },
+    };
+  });
 
   // ── GET /api/nano/check ─────────────────────────────────────
   // Pre-flight: is the environment ready?
@@ -222,7 +366,14 @@ export async function nanoRoutes(app: FastifyInstance) {
   };
 
   const proxyPost = (route: string, backendPath: string) => {
-    app.post(route, async (req) => {
+    app.post(route, async (req, reply) => {
+      if (route.startsWith('/mesh/') || route.startsWith('/discovery/') || route.startsWith('/pool/')) {
+        const safety = enforceMeshSafety(req.headers as Record<string, unknown>, req.body);
+        if (!safety.allowed) {
+          return reply.status(safety.statusCode).send({ error: safety.error });
+        }
+      }
+
       try {
         const c = new AbortController();
         const t = setTimeout(() => c.abort(), 3000);
@@ -241,7 +392,14 @@ export async function nanoRoutes(app: FastifyInstance) {
   };
 
   const proxyPut = (route: string, backendPath: string) => {
-    app.put(route, async (req) => {
+    app.put(route, async (req, reply) => {
+      if (route.startsWith('/mesh/') || route.startsWith('/discovery/') || route.startsWith('/pool/')) {
+        const safety = enforceMeshSafety(req.headers as Record<string, unknown>, req.body);
+        if (!safety.allowed) {
+          return reply.status(safety.statusCode).send({ error: safety.error });
+        }
+      }
+
       try {
         const c = new AbortController();
         const t = setTimeout(() => c.abort(), 3000);
