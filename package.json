@@ -11,6 +11,7 @@
     "dev:web": "pnpm --filter @personal-ide/web dev",
     "verify:workspace": "pnpm --filter @personal-ide/shared build && pnpm --filter @personal-ide/server build && pnpm --filter @personal-ide/web build && pnpm --filter @personal-ide/testing typecheck",
     "test:subsystems:e2e": "node scripts/run-subsystems-e2e.mjs",
+    "benchmark:task49": "node scripts/benchmarks/task49-harness.mjs",
     "smoke:phase4": "node scripts/smoke/phase4-smoke.mjs",
     "clean": "rimraf apps/*/dist packages/*/dist",
     "setup": "node scripts/setup.js",
