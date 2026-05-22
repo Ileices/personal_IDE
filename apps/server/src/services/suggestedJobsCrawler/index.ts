@@ -136,6 +136,88 @@ function recommendProtocolFromIntelligence(db: Database.Database): {
   return null;
 }
 
+function getSuggestedQueueBackpressure(db: Database.Database): {
+  suggestedCount: number;
+  highCriticalSuggestedCount: number;
+  maxAdditionalPasses: number;
+  pauseIndependent: boolean;
+  reason: string;
+} {
+  let suggestedCount = 0;
+  let highCriticalSuggestedCount = 0;
+
+  try {
+    suggestedCount = (db.prepare(`
+      SELECT COUNT(*) AS c
+      FROM job_records
+      WHERE implementation_status = 'suggested'
+    `).get() as { c?: number } | undefined)?.c || 0;
+
+    highCriticalSuggestedCount = (db.prepare(`
+      SELECT COUNT(*) AS c
+      FROM job_records
+      WHERE implementation_status = 'suggested'
+        AND priority IN ('high', 'critical')
+    `).get() as { c?: number } | undefined)?.c || 0;
+  } catch {
+    return {
+      suggestedCount: 0,
+      highCriticalSuggestedCount: 0,
+      maxAdditionalPasses: 1,
+      pauseIndependent: false,
+      reason: 'backpressure unavailable (query error)',
+    };
+  }
+
+  if (suggestedCount >= 1800 && highCriticalSuggestedCount < 60) {
+    return {
+      suggestedCount,
+      highCriticalSuggestedCount,
+      maxAdditionalPasses: 0,
+      pauseIndependent: true,
+      reason: `hard queue saturation suggested=${suggestedCount}`,
+    };
+  }
+
+  if (suggestedCount >= 1200) {
+    return {
+      suggestedCount,
+      highCriticalSuggestedCount,
+      maxAdditionalPasses: 0,
+      pauseIndependent: false,
+      reason: `queue saturation suggested=${suggestedCount}`,
+    };
+  }
+
+  if (suggestedCount >= 700) {
+    return {
+      suggestedCount,
+      highCriticalSuggestedCount,
+      maxAdditionalPasses: 1,
+      pauseIndependent: false,
+      reason: `queue pressure suggested=${suggestedCount}`,
+    };
+  }
+
+  if (suggestedCount >= 350) {
+    return {
+      suggestedCount,
+      highCriticalSuggestedCount,
+      maxAdditionalPasses: 2,
+      pauseIndependent: false,
+      reason: `moderate queue pressure suggested=${suggestedCount}`,
+    };
+  }
+
+  return {
+    suggestedCount,
+    highCriticalSuggestedCount,
+    maxAdditionalPasses: 3,
+    pauseIndependent: false,
+    reason: `queue healthy suggested=${suggestedCount}`,
+  };
+}
+
 function normalizePriority(priority: string): 'low' | 'medium' | 'high' | 'critical' {
   const normalized = String(priority || '').toLowerCase();
   if (normalized === 'low' || normalized === 'medium' || normalized === 'high' || normalized === 'critical') {
@@ -1332,14 +1414,30 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       effectiveProtocol = intelligenceRecommendation.protocol;
     }
 
+    const backpressure = getSuggestedQueueBackpressure(db);
+    const rawIntelligencePasses = !isSystemDegraded && intelligenceRecommendation && intelligenceRecommendation.protocol === effectiveProtocol
+      ? Math.max(0, Math.min(3, Number(intelligenceRecommendation.additionalPasses || 0)))
+      : 0;
+    const intelligencePasses = Math.min(rawIntelligencePasses, backpressure.maxAdditionalPasses);
+    const totalPlannedPasses = 1 + intelligencePasses;
+
+    if (!isSystemDegraded && backpressure.pauseIndependent && effectiveProtocol !== REGRESSION_HARDENING_PROTOCOL) {
+      updateCrawlerState(db, {
+        mode: 'independent',
+        current_protocol: effectiveProtocol,
+        status_message: `Skipping protocol ${effectiveProtocol} due to backpressure [${backpressure.reason}; high_critical=${backpressure.highCriticalSuggestedCount}]`,
+      });
+      return { mode, generated: 0, protocol: effectiveProtocol };
+    }
+
     updateCrawlerState(db, {
       mode: 'independent',
       current_protocol: effectiveProtocol,
       status_message: `Running protocol ${effectiveProtocol}${isSystemDegraded ? ' [degraded-system mode]' : ''}${
         !isSystemDegraded && intelligenceRecommendation
-          ? ` [${intelligenceRecommendation.reason}; passes=${1 + Math.max(0, Number(intelligenceRecommendation.additionalPasses || 0))}]`
+          ? ` [${intelligenceRecommendation.reason}; passes=${totalPlannedPasses}]`
           : ''
-      }`,
+      } [${backpressure.reason}; high_critical=${backpressure.highCriticalSuggestedCount}]`,
     });
 
     const protocolFns = [
@@ -1357,9 +1455,6 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
     ];
 
     const runSelectedProtocol = protocolFns[effectiveProtocol - 1];
-    const intelligencePasses = !isSystemDegraded && intelligenceRecommendation && intelligenceRecommendation.protocol === effectiveProtocol
-      ? Math.max(0, Math.min(3, Number(intelligenceRecommendation.additionalPasses || 0)))
-      : 0;
 
     generated = 0;
     for (let pass = 0; pass < 1 + intelligencePasses; pass += 1) {
