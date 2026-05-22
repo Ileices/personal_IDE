@@ -98,6 +98,94 @@ type PipelineCheckpointInput = {
 let schedulerTimer: ReturnType<typeof setInterval> | null = null;
 let schedulerRunning = false;
 let lastTickAt: string | null = null;
+let schedulerSaturationStreak = 0;
+let schedulerDeferredUntilTs = 0;
+
+type SchedulerBackpressurePolicy = {
+  suggestedCount: number;
+  highCriticalCount: number;
+  intervalMultiplier: number;
+  shouldDeferTick: boolean;
+  deferMs: number;
+  reason: string;
+};
+
+function getSchedulerBackpressurePolicy(db: Database.Database): SchedulerBackpressurePolicy {
+  let suggestedCount = 0;
+  let highCriticalCount = 0;
+
+  try {
+    suggestedCount = (db.prepare(`
+      SELECT COUNT(*) AS c
+      FROM job_records
+      WHERE implementation_status = 'suggested'
+    `).get() as { c?: number } | undefined)?.c || 0;
+
+    highCriticalCount = (db.prepare(`
+      SELECT COUNT(*) AS c
+      FROM job_records
+      WHERE implementation_status = 'suggested'
+        AND priority IN ('high', 'critical')
+    `).get() as { c?: number } | undefined)?.c || 0;
+  } catch {
+    return {
+      suggestedCount: 0,
+      highCriticalCount: 0,
+      intervalMultiplier: 1,
+      shouldDeferTick: false,
+      deferMs: 0,
+      reason: 'scheduler backpressure unavailable',
+    };
+  }
+
+  if (suggestedCount >= 900) {
+    schedulerSaturationStreak += 1;
+  } else {
+    schedulerSaturationStreak = 0;
+  }
+
+  if (suggestedCount >= 1800 && highCriticalCount < 120 && schedulerSaturationStreak >= 3) {
+    return {
+      suggestedCount,
+      highCriticalCount,
+      intervalMultiplier: 4,
+      shouldDeferTick: true,
+      deferMs: 60_000,
+      reason: `severe saturation suggested=${suggestedCount} streak=${schedulerSaturationStreak}`,
+    };
+  }
+
+  if (suggestedCount >= 1400) {
+    return {
+      suggestedCount,
+      highCriticalCount,
+      intervalMultiplier: 3,
+      shouldDeferTick: false,
+      deferMs: 0,
+      reason: `high saturation suggested=${suggestedCount}`,
+    };
+  }
+
+  if (suggestedCount >= 900) {
+    return {
+      suggestedCount,
+      highCriticalCount,
+      intervalMultiplier: 2,
+      shouldDeferTick: false,
+      deferMs: 0,
+      reason: `moderate saturation suggested=${suggestedCount}`,
+    };
+  }
+
+  return {
+    suggestedCount,
+    highCriticalCount,
+    intervalMultiplier: 1,
+    shouldDeferTick: false,
+    deferMs: 0,
+    reason: `queue healthy suggested=${suggestedCount}`,
+  };
+}
 
 function parseLastRun(db: Database.Database, subsystem: SubsystemId): ParsedRunPayload | null {
   const raw = getKv(db, `subsystems:last_run:${subsystem}`);
@@ -619,18 +707,40 @@ export function getSubsystemRuntimeStatus(db: Database.Database) {
 
 async function tick(db: Database.Database): Promise<void> {
   if (schedulerRunning) return;
+  if (Date.now() < schedulerDeferredUntilTs) return;
   schedulerRunning = true;
   lastTickAt = new Date().toISOString();
   try {
     const settings = loadSettings(db);
     const autoIntelSettings = loadAutoIntelSettings(db);
+    const schedulerBackpressure = getSchedulerBackpressurePolicy(db);
     const memory = new MemoryService(db);
     const checkpointInput: PipelineCheckpointInput = {
       tickStartedAt: lastTickAt || new Date().toISOString(),
       idleScanRan: false,
     };
 
-    if (shouldRunNow(db, 'ide_codebase_crawler', settings.ide_codebase_crawler)) {
+    if (schedulerBackpressure.shouldDeferTick) {
+      schedulerDeferredUntilTs = Date.now() + schedulerBackpressure.deferMs;
+      setKv(db, 'subsystems:scheduler:backpressure', JSON.stringify({
+        deferredUntil: new Date(schedulerDeferredUntilTs).toISOString(),
+        reason: schedulerBackpressure.reason,
+        suggestedCount: schedulerBackpressure.suggestedCount,
+        highCriticalCount: schedulerBackpressure.highCriticalCount,
+        streak: schedulerSaturationStreak,
+        recordedAt: new Date().toISOString(),
+      }));
+      return;
+    }
+
+    const shouldRunHeavy = (subsystem: SubsystemId, cfg: SubsystemConfig): boolean => {
+      if (!cfg.enabled || !cfg.idleEnabled || cfg.manualOnly) return false;
+      const lastRunTs = getLastRunTs(db, subsystem);
+      const adjustedIntervalSec = cfg.idleIntervalSec * schedulerBackpressure.intervalMultiplier;
+      return Date.now() - lastRunTs >= adjustedIntervalSec * 1000;
+    };
+
+    if (shouldRunHeavy('ide_codebase_crawler', settings.ide_codebase_crawler)) {
       try {
         await executeSubsystem(db, { subsystem: 'ide_codebase_crawler', depth: settings.ide_codebase_crawler.maxDepth });
       } catch (error) {
@@ -642,7 +752,7 @@ async function tick(db: Database.Database): Promise<void> {
     const fallbackProject = getMostRecentProject(db);
     const targetProject = rotatingProject ?? fallbackProject;
 
-    if (targetProject && shouldRunNow(db, 'project_state_crawler', settings.project_state_crawler)) {
+    if (targetProject && shouldRunHeavy('project_state_crawler', settings.project_state_crawler)) {
       try {
         const crawl = await runProjectStateCrawlerSubsystem(db, settings.project_state_crawler, targetProject, 'scheduler');
         checkpointInput.projectState = {
@@ -668,7 +778,7 @@ async function tick(db: Database.Database): Promise<void> {
       }
     }
 
-    if (shouldRunNow(db, 'gap_analysis', settings.gap_analysis)) {
+    if (shouldRunHeavy('gap_analysis', settings.gap_analysis)) {
       try {
         const gap = await runGapAnalysisSubsystem(db, targetProject, 'scheduler');
         checkpointInput.gap = {
@@ -693,6 +803,16 @@ async function tick(db: Database.Database): Promise<void> {
     if (checkpointInput.projectState || checkpointInput.gap || checkpointInput.suggested || checkpointInput.idleScanRan) {
       recordPipelineCheckpoint(db, checkpointInput);
     }
+
+    setKv(db, 'subsystems:scheduler:backpressure', JSON.stringify({
+      deferredUntil: null,
+      reason: schedulerBackpressure.reason,
+      suggestedCount: schedulerBackpressure.suggestedCount,
+      highCriticalCount: schedulerBackpressure.highCriticalCount,
+      intervalMultiplier: schedulerBackpressure.intervalMultiplier,
+      streak: schedulerSaturationStreak,
+      recordedAt: new Date().toISOString(),
+    }));
 
     if (!isAutoIntelManagedByRoute(db) && shouldRunAutoIntelNow(db, autoIntelSettings)) {
       try {

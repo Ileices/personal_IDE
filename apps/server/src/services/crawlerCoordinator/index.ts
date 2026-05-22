@@ -114,7 +114,15 @@ export function runCrawlerCoordinatorTick(db: Database.Database, input: CrawlerC
   const relationship = new RelationshipIndexService(db).scanProject(input.projectId, projectRoot, files);
 
   const latestSnapshot = db.prepare(`
-    SELECT snapshot_id, total_devtags, drift_events
+    SELECT
+      snapshot_id,
+      total_devtags,
+      (
+        COALESCE(registry_surplus_count, 0)
+        + COALESCE(registry_deficit_count, 0)
+        + COALESCE(content_drift_count, 0)
+        + COALESCE(location_drift_count, 0)
+      ) AS drift_events
     FROM ground_truth_snapshots
     WHERE project_path = ?
     ORDER BY datetime(created_at) DESC

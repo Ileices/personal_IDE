@@ -2719,11 +2719,20 @@ const MIGRATIONS: Migration[] = [
       const hasColumn = (table: string, col: string) =>
         (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
 
+      const indexOrderColumn = hasColumn('memory_notes', 'extracted_at')
+        ? 'extracted_at'
+        : hasColumn('memory_notes', 'created_at')
+        ? 'created_at'
+        : null;
+
       if (!hasColumn('memory_notes', 'importance_score')) {
         db.exec(`ALTER TABLE memory_notes ADD COLUMN importance_score REAL NOT NULL DEFAULT 0.5`);
+      }
+
+      if (indexOrderColumn) {
         db.exec(`
           CREATE INDEX IF NOT EXISTS idx_memory_notes_importance
-            ON memory_notes(project_id, importance_score DESC, extracted_at);
+            ON memory_notes(project_id, importance_score DESC, ${indexOrderColumn});
         `);
       }
     },
