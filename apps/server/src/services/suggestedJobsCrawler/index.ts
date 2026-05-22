@@ -220,6 +220,156 @@ function getSuggestedQueueBackpressure(db: Database.Database): {
 
 type QueueBackpressure = ReturnType<typeof getSuggestedQueueBackpressure>;
 
+function getIntelligenceFreshnessInfo(db: Database.Database): {
+  freshness: 'fresh' | 'stale' | 'missing';
+  ageMinutes: number | null;
+  maxPassCap: number;
+  reason: string;
+} {
+  try {
+    const projectId = getMostRecentProjectId(db);
+    if (!projectId) {
+      return {
+        freshness: 'missing',
+        ageMinutes: null,
+        maxPassCap: 1,
+        reason: 'no project selected for intelligence freshness',
+      };
+    }
+
+    const row = db.prepare(`
+      SELECT indexed_at
+      FROM codebase_intelligence
+      WHERE project_id = ?
+        AND facet = 'overview'
+      ORDER BY datetime(indexed_at) DESC
+      LIMIT 1
+    `).get(projectId) as { indexed_at?: string } | undefined;
+
+    if (!row?.indexed_at) {
+      return {
+        freshness: 'missing',
+        ageMinutes: null,
+        maxPassCap: 1,
+        reason: 'no overview intelligence available',
+      };
+    }
+
+    const ageMs = Date.now() - new Date(String(row.indexed_at)).getTime();
+    const ageMinutes = Number.isFinite(ageMs) && ageMs >= 0 ? Math.floor(ageMs / 60000) : null;
+    if (ageMinutes === null) {
+      return {
+        freshness: 'stale',
+        ageMinutes: null,
+        maxPassCap: 1,
+        reason: 'invalid intelligence timestamp',
+      };
+    }
+
+    if (ageMinutes > 180) {
+      return {
+        freshness: 'stale',
+        ageMinutes,
+        maxPassCap: 1,
+        reason: `intelligence stale (${ageMinutes}m old)`,
+      };
+    }
+
+    if (ageMinutes > 60) {
+      return {
+        freshness: 'stale',
+        ageMinutes,
+        maxPassCap: 2,
+        reason: `intelligence aging (${ageMinutes}m old)`,
+      };
+    }
+
+    return {
+      freshness: 'fresh',
+      ageMinutes,
+      maxPassCap: 3,
+      reason: `intelligence fresh (${ageMinutes}m old)`,
+    };
+  } catch {
+    return {
+      freshness: 'missing',
+      ageMinutes: null,
+      maxPassCap: 1,
+      reason: 'intelligence freshness lookup failed',
+    };
+  }
+}
+
+function getStabilityPressureInfo(db: Database.Database): {
+  level: 'low' | 'medium' | 'high';
+  maxPassCap: number;
+  reason: string;
+} {
+  try {
+    const recentCriticalEvents = (db.prepare(`
+      SELECT COUNT(*) AS c
+      FROM system_health_events
+      WHERE triggered_at >= datetime('now', '-2 hours')
+        AND severity IN ('error', 'critical')
+    `).get() as { c?: number } | undefined)?.c || 0;
+
+    const activeRollbacks = (db.prepare(`
+      SELECT COUNT(*) AS c
+      FROM notification_queue
+      WHERE category = 'stability_rollback'
+        AND user_acknowledged = 0
+    `).get() as { c?: number } | undefined)?.c || 0;
+
+    if (activeRollbacks > 0 || recentCriticalEvents >= 4) {
+      return {
+        level: 'high',
+        maxPassCap: 1,
+        reason: `stability high pressure (events=${recentCriticalEvents}, rollbacks=${activeRollbacks})`,
+      };
+    }
+
+    if (recentCriticalEvents >= 2) {
+      return {
+        level: 'medium',
+        maxPassCap: 2,
+        reason: `stability medium pressure (events=${recentCriticalEvents})`,
+      };
+    }
+
+    return {
+      level: 'low',
+      maxPassCap: 3,
+      reason: `stability low pressure (events=${recentCriticalEvents})`,
+    };
+  } catch {
+    return {
+      level: 'medium',
+      maxPassCap: 2,
+      reason: 'stability pressure lookup failed',
+    };
+  }
+}
+
+function getDynamicPassBudget(db: Database.Database, backpressure: QueueBackpressure): {
+  maxAdditionalPasses: number;
+  reason: string;
+} {
+  const freshness = getIntelligenceFreshnessInfo(db);
+  const stability = getStabilityPressureInfo(db);
+  const cap = Math.max(
+    0,
+    Math.min(
+      3,
+      Math.min(backpressure.maxAdditionalPasses, freshness.maxPassCap, stability.maxPassCap),
+    ),
+  );
+
+  return {
+    maxAdditionalPasses: cap,
+    reason: `${backpressure.reason}; ${freshness.reason}; ${stability.reason}`,
+  };
+}
+
 function getProtocolCooldownRemainingSeconds(db: Database.Database, protocolId: number): number {
   try {
     const row = db.prepare(`
@@ -1547,10 +1697,11 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
     }
 
     const backpressure = getSuggestedQueueBackpressure(db);
+    const dynamicBudget = getDynamicPassBudget(db, backpressure);
     const rawIntelligencePasses = !isSystemDegraded && intelligenceRecommendation && intelligenceRecommendation.protocol === effectiveProtocol
       ? Math.max(0, Math.min(3, Number(intelligenceRecommendation.additionalPasses || 0)))
       : 0;
-    const intelligencePasses = Math.min(rawIntelligencePasses, backpressure.maxAdditionalPasses);
+    const intelligencePasses = Math.min(rawIntelligencePasses, dynamicBudget.maxAdditionalPasses);
     const intelligenceAligned = rawIntelligencePasses > 0;
     const totalPlannedPasses = 1 + intelligencePasses;
 
@@ -1558,7 +1709,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
       updateCrawlerState(db, {
         mode: 'independent',
         current_protocol: effectiveProtocol,
-        status_message: `Skipping protocol ${effectiveProtocol} due to backpressure [${backpressure.reason}; high_critical=${backpressure.highCriticalSuggestedCount}]`,
+        status_message: `Skipping protocol ${effectiveProtocol} due to backpressure [${dynamicBudget.reason}; high_critical=${backpressure.highCriticalSuggestedCount}]`,
       });
       return { mode, generated: 0, protocol: effectiveProtocol };
     }
@@ -1588,7 +1739,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
         !isSystemDegraded && intelligenceRecommendation
           ? ` [${intelligenceRecommendation.reason}; passes=${totalPlannedPasses}]`
           : ''
-      } [${backpressure.reason}; high_critical=${backpressure.highCriticalSuggestedCount}]`,
+      } [${dynamicBudget.reason}; high_critical=${backpressure.highCriticalSuggestedCount}]`,
     });
 
     const protocolFns = [
