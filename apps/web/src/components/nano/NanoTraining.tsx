@@ -1,6 +1,6 @@
 import React from 'react';
 import { Activity, Pause, Play, Square } from 'lucide-react';
-import { Badge, Section, Button } from '../ui/widgets';
+import { Badge, Section } from '../ui/widgets';
 
 interface Props {
   trainingStatus: any;
@@ -14,11 +14,15 @@ export function NanoTraining({ trainingStatus, computeStatus, onPause, onResume,
   const fmtNum = (n: any, digits = 4) => (typeof n === 'number' ? n.toFixed(digits) : '—');
 
   return (
-    <Section title="Training & Models" icon={Activity} badge=
-      trainingStatus?.running
-        ? <Badge color="green">Training</Badge>
-        : <Badge color="gray">Idle</Badge>
-    }>
+    <Section
+      title="Training & Models"
+      icon={Activity}
+      badge={
+        trainingStatus?.running
+          ? <Badge color="green">Training</Badge>
+          : <Badge color="gray">Idle</Badge>
+      }
+    >
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
           <div className="flex justify-between">
@@ -78,32 +82,26 @@ export function NanoTraining({ trainingStatus, computeStatus, onPause, onResume,
         {/* NEW: Training Controls */}
         <div className="mt-3 flex gap-2">
           {trainingStatus?.running ? (
-            <Button
-              size="xs"
-              variant="outline"
+            <button
               onClick={onPause}
-              className="flex items-center gap-1 text-xs"
+              className="px-2 py-1 rounded border border-ide-border bg-ide-bg/60 hover:bg-ide-bg text-xs flex items-center gap-1"
             >
               <Pause size={12} /> Pause
-            </Button>
+            </button>
           ) : (
-            <Button
-              size="xs"
-              variant="outline"
+            <button
               onClick={onResume}
-              className="flex items-center gap-1 text-xs"
+              className="px-2 py-1 rounded border border-ide-border bg-ide-bg/60 hover:bg-ide-bg text-xs flex items-center gap-1"
             >
               <Play size={12} /> Resume
-            </Button>
+            </button>
           )}
-          <Button
-            size="xs"
-            variant="destructive"
+          <button
             onClick={onStop}
-            className="flex items-center gap-1 text-xs"
+            className="px-2 py-1 rounded border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 text-xs flex items-center gap-1"
           >
             <Square size={12} /> Stop
-          </Button>
+          </button>
         </div>
 
         {(typeof trainingStatus?.gpu_hit_rate === 'number' || typeof trainingStatus?.cpu_hit_rate === 'number') && (

@@ -732,7 +732,7 @@ function updateCrawlerState(
     status_message: string;
   }>,
 ) {
-  const allowedModes = new Set(['idle', 'blame_driven', 'independent', 'paused', 'rollback_halt']);
+  const allowedModes = new Set(['idle', 'blame_driven', 'independent', 'paused']);
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
   for (const [k, v] of Object.entries(patch)) {
@@ -1604,7 +1604,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
   if (!state) return { mode: 'idle', generated: 0 };
   if (isPipelineHaltedByRollback(db)) {
     updateCrawlerState(db, {
-      mode: 'rollback_halt',
+      mode: 'paused',
       status_message: 'Pipeline halted due to active stability rollback notification',
     });
     return { mode: 'rollback_halt', generated: 0 };
@@ -1795,7 +1795,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
     const stability = recordStabilitySnapshot(db, cycleCount, false);
     if (stability.triggered) {
       updateCrawlerState(db, {
-        mode: 'rollback_halt',
+        mode: 'paused',
         status_message: `Stability rollback triggered (${stability.reason || 'unknown'}) — halting pipeline`,
       });
       return { mode: 'rollback_halt', generated: 0, protocol: currentProtocol };
@@ -1807,7 +1807,7 @@ export function runSuggestedJobsCrawlerTick(db: Database.Database): {
   const stability = recordStabilitySnapshot(db, cycleCount, false);
   if (stability.triggered) {
     updateCrawlerState(db, {
-      mode: 'rollback_halt',
+      mode: 'paused',
       status_message: `Stability rollback triggered (${stability.reason || 'unknown'}) — halting pipeline`,
     });
     return { mode: 'rollback_halt', generated: 0 };
