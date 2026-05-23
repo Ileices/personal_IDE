@@ -222,7 +222,7 @@ describe('God Factory Loop Contract', () => {
       autoApproveChanges: false,
       autoAnswerQuestions: false,
       checkpointEvery: 4,
-      jobMaxIterations: 5,
+      jobMaxIterations: 50,
       mode: 'safe',
     });
   });
