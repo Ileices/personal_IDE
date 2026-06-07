@@ -168,6 +168,543 @@ const SCAFFOLD_TEMPLATES = [
     ],
   },
   {
+    id: 'game-topdown-rpg',
+    name: 'Top-Down Open World RPG',
+    description: 'Open-world top-down RPG with tile maps, player movement, NPCs, quests, inventory, and save/load. No dependencies — pure HTML5 Canvas. Launch with a single click.',
+    stack: ['javascript', 'canvas', 'html'],
+    recommended_workflow: 'build_new',
+    recommended_strategy: 'fullstack-balanced',
+    starter_files: [
+      {
+        path: 'index.html',
+        content: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open World RPG</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; font-family: monospace; color: #eee; }
+    #gameCanvas { display: block; border: 2px solid #333; image-rendering: pixelated; }
+    #hud { width: 800px; display: flex; justify-content: space-between; padding: 4px 8px; background: #1a1a2e; font-size: 13px; }
+    #log { width: 800px; height: 64px; background: #0d0d1a; overflow-y: auto; padding: 4px 8px; font-size: 11px; color: #aaa; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <span id="hudHp">HP: 100/100</span>
+    <span id="hudGold">Gold: 0</span>
+    <span id="hudLevel">Level 1</span>
+    <span id="hudPos">0,0</span>
+  </div>
+  <canvas id="gameCanvas" width="800" height="560"></canvas>
+  <div id="log"></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>`,
+      },
+      {
+        path: 'src/main.js',
+        content: `import { World } from './world.js';
+import { Player } from './player.js';
+import { InputHandler } from './input.js';
+import { Renderer } from './renderer.js';
+import { UIManager } from './ui.js';
+import { SaveSystem } from './save.js';
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const input = new InputHandler();
+const world = new World(64, 64);        // 64x64 tile world
+const player = new Player(world);
+const renderer = new Renderer(canvas, ctx, world);
+const ui = new UIManager();
+const save = new SaveSystem(player, world);
+
+// Auto-load save if exists
+save.load();
+
+let lastTime = performance.now();
+let accumulated = 0;
+const FIXED_STEP = 1000 / 60;
+
+function loop(now) {
+  const dt = now - lastTime;
+  lastTime = now;
+  accumulated += dt;
+
+  while (accumulated >= FIXED_STEP) {
+    player.update(FIXED_STEP, input, world);
+    world.updateNPCs(FIXED_STEP, player);
+    accumulated -= FIXED_STEP;
+  }
+
+  renderer.render(player);
+  ui.update(player);
+  requestAnimationFrame(loop);
+}
+
+// Auto-save every 30 seconds
+setInterval(() => save.save(), 30_000);
+
+requestAnimationFrame(loop);
+window._rpgGame = { player, world, save };
+console.log('RPG Engine started. Access window._rpgGame for debugging.');
+`,
+      },
+      {
+        path: 'src/world.js',
+        content: `// Tile types
+export const TILES = {
+  GRASS: 0, WATER: 1, SAND: 2, FOREST: 3, STONE: 4,
+  WALL: 5, FLOOR: 6, PATH: 7, TOWN: 8,
+};
+
+export const TILE_COLORS = {
+  [TILES.GRASS]:  '#3a7d44',
+  [TILES.WATER]:  '#1a5276',
+  [TILES.SAND]:   '#c9a84c',
+  [TILES.FOREST]: '#1e5631',
+  [TILES.STONE]:  '#6b7280',
+  [TILES.WALL]:   '#374151',
+  [TILES.FLOOR]:  '#7c6f5e',
+  [TILES.PATH]:   '#b8a99a',
+  [TILES.TOWN]:   '#6b5e4e',
+};
+
+export const TILE_SOLID = {
+  [TILES.WALL]: true, [TILES.WATER]: true, [TILES.FOREST]: false,
+};
+
+export class World {
+  constructor(width, height) {
+    this.width = width;
+    this.height = height;
+    this.tiles = this._generate(width, height);
+    this.npcs = this._spawnNPCs();
+    this.items = this._spawnItems();
+    this.chests = this._spawnChests();
+    this.quests = this._buildQuests();
+    this.log = [];
+  }
+
+  _generate(w, h) {
+    const tiles = new Uint8Array(w * h).fill(TILES.GRASS);
+    // Simple noise-based generation
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const n = Math.sin(x * 0.3 + y * 0.13) + Math.cos(x * 0.11 - y * 0.27);
+        if (n > 1.2) tiles[y * w + x] = TILES.WATER;
+        else if (n > 0.8) tiles[y * w + x] = TILES.SAND;
+        else if (n < -1.0) tiles[y * w + x] = TILES.FOREST;
+        else if (n < -1.4) tiles[y * w + x] = TILES.STONE;
+      }
+    }
+    // Place town at center
+    const cx = Math.floor(w / 2), cy = Math.floor(h / 2);
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        if (Math.abs(dx) === 3 || Math.abs(dy) === 3) tiles[(cy + dy) * w + (cx + dx)] = TILES.WALL;
+        else tiles[(cy + dy) * w + (cx + dx)] = TILES.FLOOR;
+      }
+    }
+    // Entrance
+    tiles[(cy + 3) * w + cx] = TILES.PATH;
+    return tiles;
+  }
+
+  _spawnNPCs() {
+    const cx = Math.floor(this.width / 2);
+    const cy = Math.floor(this.height / 2);
+    return [
+      { id: 'elder', name: 'Village Elder', x: cx, y: cy - 1, color: '#e0c080', dialog: ['Welcome, traveler.', 'The dungeon to the north holds great treasure.', 'Beware the slimes.'], questGiver: 'slay_slimes', w: 1, h: 1 },
+      { id: 'merchant', name: 'Merchant', x: cx + 2, y: cy, color: '#80c0e0', dialog: ['Buy something?', 'I sell potions.', 'Come back anytime.'], shop: [{ name: 'Health Potion', cost: 10, heal: 30 }], w: 1, h: 1 },
+      { id: 'knight', name: 'Guard', x: cx - 2, y: cy, color: '#c0c0c0', dialog: ['Halt!', 'The town is safe under my watch.'], w: 1, h: 1 },
+    ];
+  }
+
+  _spawnItems() {
+    return [
+      { id: 'sword1', name: 'Iron Sword', x: 10, y: 10, color: '#c0c0c0', collected: false, stat: { attack: 5 } },
+      { id: 'shield1', name: 'Wooden Shield', x: 50, y: 20, color: '#8b6914', collected: false, stat: { defense: 3 } },
+      { id: 'potion1', name: 'Health Potion', x: 20, y: 40, color: '#e00060', collected: false, heal: 25 },
+      { id: 'potion2', name: 'Health Potion', x: 35, y: 55, color: '#e00060', collected: false, heal: 25 },
+      { id: 'gold1', name: 'Gold Pile', x: 15, y: 30, color: '#ffd700', collected: false, gold: 15 },
+    ];
+  }
+
+  _spawnChests() {
+    return [
+      { id: 'chest1', x: 8, y: 8, opened: false, contents: [{ name: 'Ruby', gold: 50 }], color: '#8b4513' },
+      { id: 'chest2', x: 55, y: 45, opened: false, contents: [{ name: 'Magic Scroll', gold: 30 }], color: '#8b4513' },
+    ];
+  }
+
+  _buildQuests() {
+    return {
+      slay_slimes: { id: 'slay_slimes', title: 'Slay 3 Slimes', active: false, complete: false, progress: 0, goal: 3, reward: { gold: 20, xp: 50 } },
+    };
+  }
+
+  getTile(x, y) {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return TILES.WALL;
+    return this.tiles[y * this.width + x];
+  }
+
+  isSolid(x, y) {
+    return !!TILE_SOLID[this.getTile(x, y)];
+  }
+
+  updateNPCs(dt, player) {
+    // Simple NPC wander AI (non-hostile)
+    for (const npc of this.npcs) {
+      if (Math.random() < 0.003) {
+        const dirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+        const d = dirs[Math.floor(Math.random() * dirs.length)];
+        const nx = npc.x + d.dx, ny = npc.y + d.dy;
+        if (!this.isSolid(nx, ny)) { npc.x = nx; npc.y = ny; }
+      }
+    }
+  }
+
+  addLog(msg) {
+    this.log.unshift(msg);
+    if (this.log.length > 50) this.log.pop();
+  }
+}
+`,
+      },
+      {
+        path: 'src/player.js',
+        content: `import { TILES } from './world.js';
+
+export class Player {
+  constructor(world) {
+    this.world = world;
+    this.x = Math.floor(world.width / 2);
+    this.y = Math.floor(world.height / 2) + 5;
+    this.hp = 100; this.maxHp = 100;
+    this.gold = 0; this.xp = 0; this.level = 1;
+    this.attack = 5; this.defense = 2;
+    this.inventory = [];
+    this.completedQuests = [];
+    this.moveTimer = 0;
+    this.moveCooldown = 120;  // ms between tile moves
+    this.facing = 'down';
+    this.color = '#4af';
+  }
+
+  update(dt, input, world) {
+    this.moveTimer -= dt;
+    if (this.moveTimer > 0) return;
+
+    let dx = 0, dy = 0;
+    if (input.keys['ArrowUp']    || input.keys['w'] || input.keys['W']) { dy = -1; this.facing = 'up'; }
+    if (input.keys['ArrowDown']  || input.keys['s'] || input.keys['S']) { dy = +1; this.facing = 'down'; }
+    if (input.keys['ArrowLeft']  || input.keys['a'] || input.keys['A']) { dx = -1; this.facing = 'left'; }
+    if (input.keys['ArrowRight'] || input.keys['d'] || input.keys['D']) { dx = +1; this.facing = 'right'; }
+    if (input.keys['e'] || input.keys['E']) { this._interact(world); this.moveTimer = this.moveCooldown; return; }
+
+    if (dx !== 0 || dy !== 0) {
+      const nx = this.x + dx, ny = this.y + dy;
+      if (!world.isSolid(nx, ny)) {
+        this.x = nx; this.y = ny;
+        this._checkPickups(world);
+        this.moveTimer = this.moveCooldown;
+      }
+    }
+  }
+
+  _checkPickups(world) {
+    // Items
+    for (const item of world.items) {
+      if (!item.collected && item.x === this.x && item.y === this.y) {
+        item.collected = true;
+        if (item.heal) { this.hp = Math.min(this.maxHp, this.hp + item.heal); world.addLog(\`Picked up \${item.name} (+\${item.heal} HP)\`); }
+        else if (item.gold) { this.gold += item.gold; world.addLog(\`Found \${item.gold} gold!\`); }
+        else { this.inventory.push(item); world.addLog(\`Picked up \${item.name}\`); }
+      }
+    }
+    // Chests
+    for (const chest of world.chests) {
+      if (!chest.opened && chest.x === this.x && chest.y === this.y) {
+        chest.opened = true;
+        for (const c of chest.contents) {
+          this.gold += (c.gold || 0);
+          world.addLog(\`Chest: \${c.name} (+\${c.gold || 0} gold)\`);
+        }
+      }
+    }
+  }
+
+  _interact(world) {
+    // Check adjacent NPCs
+    const dirs = [{dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0}];
+    for (const { dx, dy } of dirs) {
+      const nx = this.x + dx, ny = this.y + dy;
+      const npc = world.npcs.find(n => n.x === nx && n.y === ny);
+      if (npc) {
+        const line = npc.dialog[Math.floor(Math.random() * npc.dialog.length)];
+        world.addLog(\`\${npc.name}: "\${line}"\`);
+        if (npc.questGiver && world.quests[npc.questGiver]) {
+          const q = world.quests[npc.questGiver];
+          if (!q.active && !q.complete) { q.active = true; world.addLog(\`Quest started: \${q.title}\`); }
+          if (q.complete && !this.completedQuests.includes(q.id)) {
+            this.completedQuests.push(q.id);
+            this.gold += q.reward.gold;
+            this.xp += q.reward.xp;
+            world.addLog(\`Quest complete! +\${q.reward.gold} gold, +\${q.reward.xp} XP\`);
+          }
+        }
+        return;
+      }
+    }
+    world.addLog('Nothing nearby.');
+  }
+
+  gainXP(amount) {
+    this.xp += amount;
+    const needed = this.level * 100;
+    if (this.xp >= needed) { this.level++; this.maxHp += 10; this.hp = this.maxHp; this.attack++; this.world.addLog(\`Level up! Now level \${this.level}\`); }
+  }
+}
+`,
+      },
+      {
+        path: 'src/input.js',
+        content: `export class InputHandler {
+  constructor() {
+    this.keys = {};
+    window.addEventListener('keydown', e => { this.keys[e.key] = true; });
+    window.addEventListener('keyup', e => { delete this.keys[e.key]; });
+  }
+}
+`,
+      },
+      {
+        path: 'src/renderer.js',
+        content: `import { TILE_COLORS } from './world.js';
+
+const TILE_SIZE = 32;
+const VIEWPORT_W = 25;  // tiles visible
+const VIEWPORT_H = 17;
+
+export class Renderer {
+  constructor(canvas, ctx, world) {
+    this.canvas = canvas;
+    this.ctx = ctx;
+    this.world = world;
+  }
+
+  render(player) {
+    const ctx = this.ctx;
+    const w = this.world;
+
+    // Camera: center on player
+    const camX = player.x - Math.floor(VIEWPORT_W / 2);
+    const camY = player.y - Math.floor(VIEWPORT_H / 2);
+
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Draw tiles
+    for (let ty = 0; ty < VIEWPORT_H; ty++) {
+      for (let tx = 0; tx < VIEWPORT_W; tx++) {
+        const wx = camX + tx, wy = camY + ty;
+        const tile = w.getTile(wx, wy);
+        ctx.fillStyle = TILE_COLORS[tile] || '#222';
+        ctx.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      }
+    }
+
+    // Draw items
+    for (const item of w.items) {
+      if (item.collected) continue;
+      const sx = (item.x - camX) * TILE_SIZE, sy = (item.y - camY) * TILE_SIZE;
+      if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
+      ctx.fillStyle = item.color;
+      ctx.beginPath(); ctx.arc(sx + 16, sy + 16, 6, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Draw chests
+    for (const chest of w.chests) {
+      const sx = (chest.x - camX) * TILE_SIZE, sy = (chest.y - camY) * TILE_SIZE;
+      if (sx < 0 || sy < 0) continue;
+      ctx.fillStyle = chest.opened ? '#5a3010' : chest.color;
+      ctx.fillRect(sx + 4, sy + 8, 24, 16);
+      ctx.fillStyle = '#ffd700';
+      ctx.fillRect(sx + 12, sy + 12, 8, 6);
+    }
+
+    // Draw NPCs
+    for (const npc of w.npcs) {
+      const sx = (npc.x - camX) * TILE_SIZE, sy = (npc.y - camY) * TILE_SIZE;
+      if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
+      ctx.fillStyle = npc.color;
+      ctx.fillRect(sx + 4, sy + 4, 24, 24);
+      ctx.fillStyle = '#000';
+      ctx.font = '9px monospace';
+      ctx.fillText(npc.name.slice(0, 8), sx, sy + 30);
+    }
+
+    // Draw player
+    const px = (player.x - camX) * TILE_SIZE;
+    const py = (player.y - camY) * TILE_SIZE;
+    ctx.fillStyle = player.color;
+    ctx.fillRect(px + 6, py + 6, 20, 20);
+    // Draw direction indicator
+    ctx.fillStyle = '#fff';
+    const dirOffsets = { up:[10,8,4,2], down:[10,22,4,2], left:[8,12,2,8], right:[22,12,2,8] };
+    const [ox,oy,ow,oh] = dirOffsets[player.facing] || [10,22,4,2];
+    ctx.fillRect(px + ox, py + oy, ow, oh);
+
+    // HP bar
+    const hpFrac = player.hp / player.maxHp;
+    ctx.fillStyle = '#300';
+    ctx.fillRect(px + 2, py + 2, 28, 4);
+    ctx.fillStyle = hpFrac > 0.5 ? '#0a0' : hpFrac > 0.25 ? '#aa0' : '#a00';
+    ctx.fillRect(px + 2, py + 2, Math.floor(28 * hpFrac), 4);
+  }
+}
+`,
+      },
+      {
+        path: 'src/ui.js',
+        content: `export class UIManager {
+  constructor() {
+    this.hudHp   = document.getElementById('hudHp');
+    this.hudGold = document.getElementById('hudGold');
+    this.hudLvl  = document.getElementById('hudLevel');
+    this.hudPos  = document.getElementById('hudPos');
+    this.logEl   = document.getElementById('log');
+    this._lastLogLen = 0;
+  }
+
+  update(player) {
+    if (this.hudHp)   this.hudHp.textContent   = \`HP: \${player.hp}/\${player.maxHp}\`;
+    if (this.hudGold) this.hudGold.textContent  = \`Gold: \${player.gold}\`;
+    if (this.hudLvl)  this.hudLvl.textContent   = \`Level \${player.level} (XP:\${player.xp})\`;
+    if (this.hudPos)  this.hudPos.textContent   = \`\${player.x},\${player.y}\`;
+
+    const log = player.world.log;
+    if (log.length !== this._lastLogLen && this.logEl) {
+      this.logEl.innerHTML = log.slice(0, 20).map(l => \`<div>\${l}</div>\`).join('');
+      this._lastLogLen = log.length;
+    }
+  }
+}
+`,
+      },
+      {
+        path: 'src/save.js',
+        content: `const SAVE_KEY = 'rpg_save_v1';
+
+export class SaveSystem {
+  constructor(player, world) {
+    this.player = player;
+    this.world = world;
+  }
+
+  save() {
+    const data = {
+      player: { x: this.player.x, y: this.player.y, hp: this.player.hp, maxHp: this.player.maxHp, gold: this.player.gold, xp: this.player.xp, level: this.player.level, attack: this.player.attack, defense: this.player.defense, completedQuests: this.player.completedQuests },
+      items: this.world.items.map(i => ({ id: i.id, collected: i.collected })),
+      chests: this.world.chests.map(c => ({ id: c.id, opened: c.opened })),
+      quests: Object.values(this.world.quests).map(q => ({ id: q.id, active: q.active, complete: q.complete, progress: q.progress })),
+      savedAt: new Date().toISOString(),
+    };
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* localStorage unavailable */ }
+  }
+
+  load() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      Object.assign(this.player, data.player);
+      for (const s of (data.items || [])) {
+        const item = this.world.items.find(i => i.id === s.id);
+        if (item) item.collected = s.collected;
+      }
+      for (const s of (data.chests || [])) {
+        const chest = this.world.chests.find(c => c.id === s.id);
+        if (chest) chest.opened = s.opened;
+      }
+      for (const s of (data.quests || [])) {
+        const q = this.world.quests[s.id];
+        if (q) Object.assign(q, s);
+      }
+      return true;
+    } catch { return false; }
+  }
+}
+`,
+      },
+      {
+        path: 'README.md',
+        content: `# Open World RPG
+
+A browser-based top-down open-world RPG game built with **The Project Factory**.
+
+## How to Play
+
+**Launch instantly** — just open \`index.html\` in any modern browser. No install needed.
+
+\`\`\`bash
+# Option 1: Direct open
+start index.html        # Windows
+open index.html         # macOS
+xdg-open index.html     # Linux
+
+# Option 2: Local dev server
+npx serve .
+\`\`\`
+
+## Controls
+
+| Key | Action |
+|-----|--------|
+| WASD / Arrow Keys | Move |
+| E | Interact (talk to NPCs, open chests) |
+
+## Features
+
+- **Open world** — 64x64 tile procedurally generated world
+- **Player progression** — XP, leveling, attack/defense stats
+- **Inventory** — pick up items, weapons, shields
+- **NPCs** — quest givers, merchants, guards with dialog
+- **Quests** — kill quests, reward system
+- **Chests** — hidden treasure across the world
+- **Auto-save** — saves to localStorage every 30 seconds
+- **HUD** — HP bar, gold, level, coordinates
+
+## Architecture
+
+\`\`\`
+src/
+  main.js      — game entry point, loop
+  world.js     — tile map generation, NPC AI, items, quests
+  player.js    — player entity, movement, interaction
+  input.js     — keyboard input handler
+  renderer.js  — tile/entity rendering (Canvas 2D)
+  ui.js        — HUD and event log
+  save.js      — save/load via localStorage
+\`\`\`
+
+## Extending
+
+The Project Factory agent can extend this game. Example prompts:
+- "Add enemy slimes that roam the world"
+- "Add a dungeon area in the north"
+- "Add combat system with attack/block"
+- "Add item shop to the merchant NPC"
+- "Add weather effects (rain, night cycle)"
+`,
+      },
+    ],
+  },
+  {
     id: 'game-3d-three',
     name: '3D Game / Scene (Three.js)',
     description: '3D scene with Three.js, orbit controls, lighting, and a game loop',
@@ -694,6 +1231,24 @@ export async function projectFactoryRoutes(app: FastifyInstance) {
         language_breakdown: JSON.parse(r.language_breakdown || '{}'),
         tech_stack: JSON.parse(r.tech_stack || '[]'),
       })),
+    });
+  });
+
+  // POST /api/project-factory/settings — persist governance settings (model cycling, etc.)
+  app.post('/settings', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as Record<string, unknown>;
+    if (body.modelCyclingEnabled !== undefined) {
+      const val = Boolean(body.modelCyclingEnabled);
+      db.prepare(`INSERT OR REPLACE INTO app_kv (key, value, updated_at) VALUES ('project_factory:model_cycling_enabled', ?, datetime('now'))`).run(val ? '1' : '0');
+    }
+    return reply.send({ ok: true });
+  });
+
+  // GET /api/project-factory/settings — read governance settings
+  app.get('/settings', async (_req, reply: FastifyReply) => {
+    const cyclingRow = db.prepare(`SELECT value FROM app_kv WHERE key = 'project_factory:model_cycling_enabled'`).get() as { value: string } | undefined;
+    return reply.send({
+      modelCyclingEnabled: cyclingRow ? cyclingRow.value === '1' : true,
     });
   });
 }

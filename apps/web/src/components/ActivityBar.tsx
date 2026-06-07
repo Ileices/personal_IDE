@@ -8,7 +8,7 @@ import {
   FolderOpen, MessageSquare, Bot, Globe, Network,
   Waves, Database, Bird, Clock, Settings, GitBranch,
   ShieldCheck, Zap, HelpCircle, BarChart2, Sparkles, Fingerprint, Cpu,
-  Tag, AlertTriangle, Scan, Layers, Briefcase, Users,
+  Tag, AlertTriangle, Scan, Layers, Briefcase, Users, Factory,
 } from 'lucide-react';
 import { HelpTip } from './HelpTip';
 
@@ -35,6 +35,7 @@ export type ActivityView =
   | 'project-state-crawler'
   | 'suggested-jobs'
   | 'community'
+  | 'silicon-factory'
   | 'help';
 
 interface ActivityBarProps {
@@ -75,8 +76,7 @@ export function ActivityBar({ active, onChange, fleetBadge, nanoBadge }: Activit
     { id: 'gap',         icon: Scan,           label: 'Gap Analysis — Coverage, Debt, Patterns', helpId: 'activity.gap' },
     { id: 'project-state-crawler', icon: Layers, label: 'Project State Crawler — Devtag Extraction & Drift', helpId: 'activity.project-state-crawler' },
     { id: 'suggested-jobs', icon: Briefcase, label: 'Suggested Jobs — Codebase Review & Implementation Pipeline', helpId: 'activity.suggested-jobs' },
-    { id: 'community',      icon: Users,    label: 'Community Hub — GitHub Discussions & Reporting', helpId: 'activity.community' },
-  ];
+    { id: 'community',      icon: Users,    label: 'Community Hub — GitHub Discussions & Reporting', helpId: 'activity.community' },    { id: 'silicon-factory', icon: Factory,  label: 'Silicon Factory ??? Job Pipeline Kanban', helpId: 'activity.silicon-factory' },  ];
 
   const bottomItems: NavItem[] = [
     { id: 'help',        icon: HelpCircle,     label: 'Help & Documentation', helpId: 'activity.help' },

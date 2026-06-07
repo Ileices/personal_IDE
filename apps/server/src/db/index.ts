@@ -1510,7 +1510,7 @@ const MIGRATIONS: Migration[] = [
             'test_missing','dead_code_removal','debt_reduction','regression_hardening',
             'integration_repair','anti_pattern_mitigation','tag_schema_extension',
             'performance_test_missing','security_gap','nano_coverage_gap',
-            'backup_reconciliation','model_tool_enhancement','model_config_promotion','external_project',
+            'model_tool_enhancement','model_config_promotion','external_project',
             'user_requested','god_factory_scan'
           )),
           source TEXT NOT NULL CHECK (source IN (
@@ -2394,408 +2394,195 @@ const MIGRATIONS: Migration[] = [
   },
   {
     version: 114,
-    name: 'blame-attribution-and-gap-to-job-columns',
+    name: 'job-records-llm-enrichment',
     up(db: Database.Database) {
       const hasColumn = (table: string, col: string) =>
         (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
 
-      // blame_records: forensic attribution columns
-      // user_authored: 1 when output contains # $usersignature[TAG]
-      // user_signature_tag: extracted TAG from $usersignature marker
-      // attributed_source: who actually authored this code ('github/copilot' fallback, or user tag)
-      if (!hasColumn('blame_records', 'user_authored')) {
-        db.exec(`ALTER TABLE blame_records ADD COLUMN user_authored INTEGER NOT NULL DEFAULT 0`);
+      if (!hasColumn('job_records', 'llm_enriched')) {
+        db.exec(`ALTER TABLE job_records ADD COLUMN llm_enriched INTEGER NOT NULL DEFAULT 0`);
       }
-      if (!hasColumn('blame_records', 'user_signature_tag')) {
-        db.exec(`ALTER TABLE blame_records ADD COLUMN user_signature_tag TEXT`);
-      }
-      if (!hasColumn('blame_records', 'attributed_source')) {
-        db.exec(`ALTER TABLE blame_records ADD COLUMN attributed_source TEXT`);
-      }
-
-      // gap_reports: mark when a job has been created for this gap
-      if (!hasColumn('gap_reports', 'acknowledged_at')) {
-        db.exec(`ALTER TABLE gap_reports ADD COLUMN acknowledged_at TEXT`);
-      }
-
-      // job_records: link back to the originating gap report
-      if (!hasColumn('job_records', 'source_report_id')) {
-        db.exec(`ALTER TABLE job_records ADD COLUMN source_report_id TEXT`);
-      }
-      if (!hasColumn('job_records', 'description')) {
-        db.exec(`ALTER TABLE job_records ADD COLUMN description TEXT NOT NULL DEFAULT ''`);
+      if (!hasColumn('job_records', 'llm_model_used')) {
+        db.exec(`ALTER TABLE job_records ADD COLUMN llm_model_used TEXT`);
       }
 
       db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_blame_user_authored
-          ON blame_records(user_authored, created_at);
-        CREATE INDEX IF NOT EXISTS idx_blame_attributed_source
-          ON blame_records(attributed_source, created_at);
-        CREATE INDEX IF NOT EXISTS idx_gap_reports_acknowledged
-          ON gap_reports(acknowledged_at, flagged_to_god_factory);
-        CREATE INDEX IF NOT EXISTS idx_job_records_source_report
-          ON job_records(source_report_id);
+        CREATE INDEX IF NOT EXISTS idx_job_records_llm_enriched
+          ON job_records(llm_enriched, implementation_status);
       `);
     },
   },
-
-  // ──────────────────────────────────────────
-  // Migration v115: Employer Crawler + Cooldown Overrides
-  // employer_analysis: stratification decisions from blame data
-  // model_cooldown_overrides: manual rate control (inject/skip/sleep per model)
-  // blame_records timestamp index for fast window queries
-  // ──────────────────────────────────────────
   {
     version: 115,
-    name: 'employer_crawler_and_cooldown_overrides',
+    name: 'model-selection-events',
     up(db: Database.Database) {
       db.exec(`
-        -- Employer analysis: role assignment decisions per model from blame data
-        CREATE TABLE IF NOT EXISTS employer_analysis (
-          id TEXT PRIMARY KEY,
-          model_id TEXT NOT NULL,
-          analysis_cycle INTEGER NOT NULL DEFAULT 0,
-          recommended_role TEXT NOT NULL DEFAULT 'general',
-          role_confidence REAL NOT NULL DEFAULT 0.5,
-          task_types TEXT NOT NULL DEFAULT '[]',
-          avoid_task_types TEXT NOT NULL DEFAULT '[]',
-          strengths TEXT NOT NULL DEFAULT '[]',
-          weaknesses TEXT NOT NULL DEFAULT '[]',
-          retirement_recommended INTEGER NOT NULL DEFAULT 0,
-          retirement_reason TEXT,
-          retirement_job_id TEXT,
-          suggested_job_created INTEGER NOT NULL DEFAULT 0,
-          sample_count INTEGER NOT NULL DEFAULT 0,
-          avg_quality REAL NOT NULL DEFAULT 0,
-          success_rate REAL NOT NULL DEFAULT 0,
-          avg_tokens INTEGER NOT NULL DEFAULT 0,
-          context_window_tier TEXT NOT NULL DEFAULT 'unknown',
-          notes TEXT,
-          analyzed_at TEXT NOT NULL DEFAULT (datetime('now')),
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        CREATE TABLE IF NOT EXISTS model_selection_events (
+          id          TEXT PRIMARY KEY,
+          message_id  TEXT,
+          session_id  TEXT NOT NULL,
+          model_chosen   TEXT NOT NULL,
+          models_considered TEXT NOT NULL DEFAULT '[]',
+          reason         TEXT,
+          latency_ms     INTEGER,
+          task_type      TEXT,
+          success        INTEGER NOT NULL DEFAULT 1,
+          created_at     TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
-        CREATE INDEX IF NOT EXISTS idx_employer_analysis_model
-          ON employer_analysis(model_id, analyzed_at);
-        CREATE INDEX IF NOT EXISTS idx_employer_analysis_role
-          ON employer_analysis(recommended_role, role_confidence);
-        CREATE INDEX IF NOT EXISTS idx_employer_retirement
-          ON employer_analysis(retirement_recommended, analyzed_at);
+        CREATE INDEX IF NOT EXISTS idx_mse_session
+          ON model_selection_events(session_id, created_at DESC);
 
-        -- Manual cooldown overrides per model: inject cooldown, skip next, sleep until
-        CREATE TABLE IF NOT EXISTS model_cooldown_overrides (
-          id TEXT PRIMARY KEY,
-          model_id TEXT NOT NULL UNIQUE,
-          override_type TEXT NOT NULL CHECK (override_type IN ('cooldown','skip','sleep')),
-          cooldown_until TEXT,
-          skip_next_cycles INTEGER NOT NULL DEFAULT 0,
-          sleep_until TEXT,
-          injected_by TEXT NOT NULL DEFAULT 'user',
-          reason TEXT,
-          active INTEGER NOT NULL DEFAULT 1,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_cooldown_overrides_model
-          ON model_cooldown_overrides(model_id, active);
-        CREATE INDEX IF NOT EXISTS idx_cooldown_overrides_type
-          ON model_cooldown_overrides(override_type, active);
-
-        -- blame_records fast timestamp index for rolling-window rate queries
-        CREATE INDEX IF NOT EXISTS idx_blame_records_timestamp
-          ON blame_records(created_at);
+        CREATE INDEX IF NOT EXISTS idx_mse_model
+          ON model_selection_events(model_chosen, created_at DESC);
       `);
     },
   },
   {
     version: 116,
-    name: 'employer_allowance_value_fields',
+    name: 'rate-limit-learning',
     up(db: Database.Database) {
-      const hasColumn = (table: string, col: string) =>
-        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
-
-      if (!hasColumn('employer_analysis', 'allowance_hourly_est')) {
-        db.exec(`ALTER TABLE employer_analysis ADD COLUMN allowance_hourly_est INTEGER NOT NULL DEFAULT 0`);
-      }
-      if (!hasColumn('employer_analysis', 'allowance_window_usage_pct')) {
-        db.exec(`ALTER TABLE employer_analysis ADD COLUMN allowance_window_usage_pct REAL NOT NULL DEFAULT 0`);
-      }
-      if (!hasColumn('employer_analysis', 'allowance_tier')) {
-        db.exec(`ALTER TABLE employer_analysis ADD COLUMN allowance_tier TEXT NOT NULL DEFAULT 'balanced'`);
-      }
-      if (!hasColumn('employer_analysis', 'strategic_value_score')) {
-        db.exec(`ALTER TABLE employer_analysis ADD COLUMN strategic_value_score REAL NOT NULL DEFAULT 0`);
-      }
-
       db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_employer_allowance_tier
-          ON employer_analysis(allowance_tier, strategic_value_score, analyzed_at);
+        -- Stores every rate limit event observed per model
+        CREATE TABLE IF NOT EXISTS rate_limit_observations (
+          id                  TEXT PRIMARY KEY,
+          model_id            TEXT NOT NULL,
+          provider            TEXT NOT NULL,
+          event_type          TEXT NOT NULL,
+          observed_at         TEXT NOT NULL DEFAULT (datetime('now')),
+          cooldown_ms         INTEGER,
+          requests_in_window  INTEGER,
+          window_ms           INTEGER,
+          http_status         INTEGER,
+          error_message       TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_rlo_model ON rate_limit_observations(model_id, observed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_rlo_event  ON rate_limit_observations(event_type, observed_at DESC);
+
+        -- Per-model cooldown state: updated on each observation
+        CREATE TABLE IF NOT EXISTS model_cooldown_state (
+          model_id               TEXT PRIMARY KEY,
+          provider               TEXT NOT NULL,
+          is_rate_limited        INTEGER NOT NULL DEFAULT 0,
+          rate_limited_at        TEXT,
+          estimated_reset_at     TEXT,
+          learned_cooldown_ms    INTEGER DEFAULT 60000,
+          consecutive_successes  INTEGER DEFAULT 0,
+          consecutive_failures   INTEGER DEFAULT 0,
+          last_probe_at          TEXT,
+          updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Which models are assigned to which crawlers
+        CREATE TABLE IF NOT EXISTS model_pool_assignments (
+          service_id    TEXT NOT NULL,
+          model_id      TEXT NOT NULL,
+          priority      INTEGER NOT NULL DEFAULT 0,
+          assigned_at   TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (service_id, model_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mpa_service ON model_pool_assignments(service_id, priority DESC);
+
+        -- Factory cross-communication messages
+        CREATE TABLE IF NOT EXISTS factory_messages (
+          id            TEXT PRIMARY KEY,
+          from_factory  TEXT NOT NULL,
+          to_factory    TEXT NOT NULL,
+          message_type  TEXT NOT NULL,
+          subject       TEXT,
+          body          TEXT NOT NULL,
+          model_used    TEXT,
+          read_at       TEXT,
+          created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_fm_to ON factory_messages(to_factory, read_at, created_at DESC);
       `);
     },
   },
+
+  // ──────────────────────────────────────────
+  // Migration 117: Prompt injection forensics +
+  // community discussions + auto-complete state
+  // ──────────────────────────────────────────
   {
     version: 117,
-    name: 'analysis_and_corpus_tables',
+    name: 'injection-community-autocomplete',
     up(db: Database.Database) {
       db.exec(`
-        CREATE TABLE IF NOT EXISTS codebase_chunks (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL,
-          path TEXT NOT NULL,
-          chunk_index INTEGER NOT NULL DEFAULT 0,
-          total_chunks INTEGER NOT NULL DEFAULT 1,
-          summary TEXT NOT NULL DEFAULT '',
-          language TEXT DEFAULT '',
-          symbols TEXT DEFAULT '[]',
-          dependencies TEXT DEFAULT '[]',
-          token_count INTEGER DEFAULT 0,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        -- Forensic log of every detected prompt-injection attempt.
+        -- Append-only per CONSTITUTION Rule 2.
+        CREATE TABLE IF NOT EXISTS injection_attempts (
+          id              TEXT PRIMARY KEY,
+          detected_at     TEXT NOT NULL DEFAULT (datetime('now')),
+          source          TEXT NOT NULL DEFAULT 'external',
+          pattern_matched TEXT NOT NULL,
+          raw_input_hash  TEXT NOT NULL,
+          sanitized_len   INTEGER,
+          raw_len         INTEGER,
+          context         TEXT
         );
-        CREATE INDEX IF NOT EXISTS idx_chunks_project ON codebase_chunks(project_id);
+        CREATE INDEX IF NOT EXISTS idx_ia_detected ON injection_attempts(detected_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_ia_source    ON injection_attempts(source, detected_at DESC);
 
-        CREATE TABLE IF NOT EXISTS codebase_overviews (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL UNIQUE,
-          total_files INTEGER DEFAULT 0,
-          total_lines INTEGER DEFAULT 0,
-          languages TEXT DEFAULT '{}',
-          entry_points TEXT DEFAULT '[]',
-          dependencies TEXT DEFAULT '[]',
-          architecture TEXT DEFAULT '',
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        -- Discussions/issues imported from community sources (GitHub, forums)
+        CREATE TABLE IF NOT EXISTS community_discussions (
+          id              TEXT PRIMARY KEY,
+          source_platform TEXT NOT NULL DEFAULT 'github',
+          external_id     TEXT,
+          title           TEXT NOT NULL,
+          body            TEXT,
+          url             TEXT,
+          labels          TEXT DEFAULT '[]',
+          signals         TEXT DEFAULT '{}',
+          job_id_created  TEXT,
+          processed_at    TEXT NOT NULL DEFAULT (datetime('now')),
+          status          TEXT NOT NULL DEFAULT 'pending'
         );
-        CREATE INDEX IF NOT EXISTS idx_codebase_overviews_project ON codebase_overviews(project_id);
+        CREATE INDEX IF NOT EXISTS idx_cd_status     ON community_discussions(status, processed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_cd_platform   ON community_discussions(source_platform, processed_at DESC);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_cd_ext ON community_discussions(source_platform, external_id);
 
-        CREATE TABLE IF NOT EXISTS task_tracker (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL,
-          agent_run_id TEXT,
-          title TEXT NOT NULL,
-          total_subtasks INTEGER DEFAULT 0,
-          completed_subtasks INTEGER DEFAULT 0,
-          current_subtask_index INTEGER DEFAULT 0,
-          subtasks TEXT DEFAULT '[]',
-          status TEXT NOT NULL DEFAULT 'pending',
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        -- Auto-complete loop persistent state (KV alternative)
+        CREATE TABLE IF NOT EXISTS auto_complete_state (
+          id               TEXT PRIMARY KEY DEFAULT 'singleton',
+          status           TEXT NOT NULL DEFAULT 'idle',
+          current_job_id   TEXT,
+          completed_count  INTEGER NOT NULL DEFAULT 0,
+          failed_count     INTEGER NOT NULL DEFAULT 0,
+          consecutive_failures INTEGER NOT NULL DEFAULT 0,
+          started_at       TEXT,
+          paused_at        TEXT,
+          pause_reason     TEXT,
+          updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        CREATE INDEX IF NOT EXISTS idx_tasks_project ON task_tracker(project_id);
+        INSERT OR IGNORE INTO auto_complete_state (id) VALUES ('singleton');
 
-        CREATE TABLE IF NOT EXISTS project_corpus (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL,
-          manifesto TEXT,
-          file_count INTEGER DEFAULT 0,
-          total_tokens INTEGER DEFAULT 0,
-          ingest_path TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        -- Test coverage map: which tests cover which functions/files
+        CREATE TABLE IF NOT EXISTS test_coverage_map (
+          id            TEXT PRIMARY KEY,
+          project_id    TEXT NOT NULL,
+          test_file     TEXT NOT NULL,
+          source_file   TEXT NOT NULL,
+          function_name TEXT,
+          coverage_type TEXT NOT NULL DEFAULT 'unit',
+          discovered_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        CREATE INDEX IF NOT EXISTS idx_project_corpus_project ON project_corpus(project_id);
-      `);
-    },
-  },
-  {
-    version: 118,
-    name: 'job_records_backup_reconciliation_category',
-    up(db: Database.Database) {
-      const tableSql = db.prepare(`
-        SELECT sql
-        FROM sqlite_master
-        WHERE type = 'table' AND name = 'job_records'
-      `).get() as { sql?: string } | undefined;
+        CREATE INDEX IF NOT EXISTS idx_tcm_project ON test_coverage_map(project_id, source_file);
+        CREATE INDEX IF NOT EXISTS idx_tcm_uncovered ON test_coverage_map(source_file) WHERE function_name IS NULL;
 
-      if (tableSql?.sql?.includes('backup_reconciliation')) {
-        return;
-      }
-
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS job_records_new (
-          id TEXT PRIMARY KEY,
-          job_id TEXT NOT NULL UNIQUE,
-          job_category TEXT NOT NULL CHECK (job_category IN (
-            'test_missing','dead_code_removal','debt_reduction','regression_hardening',
-            'integration_repair','anti_pattern_mitigation','tag_schema_extension',
-            'performance_test_missing','security_gap','nano_coverage_gap',
-            'backup_reconciliation','model_tool_enhancement','model_config_promotion','external_project',
-            'user_requested','god_factory_scan'
-          )),
-          source TEXT NOT NULL CHECK (source IN (
-            'blame_crawler','suggested_jobs_crawler','user','god_factory_agent'
-          )),
-          source_report_id TEXT,
-          source_record_ids TEXT NOT NULL DEFAULT '[]',
-          evidence_summary TEXT NOT NULL DEFAULT '',
-          priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('critical','high','medium','low')),
-          title TEXT NOT NULL,
-          description TEXT NOT NULL DEFAULT '',
-          affected_files TEXT NOT NULL DEFAULT '[]',
-          affected_devtags TEXT NOT NULL DEFAULT '[]',
-          affected_plantags TEXT NOT NULL DEFAULT '[]',
-          required_buildtags TEXT NOT NULL DEFAULT '[]',
-          blocking_jobs TEXT NOT NULL DEFAULT '[]',
-          blocked_by_jobs TEXT NOT NULL DEFAULT '[]',
-          hierarchy TEXT NOT NULL DEFAULT '{}',
-          atomic_steps TEXT NOT NULL DEFAULT '[]',
-          sandbox_spec TEXT NOT NULL DEFAULT '{}',
-          implementation_status TEXT NOT NULL DEFAULT 'suggested' CHECK (implementation_status IN (
-            'suggested','sandbox_ready','implementing','implemented','rejected','archived'
-          )),
-          created_cycle INTEGER NOT NULL DEFAULT 0,
-          last_updated_cycle INTEGER NOT NULL DEFAULT 0,
-          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          project_id TEXT REFERENCES projects(id) ON DELETE SET NULL
+        -- Documentation gap tracker
+        CREATE TABLE IF NOT EXISTS doc_gap_records (
+          id            TEXT PRIMARY KEY,
+          project_id    TEXT NOT NULL,
+          file_path     TEXT NOT NULL,
+          symbol_name   TEXT,
+          symbol_type   TEXT,
+          gap_type      TEXT NOT NULL,
+          job_id        TEXT,
+          discovered_at TEXT NOT NULL DEFAULT (datetime('now')),
+          resolved_at   TEXT
         );
-
-        INSERT INTO job_records_new (
-          id, job_id, job_category, source, source_report_id, source_record_ids, evidence_summary, priority, title,
-          description,
-          affected_files, affected_devtags, affected_plantags, required_buildtags,
-          blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
-          implementation_status, created_cycle, last_updated_cycle, timestamp, created_at, project_id
-        )
-        SELECT
-          id, job_id, job_category, source,
-          source_report_id,
-          source_record_ids,
-          COALESCE(evidence_summary, ''), priority, title,
-          COALESCE(description, ''),
-          affected_files, affected_devtags, affected_plantags, required_buildtags,
-          blocking_jobs, blocked_by_jobs, hierarchy, atomic_steps, sandbox_spec,
-          implementation_status, created_cycle, last_updated_cycle, timestamp, created_at, project_id
-        FROM job_records;
-
-        DROP TABLE job_records;
-        ALTER TABLE job_records_new RENAME TO job_records;
-
-        CREATE INDEX IF NOT EXISTS idx_job_records_status ON job_records(implementation_status);
-        CREATE INDEX IF NOT EXISTS idx_job_records_priority ON job_records(priority, created_cycle);
-        CREATE INDEX IF NOT EXISTS idx_job_records_category ON job_records(job_category);
-        CREATE INDEX IF NOT EXISTS idx_job_records_source ON job_records(source);
-        CREATE INDEX IF NOT EXISTS idx_job_records_project ON job_records(project_id);
-        CREATE INDEX IF NOT EXISTS idx_job_records_project_status_created ON job_records(project_id, implementation_status, created_at);
-        CREATE INDEX IF NOT EXISTS idx_job_records_source_report ON job_records(source_report_id);
-      `);
-    },
-  },
-  // ──────────────────────────────────────────────────────────────────────────
-  // Migration v119: system_health_events
-  // Records every StabilityMonitor rollback trigger so SuggestedJobsCrawler
-  // and other services can inspect recent instability without reading logs.
-  // ──────────────────────────────────────────────────────────────────────────
-  {
-    version: 119,
-    name: 'system_health_events',
-    up(db: Database.Database) {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS system_health_events (
-          id          INTEGER PRIMARY KEY AUTOINCREMENT,
-          event_type  TEXT    NOT NULL,
-          severity    TEXT    NOT NULL DEFAULT 'warning' CHECK (severity IN ('info','warning','error','critical')),
-          triggered_at TEXT   NOT NULL DEFAULT (datetime('now')),
-          reason      TEXT    NOT NULL DEFAULT '',
-          project_id  TEXT    REFERENCES projects(id) ON DELETE SET NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_system_health_events_time
-          ON system_health_events(triggered_at);
-        CREATE INDEX IF NOT EXISTS idx_system_health_events_type_time
-          ON system_health_events(event_type, triggered_at);
-        CREATE INDEX IF NOT EXISTS idx_system_health_events_project_time
-          ON system_health_events(project_id, triggered_at);
-      `);
-    },
-  },
-  // ──────────────────────────────────────────────────────────────────────────
-  // Migration v120: memory_notes importance_score
-  // Adds importance_score column to memory_notes for priority-based context
-  // packing (high-importance memories get a higher priority slot in context).
-  // ──────────────────────────────────────────────────────────────────────────
-  {
-    version: 120,
-    name: 'memory_notes_importance_score',
-    up(db: Database.Database) {
-      const hasColumn = (table: string, col: string) =>
-        (db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some((r: any) => r.name === col);
-
-      const indexOrderColumn = hasColumn('memory_notes', 'extracted_at')
-        ? 'extracted_at'
-        : hasColumn('memory_notes', 'created_at')
-        ? 'created_at'
-        : null;
-
-      if (!hasColumn('memory_notes', 'importance_score')) {
-        db.exec(`ALTER TABLE memory_notes ADD COLUMN importance_score REAL NOT NULL DEFAULT 0.5`);
-      }
-
-      if (indexOrderColumn) {
-        db.exec(`
-          CREATE INDEX IF NOT EXISTS idx_memory_notes_importance
-            ON memory_notes(project_id, importance_score DESC, ${indexOrderColumn});
-        `);
-      }
-    },
-  },
-  // ──────────────────────────────────────────────────────────────────────────
-  // Migration v121: codebase_intelligence
-  // Unified read model for ProjectStateCrawler + HierarchicalCodeIndex +
-  // RelationshipIndexService so downstream systems can consume one source.
-  // ──────────────────────────────────────────────────────────────────────────
-  {
-    version: 121,
-    name: 'codebase_intelligence',
-    up(db: Database.Database) {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS codebase_intelligence (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL,
-          project_root TEXT NOT NULL,
-          facet TEXT NOT NULL CHECK (facet IN ('overview','file','relationship','drift','semantic')),
-          entity_key TEXT NOT NULL,
-          file_path TEXT,
-          summary TEXT NOT NULL DEFAULT '',
-          score REAL NOT NULL DEFAULT 0,
-          metrics_json TEXT NOT NULL DEFAULT '{}',
-          source_snapshot_id TEXT,
-          indexed_at TEXT NOT NULL DEFAULT (datetime('now')),
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-          UNIQUE(project_id, facet, entity_key)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_codebase_intelligence_project
-          ON codebase_intelligence(project_id, indexed_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_codebase_intelligence_facet_score
-          ON codebase_intelligence(project_id, facet, score DESC);
-        CREATE INDEX IF NOT EXISTS idx_codebase_intelligence_file
-          ON codebase_intelligence(project_id, file_path);
-      `);
-    },
-  },
-  // ──────────────────────────────────────────────────────────────────────────
-  // Migration v122: suggested jobs per-protocol cooldown windows
-  // Adds durable cooldown tracking so independent protocols can be throttled
-  // individually under queue pressure without pausing the full crawler.
-  // ──────────────────────────────────────────────────────────────────────────
-  {
-    version: 122,
-    name: 'sj_protocol_cooldowns',
-    up(db: Database.Database) {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS sj_protocol_cooldowns (
-          protocol_id INTEGER PRIMARY KEY CHECK (protocol_id BETWEEN 1 AND 11),
-          cooldown_until TEXT,
-          last_started_at TEXT,
-          last_finished_at TEXT,
-          last_generated_count INTEGER NOT NULL DEFAULT 0,
-          consecutive_noop INTEGER NOT NULL DEFAULT 0,
-          reason TEXT NOT NULL DEFAULT '',
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_sj_protocol_cooldowns_until
-          ON sj_protocol_cooldowns(cooldown_until);
+        CREATE INDEX IF NOT EXISTS idx_dgr_project ON doc_gap_records(project_id, resolved_at);
       `);
     },
   },

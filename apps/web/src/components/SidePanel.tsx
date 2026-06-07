@@ -27,6 +27,7 @@ import { GapAnalysisPanel } from './GapAnalysisPanel';
 import { ProjectStateCrawlerPanel } from './ProjectStateCrawlerPanel';
 import { SuggestedJobsPanel } from './SuggestedJobsPanel';
 import { CommunityHubPanel } from './CommunityHubPanel';
+import { SiliconFactoryPanel } from './SiliconFactoryPanel';
 import { ProviderSetupWizard } from './wizards/ProviderSetupWizard';
 import { ModelStrategyWizard } from './wizards/ModelStrategyWizard';
 import { HelpTip } from './HelpTip';
@@ -97,6 +98,7 @@ export function SidePanel({ view, width, onClose, onNewProject, showGodFactoryCo
         />
       )}
       {view === 'community' && <CommunityHubPanel />}
+      {view === 'silicon-factory' && <SiliconFactoryPanel />}
       {view === 'help' && <HelpView />}
     </div>
   );

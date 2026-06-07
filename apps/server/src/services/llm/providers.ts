@@ -1,7 +1,8 @@
 // apps/server/src/services/llm/providers.ts
 // Multi-Provider LLM Client
 // Supports GitHub, Ollama, Groq, HuggingFace,
-// Cohere, Mistral, Gemini, Together, OpenRouter, LM Studio
+// Cohere, Mistral, Gemini, Together, OpenRouter, LM Studio,
+// Cerebras, SiliconFlow, Fireworks, Anthropic, Perplexity, xAI, DeepSeek, Qwen
 // ============================================
 import OpenAI from 'openai';
 import type { ProviderType, UnifiedModel, TokenLimitCheck } from '@personal-ide/shared';

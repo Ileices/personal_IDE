@@ -351,20 +351,38 @@ class ProductionRateLimiter {
 
   /** Find a fallback model that isn't rate limited — picks the model with
    *  the most remaining headroom so we naturally round-robin through capacity.
-   *  If an ordered fallback chain is provided, prefer that order first. */
+   *  If an ordered fallback chain is provided, prefer that order first.
+   *  Falls back to FALLBACK_CHAINS.default from unifiedFallback when no orderedFallbacks given. */
   findFallback(preferredModelId: string, mode?: string, orderedFallbacks?: string[]): string | null {
     const preferred = MODELS.find(m => m.id === preferredModelId);
-    if (!preferred) return null;
+
+    // Build the effective ordered list: caller-supplied → FALLBACK_CHAINS → MODELS
+    let chainToTry = orderedFallbacks;
+    if (!chainToTry?.length) {
+      // Dynamically import FALLBACK_CHAINS — use sync require pattern since this is Node
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { FALLBACK_CHAINS } = require('./unifiedFallback.js') as { FALLBACK_CHAINS: Record<string, string[]> };
+        const chainKey = mode === 'crawler' ? 'crawler'
+          : mode === 'reasoning' ? 'reasoning'
+          : mode === 'lightweight' ? 'lightweight'
+          : 'default';
+        chainToTry = FALLBACK_CHAINS[chainKey] ?? FALLBACK_CHAINS.default;
+      } catch { /* fallback to MODELS list if import fails */ }
+    }
 
     // If caller provides an explicit fallback chain (midwife / agent config), try those in order first
-    if (orderedFallbacks?.length) {
-      for (const fbId of orderedFallbacks) {
+    if (chainToTry?.length) {
+      for (const fbId of chainToTry) {
         if (fbId === preferredModelId) continue;
         if (this.isDead(fbId)) continue; // Skip 404-blacklisted models
         const check = this.canRequest(fbId);
         if (check.allowed) return fbId;
       }
     }
+
+    // If preferred model not in MODELS list (multi-provider), return first available chain entry
+    if (!preferred) return null;
 
     // Score each candidate by remaining capacity headroom
     const candidates = MODELS

@@ -16,6 +16,7 @@ import {
   Play, Star, Settings, Plus, Sparkles,
   Wrench, Shield, CheckCircle, XCircle, Terminal, FileCode,
   Eye, ChevronUp, ToggleLeft, ToggleRight, BookOpen, Search,
+  Brain, GitBranch,
 } from 'lucide-react';
 import { useProjectStore } from '../stores/projectStore';
 import { useChatStore } from '../stores/chatStore';
@@ -23,6 +24,84 @@ import { useModelStore } from '../stores/modelStore';
 import { ModelDropdown } from './UniversalModelPicker';
 import { API_BASE } from '../config.js';
 import { GodFactoryRightPanel } from './godFactory/GodFactoryRightPanel.js';
+
+// ─── Model Selection Thinking Animation ──────────────────────────────────────
+
+interface ModelSelectionEvent {
+  model_chosen: string;
+  models_considered: string[];
+  reason: string;
+  latency_ms: number;
+  task_type: string;
+  created_at: string;
+}
+
+function ModelSelectionThinking({ conversationId }: { conversationId: string | null }) {
+  const [events, setEvents] = useState<ModelSelectionEvent[]>([]);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/models/selection-events?session_id=${conversationId}&limit=5`);
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          if (data.events?.length) setEvents(data.events);
+        }
+      } catch { /* best-effort */ }
+    };
+    poll();
+    const id = window.setInterval(poll, 2000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [conversationId]);
+
+  const latest = events[0];
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 text-xs text-ide-text-dim">
+        <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
+        <Brain className="w-3 h-3 text-blue-400" />
+        <span>Thinking…</span>
+        {latest && (
+          <span className="text-[10px] text-blue-300/80 ml-1">
+            via <span className="font-medium text-blue-300">{latest.model_chosen.split('/').pop()}</span>
+            <span className="text-ide-text-dim/60 ml-1">({new Date(latest.created_at).toLocaleTimeString()})</span>
+          </span>
+        )}
+        {latest && latest.models_considered.length > 1 && (
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="ml-1 text-[10px] text-ide-text-dim/60 hover:text-ide-text-dim flex items-center gap-0.5"
+          >
+            <GitBranch className="w-2.5 h-2.5" />
+            {expanded ? 'less' : `+${latest.models_considered.length - 1} considered`}
+          </button>
+        )}
+      </div>
+      {expanded && latest && (
+        <div className="ml-5 bg-ide-bg/60 border border-ide-border/30 rounded p-2 text-[10px] space-y-1">
+          <div className="text-ide-text-dim/80">Model selection chain:</div>
+          {latest.models_considered.map((m, i) => (
+            <div key={m} className={`flex items-center gap-1.5 ${m === latest.model_chosen ? 'text-green-300' : 'text-ide-text-dim/60 line-through'}`}>
+              <span className="w-4 text-right text-ide-text-dim/40">{i + 1}.</span>
+              <span>{m.split('/').pop()}</span>
+              {m === latest.model_chosen && <span className="text-green-400/80 no-underline">✓ selected</span>}
+            </div>
+          ))}
+          {latest.reason && (
+            <div className="mt-1 pt-1 border-t border-ide-border/20 text-ide-text-dim/60">
+              Reason: {latest.reason}
+            </div>
+          )}
+          <div className="text-ide-text-dim/40">Latency: {latest.latency_ms}ms · Task: {latest.task_type}</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -55,9 +134,6 @@ interface ApprovalDetails {
   isNew?: boolean;
   oldString?: string;
   newString?: string;
-  originalLines?: number;
-  newLines?: number;
-  truncationWarning?: string | null;
 }
 
 interface PromptHistoryItem {
@@ -90,7 +166,7 @@ interface GodFactoryIdleSuggestion {
 
 // ─── Tool constants ───────────────────────────────────────────────────────────
 
-const MAX_TOOL_ITERATIONS = 100000;
+const MAX_TOOL_ITERATIONS = 1000;
 
 const TOOL_DEFINITIONS_PROMPT = `
 ## THE GOD FACTORY Codebase Tools
@@ -103,13 +179,6 @@ To call a tool, output a fenced code block with language \`tool_call\` containin
 \`\`\`tool_call
 {"tool": "read_file", "params": {"path": "apps/web/src/App.tsx", "startLine": 1, "endLine": 50}}
 \`\`\`
-
-⚠️ CRITICAL AUTONOMY RULES (MUST follow every single response):
-1. If your response mentions reading, searching, checking, or calling anything — INCLUDE THE tool_call BLOCK IN THIS SAME RESPONSE. Never say "I will search" and then stop. ACT immediately.
-2. Use ONE tool call per response. After you receive the tool result, use another tool or give your final answer.
-3. Do NOT ask the user for permission before using tools — just use them. You have full authorization.
-4. Do NOT describe a multi-step plan and then wait. Execute the FIRST step NOW, then proceed step-by-step.
-5. If you are in autonomous mode, after completing each task continue to the NEXT task without pausing. Only stop when you have exhausted all identified work or hit the iteration limit.
 
 ### Available Tools
 
@@ -166,19 +235,15 @@ To call a tool, output a fenced code block with language \`tool_call\` containin
 | silicon_reindex_embeddings | Rebuild TF-IDF symbol embeddings for stronger semantic find | \`project_id?\` |
 
 ### Tool Rules
-- Use ONE tool call per response turn — include it in the SAME response where you decide to use it
-- NEVER describe what you will do and then stop — execute immediately
-- **ALWAYS use \`patch_file\` for modifying existing files — NEVER use \`write_file\` on files that already exist**
-- **ONLY use \`write_file\` when creating a brand-new file that does not yet exist**
-- The reason: \`write_file\` replaces the entire file content. If your generated content is incomplete due to token limits or context loss, you will silently delete working code. \`patch_file\` surgically replaces only the matched region, leaving everything else untouched.
-- Always READ a file before patching it (ensures oldString matches exactly)
-- For patch_file: include 3+ lines of unchanged context around the target text
-- patch_file oldString must match EXACTLY ONCE — add more context if needed
+- Use ONE tool call per response turn
 - When the user asks for a feature, enhancement, or implementation, call \`find_suggested_jobs\` first
 - If a matching job exists, call \`get_job_detail\` or \`read_sandbox_status\` before recommending implementation
 - If no matching job exists for a requested enhancement, call \`create_brainstorm_job\` to create a real Suggested Job instead of inventing one
 - When the user asks about codebase state, regressions, model performance, coverage, debt, or recurring failures, use the live God Factory tools instead of guessing
 - Brainstorm responses must cite live tool results such as devtags, files, debt scores, patterns, or blame/model data
+- Always READ a file before patching it (ensures oldString matches exactly)
+- For patch_file: include 3+ lines of unchanged context around the target text
+- patch_file oldString must match EXACTLY ONCE — add more context if needed
 - Dangerous commands (rm -rf, format, shutdown, etc.) are automatically blocked
 - Maximum ${MAX_TOOL_ITERATIONS} tool calls per session
 - After finishing, provide a clear summary of all changes made
@@ -190,11 +255,6 @@ function extractToolCall(text: string): ToolCall | null {
   try {
     const parsed = JSON.parse(match[1]);
     if (typeof parsed.tool !== 'string') return null;
-    // Normalize: handle both {tool, params: {...}} and flat {tool, key1: val1, ...}
-    if (!parsed.params || typeof parsed.params !== 'object') {
-      const { tool, ...rest } = parsed;
-      return { tool, params: rest } as ToolCall;
-    }
     return parsed as ToolCall;
   } catch { return null; }
 }
@@ -293,24 +353,23 @@ function buildSessionBriefing(notifications: GodFactoryQueueItem[], suggestions:
 
 const HIST_KEY = 'god_factory_prompt_history';
 const CONV_KEY = 'god_factory_conversation';
-const SESSION_KEY = 'god_factory_session_id';
-const GF_AUTO_APPROVE_KEY = 'god_factory_auto_approve_changes';
-const GF_GOVERNANCE_EVENT = 'god-factory-governance-change';
-const SESSION_BRIEF_KEY_PREFIX = 'god_factory_session_brief_shown:';
-const SESSION_BRIEF_GLOBAL_KEY = 'god_factory_session_brief_shown_global';
+const GF_AUTO_APPROVE_STORAGE_KEY = 'god_factory:autoApproveChanges';
+const GF_GOVERNANCE_EVENT = 'god_factory:governance_changed';
+
+function loadStoredBool(key: string, fallback: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return raw === '1' || raw.toLowerCase() === 'true';
+  } catch {
+    return fallback;
+  }
+}
 
 const loadHistory  = (): PromptHistoryItem[] => { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; } };
 const saveHistory  = (v: PromptHistoryItem[]) => { try { localStorage.setItem(HIST_KEY, JSON.stringify(v.slice(0, 300))); } catch {} };
 const loadConv     = (): GodMessage[] => { try { return JSON.parse(localStorage.getItem(CONV_KEY) || '[]'); } catch { return []; } };
 const saveConv     = (v: GodMessage[]) => { try { localStorage.setItem(CONV_KEY, JSON.stringify(v.slice(-150))); } catch {} };
-const readAutoApproveChanges = (): boolean => {
-  try {
-    const raw = localStorage.getItem(GF_AUTO_APPROVE_KEY);
-    return raw === '1' || raw === 'true';
-  } catch {
-    return false;
-  }
-};
 
 // ─── Social Links Bar ─────────────────────────────────────────────────────────
 
@@ -364,10 +423,9 @@ export function TheGodFactory() {
   const { activeProject } = useProjectStore();
   const { selectedModel, setModel } = useChatStore();
   const { allModels, fetchModels } = useModelStore();
-  const [ideRootPath, setIdeRootPath] = useState<string | undefined>(undefined);
 
-  // Use the global chat-store model as default to keep God Factory aligned with the rest of the app.
-  const [localModel, setLocalModel] = useState(selectedModel || 'github/openai/gpt-4.1-mini');
+  // Use the chatStore's model as default, but allow local override
+  const [localModel, setLocalModel] = useState(selectedModel || 'gemini/gemini-2.5-flash-lite');
 
   const [messages, setMessages]           = useState<GodMessage[]>(loadConv);
   const [input, setInput]                 = useState('');
@@ -381,18 +439,15 @@ export function TheGodFactory() {
   const [showFileSelector, setShowFileSelector] = useState(false);
   const [copied, setCopied]               = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [godFactorySessionId, setGodFactorySessionId] = useState<string | null>(() => {
-    try { return localStorage.getItem(SESSION_KEY); } catch { return null; }
-  });
+  const [godFactorySessionId, setGodFactorySessionId] = useState<string | null>(null);
   const [sessionEpoch, setSessionEpoch] = useState(0);
 
   // Tool-calling state
   const [toolsEnabled, setToolsEnabled]           = useState(true);
   const [toolIterationCount, setToolIterationCount] = useState(0);
+  const [autoApproveTools, setAutoApproveTools] = useState(() => loadStoredBool(GF_AUTO_APPROVE_STORAGE_KEY, false));
   const [pendingApproval, setPendingApproval]     = useState<ApprovalDetails | null>(null);
-  const [autoApproveChanges, setAutoApproveChanges] = useState<boolean>(() => readAutoApproveChanges());
   const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
-  const [autonomousMode, setAutonomousMode]       = useState(false);
 
   // Codebase snapshot — pre-loaded on mount so system prompt always has real context
   const [codebaseTree, setCodebaseTree]   = useState<string>('');
@@ -402,16 +457,12 @@ export function TheGodFactory() {
   const abortRef  = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
-  const godFactorySessionIdRef = useRef<string | null>(godFactorySessionId);
+  const godFactorySessionIdRef = useRef<string | null>(null);
   const sessionIntroShownRef = useRef<string | null>(null);
-  const autonomousModeRef = useRef(false);
 
-  // Keep local model synced with the global model selection to avoid stale provider drift.
-  useEffect(() => {
-    if (selectedModel && selectedModel !== localModel) setLocalModel(selectedModel);
-  }, [selectedModel]);
-  // Force-refresh models on mount so GitHub PAT models are always current
-  useEffect(() => { void fetchModels(true); }, [fetchModels]);
+  // Keep local model in sync with global if global changes and we haven't overridden
+  useEffect(() => { if (selectedModel && !localModel) setLocalModel(selectedModel); }, [selectedModel]);
+  useEffect(() => { void fetchModels(); }, [fetchModels]);
   useEffect(() => {
     if (allModels.length === 0 || !localModel) return;
     if (allModels.some(model => model.id === localModel)) return;
@@ -423,67 +474,24 @@ export function TheGodFactory() {
   useEffect(() => { saveHistory(history); }, [history]);
   useEffect(() => { godFactorySessionIdRef.current = godFactorySessionId; }, [godFactorySessionId]);
   useEffect(() => {
-    try {
-      localStorage.setItem(GF_AUTO_APPROVE_KEY, autoApproveChanges ? '1' : '0');
-    } catch {
-      // no-op
-    }
-  }, [autoApproveChanges]);
-  useEffect(() => {
-    try {
-      if (godFactorySessionId) localStorage.setItem(SESSION_KEY, godFactorySessionId);
-      else localStorage.removeItem(SESSION_KEY);
-    } catch {
-      // no-op
-    }
-  }, [godFactorySessionId]);
-  useEffect(() => { autonomousModeRef.current = autonomousMode; }, [autonomousMode]);
-
-  useEffect(() => {
-    let active = true;
-
-    const applyAutoApprove = (value: unknown) => {
-      if (typeof value !== 'boolean') return;
-      setAutoApproveChanges(value);
+    const refreshFromStorage = () => {
+      setAutoApproveTools(loadStoredBool(GF_AUTO_APPROVE_STORAGE_KEY, false));
     };
 
-    const syncFromLoopStatus = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/god-factory/loop/status`);
-        if (!res.ok) return;
-        const payload = await res.json() as {
-          activeRun?: { auto_approve_changes?: number } | null;
-          config?: { governance?: { autoApproveChanges?: boolean } };
-        };
-        if (!active) return;
-        if (typeof payload?.activeRun?.auto_approve_changes === 'number') {
-          setAutoApproveChanges(payload.activeRun.auto_approve_changes === 1);
-          return;
-        }
-        applyAutoApprove(payload?.config?.governance?.autoApproveChanges);
-      } catch {
-        // best-effort status hydration
+    const onGovernanceChanged = (evt: Event) => {
+      const ce = evt as CustomEvent<{ autoApproveChanges?: boolean }>;
+      if (typeof ce.detail?.autoApproveChanges === 'boolean') {
+        setAutoApproveTools(ce.detail.autoApproveChanges);
+      } else {
+        refreshFromStorage();
       }
     };
 
-    const onGovernanceChange = (event: Event) => {
-      const detail = (event as CustomEvent<{ autoApproveChanges?: boolean }>).detail;
-      applyAutoApprove(detail?.autoApproveChanges);
-    };
-
-    const onStorageChange = (event: StorageEvent) => {
-      if (event.key !== GF_AUTO_APPROVE_KEY) return;
-      setAutoApproveChanges(event.newValue === '1' || event.newValue === 'true');
-    };
-
-    window.addEventListener(GF_GOVERNANCE_EVENT, onGovernanceChange as EventListener);
-    window.addEventListener('storage', onStorageChange);
-    void syncFromLoopStatus();
-
+    window.addEventListener('storage', refreshFromStorage);
+    window.addEventListener(GF_GOVERNANCE_EVENT, onGovernanceChanged as EventListener);
     return () => {
-      active = false;
-      window.removeEventListener(GF_GOVERNANCE_EVENT, onGovernanceChange as EventListener);
-      window.removeEventListener('storage', onStorageChange);
+      window.removeEventListener('storage', refreshFromStorage);
+      window.removeEventListener(GF_GOVERNANCE_EVENT, onGovernanceChanged as EventListener);
     };
   }, []);
 
@@ -492,11 +500,6 @@ export function TheGodFactory() {
     let active = true;
     (async () => {
       try {
-        const rootRes = await fetch(`${API_BASE}/api/codebase/root`);
-        const rootData = await rootRes.json().catch(() => ({}));
-        if (active && typeof rootData?.root === 'string' && rootData.root.trim()) {
-          setIdeRootPath(rootData.root);
-        }
         const [treeRes, docsRes, stateRes, projectStateRes, feedbackIndexRes] = await Promise.all([
           fetch(`${API_BASE}/api/codebase/tree?path=.&depth=3`),
           fetch(`${API_BASE}/api/codebase/docs`),
@@ -599,7 +602,7 @@ export function TheGodFactory() {
         body: JSON.stringify({
           start_cycle: `${Date.now()}`,
           notifications_presented: [],
-          project_id: null,
+          project_id: activeProject?.id ?? null,
         }),
       });
       if (!res.ok) return null;
@@ -608,11 +611,10 @@ export function TheGodFactory() {
       setGodFactorySessionId(data.session_id);
       godFactorySessionIdRef.current = data.session_id;
       return data.session_id;
-    } catch (err) {
-      console.warn('Failed to create God Factory session:', err);
+    } catch {
       return null;
     }
-  }, []);
+  }, [activeProject?.id]);
 
   const ensureGodFactorySession = useCallback(async () => {
     return godFactorySessionIdRef.current || await createGodFactorySession();
@@ -627,23 +629,13 @@ export function TheGodFactory() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-    } catch (err) {
-      console.warn('Failed to append God Factory session payload:', err);
+    } catch {
+      // noop
     }
   }, [ensureGodFactorySession]);
 
   const injectSessionBriefing = useCallback(async (sessionId: string) => {
     if (sessionIntroShownRef.current === sessionId) return;
-    try {
-      const persisted = sessionStorage.getItem(`${SESSION_BRIEF_KEY_PREFIX}${sessionId}`) === '1';
-      const globalPersisted = sessionStorage.getItem(SESSION_BRIEF_GLOBAL_KEY) === '1';
-      if (persisted || globalPersisted) {
-        sessionIntroShownRef.current = sessionId;
-        return;
-      }
-    } catch {
-      // no-op
-    }
 
     try {
       const [queueRes, suggestionsRes] = await Promise.all([
@@ -656,14 +648,7 @@ export function TheGodFactory() {
       const suggestions = suggestionsData?.suggestions || [];
 
       setMessages(prev => {
-        // Only inject the startup brief into a fresh thread.
-        // Re-mounting the God Factory tab should not interrupt ongoing conversations.
-        if (prev.length > 0) return prev;
-        const alreadyHasStartupBrief = prev.some(msg =>
-          msg.id.startsWith('gf-startup-')
-          || msg.content.includes('[THE GOD FACTORY STARTUP BRIEF]')
-        );
-        if (alreadyHasStartupBrief) return prev;
+        if (prev.some(msg => msg.id === `gf-startup-${sessionId}`)) return prev;
         return [...prev, {
           id: `gf-startup-${sessionId}`,
           role: 'assistant',
@@ -679,8 +664,6 @@ export function TheGodFactory() {
       }
     } finally {
       sessionIntroShownRef.current = sessionId;
-      try { sessionStorage.setItem(`${SESSION_BRIEF_KEY_PREFIX}${sessionId}`, '1'); } catch {}
-      try { sessionStorage.setItem(SESSION_BRIEF_GLOBAL_KEY, '1'); } catch {}
     }
   }, [appendGodFactorySession, localModel]);
 
@@ -695,14 +678,14 @@ export function TheGodFactory() {
 
   // ── Approval helper (promise-based modal) ─────────────────────────────────
   const requestApproval = useCallback((details: ApprovalDetails): Promise<boolean> => {
-    if (autoApproveChanges) {
+    if (autoApproveTools) {
       return Promise.resolve(true);
     }
     return new Promise((resolve) => {
       approvalResolveRef.current = resolve;
       setPendingApproval(details);
     });
-  }, [autoApproveChanges]);
+  }, [autoApproveTools]);
 
   const handleApprovalDecision = (approved: boolean) => {
     approvalResolveRef.current?.(approved);
@@ -924,22 +907,13 @@ export function TheGodFactory() {
           });
           const preview = await prevRes.json();
           if (preview.error) return `Error: ${preview.error}`;
-          const approved = await requestApproval({
-            type: 'write',
-            path: String(params.path),
-            diff: preview.diff,
-            isNew: preview.isNew,
-            originalLines: preview.originalLines,
-            newLines: preview.linesWritten,
-            truncationWarning: preview.truncationWarning ?? null,
-          });
+          const approved = await requestApproval({ type: 'write', path: String(params.path), diff: preview.diff, isNew: preview.isNew });
           if (!approved) return `User rejected write to ${params.path}.`;
           const applyRes = await fetch(`${API_BASE}/api/codebase/write`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: params.path, content: params.content, approved: true, force: true }),
+            body: JSON.stringify({ path: params.path, content: params.content, approved: true }),
           });
           const result = await applyRes.json();
-          if (!applyRes.ok) return `Error: ${result.error}`;
           return result.success ? `${result.isNew ? 'Created' : 'Updated'} ${params.path} (${result.linesWritten} lines).` : `Error: ${result.error}`;
         }
         case 'run_command': {
@@ -1289,29 +1263,9 @@ export function TheGodFactory() {
     systemContext: string,
     abortCtrl: AbortController,
   ): Promise<{ content: string; msgId: string }> => {
-    const modelCandidates = allModels.some(model => model.id === localModel)
-      ? [localModel]
-      : (allModels[0]?.id ? [allModels[0].id] : [localModel]);
-
-    let requestModel = modelCandidates[0];
-    let fallbackModels: string[] | undefined;
-
-    try {
-      const strategyRes = await fetch(`${API_BASE}/api/model-strategy`);
-      const strategy = strategyRes.ok ? await strategyRes.json().catch(() => null) : null;
-      if (strategy?.settings) {
-        if (!requestModel && strategy.settings.primaryModel) {
-          requestModel = strategy.settings.primaryModel;
-        }
-        fallbackModels = [
-          ...(strategy.settings.fallbackModels || []),
-          strategy.settings.primaryModel,
-        ].filter((modelId: string, index: number, arr: string[]) => !!modelId && modelId !== requestModel && arr.indexOf(modelId) === index);
-      }
-    } catch {
-      fallbackModels = undefined;
-    }
-
+    const requestModel = allModels.some(model => model.id === localModel)
+      ? localModel
+      : (allModels[0]?.id || localModel);
     const msgId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
     setMessages(prev => [...prev, {
       id: msgId, role: 'assistant', content: '', timestamp: new Date().toISOString(),
@@ -1323,7 +1277,6 @@ export function TheGodFactory() {
       body: JSON.stringify({
         message: prompt,
         model: requestModel,
-        fallbackModels,
         mode: 'agent',
         projectId: activeProject?.id || 'default',
         conversationId: conversationId || undefined,
@@ -1341,7 +1294,6 @@ export function TheGodFactory() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let fullContent = '';
-    let modelRecommendation = '';
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -1359,14 +1311,6 @@ export function TheGodFactory() {
             setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: fullContent } : m));
           } else if (ev.type === 'content_done') {
             fullContent = ev.fullContent || fullContent;
-          } else if (ev.type === 'model_recommendation') {
-            const recommended = String(ev.recommendedModel || '').trim();
-            if (recommended) {
-              const confidence = Number(ev.confidence || 0);
-              const pct = Number.isFinite(confidence) ? Math.round(confidence * 100) : 0;
-              const taskType = String(ev.taskType || 'general');
-              modelRecommendation = `\n\nRecommendation: Next similar ${taskType} requests should prefer ${recommended}${pct > 0 ? ` (${pct}% confidence)` : ''}.`;
-            }
           } else if (ev.type === 'done') {
             setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', tokenCount: ev.usage?.totalTokens } : m));
           } else if (ev.type === 'error') {
@@ -1375,17 +1319,17 @@ export function TheGodFactory() {
         } catch { /* skip malformed */ }
       }
     }
-    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', content: `${fullContent || m.content}${modelRecommendation}` } : m));
-    return { content: `${fullContent}${modelRecommendation}`, msgId };
-  }, [localModel, allModels, conversationId, selectedFiles]);
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'done', content: fullContent || m.content } : m));
+    return { content: fullContent, msgId };
+  }, [localModel, allModels, activeProject, conversationId, selectedFiles]);
 
   const takeBackup = async (): Promise<string | null> => {
-    if (!autoBackup || !ideRootPath) return null;
+    if (!autoBackup || !activeProject?.rootPath) return null;
     try {
       const res = await fetch(`${API_BASE}/api/files/backup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectRoot: ideRootPath }),
+        body: JSON.stringify({ projectRoot: activeProject.rootPath }),
       });
       if (!res.ok) return null;
       const data = await res.json();
@@ -1435,8 +1379,7 @@ export function TheGodFactory() {
         `Your job is to improve Personal IDE itself — its built-in features, UX, architecture, models, onboarding, docs, and developer tooling.`,
         `Do NOT behave like a generic external project builder unless the user explicitly asks you to inspect an imported project. Your default scope is the Personal IDE application codebase and help/documentation system.`,
         `You have full access to the Personal IDE codebase, terminal, filesystem, and documentation.`,
-        `Primary scope: Personal IDE internal codebase (self-improvement mode).`,
-        `External telemetry project (read-only signals): ${activeProject?.name || 'none selected'}`,
+        `Active project context: ${activeProject?.name || 'Personal IDE internal codebase (self-improvement mode)'}`,
         selectedFiles.length > 0 ? `Context files: ${selectedFiles.join(', ')}` : '',
         `Model: ${localModel}  Date: ${new Date().toISOString().slice(0, 10)}`,
         `When the user asks about how the app works, use the help/docs and source code to answer with specific details from Personal IDE.`,
@@ -1472,24 +1415,7 @@ export function TheGodFactory() {
 
       while (iteration < MAX_TOOL_ITERATIONS && !abort.signal.aborted) {
         const toolCall = extractToolCall(currentContent);
-
-        if (!toolCall) {
-          // No tool call found. In autonomous mode, keep driving the agent unless it signals done.
-          if (autonomousModeRef.current && toolsEnabled && iteration > 0) {
-            const donePhrases = /autonomous loop complete|no more tasks|all tasks complete|nothing more to do|task complete|i'm done|i am done/i;
-            if (donePhrases.test(currentContent)) break;
-            // Inject continuation nudge so the agent keeps working
-            toolHistory.push({ role: 'assistant', content: currentContent });
-            const contPrompt = `Continue autonomously. Identify the next highest-priority task from the Intel Panel, codebase health signals, or prior analysis. Execute it immediately with a tool call. When all work is done, reply with "AUTONOMOUS LOOP COMPLETE".`;
-            const { content: nextContent } = await streamTurn(contPrompt, buildSystemCtx(toolHistory), abort);
-            currentContent = nextContent;
-            finalAssistantContent = nextContent;
-            iteration++;
-            setToolIterationCount(iteration);
-            continue;
-          }
-          break;
-        }
+        if (!toolCall) break;
 
         iteration++;
         setToolIterationCount(iteration);
@@ -1560,7 +1486,6 @@ export function TheGodFactory() {
     sessionIntroShownRef.current = null;
     setSessionEpoch(prev => prev + 1);
     try { localStorage.removeItem(CONV_KEY); } catch {}
-    try { localStorage.removeItem(SESSION_KEY); } catch {}
   };
   const copyMsg        = (content: string, id: string) => { navigator.clipboard.writeText(content).catch(() => {}); setCopied(id); setTimeout(() => setCopied(null), 1500); };
   const exportConv     = () => {
@@ -1650,7 +1575,7 @@ export function TheGodFactory() {
             <span className="text-xs text-ide-text-dim px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded-full">
               Self-Improvement Agent
             </span>
-            <span className="text-xs text-ide-text-dim">Primary scope: Personal IDE codebase</span>
+            {activeProject && <span className="text-xs text-ide-text-dim">· {activeProject.name}</span>}
           </div>
           <div className="flex items-center gap-1.5">
             {/* Tool iteration counter */}
@@ -1666,9 +1591,6 @@ export function TheGodFactory() {
                 <Archive className="w-2.5 h-2.5" /> {backupStatus}
               </span>
             )}
-            <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${autoApproveChanges ? 'text-red-300 bg-red-500/10' : 'text-emerald-300 bg-emerald-500/10'}`}>
-              <Shield className="w-2.5 h-2.5" /> {autoApproveChanges ? 'Approvals AUTO' : 'Approvals REQUIRED'}
-            </span>
             {/* Tools toggle */}
             <button
               onClick={() => setToolsEnabled(v => !v)}
@@ -1678,6 +1600,11 @@ export function TheGodFactory() {
               {toolsEnabled ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
               {toolsEnabled ? 'Tools ON' : 'Tools OFF'}
             </button>
+            {autoApproveTools && (
+              <span className="text-[10px] px-2 py-1 rounded border border-red-500/40 bg-red-500/10 text-red-300" title="File edits and commands are auto-approved from God Factory governance settings.">
+                Auto-approve ACTIVE
+              </span>
+            )}
             {/* Auto-backup toggle */}
             <button
               onClick={() => setAutoBackup(v => !v)}
@@ -1731,7 +1658,7 @@ export function TheGodFactory() {
         {/* File context selector dropdown */}
         {showFileSelector && (
           <FileContextSelector
-            projectRoot={ideRootPath}
+            projectRoot={activeProject?.rootPath}
             selected={selectedFiles}
             onToggle={(path) => setSelectedFiles(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path])}
             onClose={() => setShowFileSelector(false)}
@@ -1752,10 +1679,7 @@ export function TheGodFactory() {
                 />
           ))}
           {isStreaming && toolIterationCount === 0 && (
-            <div className="flex items-center gap-2 text-xs text-ide-text-dim">
-              <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
-              <span>Thinking…</span>
-            </div>
+            <ModelSelectionThinking conversationId={conversationId} />
           )}
           <div ref={bottomRef} />
         </div>
@@ -1775,12 +1699,7 @@ export function TheGodFactory() {
           {toolsEnabled && (
             <div className="flex items-center gap-2 mb-2 text-[10px] text-purple-400/70">
               <Wrench className="w-3 h-3" />
-              <span>
-                Agent mode: reads, searches, edits files and runs commands — {autoApproveChanges ? 'writes/execs auto-approved by loop governance' : 'writes/execs require your approval'}
-              </span>
-              {autonomousMode && (
-                <span className="text-purple-300 font-semibold animate-pulse">∞ Autonomous ON</span>
-              )}
+              <span>Agent mode: reads, searches, edits files and runs commands — writes/execs require your approval</span>
               {codebaseReady
                 ? <span className="ml-auto text-green-400/70">✓ Codebase loaded</span>
                 : <span className="ml-auto text-yellow-400/70 animate-pulse">⏳ Loading codebase…</span>}
@@ -1790,32 +1709,15 @@ export function TheGodFactory() {
             <textarea
               ref={inputRef}
               value={input}
-              onChange={e => {
-                setInput(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-              }}
+              onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
               placeholder={toolsEnabled
                 ? "Tell THE GOD FACTORY what to build, fix, or enhance… it will use tools autonomously (Enter sends)"
                 : "Tell THE GOD FACTORY what to build, fix, or enhance… (Enter sends, Shift+Enter = newline)"}
-              className="flex-1 bg-ide-bg border border-ide-border rounded-lg px-3 py-2.5 text-sm text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-purple-500/50 transition-colors overflow-y-auto"
-              style={{ minHeight: '60px', maxHeight: '200px', height: '60px' }}
+              className="flex-1 bg-ide-bg border border-ide-border rounded-lg px-3 py-2.5 text-sm text-ide-text placeholder-ide-text-dim resize-none focus:outline-none focus:border-purple-500/50 transition-colors min-h-[60px] max-h-[200px]"
               rows={2}
             />
             <div className="flex flex-col gap-1.5">
-              {/* Autonomous mode toggle */}
-              <button
-                onClick={() => setAutonomousMode(prev => !prev)}
-                title={autonomousMode ? 'Autonomous mode ON — agent will keep running until done. Click to disable.' : 'Autonomous mode OFF — agent stops after each response. Click to enable.'}
-                className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors text-xs font-bold border ${
-                  autonomousMode
-                    ? 'bg-purple-600/80 border-purple-400 text-white'
-                    : 'bg-ide-bg border-ide-border text-ide-text-dim hover:border-purple-500/50'
-                }`}
-              >
-                ∞
-              </button>
               {isStreaming ? (
                 <button onClick={stopStreaming}
                   className="w-9 h-9 flex items-center justify-center bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30">
@@ -1892,30 +1794,6 @@ function ApprovalModal({ details, onApprove, onReject }: {
             </div>
           ) : (
             <div className="space-y-3">
-              {/* Truncation warning — shown prominently when file shrinks significantly */}
-              {details.truncationWarning && (
-                <div className="flex items-start gap-2 p-3 bg-red-500/15 border border-red-500/40 rounded-lg text-[11px] text-red-300">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-400" />
-                  <div>
-                    <p className="font-semibold text-red-400 mb-1">⚠ Truncation Risk Detected</p>
-                    <p>{details.truncationWarning}</p>
-                    <p className="mt-1 text-red-400/70">Approving will overwrite with the potentially incomplete content. The original will be backed up to <code>.bak</code>.</p>
-                  </div>
-                </div>
-              )}
-              {/* Line count summary */}
-              {!details.isNew && details.originalLines !== undefined && details.newLines !== undefined && (
-                <div className={`flex items-center gap-3 text-[11px] px-3 py-2 rounded border ${
-                  details.newLines < details.originalLines * 0.8
-                    ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                    : 'bg-ide-bg/50 border-ide-border text-ide-text-dim'
-                }`}>
-                  <span>Lines: <span className="font-mono">{details.originalLines}</span> → <span className="font-mono">{details.newLines}</span></span>
-                  {details.newLines < details.originalLines * 0.8 && (
-                    <span className="text-red-400 font-semibold">({Math.round(details.newLines / details.originalLines * 100)}% of original)</span>
-                  )}
-                </div>
-              )}
               {details.diff && (
                 <>
                   <div className="flex items-center justify-between">

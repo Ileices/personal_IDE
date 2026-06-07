@@ -229,7 +229,95 @@ function getResourceSnapshot(): ResourceSnapshot {
   };
 }
 
+// ── Admin Task Executor ────────────────────
+// Handles silicon tasks for agent_type values that don't require LLM execution.
+// These are operational/registry tasks dispatched by the God Factory as part
+// of its governance loop. Called from tick() before heartbeat update.
+
+function executeAdminTasks(db: Db): void {
+  // Find PENDING tasks for admin agent types
+  const adminTypes = ['tag_registry', 'model_registry'];
+  const placeholders = adminTypes.map(() => '?').join(',');
+  let tasks: Array<{ id: string; agent_type: string; instruction: string }> = [];
+  try {
+    tasks = db.prepare(`
+      SELECT id, agent_type, instruction
+      FROM silicon_tasks
+      WHERE status = 'PENDING' AND agent_type IN (${placeholders})
+      ORDER BY created_at ASC LIMIT 20
+    `).all(...adminTypes) as typeof tasks;
+  } catch { return; }
+
+  if (tasks.length === 0) return;
+
+  // Lazy import TagRegistryService to avoid circular dep
+  let TagRegistry: typeof import('../tagRegistry/index.js').TagRegistryService | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('../tagRegistry/index.js') as typeof import('../tagRegistry/index.js');
+    TagRegistry = mod.TagRegistryService;
+  } catch { return; }
+
+  const registry = new TagRegistry(db);
+
+  for (const task of tasks) {
+    const instruction = task.instruction.toUpperCase();
+    let output = '';
+
+    try {
+      if (task.agent_type === 'tag_registry') {
+        if (instruction.includes('EMERGENCY FREEZE') || instruction.includes('FREEZE')) {
+          registry.freeze(task.instruction);
+          output = `tag_registry FROZEN. Reason captured. Tag-dependent ops gated.`;
+        } else if (instruction.includes('UNFREEZE') || instruction.includes('REBUILD')) {
+          const result = registry.unfreeze();
+          output = result.wasEmpty
+            ? `tag_registry UNFROZEN + auto-seeded ${result.seeded} canonical types (devtags was empty).`
+            : `tag_registry UNFROZEN. ${(db.prepare(`SELECT COUNT(*) as c FROM devtags WHERE status='active'`).get() as any)?.c ?? 0} active devtags.`;
+        } else {
+          output = `tag_registry: unrecognized instruction — marked complete.`;
+        }
+      } else if (task.agent_type === 'model_registry') {
+        if (instruction.includes('ROLLBACK')) {
+          // Reset recent quality regression for the mentioned model
+          const modelMatch = task.instruction.match(/mistral\/[\w\-\.]+ |[a-z]+\/[\w\-\.]+/i);
+          const modelId = modelMatch ? modelMatch[0].trim() : null;
+          if (modelId) {
+            try {
+              db.prepare(`
+                UPDATE model_registry
+                SET success_rate = 0.7, avg_quality = 0.7, total_runs = 0, last_run_at = NULL
+                WHERE model_id = ?
+              `).run(modelId);
+            } catch { /* model_registry may not exist yet */ }
+          }
+          output = `model_registry ROLLBACK for ${modelId ?? 'unknown'} — quality scores reset.`;
+        } else {
+          output = `model_registry: unrecognized instruction — marked complete.`;
+        }
+      }
+
+      // Mark task COMPLETED
+      db.prepare(`
+        UPDATE silicon_tasks
+        SET status = 'COMPLETED', output_raw = ?, completed_at = ?, attempt_count = attempt_count + 1
+        WHERE id = ?
+      `).run(output, Date.now(), task.id);
+    } catch (err: any) {
+      // Mark FAILED (keep attempt count for audit)
+      db.prepare(`
+        UPDATE silicon_tasks
+        SET status = 'FAILED', output_raw = ?, attempt_count = attempt_count + 1
+        WHERE id = ?
+      `).run(`Admin task error: ${err?.message ?? 'unknown'}`, task.id);
+    }
+  }
+}
+
 function tick(db: Db): void {
+  // Execute admin tasks (tag_registry, model_registry) that don't need LLM
+  executeAdminTasks(db);
+
   lastHeartbeatAt = new Date().toISOString();
   lastQueue = getQueueSnapshot(db);
   lastResources = getResourceSnapshot();
@@ -264,10 +352,45 @@ export function ensureSiliconFactoryDefaults(db: Db): void {
   Object.entries(defaults).forEach(([key, value]) => stmt.run(key, value));
 }
 
+/**
+ * Cold-boot scan: dispatch any PENDING tasks with attempt_count=0 that were
+ * created while the supervisor was stopped. Without this, tasks created when
+ * the server is not running are never dispatched.
+ */
+function dispatchColdBootPendingTasks(db: Db): void {
+  try {
+    const orphaned = db.prepare(`
+      SELECT id FROM silicon_tasks
+      WHERE status = 'PENDING' AND attempt_count = 0
+      ORDER BY created_at ASC
+      LIMIT 50
+    `).all() as Array<{ id: string }>;
+
+    if (orphaned.length === 0) return;
+
+    const now = Date.now();
+    for (const { id } of orphaned) {
+      db.prepare(`
+        UPDATE silicon_tasks
+        SET status = 'PENDING', attempt_count = 0
+        WHERE id = ? AND status = 'PENDING'
+      `).run(id);
+    }
+
+    // Record cold-boot scan in KV for audit visibility
+    setKv(db, 'silicon_factory:cold_boot_scan_at', new Date(now).toISOString());
+    setKv(db, 'silicon_factory:cold_boot_orphaned', String(orphaned.length));
+  } catch {
+    // Best-effort — don't crash supervisor startup
+  }
+}
+
 export function startSiliconFactorySupervisor(db: Db): void {
   ensureSiliconFactoryDefaults(db);
   if (supervisorTimer) return;
   supervisorPaused = false;
+  // Cold-boot: pick up any PENDING tasks from before this startup
+  dispatchColdBootPendingTasks(db);
   tick(db);
   supervisorTimer = setInterval(() => {
     if (supervisorPaused) return;

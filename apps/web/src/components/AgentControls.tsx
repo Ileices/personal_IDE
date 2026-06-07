@@ -696,10 +696,18 @@ export function AgentControls() {
   };
 
   // Wizard → applies settings + optionally starts the loop
-  const handleWizardLaunch = useCallback(async (result: { workflowMode: WorkflowMode; strategyTemplate: string; taskPrompt: string; autoStart: boolean; strictQualityGate: boolean }) => {
+  const handleWizardLaunch = useCallback(async (result: { workflowMode: WorkflowMode; strategyTemplate: string; taskPrompt: string; autoStart: boolean; strictQualityGate: boolean; modelCyclingEnabled?: boolean }) => {
     setWorkflowMode(result.workflowMode);
     setStrictQualityGate(result.strictQualityGate);
     setTask(result.taskPrompt);
+    // Persist Project Factory model cycling toggle to server (separate KV from God Factory)
+    if (result.modelCyclingEnabled !== undefined) {
+      void fetch(`${API_BASE}/api/project-factory/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelCyclingEnabled: result.modelCyclingEnabled }),
+      });
+    }
     // Apply strategy template if one was selected
     if (result.strategyTemplate) {
       void applyStrategyTemplate(result.strategyTemplate);

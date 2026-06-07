@@ -45,10 +45,10 @@ export interface UserAcquireResult {
 }
 
 const DEFAULT_CONFIG: UserRateLimiterConfig = {
-  ipRequestsPerMinute: 60,
-  userRequestsPerMinute: 40,
-  ipRequestsPerDay: 5000,
-  userRequestsPerDay: 3000,
+  ipRequestsPerMinute: 600,
+  userRequestsPerMinute: 4000,
+  ipRequestsPerDay: 500000000,
+  userRequestsPerDay: 300000000,
   abuseThreshold: 10,
   abuseBlockMs: 5 * 60_000, // 5 minutes
   windowMs: 60_000,

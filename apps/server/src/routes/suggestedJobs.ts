@@ -8,6 +8,8 @@ import {
   runSuggestedJobsCrawlerTick,
   runSandboxTick,
   getCrawlerStatus,
+  verifyJobCompletion,
+  runAutoCompleteTick,
 } from '../services/suggestedJobsCrawler/index.js';
 
 const VALID_STATUSES = ['suggested', 'sandbox_ready', 'implementing', 'implemented', 'rejected', 'archived'] as const;
@@ -582,5 +584,74 @@ export async function suggestedJobsRoutes(app: FastifyInstance) {
     const limit = Math.min(parseInt(q.limit || '50', 10), 200);
     const log = db.prepare(`SELECT * FROM crash_recovery_log ORDER BY timestamp DESC LIMIT ?`).all(limit) as Record<string, unknown>[];
     return reply.send({ log });
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // Auto-Complete Loop — Sprint 3
+  // The auto-complete loop picks one suggested job at a time, marks
+  // it 'implementing', calls verifyJobCompletion, then marks it
+  // 'implemented' or returns it to 'suggested' with a failure note.
+  // Circuit-breaker: 3 consecutive failures → auto-pause.
+  // ─────────────────────────────────────────────────────────────────
+
+  // ── POST /auto-complete/start ────────────────────────────────────
+  app.post('/auto-complete/start', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const state = db.prepare(`SELECT * FROM auto_complete_state WHERE id = 'singleton'`).get() as Record<string, unknown> | undefined;
+    if (state?.status === 'running') {
+      return reply.send({ ok: false, reason: 'Loop already running', state });
+    }
+    db.prepare(`
+      UPDATE auto_complete_state SET
+        status = 'running', started_at = datetime('now'), paused_at = NULL,
+        pause_reason = NULL, consecutive_failures = 0, updated_at = datetime('now')
+      WHERE id = 'singleton'
+    `).run();
+    // Fire first tick asynchronously
+    setImmediate(() => runAutoCompleteTick(db));
+    return reply.send({ ok: true, status: 'running' });
+  });
+
+  // ── POST /auto-complete/pause ────────────────────────────────────
+  app.post('/auto-complete/pause', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as Record<string, unknown>;
+    db.prepare(`
+      UPDATE auto_complete_state SET status = 'paused', paused_at = datetime('now'),
+        pause_reason = ?, updated_at = datetime('now') WHERE id = 'singleton'
+    `).run(String(body.reason || 'user_requested'));
+    return reply.send({ ok: true, status: 'paused' });
+  });
+
+  // ── POST /auto-complete/stop ─────────────────────────────────────
+  app.post('/auto-complete/stop', async (_req: FastifyRequest, reply: FastifyReply) => {
+    db.prepare(`
+      UPDATE auto_complete_state SET status = 'idle', paused_at = NULL, pause_reason = NULL,
+        started_at = NULL, current_job_id = NULL, updated_at = datetime('now')
+      WHERE id = 'singleton'
+    `).run();
+    return reply.send({ ok: true, status: 'idle' });
+  });
+
+  // ── GET /auto-complete/status ────────────────────────────────────
+  app.get('/auto-complete/status', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const state = db.prepare(`SELECT * FROM auto_complete_state WHERE id = 'singleton'`).get() as Record<string, unknown> | undefined;
+    return reply.send({ state: state || { status: 'idle' } });
+  });
+
+  // ── POST /jobs/:id/verify ────────────────────────────────────────
+  // Uses verifyJobCompletion() from the crawler service to LLM-verify
+  // whether a job is truly done. Updates implementation_status accordingly.
+  app.post('/jobs/:id/verify', async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const job = db.prepare(`SELECT * FROM job_records WHERE job_id = ? OR id = ?`).get(id, id) as Record<string, unknown> | undefined;
+    if (!job) return reply.status(404).send({ error: 'Job not found' });
+
+    const result = await verifyJobCompletion(String(job.job_id), db);
+    if (result.verified) {
+      db.prepare(`
+        UPDATE job_records SET implementation_status = 'implemented', last_updated_cycle = last_updated_cycle + 1
+        WHERE job_id = ?
+      `).run(job.job_id as string);
+    }
+    return reply.send({ job_id: job.job_id, verified: result.verified, reason: result.reason });
   });
 }

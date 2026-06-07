@@ -8,6 +8,8 @@ import { rateLimiter } from '../services/llm/rateLimiter.js';
 import { getAvailableModels } from '../services/llm/client.js';
 import { createNanoClient, createOllamaClient, getClientFromDb } from '../services/llm/providers.js';
 import type { ProviderType } from '@personal-ide/shared';
+import { getRecentSelections } from '../services/modelSelection/index.js';
+import { getRateLimitStats } from '../services/modelRateLimitTracker/index.js';
 
 type TestClassification = 'working' | 'rate_limited' | 'cost_blocked' | 'not_configured' | 'not_installed' | 'discontinued' | 'error';
 
@@ -94,6 +96,45 @@ function upsertModelRegistryFromTest(db: any, modelId: string, provider: string,
   }
 }
 
+/**
+ * Compute a composite quality score for a model from the model_registry + blame_records.
+ * Returns a score in [0, 1]. Falls back to 0.1 (regression floor) if no data.
+ */
+function computeCompositeQuality(db: any, modelId: string): {
+  score: number;
+  successRate: number;
+  totalRuns: number;
+  recentUsage: number;
+  lastRunAt: string | null;
+} {
+  try {
+    const reg = db.prepare(
+      'SELECT success_rate, total_runs, avg_quality, last_run_at FROM model_registry WHERE model_id = ?'
+    ).get(modelId) as any;
+
+    // Recent usage from blame_records (last 1h)
+    const recentRow = db.prepare(`
+      SELECT COUNT(*) as cnt FROM blame_records
+      WHERE attributed_source = ? AND created_at > datetime('now', '-1 hour')
+    `).get(modelId) as any;
+
+    const successRate = reg ? Number(reg.success_rate || 0) : 0;
+    const totalRuns = reg ? Number(reg.total_runs || 0) : 0;
+    const avgQuality = reg ? Number(reg.avg_quality || 0) : 0;
+    const recentUsage = recentRow ? Number(recentRow.cnt || 0) : 0;
+
+    // Composite: 50% success_rate + 30% avg_quality + 20% recency bonus (capped at 0.2)
+    const recencyBonus = Math.min(0.2, recentUsage * 0.02);
+    const rawScore = (successRate * 0.5) + (avgQuality * 0.3) + recencyBonus;
+    // Apply regression floor of 0.1 if we have any data
+    const score = totalRuns > 0 ? Math.max(0.1, Math.min(1.0, rawScore)) : 0;
+
+    return { score, successRate, totalRuns, recentUsage, lastRunAt: reg?.last_run_at || null };
+  } catch {
+    return { score: 0, successRate: 0, totalRuns: 0, recentUsage: 0, lastRunAt: null };
+  }
+}
+
 export async function modelsRoutes(app: FastifyInstance) {
   const db = (app as any).db;
   // --- GET /api/models - List all models ---
@@ -122,6 +163,28 @@ export async function modelsRoutes(app: FastifyInstance) {
   // --- GET /api/models/status - Rate limit status for all models ---
   app.get('/status', async () => {
     return { status: rateLimiter.getAllStatus() };
+  });
+
+  // --- GET /api/models/quality - Composite quality scores for all models ---
+  app.get('/quality', async () => {
+    const allModels = MODELS.map(m => ({
+      modelId: m.id,
+      name: m.name,
+      publisher: m.publisher,
+      ...computeCompositeQuality(db, m.id),
+    }));
+    // Sort by score descending
+    allModels.sort((a, b) => b.score - a.score);
+    return { models: allModels, generatedAt: new Date().toISOString() };
+  });
+
+  // --- GET /api/models/quality/:modelId - Quality for a specific model ---
+  app.get<{ Params: { modelId: string } }>('/quality/:modelId', async (request, reply) => {
+    const { modelId } = request.params;
+    const decoded = decodeURIComponent(modelId);
+    const model = MODELS.find(m => m.id === decoded);
+    if (!model) return reply.status(404).send({ error: 'Model not found' });
+    return { modelId: decoded, name: model.name, ...computeCompositeQuality(db, decoded) };
   });
 
   // --- POST /api/models/test - Test a specific model and classify failures ---
@@ -390,5 +453,23 @@ export async function modelsRoutes(app: FastifyInstance) {
     } catch {
       return { models: [], count: 0 };
     }
+  });
+
+  // --- GET /api/models/selection-events - Model selection events for thinking animation ---
+  app.get<{
+    Querystring: { session_id?: string; limit?: string; task_type?: string };
+  }>('/selection-events', async (request, reply) => {
+    const { session_id, limit, task_type } = request.query;
+    const parsedLimit = limit ? Math.max(1, Math.min(500, parseInt(limit, 10))) : 50;
+    return getRecentSelections(db, {
+      sessionId: session_id,
+      limit: parsedLimit,
+      taskType: task_type,
+    });
+  });
+
+  // --- GET /api/models/rate-limit-stats - Learned rate limit state ---
+  app.get('/rate-limit-stats', async () => {
+    return getRateLimitStats(db);
   });
 }

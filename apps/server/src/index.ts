@@ -41,6 +41,7 @@ import { suggestedJobsRoutes } from './routes/suggestedJobs.js';
 import { godFactoryRoutes } from './routes/godFactory.js';
 import { siliconFactoryRoutes } from './routes/siliconFactory.js';
 import { projectFactoryRoutes } from './routes/projectFactory.js';
+import { factoryMessagesRoutes } from './routes/factoryMessages.js';
 import { stabilityRoutes } from './routes/stability.js';
 import { contextWindowRoutes } from './routes/contextWindow.js';
 import { appUpdateRoutes } from './routes/appUpdate.js';
@@ -175,6 +176,9 @@ async function main() {
 
   // Project Factory — scaffold, import analysis, milestone/quality history
   await app.register(projectFactoryRoutes, { prefix: '/api/project-factory' });
+
+  // Factory Messages — inter-factory LLM communication (God <-> Project)
+  await app.register(factoryMessagesRoutes, { prefix: '/api/factory-messages' });
 
   // Stability Monitor — rolling 10-cycle health window, auto-rollback triggers
   await app.register(stabilityRoutes, { prefix: '/api/stability' });

@@ -17,6 +17,7 @@ import { DebtTrackingAgent } from './debtTracking.js';
 import { TagSystemAnalysisAgent } from './tagSystemAnalysis.js';
 import { AgentPerformanceAnalysisAgent } from './agentPerformance.js';
 import { GapAnalysisTools } from './tools.js';
+import { callWithFallback } from '../llm/unifiedFallback.js';
 
 export type GapCategory = 'coverage' | 'structural' | 'process' | 'tag_system' | 'agent_performance';
 export type Severity = 'info' | 'warning' | 'error' | 'critical' | 'fatal';
@@ -48,6 +49,12 @@ export interface FullGapAnalysisResult {
   performance_summary: any;
   flagged_to_god_factory: number;
   total_reports: number;
+  llm_enrichment?: {
+    executiveSummary: string;
+    topPriorities: string[];
+    suggestedFiles: string[];
+    modelUsed: string;
+  } | null;
 }
 
 export class GapAnalysisAgent {
@@ -253,6 +260,50 @@ export class GapAnalysisAgent {
     // ── Persist all gap reports ───────────────────────────────────────────
     this.persistReports(reports);
 
+    // ── LLM Semantic Enrichment ───────────────────────────────────────────
+    // Use a real LLM to produce a ranked, actionable summary with rationale.
+    // This upgrades the SQL-only sub-agents with semantic understanding.
+    let llmEnrichment: {
+      executiveSummary: string;
+      topPriorities: string[];
+      suggestedFiles: string[];
+      modelUsed: string;
+    } | null = null;
+
+    if (reports.length > 0) {
+      try {
+        const reportSummary = reports.slice(0, 10).map(r =>
+          `[${r.severity.toUpperCase()}] ${r.gap_category}: ${r.recommended_action_tags.join(', ')} — affects: ${[...r.affected_files, ...r.affected_tags].slice(0, 3).join(', ')}`
+        ).join('\n');
+
+        const llmResult = await callWithFallback({
+          db: this.db,
+          chainKey: 'crawler',
+          taskType: 'gap_analysis_enrichment',
+          maxTokens: 300,
+          messages: [{
+            role: 'system',
+            content: 'You are a code quality analyst. Given gap analysis findings, produce a concise executive summary, top 3 priorities, and list of specific files/modules to address first.',
+          }, {
+            role: 'user',
+            content: `Gap analysis findings for cycles ${cycle_range[0]}-${cycle_range[1]}:\n${reportSummary}\n\nRespond with JSON: {"executiveSummary": "...", "topPriorities": ["...", "...", "..."], "suggestedFiles": ["..."]}`,
+          }],
+        });
+
+        const parsed = JSON.parse(llmResult.content.replace(/^```json\n?|\n?```$/g, '').trim());
+        llmEnrichment = {
+          executiveSummary: parsed.executiveSummary ?? '',
+          topPriorities: parsed.topPriorities ?? [],
+          suggestedFiles: parsed.suggestedFiles ?? [],
+          modelUsed: llmResult.modelId,
+        };
+
+        // Store enrichment in app_kv
+        this.db.prepare("INSERT OR REPLACE INTO app_kv (key, value, updated_at) VALUES ('gap_analysis:llm_enrichment', ?, datetime('now'))")
+          .run(JSON.stringify({ ...llmEnrichment, session_id, cycle_range, timestamp: new Date().toISOString() }));
+      } catch { /* LLM enrichment is non-critical — SQL analysis results are still valid */ }
+    }
+
     return {
       session_id,
       cycle_range,
@@ -278,6 +329,7 @@ export class GapAnalysisAgent {
       } : null,
       flagged_to_god_factory: reports.filter(r => r.flagged_to_god_factory).length,
       total_reports: reports.length,
+      llm_enrichment: llmEnrichment,
     };
   }
 

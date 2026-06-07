@@ -145,10 +145,12 @@ Fastify 5.2 with:
 | `services/contextWindowManager/` | Priority-ordered context budget enforcement; `fitPrioritySlots()` (priority: system_prompt > task_buildtags > devtags > history > memory > code_content); tier ceilings T1–T5; truncation logged to notification_queue |
 | `services/errors/` | Compile/lint error detection |
 | `services/filesystem/` | File tree listing, read/write operations |
+| `services/projectStateCrawler/` | Full project-state crawl service. Scheduler now calls this directly (not just summary scans). Supports optional archive-forensic mode via `include_backup_dirs` / `include_hidden_dirs`. |
 | `services/memory/` | SQLite-backed project memory notes + search |
 | `services/midwife/` | Training data generator ("bird-feeding") |
 | `services/modes/` | System prompt templates for each mode |
 | `services/nanoLiaison/` | Polls Nano Sea `/v1/training/status` every 15 s; diffs nano states; creates devtag records + forensic entries for anomalies |
+| `services/subsystemScheduler.ts` | 15s scheduler tick. Runs full Project State Crawler + full Gap Analysis + Suggested Jobs tick + God Factory idle scanner. Persists last-run payloads and pipeline checkpoint telemetry in `app_kv`. |
 | `services/siliconFactory/` | Task lifecycle, IAP messaging, sync locks, state snapshots, symbol graph, test indexing, embeddings |
 | `services/spawnAuthority/` | **Transactional spawn gate**: `requestSpawn()` → UUID confirmation record; `resolveConfirmation()` → accepted/rejected; `executeSpawn()` → one-time consume; replay denied |
 | `services/stabilityMonitor/` | Rolling 10-cycle window; thresholds: 2 consecutive test failures, blame score drop >0.15/3 cycles, 2 consecutive loops, buildtag rejection spike >0.20; breach triggers rollback notification + forensic job |
@@ -171,6 +173,12 @@ SQLite database at `./data/personal-ide.db`. Key tables:
 | `checkpoints` | Project snapshot metadata |
 | `code_symbols` | Indexed code symbols |
 | `code_relationships` | Symbol relationships |
+| `ground_truth_snapshots` | Project State Crawler snapshot headers (status, counts, drift totals) |
+| `snapshot_devtags` | Parsed devtag records per snapshot |
+| `drift_events` | Registry/content/location drift records from PSC |
+| `gap_reports` | Full Gap Analysis output; `flagged_to_god_factory` drives God Factory ingest |
+| `job_records` | Suggested/GodFactory actionable work queue |
+| `app_kv` | Scheduler settings, subsystem last-run payloads, pipeline checkpoint state |
 | `stability_snapshots` | Rolling stability window records (10-cycle); written by StabilityMonitor |
 | `loop_milestones` | Per-iteration loop progress records; written by milestoneEmitter |
 | `loop_quality_snapshots` | Per-iteration quality signals; written by milestoneEmitter |
@@ -264,3 +272,18 @@ User clicks "Start Fleet"
   → Each agent runs independently via EnhancedAgentLoop
   → Fleet events broadcast via SSE
 ```
+
+  ### 5.4 Autonomous Crawler Pipeline (Scheduler)
+  ```
+  15s scheduler tick
+    → (if due) run full Project State Crawler
+      → writes ground_truth_snapshots + snapshot_devtags + drift_events
+    → (if due) run Suggested Jobs crawler tick
+      → writes/updates job_records
+    → (if due) run full Gap Analysis
+      → writes gap_reports
+    → (if due) run God Factory idle scanner
+      → writes idle_suggestions
+    → record pipeline checkpoint in app_kv
+      → if anomalies detected, enqueue notification_queue warning
+  ```

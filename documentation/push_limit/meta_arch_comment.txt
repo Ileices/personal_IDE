@@ -1,0 +1,115 @@
+## THE AGENT META-ARCHITECTURE: Control Plane Design
+
+The most important mental model shift in this entire project. From the agent_meta_architecture_action_plan.json found in the codebase:
+
+**Core principle: "The agent is a control plane, not a code writer — it generates Python automation scripts that generate code."**
+
+This is how a 512-token nano model can build arbitrarily large codebases across many turns.
+
+---
+
+### The Control Plane Model
+
+Traditional approach (what we accidentally built):
+```
+LLM -> writes code directly -> file system
+```
+
+Meta-architecture approach (what God Factory should be):
+```
+LLM (512 tokens) -> generates automation script -> script runs -> code written
+                    (20-line Python that calls templates and fills variables)
+```
+
+The LLM never needs to hold the entire codebase in memory because it is not writing code — it is writing instructions that write code. The code-writing step is deterministic and testable.
+
+---
+
+### Memory Fabric (4 Subdirectories)
+
+```
+.god_factory/
+  indices/          keyword+embedding index of all project symbols
+  domains/          domain-specific knowledge (auth, database, API, UI patterns)
+  automation/       reusable Python scripts for common code generation patterns
+  cache/            recent context snapshots keyed by task_id
+```
+
+**Token-aware indexing formula:**
+```
+relevance = (0.60 * keyword_overlap_score)
+          + (0.25 * recency_score)
+          + (0.15 * access_frequency_score)
+```
+
+High keyword overlap means the index entry is about what the agent needs right now.
+Recency means the agent worked on this file recently.
+Frequency means this is frequently-relevant knowledge.
+
+---
+
+### Overflow Queue
+
+When memories do not fit the context budget (context window is full):
+1. All excluded memories go into an overflow_queue table
+2. Next turn: agent first processes the overflow queue (one turn dedicated to catching up)
+3. If overflow persists 3 turns: auto-summarize overflow into a single compressed entry
+4. This enables the agent to handle projects with 100K+ lines without ever losing context
+
+---
+
+### The automation/ Directory Pattern
+
+When the agent needs to create a new REST endpoint (same as it does today manually), instead of writing the code directly, it should:
+
+1. Find the closest existing automation script: `automation/create_rest_endpoint.py`
+2. Call that script with parameters: `python create_rest_endpoint.py --name health --method GET --auth none`
+3. Script creates: route file, handler file, types file, test file — all consistently
+
+When no automation script exists for a task:
+1. Agent creates a new automation script (this IS the code-writing step for novel tasks)
+2. Stores it in automation/ for reuse
+3. Runs it immediately
+
+This means each novel task adds a reusable capability. The automation/ directory becomes the agent's skill repertoire.
+
+---
+
+### How This Connects to OpenClaw
+
+OpenClaw's 8 built-in skills ARE automation scripts. The agent calling `claw:refactor` is exactly this pattern. What's missing is the ability for the agent to CREATE new claw skills dynamically. Phase 3 adds:
+
+```
+command_agent receives: 'create new claw skill'
+-> generates Python automation script
+-> tests it against a sandbox project
+-> if tests pass: registers as new OpenClaw skill
+-> God Factory now has n+1 skills permanently
+```
+
+This is the "ever-growing toolbox" described in the AIOS IO vision.
+
+---
+
+### The 5-Phase Action Plan (from agent_meta_architecture_action_plan.json)
+
+Phase 1: Build memory fabric subdirectories, implement token-aware index
+Phase 2: Implement overflow queue, add domain knowledge seeding for each project template
+Phase 3: Build first 5 automation scripts for the most common code patterns
+Phase 4: Connect command_agent to automation script creation pipeline
+Phase 5: Add dynamic OpenClaw skill registration from validated automation scripts
+
+All 5 phases fit inside Phase 3 of the main roadmap (God Factory intelligence layer).
+
+---
+
+### Why This Matters for NANO
+
+When a NANO model routes a task, it can route to:
+- LLM provider (current)
+- NANO Sea v2 (Phase 5)
+- automation/ script (Phase 3, zero tokens needed)
+
+The third route is the key insight: tasks that have been automated require ZERO model inference. They execute deterministically. This means God Factory becomes FASTER as it works on a project longer, because the automation/ directory grows.
+
+This is the mechanism behind the benchmark target: "God Factory outperforms GitHub Copilot on familiar codebase by 2x."

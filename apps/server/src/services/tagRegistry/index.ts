@@ -518,4 +518,88 @@ export class TagRegistryService {
       failed_buildtags: (bMap['failed'] as number) ?? 0,
     };
   }
+
+  // ── Registry Freeze / Unfreeze ──────────────────────────────────────────
+  // These operations store state in app_kv so the silicon factory can gate
+  // tag-dependent operations on the freeze flag.
+
+  isFrozen(): boolean {
+    try {
+      const row = this.db.prepare(`SELECT value FROM app_kv WHERE key = 'tag_registry:frozen'`).get() as { value?: string } | undefined;
+      return row?.value === '1';
+    } catch { return false; }
+  }
+
+  freeze(reason: string): void {
+    this.db.prepare(
+      `INSERT INTO app_kv (key, value, updated_at) VALUES ('tag_registry:frozen', '1', datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = datetime('now')`
+    ).run();
+    this.db.prepare(
+      `INSERT INTO app_kv (key, value, updated_at) VALUES ('tag_registry:frozen_reason', ?, datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
+    ).run(reason);
+  }
+
+  unfreeze(): { wasEmpty: boolean; seeded: number } {
+    this.db.prepare(
+      `INSERT INTO app_kv (key, value, updated_at) VALUES ('tag_registry:frozen', '0', datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value = '0', updated_at = datetime('now')`
+    ).run();
+
+    // If devtags count is 0 after unfreeze, auto-seed from canonical CONSTITUTION type list
+    const count = (this.db.prepare(`SELECT COUNT(*) as c FROM devtags WHERE status = 'active'`).get() as { c: number })?.c ?? 0;
+    if (count === 0) {
+      const seeded = this.seedCanonicalDevtags();
+      return { wasEmpty: true, seeded };
+    }
+    return { wasEmpty: false, seeded: 0 };
+  }
+
+  /**
+   * Seeds canonical devtag types from the CONSTITUTION-approved list.
+   * Called automatically on UNFREEZE when devtags count is 0 (cold start).
+   * These are structural system tags, not project-specific code tags.
+   */
+  seedCanonicalDevtags(): number {
+    // CONSTITUTION canonical tag types — the baseline system tag vocabulary
+    const CANONICAL_TYPES: Array<{ tag_key: string; tag_type: string; name: string }> = [
+      { tag_key: 'system:field:root', tag_type: 'field', name: 'Root Field Tag' },
+      { tag_key: 'system:function:root', tag_type: 'function', name: 'Root Function Tag' },
+      { tag_key: 'system:route:root', tag_type: 'route', name: 'Root Route Tag' },
+      { tag_key: 'system:interface:root', tag_type: 'interface', name: 'Root Interface Tag' },
+      { tag_key: 'system:constant:root', tag_type: 'constant', name: 'Root Constant Tag' },
+      { tag_key: 'system:class:root', tag_type: 'class', name: 'Root Class Tag' },
+      { tag_key: 'system:type:root', tag_type: 'type', name: 'Root Type Alias Tag' },
+      { tag_key: 'system:enum:root', tag_type: 'enum', name: 'Root Enum Tag' },
+      { tag_key: 'system:test:root', tag_type: 'test', name: 'Root Test Tag' },
+      { tag_key: 'system:import:root', tag_type: 'import', name: 'Root Import Tag' },
+      { tag_key: 'system:export:root', tag_type: 'export', name: 'Root Export Tag' },
+      { tag_key: 'system:handler:root', tag_type: 'handler', name: 'Root Handler Tag' },
+      { tag_key: 'system:worker:root', tag_type: 'worker', name: 'Root Worker Tag' },
+      { tag_key: 'system:method:root', tag_type: 'method', name: 'Root Method Tag' },
+      { tag_key: 'system:hook:root', tag_type: 'hook', name: 'Root Hook Tag' },
+      { tag_key: 'system:component:root', tag_type: 'component', name: 'Root Component Tag' },
+      { tag_key: 'system:service:root', tag_type: 'service', name: 'Root Service Tag' },
+      { tag_key: 'system:middleware:root', tag_type: 'middleware', name: 'Root Middleware Tag' },
+      // NANO-specific types
+      { tag_key: 'nano:module:root', tag_type: 'nano:module', name: 'NANO Module Root' },
+      { tag_key: 'nano:weight:frozen:root', tag_type: 'nano:weight:frozen', name: 'NANO Frozen Weight Root' },
+    ];
+
+    let inserted = 0;
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO devtags (id, tag_key, tag_type, name, status, metadata)
+      VALUES (?, ?, ?, ?, 'active', '{"seeded": true, "canonical": true}')
+    `);
+
+    for (const t of CANONICAL_TYPES) {
+      try {
+        const result = stmt.run(uuid(), t.tag_key, t.tag_type, t.name);
+        if (result.changes > 0) inserted++;
+      } catch { /* already exists — ignore */ }
+    }
+
+    return inserted;
+  }
 }

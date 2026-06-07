@@ -29,6 +29,7 @@ interface WizardResult {
   taskPrompt: string;
   autoStart: boolean;
   strictQualityGate: boolean;
+  modelCyclingEnabled: boolean;
 }
 
 interface Props {
@@ -106,6 +107,7 @@ export function ProjectFactoryWizard({ onClose, onLaunch }: Props) {
   const [strategyTemplate, setStrategyTemplate] = useState('fullstack-balanced');
   const [strictQualityGate, setStrictQualityGate] = useState(true);
   const [autoStart, setAutoStart] = useState(true);
+  const [modelCyclingEnabled, setModelCyclingEnabled] = useState(true);
   const [bootstrapAfterScaffold, setBootstrapAfterScaffold] = useState(true);
   const [autoStartPreview, setAutoStartPreview] = useState(true);
 
@@ -216,7 +218,7 @@ export function ProjectFactoryWizard({ onClose, onLaunch }: Props) {
     if (analysisResult?.analysisReport) {
       taskText = `${taskText}\n\n--- IMPORT ANALYSIS ---\n${analysisResult.analysisReport.slice(0, 8000)}\n--- END IMPORT ANALYSIS ---`;
     }
-    onLaunch({ workflowMode, strategyTemplate, taskPrompt: taskText, autoStart, strictQualityGate });
+    onLaunch({ workflowMode, strategyTemplate, taskPrompt: taskText, autoStart, strictQualityGate, modelCyclingEnabled });
     onClose();
   };
 
@@ -576,6 +578,15 @@ export function ProjectFactoryWizard({ onClose, onLaunch }: Props) {
                   className="accent-purple-500"
                 />
                 Auto-start The Project Factory loop immediately
+              </label>
+              <label className="flex items-center gap-2 text-xs text-ide-text-dim" title="When enabled, the factory can cycle across all available models on rate-limit. When disabled, it stays on one model.">
+                <input
+                  type="checkbox"
+                  checked={modelCyclingEnabled}
+                  onChange={e => setModelCyclingEnabled(e.target.checked)}
+                  className="accent-blue-400"
+                />
+                Model cycling (cycle providers on rate-limit)
               </label>
             </div>
           )}

@@ -6,6 +6,16 @@ import { GapAnalysisAgent } from './gapAnalysis/index.js';
 import { runSuggestedJobsCrawlerTick } from './suggestedJobsCrawler/index.js';
 import { runGodFactoryIdleScanner } from './godFactory/idleScanner.js';
 import { executeSubsystem, getKv, loadSettings, setKv, type SubsystemConfig, type SubsystemId } from '../routes/subsystems.js';
+import { runModelPerfCrawlerTick } from './modelPerformanceCrawler/index.js';
+import { runMistralPerfCrawlerTick } from './mistralPerformanceCrawler/index.js';
+import { runSecurityCrawlerTick } from './securityCrawler/index.js';
+import { runSoftProbes } from './modelRateLimitTracker/index.js';
+import { runDependencyGraphCrawlerTick } from './dependencyGraphCrawler/index.js';
+import { runSchemaDriftCrawlerTick } from './schemaDriftCrawler/index.js';
+import { runCommunityCrawlerTick } from './communityCrawler/index.js';
+import { runTestCoverageCrawlerTick } from './testCoverageCrawler/index.js';
+import { runDocumentationGapCrawlerTick } from './documentationGapCrawler/index.js';
+import * as path from 'path';
 
 const SCHEDULER_TICK_MS = 15_000;
 const PROJECT_ROTATION_KEY = 'subsystems:project_rotation_index';
@@ -823,6 +833,80 @@ async function tick(db: Database.Database): Promise<void> {
         const summary = err instanceof Error ? err.message : String(err || 'unknown auto-intel error');
         setKv(db, AUTO_INTEL_LAST_ERROR_KEY, summary.slice(0, 400));
       }
+    }
+
+    // ── New Crawlers ────────────────────────────────────────────────────
+    // These use their own app_kv-based interval tracking (not SubsystemConfig)
+    // since they don't map to a SubsystemId in the current schema.
+
+    // Model Performance Crawler — every 30 minutes
+    const modelPerfLastRun = new Date(getKv(db, 'model_perf_crawler:last_run') ?? 0).getTime() || 0;
+    if (Date.now() - modelPerfLastRun >= 30 * 60 * 1000) {
+      try { runModelPerfCrawlerTick(db); } catch { /* non-fatal */ }
+    }
+
+    // Mistral Performance Crawler — every 15 minutes
+    const mistralLastRun = new Date(getKv(db, 'mistral_crawler:last_run') ?? 0).getTime() || 0;
+    if (Date.now() - mistralLastRun >= 15 * 60 * 1000) {
+      try { runMistralPerfCrawlerTick(db); } catch { /* non-fatal */ }
+    }
+
+    // Security OWASP Crawler — every 60 minutes
+    const securityLastRun = new Date(getKv(db, 'security_crawler:last_run') ?? 0).getTime() || 0;
+    if (Date.now() - securityLastRun >= 60 * 60 * 1000) {
+      try {
+        const srcRoot = path.join(process.cwd(), 'src');
+        runSecurityCrawlerTick(db, { srcRoot, maxFilesPerRun: 100 });
+      } catch { /* non-fatal */ }
+    }
+
+    // Rate Limit Soft Probes — every 2 minutes
+    // Checks if rate-limited models are available again
+    const softProbeLastRun = new Date(getKv(db, 'rate_limit:soft_probe_last_run') ?? 0).getTime() || 0;
+    if (Date.now() - softProbeLastRun >= 2 * 60 * 1000) {
+      setKv(db, 'rate_limit:soft_probe_last_run', new Date().toISOString());
+      runSoftProbes(db).catch(() => { /* non-fatal */ });
+    }
+
+    // Dependency Graph Crawler — every 4 hours
+    const depGraphLastRun = new Date(getKv(db, 'dependency_graph:last_run') ?? 0).getTime() || 0;
+    if (Date.now() - depGraphLastRun >= 4 * 60 * 60 * 1000) {
+      try {
+        const srcRoot = path.join(process.cwd(), 'src');
+        runDependencyGraphCrawlerTick(db, { srcRoot });
+      } catch { /* non-fatal */ }
+    }
+
+    // Schema Drift Crawler — every 30 minutes
+    const schemaDriftLastRun = new Date(getKv(db, 'schema_drift:last_run') ?? 0).getTime() || 0;
+    if (Date.now() - schemaDriftLastRun >= 30 * 60 * 1000) {
+      try {
+        runSchemaDriftCrawlerTick(db);
+      } catch { /* non-fatal */ }
+    }
+
+    // Community Crawler — every 6 hours
+    // Scans GitHub Discussions/Issues → creates human-approval-required jobs
+    const communityLastRun = new Date(getKv(db, 'community_crawler:last_run') ?? 0).getTime() || 0;
+    if (Date.now() - communityLastRun >= 6 * 60 * 60 * 1000) {
+      setKv(db, 'community_crawler:last_run', new Date().toISOString());
+      runCommunityCrawlerTick(db).catch(() => { /* non-fatal */ });
+    }
+
+    // Test Coverage Crawler — every 2 hours
+    // Finds source files with no tests → creates test_missing jobs
+    const testCoverageLastRun = new Date(getKv(db, 'test_coverage:last_run') ?? 0).getTime() || 0;
+    if (Date.now() - testCoverageLastRun >= 2 * 60 * 60 * 1000) {
+      setKv(db, 'test_coverage:last_run', new Date().toISOString());
+      runTestCoverageCrawlerTick(db).catch(() => { /* non-fatal */ });
+    }
+
+    // Documentation Gap Crawler — every 4 hours
+    // Finds exported symbols with no JSDoc → creates documentation jobs
+    const docGapLastRun = new Date(getKv(db, 'doc_gap:last_run') ?? 0).getTime() || 0;
+    if (Date.now() - docGapLastRun >= 4 * 60 * 60 * 1000) {
+      setKv(db, 'doc_gap:last_run', new Date().toISOString());
+      runDocumentationGapCrawlerTick(db).catch(() => { /* non-fatal */ });
     }
   } catch (err) {
     console.error('Subsystem scheduler tick failed:', err);

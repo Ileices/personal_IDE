@@ -1,0 +1,129 @@
+## CRAWLER COORDINATOR: Unifying the Three Parallel Analyzers
+
+Currently, three codebase analyzers run independently and never share results:
+- PSC (ProjectStructureCrawler): generates devtags
+- HierarchicalCodeIndex: builds AST symbol tree
+- RelationshipIndexService: builds dependency graph with 16 relationship types
+
+ContextAssembly v3 already has 3 empty slots waiting for data from these analyzers (depGraphContext, moduleClusterContext, explorationContext). The CrawlerCoordinator is what populates them.
+
+---
+
+### Architecture
+
+```
+CrawlerCoordinator (new service, apps/server/src/services/crawlerCoordinator/index.ts)
+  |
+  +--> PSC.scan()            -> raw devtags
+  +--> HCI.buildIndex()      -> AST symbols
+  +--> RIS.buildGraph()      -> relationship edges
+  |
+  +--> merge(devtags, symbols, edges)
+  |
+  +--> codebase_intelligence table (new SQLite table)
+       columns:
+         file_path TEXT
+         symbol_name TEXT
+         symbol_type TEXT (class, function, interface, const, etc.)
+         semantic_description TEXT (LLM-generated, Phase 2)
+         embedding_vector BLOB (nomic-embed-text output, Phase 2)
+         relationship_summary TEXT (formatted from 16 relationship types)
+         last_indexed INTEGER (Unix timestamp)
+         access_count INTEGER (incremented when ContextAssembly reads this row)
+```
+
+---
+
+### Merge Algorithm
+
+For each symbol found by HCI:
+1. Find matching PSC devtag by symbol_name (exact match first, then fuzzy)
+2. Find all relationship edges from RIS where source=symbol_name or target=symbol_name
+3. Merge into single codebase_intelligence row
+4. If PSC devtag exists: devtag_id foreign key link
+5. If PSC devtag missing: create synthetic devtag with source='crawlerCoordinator'
+
+---
+
+### Scheduling
+
+CrawlerCoordinator runs on the SubsystemScheduler 15-second tick but only does INCREMENTAL updates:
+- On tick: check file_watcher events since last run (chokidar)
+- Only re-index files that changed
+- Full re-index: triggered manually or on project open (cold start)
+
+Full re-index estimated time:
+- 1,000 files: ~45 seconds (acceptable for project open)
+- 10,000 files: ~8 minutes (background only, never blocks UI)
+
+---
+
+### ContextAssembly Integration
+
+After CrawlerCoordinator populates codebase_intelligence, ContextAssembly v3 reads it:
+
+```typescript
+// depGraphContext slot (priority 4 in CWM):
+const deps = await db.all(
+  'SELECT symbol_name, relationship_summary FROM codebase_intelligence WHERE file_path IN (?) ORDER BY access_count DESC LIMIT 20',
+  relevantFiles
+);
+
+// moduleClusterContext slot:
+const clusters = await db.all(
+  'SELECT DISTINCT file_path, symbol_type FROM codebase_intelligence WHERE embedding_vector IS NOT NULL ORDER BY access_count DESC LIMIT 30'
+);
+
+// explorationContext slot:
+const unexplored = await db.all(
+  'SELECT file_path, symbol_name FROM codebase_intelligence WHERE access_count = 0 ORDER BY last_indexed DESC LIMIT 10'
+);
+```
+
+---
+
+### Semantic Description Generation (Phase 2 addition)
+
+When nomic-embed-text is available (local Ollama), CrawlerCoordinator adds a background job:
+
+For each codebase_intelligence row where semantic_description IS NULL:
+1. Read function/class body (50 lines max)
+2. Call nomic-embed-text via Ollama: generate embedding
+3. Optionally call small LLM: 'Describe this function in 1 sentence: [code]'
+4. Store both embedding_vector and semantic_description
+
+This enables Phase 2's cosine similarity search instead of LIKE SQL.
+
+---
+
+### Why RelationshipIndexService is the Right Foundation
+
+RIS already has formatForLLM() which produces human-readable relationship summaries. It tracks 16 relationship types: imports, uses, extends, implements, calls, instantiates, tests, mocks, configures, wraps, transforms, aggregates, delegates, observes, publishes, subscribes.
+
+This is the dependency graph that every context assembly has been missing. When the agent modifies AuthService, the CrawlerCoordinator can immediately answer: "These 14 files depend on AuthService. These 3 files test it. These 2 files mock it."
+
+That context prevents the agent from making changes that break downstream consumers — which is currently one of the top causes of stability monitor rollbacks.
+
+---
+
+### Database Migration Required
+
+```sql
+CREATE TABLE codebase_intelligence (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  symbol_name TEXT NOT NULL,
+  symbol_type TEXT NOT NULL DEFAULT 'unknown',
+  semantic_description TEXT,
+  embedding_vector BLOB,
+  relationship_summary TEXT,
+  devtag_id INTEGER REFERENCES devtags(id),
+  last_indexed INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+  access_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_ci_file ON codebase_intelligence(project_id, file_path);
+CREATE INDEX idx_ci_symbol ON codebase_intelligence(project_id, symbol_name);
+CREATE INDEX idx_ci_access ON codebase_intelligence(project_id, access_count DESC);
+```

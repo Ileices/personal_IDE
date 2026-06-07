@@ -26,7 +26,9 @@ export type ToolName =
   | 'nano_train'
   | 'mesh_connect'
   | 'spawn_agent'
-  | 'execute_skill';
+  | 'semantic_search_codebase'
+  | 'schedule_job'
+  | 'model_performance_query';
 
 export type ActorId = 'agent' | 'user' | 'nano' | 'system' | 'midwife' | 'peer';
 
@@ -94,7 +96,9 @@ const enabledTools: Set<ToolName> = new Set([
   'run_tests',
   'run_lint',
   'nano_train',
-  'execute_skill',  // skill execution is low blast-radius — enabled by default
+  'semantic_search_codebase',
+  'schedule_job',
+  'model_performance_query',
 ]);
 
 /** Enable a previously-disabled tool at runtime (e.g. user turns on web search) */

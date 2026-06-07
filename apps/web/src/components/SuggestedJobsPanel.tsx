@@ -142,10 +142,11 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }: { status: string | null | undefined }) {
+  const safeStatus = status ?? 'unknown';
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_COLORS[status] || 'bg-slate-600/20 text-slate-400'}`}>
-      {status.replace(/_/g, ' ')}
+    <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_COLORS[safeStatus] || 'bg-slate-600/20 text-slate-400'}`}>
+      {safeStatus.replace(/_/g, ' ')}
     </span>
   );
 }

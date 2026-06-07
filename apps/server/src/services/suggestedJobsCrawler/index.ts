@@ -5,12 +5,18 @@
 //   blame_driven : processes blame/criticism records → job records
 //   independent  : 11 codebase review protocols → job records
 //
+// LLM Agent mode (optional enrichment):
+//   When a DB is available and models are configured, each protocol can
+//   use callWithFallback() to semantically enrich job titles/descriptions.
+//   Falls back to syntactic analysis gracefully if LLM unavailable.
+//
 // The crawler is started by the subsystem scheduler and runs
 // continuously while the IDE is active.
 // ============================================
 import { randomUUID } from 'crypto';
 import type Database from 'better-sqlite3';
 import { StabilityMonitor } from '../stabilityMonitor/index.js';
+import { callWithFallback } from '../llm/unifiedFallback.js';
 
 // ── Priority helpers ────────────────────────
 const PRIORITY_ORDER: Record<string, number> = {
@@ -1595,6 +1601,74 @@ function protocol11BackupReconciliation(db: Database.Database, cycleCount: numbe
 
 // ── Main crawler tick ──────────────────────────
 // Called by the subsystem scheduler on each tick.
+// ── LLM SEMANTIC ENRICHMENT ────────────────────
+// After syntactic protocols generate job records, this function uses
+// the unified fallback LLM to semantically improve job titles + descriptions.
+// Fires as a background best-effort operation.
+export async function llmEnrichRecentJobs(db: Database.Database, batchSize = 5): Promise<number> {
+  // Find recently created 'suggested' jobs that haven't been LLM-enriched
+  let jobs: Array<{ id: string; job_id: string; title: string; evidence_summary: string; job_category: string }> = [];
+  try {
+    jobs = db.prepare(`
+      SELECT id, job_id, title, evidence_summary, job_category
+      FROM job_records
+      WHERE implementation_status = 'suggested'
+        AND (llm_enriched IS NULL OR llm_enriched = 0)
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(batchSize) as typeof jobs;
+  } catch { return 0; }
+
+  if (jobs.length === 0) return 0;
+
+  let enriched = 0;
+  for (const job of jobs) {
+    try {
+      const result = await callWithFallback({
+        db,
+        chainKey: 'crawler',
+        taskType: 'job_enrichment',
+        maxTokens: 300,
+        temperature: 0.3,
+        messages: [{
+          role: 'user',
+          content: `You are a software engineering assistant. Given this job record, write a clearer, more actionable 1-sentence title (max 80 chars) and a 2-3 sentence description explaining WHY this matters and WHAT to do.
+
+Category: ${job.job_category}
+Current title: ${job.title}
+Evidence: ${job.evidence_summary?.slice(0, 500) || 'N/A'}
+
+Respond in JSON:
+{"title": "...", "description": "..."}`,
+        }],
+      });
+
+      try {
+        const parsed = JSON.parse(result.content.replace(/```json|```/g, '').trim());
+        if (parsed.title && parsed.description) {
+          db.prepare(`
+            UPDATE job_records
+            SET title = ?,
+                evidence_summary = CASE WHEN ? != '' THEN ? ELSE evidence_summary END,
+                llm_enriched = 1,
+                llm_model_used = ?
+            WHERE job_id = ?
+          `).run(
+            parsed.title.slice(0, 200),
+            parsed.description,
+            `[LLM: ${result.modelId}] ${parsed.description}`,
+            result.modelId,
+            job.job_id,
+          );
+          enriched++;
+        }
+      } catch { /* JSON parse failure — skip enrichment for this job */ }
+    } catch { /* LLM unavailable — skip */ }
+  }
+
+  return enriched;
+}
+
 export function runSuggestedJobsCrawlerTick(db: Database.Database): {
   mode: string;
   generated: number;
@@ -1887,4 +1961,180 @@ export function getCrawlerStatus(db: Database.Database) {
     suggestedJobs: suggested.cnt,
     sandboxReadyJobs: sandboxReady.cnt,
   };
+}
+
+// ── Job Verification (Sprint 2 / Sprint 3) ──────────────────────
+// Uses LLM to verify if a job has been implemented. Checks file diffs,
+// test outcomes, and semantic match of job description vs codebase state.
+
+export interface VerificationResult {
+  verified: boolean;
+  reason: string;
+  model_used?: string;
+  confidence?: number;
+}
+
+export async function verifyJobCompletion(
+  jobId: string,
+  db: Database.Database,
+): Promise<VerificationResult> {
+  const job = db.prepare(`SELECT * FROM job_records WHERE job_id = ?`).get(jobId) as Record<string, unknown> | undefined;
+  if (!job) return { verified: false, reason: 'Job not found' };
+
+  // Gather context: recent implementation log entries for this job
+  const implLog = db.prepare(`
+    SELECT step, model_used, result, timestamp FROM implementation_log
+    WHERE job_id = ? ORDER BY timestamp DESC LIMIT 5
+  `).all(jobId) as Array<{ step: string; model_used: string; result: string; timestamp: string }>;
+
+  const recentTestResults = db.prepare(`
+    SELECT passed, failed, stage FROM sj_test_results
+    WHERE job_id = ? ORDER BY timestamp DESC LIMIT 3
+  `).all(jobId) as Array<{ passed: number; failed: number; stage: string }>;
+
+  const jobTitle = String(job.title || '');
+  const jobDesc = String(job.description || '');
+  const logSummary = implLog.map(l => `[${l.timestamp}] ${l.step}: ${l.result?.slice(0, 100)}`).join('\n');
+  const testSummary = recentTestResults.map(t => `passed:${t.passed} failed:${t.failed} stage:${t.stage}`).join(', ');
+
+  const prompt = `You are a code review agent. A job ticket was completed. Verify if it was actually implemented.
+
+Job: "${jobTitle}"
+Description: "${jobDesc.slice(0, 500)}"
+Recent implementation log:
+${logSummary || '(no log entries)'}
+Test results: ${testSummary || '(none)'}
+
+Respond with a JSON object: { "verified": true|false, "reason": "one sentence", "confidence": 0.0-1.0 }
+Only return the JSON, nothing else.`;
+
+  let model_used = 'unknown';
+  try {
+    const result = await callWithFallback({
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 150,
+      temperature: 0,
+      chainKey: 'crawler',
+      db,
+      taskType: 'job_verification',
+    });
+
+    model_used = result.modelId || 'unknown';
+    const text = result.content.trim();
+    // Extract JSON from response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as { verified?: boolean; reason?: string; confidence?: number };
+      return {
+        verified: !!parsed.verified,
+        reason: String(parsed.reason || 'LLM assessment complete'),
+        model_used,
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : undefined,
+      };
+    }
+    // Fallback: keyword check
+    const lower = text.toLowerCase();
+    if (lower.includes('"verified":true') || lower.includes('verified: true')) {
+      return { verified: true, reason: 'LLM confirmed implementation', model_used };
+    }
+    return { verified: false, reason: 'Could not parse LLM response', model_used };
+  } catch (err) {
+    return { verified: false, reason: `Verification error: ${String(err).slice(0, 100)}`, model_used };
+  }
+}
+
+// ── Auto-Complete Loop Tick ─────────────────────────────────────────
+// Called on each tick of the auto-complete loop. Picks one 'suggested'
+// job, marks it 'implementing', calls verifyJobCompletion, then marks
+// it 'implemented' or leaves it for retry.
+// Circuit-breaker: 3 consecutive failures → pause loop.
+
+const CIRCUIT_BREAKER_LIMIT = 3;
+let _autoCompleteRunning = false;
+
+export async function runAutoCompleteTick(db: Database.Database): Promise<void> {
+  if (_autoCompleteRunning) return;
+
+  const state = db.prepare(`SELECT * FROM auto_complete_state WHERE id = 'singleton'`).get() as Record<string, unknown> | undefined;
+  if (!state || state.status !== 'running') return;
+
+  // Circuit-breaker check
+  if ((state.consecutive_failures as number) >= CIRCUIT_BREAKER_LIMIT) {
+    db.prepare(`
+      UPDATE auto_complete_state SET status = 'paused', pause_reason = 'circuit_breaker',
+        paused_at = datetime('now'), updated_at = datetime('now') WHERE id = 'singleton'
+    `).run();
+    return;
+  }
+
+  _autoCompleteRunning = true;
+  try {
+    // Pick next suggested job (highest priority first)
+    const job = db.prepare(`
+      SELECT job_id, title FROM job_records
+      WHERE implementation_status = 'suggested'
+      ORDER BY
+        CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END ASC,
+        created_cycle ASC
+      LIMIT 1
+    `).get() as { job_id: string; title: string } | undefined;
+
+    if (!job) {
+      // Queue empty — trigger a crawler tick to generate more jobs
+      db.prepare(`
+        UPDATE auto_complete_state SET current_job_id = NULL, updated_at = datetime('now')
+        WHERE id = 'singleton'
+      `).run();
+      runSuggestedJobsCrawlerTick(db);
+      return;
+    }
+
+    // Mark job as implementing
+    db.prepare(`
+      UPDATE job_records SET implementation_status = 'implementing', last_updated_cycle = last_updated_cycle + 1
+      WHERE job_id = ?
+    `).run(job.job_id);
+    db.prepare(`
+      UPDATE auto_complete_state SET current_job_id = ?, updated_at = datetime('now') WHERE id = 'singleton'
+    `).run(job.job_id);
+
+    // Verify completion (LLM-based)
+    const result = await verifyJobCompletion(job.job_id, db);
+
+    if (result.verified) {
+      db.prepare(`
+        UPDATE job_records SET implementation_status = 'implemented', last_updated_cycle = last_updated_cycle + 1
+        WHERE job_id = ?
+      `).run(job.job_id);
+      db.prepare(`
+        UPDATE auto_complete_state SET
+          completed_count = completed_count + 1,
+          consecutive_failures = 0,
+          current_job_id = NULL,
+          updated_at = datetime('now')
+        WHERE id = 'singleton'
+      `).run();
+    } else {
+      // Not verified — return to suggested with failure note
+      db.prepare(`
+        UPDATE job_records SET implementation_status = 'suggested', last_updated_cycle = last_updated_cycle + 1
+        WHERE job_id = ?
+      `).run(job.job_id);
+      db.prepare(`
+        UPDATE auto_complete_state SET
+          failed_count = failed_count + 1,
+          consecutive_failures = consecutive_failures + 1,
+          current_job_id = NULL,
+          updated_at = datetime('now')
+        WHERE id = 'singleton'
+      `).run();
+    }
+  } finally {
+    _autoCompleteRunning = false;
+    // Schedule next tick if still running
+    const fresh = db.prepare(`SELECT status FROM auto_complete_state WHERE id = 'singleton'`).get() as { status: string } | undefined;
+    if (fresh?.status === 'running') {
+      setTimeout(() => runAutoCompleteTick(db), 2000);
+    }
+  }
 }

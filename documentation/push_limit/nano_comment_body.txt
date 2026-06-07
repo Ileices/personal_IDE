@@ -1,0 +1,115 @@
+## NANO v2 EXACT CODE STRUCTURE (Phase 5 Build Reference)
+
+All hyperparameters from proven experiments. PPL=4.977 proven on test_30v3.
+
+### Canonical Hyperparameters (do not change)
+
+D_MODEL=256, VOCAB_SIZE=8192, MAX_SEQ_LEN=512, N_HEADS=4, N_LAYERS=3 (3 swarm layers = ~500K params, test_21 proof), DEFAULT_TOP_K=8, SOFT_K=True (reverse cumsum beats argmax, test_30v3), EFF_LAMBDA=0.01, CHROMATIC_CANDIDATES=50
+
+### nano_v2/ Directory Layout
+
+```
+NANO_train/
+  nano_v2/
+    __init__.py       exports NanoSea, NanoSea.from_checkpoint()
+    model.py          Nano, SwarmLayer, ChromaticIndex, SoftKRouter, ChromaticCrosstalk, NanoSea
+    train.py          SwarmTrainer, IndependenceTracker, compute_loss()
+    midwife.py        ValidatedMidwife, execution validation
+    lifecycle.py      NanoSpawner, FitnessEvaluator, CosmicCycleManager
+    memory.py         NanoMemoryManager (GPU hot / CPU warm / Disk cold)
+    mesh.py           mDNS peer discovery, federated averaging over HTTP
+    server.py         FastAPI port 5100
+    config.py         hyperparameters as dataclass, from nano_v2_config.json
+    tests/
+      test_30v3.py    MUST pass first — reproduces proven ppl=4.977
+      test_31.py      bird-feeder independence gate for Phase 6
+```
+
+### Single Universal Nano (NO subclasses — this is v2, not v1)
+
+The 296 typed nano subclasses (FeatureNano, PatternNano, etc.) from v1 are DEAD. Do not reference them. A single Nano class handles all tasks. All specialization is emergent via learned RBY coordinates.
+
+```python
+class Nano(nn.Module):
+    def __init__(self, d_model=256):
+        super().__init__()
+        self.fc1 = nn.Linear(d_model, d_model * 4)
+        self.fc2 = nn.Linear(d_model * 4, d_model)
+        self.norm = nn.LayerNorm(d_model)
+        rby = torch.rand(3)
+        self.rby = nn.Parameter(rby / rby.sum())  # simplex constraint
+```
+
+### ChromaticIndex (O(log N) routing via scipy KDTree)
+
+```python
+class ChromaticIndex:
+    def _rebuild(self):
+        coords = torch.stack([n.rby.detach() for n in self.nanos]).numpy()
+        log_c = np.log(coords + 1e-8)
+        centered = log_c - log_c.mean(axis=1, keepdims=True)  # Aitchison transform
+        self.kdtree = KDTree(centered)  # scipy.spatial.KDTree
+
+    def query(self, query_rby, k=50):
+        q = query_rby.detach().numpy()
+        log_q = np.log(q + 1e-8)
+        c_q = log_q - log_q.mean()
+        _, indices = self.kdtree.query(c_q, k=k)
+        return indices.tolist()
+```
+
+### SoftKRouter (differentiable k via reverse cumsum — the key v2 innovation)
+
+```python
+class SoftKRouter(nn.Module):
+    def __init__(self, d_model=256, n_candidates=50):
+        super().__init__()
+        self.score_proj = nn.Linear(d_model, n_candidates)
+        self.k_threshold = nn.Parameter(torch.tensor(0.3))
+
+    def forward(self, x, candidate_scores):
+        probs = F.softmax(candidate_scores, dim=-1)
+        sorted_probs, sort_idx = torch.sort(probs, dim=-1, descending=True)
+        cumsum = torch.cumsum(sorted_probs, dim=-1)
+        gates = (cumsum - sorted_probs < self.k_threshold.sigmoid()).float()
+        w = sorted_probs * gates
+        w = w / (w.sum(dim=-1, keepdim=True) + 1e-8)
+        return w, sort_idx
+```
+
+### Training Loss (efficiency regularization prevents nano collapse)
+
+```python
+def compute_loss(logits, targets, router_weights):
+    lm_loss = F.cross_entropy(logits.view(-1, VOCAB_SIZE), targets.view(-1))
+    load = router_weights.mean(dim=[0, 1])
+    eff_loss = EFF_LAMBDA * load.var()  # penalize uneven utilization
+    return lm_loss + eff_loss
+```
+
+### FastAPI Server Endpoints (nano_v2/server.py, port 5100)
+
+```
+POST /v1/training/observe   { query, response, model, quality_score, taskType, success }
+                            -> queues training pair, returns buffer_size
+POST /v1/training/batch     { file_path: JSONL from DatasetBuilder }
+                            -> trains on full batch, returns trained count
+GET  /v1/independence/status -> { nano_capable: ['planning'], in_training: ['coding_ts'] }
+GET  /v1/health             -> { status: 'ok', model_loaded: true, nanos_per_layer: 256 }
+```
+
+### What Survives from NANO_train/core/
+
+- rby.py: KEEP — aitchison_distance(), rby_to_unit_vector() all valid and imported
+- ptaie.py: KEEP — PTAIE token encoding, used as tokenizer in nano_v2/
+- lifecycle.py: ADAPT — CosmicCycleManager logic correct, update imports only
+- ae.py, compression.py, ic_ae.py: ARCHIVE — v1 artifacts, do not delete, do not import
+
+### test_31 Design (independence gate before Project Factory goes live)
+
+1. Train NanoSea ONLY on bird-feeder maintenance corpus (no LLM reference answers)
+2. Run 50 queries: mix of 'what part failed?', 'what should I order?', 'fix the schedule?'
+3. Evaluate: semantic similarity to ground truth > 0.65 average
+4. PASS: IndependenceTracker marks 'domain_task' as nano_capable
+5. ONLY after PASS: modelSwitcher.ts can route domain_task requests to NANO server
+6. This is the proof that nano is genuinely capable, not just echoing training data

@@ -136,6 +136,8 @@ interface EnhancedAgentConfig extends AgentConfig {
   taskId?: string;
   /** Ordered fallback models when primary is rate-limited */
   fallbackModels?: string[];
+  /** When false, stick to primary model — no provider cycling */
+  modelCyclingEnabled?: boolean;
 }
 
 export class EnhancedAgentLoop {
@@ -556,9 +558,12 @@ export class EnhancedAgentLoop {
 
           const canProceed = rateLimiter.canRequest(this.config.model, 'agent');
           if (!canProceed.allowed) {
-            // Try ordered fallback chain first, then smart headroom-based fallback
-            const fallback = canProceed.fallbackModel
-              || rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels);
+            // In single-model mode, do not switch providers before the call.
+            const canCycleModels = this.config.modelCyclingEnabled !== false;
+            // Try ordered fallback chain first, then smart headroom-based fallback.
+            const fallback = canCycleModels
+              ? (canProceed.fallbackModel || rateLimiter.findFallback(this.config.model, 'agent', this.config.fallbackModels))
+              : null;
             if (fallback) {
               this.emit({ type: 'auto_answer', question: 'Rate limited on ' + this.config.model, answer: 'Switching to ' + fallback });
               this.switchModel(fallback, 'Rate limited (pre-call check)');
@@ -838,6 +843,11 @@ export class EnhancedAgentLoop {
 
             // ── Handle 404 — Model not found (extracted to modelSwitcher.ts) ──
             if (statusCode === 404) {
+              if (this.config.modelCyclingEnabled === false) {
+                this.setState('error');
+                this.emit({ type: 'error', error: `Selected model not found: ${this.config.model}. Model cycling is disabled.` });
+                break;
+              }
               const fallback = handle404ModelNotFound(
                 this.config.model, this.config.fallbackModels, rateLimiter, (e) => this.emit(e),
               );
@@ -854,9 +864,12 @@ export class EnhancedAgentLoop {
             // ── Handle 429/403 Rate Limits (extracted to modelSwitcher.ts) ──
             if (statusCode === 429 || statusCode === 403) {
               const rl = handleRateLimitSwitch(
-                this.config.model, statusCode, this.config.fallbackModels, rateLimiter, (e) => this.emit(e),
+                this.config.model, statusCode,
+                // When model cycling is disabled, pass empty fallbacks so it waits instead of switching
+                (this.config.modelCyclingEnabled !== false) ? this.config.fallbackModels : [],
+                rateLimiter, (e) => this.emit(e),
               );
-              if (rl.fallback) {
+              if (rl.fallback && this.config.modelCyclingEnabled !== false) {
                 this.switchModel(rl.fallback, `Rate limited (${statusCode})`);
               } else {
                 await this.delay(rl.waitMs);
