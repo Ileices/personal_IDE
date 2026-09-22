@@ -4,7 +4,7 @@
 [![pnpm](https://img.shields.io/badge/pnpm-10%2B-orange)](https://pnpm.io/)
 [![Node.js](https://img.shields.io/badge/node-20%2B-green)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: All rights reserved](https://img.shields.io/badge/License-All%20rights%20reserved-lightgrey.svg)](./LICENSE)
 [![GitHub Discussions](https://img.shields.io/github/discussions/Ileices/personal_IDE)](https://github.com/Ileices/personal_IDE/discussions)
 [![Security Advisories](https://img.shields.io/badge/Security-0%20open%20vulnerabilities-brightgreen)](https://github.com/Ileices/personal_IDE/security/dependabot)
 
@@ -474,4 +474,6 @@ lsof -ti :3001 -ti :5173 -ti :5174 | xargs -r kill -9
 
 ## License
 
-Private — All rights reserved.
+All rights reserved.
+
+See the [LICENSE](./LICENSE) file for repository usage terms.
